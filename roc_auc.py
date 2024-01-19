@@ -18,7 +18,7 @@ def optimize(X, Y, Xdot, Ydot, AUC, Lambda_guess, Lambda_scaling=1):
     Lambda *= Lambda_scaling
 
     bcs = [xminusinfinity, yminusinfinity, xplusinfinity-1, yplusinfinity-1, Lambda * AUC + c1 - 2, -Lambda * (1-AUC) + c2 - 2]
-    return np.asarray(bcs[1:])
+    return np.asarray(bcs[:-1])
 
   t_plot = np.linspace(-10, 10, 1001)
   guess = xy_guess(X=X, Y=Y, t_plot=t_plot, AUC=AUC)
