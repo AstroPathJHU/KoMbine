@@ -1,6 +1,6 @@
 import numpy as np, scipy.integrate
 
-def optimize(X, Y, Xdot, Ydot, AUC, Lambda_guess, Lambda_scaling=1):
+def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, guess=None, Lambda_scaling=1):
   def fun(t, xy, params):
     x, y = xy
     Lambda, c1, c2 = params
@@ -21,7 +21,8 @@ def optimize(X, Y, Xdot, Ydot, AUC, Lambda_guess, Lambda_scaling=1):
     return np.asarray(bcs[:-1])
 
   t_plot = np.linspace(-10, 10, 1001)
-  guess = xy_guess(X=X, Y=Y, t_plot=t_plot, AUC=AUC)
+  if guess is None:
+    guess = xy_guess(X=X, Y=Y, t_plot=t_plot, AUC=AUC)
 
   Lambda_guess /= Lambda_scaling
   c1_guess = 2 - Lambda_guess * AUC

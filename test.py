@@ -31,7 +31,7 @@ def run(target_AUC, verbose=True, prev_rocs={AUC: (X, Y, None, None)}):
       else:
         Lambda_guess = -2
 
-    optimize_result = roc_auc.optimize(X=X, Y=Y, Xdot=Xdot, Ydot=Ydot, AUC=target_AUC, Lambda_scaling=1, Lambda_guess=Lambda_guess)
+    optimize_result = roc_auc.optimize(X=X, Y=Y, Xdot=Xdot, Ydot=Ydot, AUC=target_AUC, Lambda_scaling=1, Lambda_guess=Lambda_guess, guess=xy_guess)
 
   x, y = xy = optimize_result.y
   Lambda, c1, c2 = params = optimize_result.p
