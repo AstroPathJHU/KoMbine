@@ -62,10 +62,11 @@ def plot_params():
   L = []
   c1 = []
   c2 = []
-  for target_auc in sorted(np.linspace(AUC+0.1, AUC-0.3, 401), key=lambda x: abs(x-AUC)):
-    result = run(target_auc, verbose=False)
-    print(target_auc, result.success)
-    if result.success:
+  for linspace in np.linspace(AUC, AUC-0.3, 301), np.linspace(AUC, AUC+0.1, 101):
+    for target_auc in linspace:
+      result = run(target_auc, verbose=False)
+      print(target_auc, result.success)
+      if not result.success: break
       target_aucs.append(target_auc)
       x, y = result.y
       auc = 1/2 * np.sum((y[1:]+y[:-1]) * (x[1:] - x[:-1]))
