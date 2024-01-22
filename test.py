@@ -16,14 +16,23 @@ t_plot = np.linspace(-10, 10, 1001)
 dt_plot = t_plot[1] - t_plot[0]
 AUC = np.sum(Y(t_plot) * Xdot(t_plot)) * dt_plot
 
-def run(target_AUC, verbose=True, Lambda_guess=None):
-  xy_guess = roc_auc.xy_guess(X=X, Y=Y, t_plot=t_plot, AUC=target_AUC)
-  if Lambda_guess is None:
-    if target_AUC < AUC:
-      Lambda_guess = 2
-    else:
-      Lambda_guess = -2 
-  optimize_result = roc_auc.optimize(X=X, Y=Y, Xdot=Xdot, Ydot=Ydot, AUC=target_AUC, Lambda_scaling=1, Lambda_guess=Lambda_guess)
+def run(target_AUC, verbose=True, prev_rocs={AUC: (X, Y, None, None)}):
+  AUC_for_guess = min(prev_rocs.keys(), key=lambda x: abs(x-target_AUC))
+  X_for_guess, Y_for_guess, Lambda_guess, prev_result = prev_rocs[AUC_for_guess]
+  if AUC_for_guess == target_AUC and prev_result is not None:
+    optimize_result = prev_result
+    xy_guess = optimize_result.y
+  else:
+    xy_guess = roc_auc.xy_guess(X=X_for_guess, Y=Y_for_guess, t_plot=t_plot, AUC=target_AUC)
+
+    if Lambda_guess is None:
+      if target_AUC < AUC:
+        Lambda_guess = 2
+      else:
+        Lambda_guess = -2
+
+    optimize_result = roc_auc.optimize(X=X, Y=Y, Xdot=Xdot, Ydot=Ydot, AUC=target_AUC, Lambda_scaling=1, Lambda_guess=Lambda_guess)
+
   x, y = xy = optimize_result.y
   Lambda, c1, c2 = params = optimize_result.p
 
@@ -40,7 +49,10 @@ def run(target_AUC, verbose=True, Lambda_guess=None):
     print("=========================")
     plt.legend()
     plt.show()
-  
+
+  if optimize_result is not prev_result and optimize_result.success and np.isclose(target_AUC, 1/2 * np.sum((y[1:]+y[:-1]) * (x[1:] - x[:-1])), rtol=0, atol=1e-5):
+    prev_rocs[target_AUC] = x, y, Lambda, optimize_result
+
   return optimize_result
 
 def plot_params():
@@ -50,7 +62,7 @@ def plot_params():
   L = []
   c1 = []
   c2 = []
-  for target_auc in np.linspace(AUC+0.1, AUC-0.3, 401):
+  for target_auc in sorted(np.linspace(AUC+0.1, AUC-0.3, 401), key=lambda x: abs(x-AUC)):
     result = run(target_auc, verbose=False)
     print(target_auc, result.success)
     if result.success:

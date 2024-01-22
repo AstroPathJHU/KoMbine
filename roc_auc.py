@@ -28,15 +28,17 @@ def optimize(X, Y, Xdot, Ydot, AUC, Lambda_guess, Lambda_scaling=1):
   c2_guess = 2 + Lambda_guess * (1-AUC)
   params_guess = np.array([Lambda_guess, c1_guess, c2_guess])
 
-  result = scipy.integrate.solve_bvp(fun=fun, bc=bc, x=t_plot, y=guess, p=params_guess, max_nodes=1000000)
+  result = scipy.integrate.solve_bvp(fun=fun, bc=bc, x=t_plot, y=guess, p=params_guess, max_nodes=100000)
   return result
 
 def xy_guess(X, Y, t_plot, AUC):
   if not 0 <= AUC <= 1:
     raise ValueError(f"AUC={AUC} is not between 0 and 1")
 
-  X = X(t_plot)
-  Y = Y(t_plot)
+  if callable(X):
+    X = X(t_plot)
+  if callable(Y):
+    Y = Y(t_plot)
   XplusY = X + Y
   XminusY = X - Y
 
