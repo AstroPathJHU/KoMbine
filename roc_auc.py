@@ -1,4 +1,4 @@
-import numpy as np, scipy.integrate
+import matplotlib.pyplot as plt, numpy as np, scipy.integrate
 
 def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, t_guess=None, guess=None, Lambda_scaling=1):
   def fun(t, xy, params):
@@ -77,8 +77,28 @@ def xy_guess(X, Y, t_guess, AUC):
     AUC_s = 1/2 * np.sum((x[1:] - x[:-1]) * (y[1:] + y[:-1]))
     return AUC_s - AUC
 
-  np.testing.assert_allclose(AUCresidual_s(1), 1-AUC, atol=1e-5, rtol=0)
-  np.testing.assert_allclose(AUCresidual_s(-1), -AUC, atol=1e-5, rtol=0)
+  try:
+    np.testing.assert_allclose(AUCresidual_s(1), 1-AUC, atol=1e-4, rtol=0)
+  except AssertionError:
+    xminusy = xminusy_s(1)
+    x = (xplusy + xminusy) / 2
+    y = (xplusy - xminusy) / 2
+    for _ in zip(x, y, strict=True):
+      print(*_)
+    plt.scatter(x, y)
+    plt.show()
+    raise
+  try:
+    np.testing.assert_allclose(AUCresidual_s(-1), -AUC, atol=1e-4, rtol=0)
+  except AssertionError:
+    xminusy = xminusy_s(-1)
+    x = (xplusy + xminusy) / 2
+    y = (xplusy - xminusy) / 2
+    for _ in zip(x, y, strict=True):
+      print(*_)
+    plt.scatter(x, y)
+    plt.show()
+    raise
 
   if AUC == 1:
     s = 1

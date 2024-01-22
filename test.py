@@ -14,7 +14,7 @@ def Ydot(t):
 X = Y
 Xdot = Ydot
 
-t_plot = np.linspace(-6, 6, 1001)
+t_plot = np.linspace(-10, 10, 1001)
 dt_plot = t_plot[1] - t_plot[0]
 AUC = np.sum(Y(t_plot) * Xdot(t_plot)) * dt_plot
 
