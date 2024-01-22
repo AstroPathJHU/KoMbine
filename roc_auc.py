@@ -29,7 +29,6 @@ def optimize(X, Y, Xdot, Ydot, AUC, Lambda_guess, Lambda_scaling=1):
   params_guess = np.array([Lambda_guess, c1_guess, c2_guess])
 
   result = scipy.integrate.solve_bvp(fun=fun, bc=bc, x=t_plot, y=guess, p=params_guess, max_nodes=1000000)
-  print(bc(result.y[:,0], result.y[:,-1], result.p))
   return result
 
 def xy_guess(X, Y, t_plot, AUC):
