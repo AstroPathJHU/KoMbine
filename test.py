@@ -11,8 +11,6 @@ def Xdot(t):
   return (scipy.stats.norm.pdf(t, loc=0, scale=h) + 2*scipy.stats.norm.pdf(t, loc=2, scale=h)) / 3
 def Ydot(t):
   return (scipy.stats.norm.pdf(t, loc=1, scale=h) + 2*scipy.stats.norm.pdf(t, loc=-2, scale=h)) / 3
-X = Y
-Xdot = Ydot
 
 t_plot = np.linspace(-10, 10, 1001)
 dt_plot = t_plot[1] - t_plot[0]

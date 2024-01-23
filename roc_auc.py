@@ -27,6 +27,14 @@ def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, t_guess=None, guess=None, L
   if guess is None:
     guess = xy_guess(X=X, Y=Y, t_guess=t_guess, AUC=AUC)
 
+  np.testing.assert_equal(t_guess.shape[0], guess.shape[1])
+  guess_dot = guess[:, 1:] - guess[:, :-1]
+  guess_dot_left = np.concatenate((guess_dot, [[0], [0]]), axis=1)
+  guess_dot_right = np.concatenate(([[0], [0]], guess_dot), axis=1)
+  slc = np.any((abs(guess_dot_left)>1e-5) | (abs(guess_dot_right)>1e-5), axis=0)
+  t_guess = t_guess[slc]
+  guess = guess[:, slc]
+
   Lambda_guess /= Lambda_scaling
   c1_guess = 2 - Lambda_guess * AUC
   c2_guess = 2 + Lambda_guess * (1-AUC)
