@@ -1,3 +1,11 @@
+*.aux
+*.bcf
 *.ipynb
+*.log
+*.out
 *.pyc
+*.run.xml
+*.synctex.gz
 .ipynb_checkpoints/*-checkpoint.py
+
+rocpicker.pdf
