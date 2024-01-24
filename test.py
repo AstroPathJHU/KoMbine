@@ -4,11 +4,11 @@ import roc_auc
 h = .6
 
 def X(t):
-  return (scipy.stats.norm.cdf(t, loc=0, scale=h) + 2*scipy.stats.norm.cdf(t, loc=2, scale=h)) / 3
+  return (scipy.stats.norm.cdf(t, loc=-1, scale=h) + 2*scipy.stats.norm.cdf(t, loc=2, scale=h)) / 3
 def Y(t):
   return (scipy.stats.norm.cdf(t, loc=1, scale=h) + 2*scipy.stats.norm.cdf(t, loc=-2, scale=h)) / 3
 def Xdot(t):
-  return (scipy.stats.norm.pdf(t, loc=0, scale=h) + 2*scipy.stats.norm.pdf(t, loc=2, scale=h)) / 3
+  return (scipy.stats.norm.pdf(t, loc=-1, scale=h) + 2*scipy.stats.norm.pdf(t, loc=2, scale=h)) / 3
 def Ydot(t):
   return (scipy.stats.norm.pdf(t, loc=1, scale=h) + 2*scipy.stats.norm.pdf(t, loc=-2, scale=h)) / 3
 
@@ -58,7 +58,7 @@ def run(target_AUC, verbose=True, prev_rocs={AUC: (t_plot, X, Y, None, None)}):
 
   return optimize_result
 
-def plot_params():
+def plot_params(*, skip_aucs=[]):
   target_aucs = []
   aucs = []
   delta_aucs = []
@@ -68,6 +68,7 @@ def plot_params():
   NLL = []
   for linspace in np.linspace(AUC, 0.99999, 501), np.linspace(AUC, 0.00001, 501):
     for target_auc in linspace:
+      if target_auc in skip_aucs: continue
       result = run(target_auc, verbose=False)
       print(target_auc, result.success)
       if not result.success: break
@@ -79,10 +80,11 @@ def plot_params():
       c1.append(result.p[1])
       c2.append(result.p[2])
       NLL.append(result.NLL)
-  plt.scatter(target_aucs, delta_aucs, label="$\Delta$AUC")
+  #plt.scatter(target_aucs, delta_aucs, label="$\Delta$AUC")
   plt.scatter(target_aucs, L, label="$\Lambda$")
   plt.scatter(target_aucs, c1, label="$c_1$")
   plt.scatter(target_aucs, c2, label="$c_2$")
+  plt.ylim(-3, 3)
   plt.legend()
   plt.show()
   deltaNLL = np.asarray(NLL)
