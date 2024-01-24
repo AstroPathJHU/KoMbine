@@ -3,18 +3,22 @@ import roc_auc
 
 h = .6
 
+NX = NY = 3
+
 def X(t):
-  return (scipy.stats.norm.cdf(t, loc=-1, scale=h) + 2*scipy.stats.norm.cdf(t, loc=2, scale=h)) / 3
+  return (scipy.stats.norm.cdf(t, loc=-1, scale=h) + 2*scipy.stats.norm.cdf(t, loc=2, scale=h)) / 3 * NX
 def Y(t):
-  return (scipy.stats.norm.cdf(t, loc=1, scale=h) + 2*scipy.stats.norm.cdf(t, loc=-2, scale=h)) / 3
+  return (scipy.stats.norm.cdf(t, loc=1, scale=h) + 2*scipy.stats.norm.cdf(t, loc=-2, scale=h)) / 3 * NY
 def Xdot(t):
-  return (scipy.stats.norm.pdf(t, loc=-1, scale=h) + 2*scipy.stats.norm.pdf(t, loc=2, scale=h)) / 3
+  return (scipy.stats.norm.pdf(t, loc=-1, scale=h) + 2*scipy.stats.norm.pdf(t, loc=2, scale=h)) / 3 * NX
 def Ydot(t):
-  return (scipy.stats.norm.pdf(t, loc=1, scale=h) + 2*scipy.stats.norm.pdf(t, loc=-2, scale=h)) / 3
+  return (scipy.stats.norm.pdf(t, loc=1, scale=h) + 2*scipy.stats.norm.pdf(t, loc=-2, scale=h)) / 3 * NY
 
 t_plot = np.linspace(-10, 10, 1001)
 dt_plot = t_plot[1] - t_plot[0]
-AUC = np.sum(Y(t_plot) * Xdot(t_plot)) * dt_plot
+NX = X(np.inf)
+NY = Y(np.inf)
+AUC = np.sum(Y(t_plot)/NY * Xdot(t_plot)/NX) * dt_plot
 
 def run(target_AUC, verbose=True, prev_rocs={AUC: (t_plot, X, Y, None, None)}):
   AUC_for_guess = min(prev_rocs.keys(), key=lambda x: abs(x-target_AUC))
@@ -39,15 +43,15 @@ def run(target_AUC, verbose=True, prev_rocs={AUC: (t_plot, X, Y, None, None)}):
   Lambda, c1, c2 = params = optimize_result.p
 
   if verbose:  
-    plt.scatter(X(t_plot), Y(t_plot), label="X, Y")
+    plt.scatter(X(t_plot)/NX, Y(t_plot)/NY, label="X, Y")
     plt.scatter(xy_guess[0], xy_guess[1], label="guess")
     plt.scatter(xy[0], xy[1], label="optimized")
     print("=========================")
     print("should be 0:", x[0], y[0])
     print("should be 1:", x[-1], y[-1])
     print("should be equal:", target_AUC, 1/2 * np.sum((y[1:]+y[:-1]) * (x[1:] - x[:-1])))
-    print("should be equal:", c1, 2 - Lambda*target_AUC)
-    print("should be equal:", c2, 2 + Lambda*(1-target_AUC))
+    print("should be equal:", c1, 2*NX - Lambda*target_AUC)
+    print("should be equal:", c2, 2*NY + Lambda*(1-target_AUC))
     print("=========================")
     plt.legend()
     plt.show()
@@ -66,16 +70,28 @@ def plot_params(*, skip_aucs=[]):
   c1 = []
   c2 = []
   NLL = []
-  for linspace in np.linspace(AUC, 0.99999, 501), np.linspace(AUC, 0.00001, 501):
+  linspaces = [
+    [AUC] + [_ for _ in np.linspace(0, 1, 1001) if _ >= AUC],
+    [AUC] + [_ for _ in np.linspace(1, 0, 1001) if _ <= AUC],
+  ]
+  for linspace in linspaces:
+    last_failed = False
     for target_auc in linspace:
       if target_auc in skip_aucs: continue
       result = run(target_auc, verbose=False)
-      print(target_auc, result.success)
-      if not result.success: break
-      target_aucs.append(target_auc)
       x, y = result.y
       auc = 1/2 * np.sum((y[1:]+y[:-1]) * (x[1:] - x[:-1]))
-      delta_aucs.append(auc - target_auc)
+      delta_auc = auc - target_auc
+      if not result.success or abs(delta_auc) > 1e-2:
+        print("failed", target_auc)
+        if last_failed:
+          break
+        else:
+          last_failed = True
+          continue
+      last_failed = False
+      target_aucs.append(target_auc)
+      delta_aucs.append(delta_auc)
       L.append(result.p[0])
       c1.append(result.p[1])
       c2.append(result.p[2])
@@ -94,3 +110,37 @@ def plot_params(*, skip_aucs=[]):
   plt.ylabel("$-2\Delta\ln{L}$")
   plt.show()
   return target_aucs, delta_aucs, L, c1, c2, NLL
+
+def plots(show=False):
+  plt.figure(figsize=(5, 5))
+  plt.scatter(t_plot, Xdot(t_plot), label=r"$\dot{X}$")
+  plt.scatter(t_plot, Ydot(t_plot), label=r"$\dot{Y}$")
+  plt.xlabel("$t$")
+  plt.ylabel(r"$\dot{X}$, $\dot{Y}$")
+  plt.legend()
+  plt.savefig("docs/exampleXdotYdot.pdf")
+  if show:
+    plt.show()
+  plt.close()
+
+  plt.figure(figsize=(5, 5))
+  plt.scatter(t_plot, X(t_plot), label=r"$X$")
+  plt.scatter(t_plot, Y(t_plot), label=r"$Y$")
+  plt.xlabel("$t$")
+  plt.ylabel(r"$X$, $Y$")
+  plt.legend()
+  plt.savefig("docs/exampleXY.pdf")
+  if show:
+    plt.show()
+  plt.close()
+
+  plt.figure(figsize=(5, 5))
+  plt.scatter(X(t_plot)/NX, Y(t_plot)/NY)
+  plt.xlabel("$X$")
+  plt.ylabel("$Y$")
+  plt.xlim(0, 1)
+  plt.ylim(0, 1)
+  plt.savefig("docs/exampleroc.pdf")
+  if show:
+    plt.show()
+  plt.close()

@@ -3,9 +3,8 @@
 *.ipynb
 *.log
 *.out
+*.pdf
 *.pyc
 *.run.xml
 *.synctex.gz
 .ipynb_checkpoints/*-checkpoint.py
-
-rocpicker.pdf

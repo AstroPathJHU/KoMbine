@@ -1,6 +1,9 @@
 import matplotlib.pyplot as plt, numpy as np, scipy.integrate
 
 def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, t_guess=None, guess=None, Lambda_scaling=1):
+  NX = X(np.inf)
+  NY = Y(np.inf)
+
   def fun(t, xy, params):
     x, y = xy
     Lambda, c1, c2 = params
@@ -17,7 +20,7 @@ def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, t_guess=None, guess=None, L
     Lambda, c1, c2 = params
     Lambda *= Lambda_scaling
 
-    bcs = [xminusinfinity, yminusinfinity, xplusinfinity-1, yplusinfinity-1, Lambda * AUC + c1 - 2, -Lambda * (1-AUC) + c2 - 2]
+    bcs = [xminusinfinity, yminusinfinity, xplusinfinity-1, yplusinfinity-1, Lambda * AUC + c1 - 2*NX, -Lambda * (1-AUC) + c2 - 2*NY]
     return np.asarray(bcs[:-1])
 
   if guess is not None and t_guess is None:
@@ -36,8 +39,8 @@ def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, t_guess=None, guess=None, L
   guess = guess[:, slc]
 
   Lambda_guess /= Lambda_scaling
-  c1_guess = 2 - Lambda_guess * AUC
-  c2_guess = 2 + Lambda_guess * (1-AUC)
+  c1_guess = 2*NX - Lambda_guess * AUC
+  c2_guess = 2*NY + Lambda_guess * (1-AUC)
   params_guess = np.array([Lambda_guess, c1_guess, c2_guess])
 
   result = scipy.integrate.solve_bvp(fun=fun, bc=bc, x=t_guess, y=guess, p=params_guess, max_nodes=100000)
@@ -58,9 +61,11 @@ def xy_guess(X, Y, t_guess, AUC):
     raise ValueError(f"AUC={AUC} is not between 0 and 1")
 
   if callable(X):
-    X = X(t_guess)
+    np.testing.assert_equal(X(-np.inf), 0)
+    X = X(t_guess) / X(np.inf)
   if callable(Y):
-    Y = Y(t_guess)
+    np.testing.assert_equal(Y(-np.inf), 0)
+    Y = Y(t_guess) / Y(np.inf)
   XplusY = X + Y
   XminusY = X - Y
 
