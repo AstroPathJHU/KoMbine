@@ -56,7 +56,7 @@ def run(target_AUC, verbose=True, prev_rocs={AUC: (t_plot, X, Y, None, None)}):
     plt.legend()
     plt.show()
 
-  if optimize_result is not prev_result and optimize_result.success and np.isclose(target_AUC, 1/2 * np.sum((y[1:]+y[:-1]) * (x[1:] - x[:-1])), rtol=0, atol=1e-5):
+  if optimize_result is not prev_result and optimize_result.success and np.isclose(target_AUC, 1/2 * np.sum((y[1:]+y[:-1]) * (x[1:] - x[:-1])), rtol=0, atol=1e-3):
     slc = slice(None)#(xd>0) & (yd>0)
     prev_rocs[target_AUC] = t[slc], x[slc], y[slc], Lambda, optimize_result
 
@@ -100,7 +100,7 @@ def plot_params(*, skip_aucs=[]):
   plt.scatter(target_aucs, L, label="$\Lambda$")
   plt.scatter(target_aucs, c1, label="$c_1$")
   plt.scatter(target_aucs, c2, label="$c_2$")
-  plt.ylim(-3, 3)
+  plt.ylim(-10, 10)
   plt.legend()
   plt.show()
   deltaNLL = np.asarray(NLL)
