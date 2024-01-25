@@ -1,5 +1,7 @@
 *.aux
+*.bbl
 *.bcf
+*.blg
 *.ipynb
 *.log
 *.out

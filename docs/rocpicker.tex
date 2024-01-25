@@ -1,3 +1,5 @@
+% !TeX TXS-program:bibliography = txs:///biber
+
 \documentclass[11pt]{article}
 
 \usepackage[margin=1in]{geometry}
@@ -6,6 +8,9 @@
 \usepackage{amsmath}
 \usepackage{hyperref}
 \usepackage{cleveref}
+\usepackage{siunitx}
+
+\addbibresource{rocpicker.bib}
 
 \title{Finding error bands for a ROC curve}
 \author{Heshy Roskes}
@@ -32,6 +37,12 @@ Each sample's \(t\) measurement also comes with its own statistical and systemat
 At this point I want to address the first source of uncertainty.  I think the method will extend nicely to sample-wise uncertainties too.
 
 \section{Previous approaches}
+
+I haven't been able to find any recent papers that deal with this.  Many methods \autocite{roc_kerekes} deal with individual points on the ROC curve without taking their correlations into account.  There is a paper from Tilbury 25 years ago \autocite{roc_tilbury} that does something similar to what I'm doing here, but in a \emph{very} computationally expensive way, with a discrete and small number of points.  Tilbury notes that one of the computations done for that paper ``ran for over a month on a powerful Unix workstation''.  A quarter century later, I'm sure it would run faster, but the method still scales poorly with the number of points on the ROC curve.
+
+In any case, none of the papers I saw considered any uncertainties other than the binomial statistical uncertainty on the number of samples.  We want a method that can generalize to sample-wise uncertainties, which can include statistical uncertainties on counts and any kind of systematic uncertainty.
+
+There is something similar for Kaplan-Meier curves \autocite{kaplanmeier_sachs}.  It correctly considers the whole curve as a unit, but also doesn't include systematic uncertainties.
 
 \section{Formalizing the problem}
 
@@ -169,6 +180,66 @@ c_2&=2n_Y
 \end{align}
 In other words, \cref{eq:boundaryconditions_AUC} is a necessary but not sufficient replacement for \cref{eq:AUC}.  I'm not sure how to come up with a better boundary condition.  On the other hand, it may not matter so much, because \texttt{solve\_bvp} needs a decent guess anyway in order to converge.
 
-A bigger issue is that beyond a certain point, \texttt{solve\_bvp} fails to converge even if I give it a guess based on an \(\AUC\) that is very close by.  There seems to be a phase transition of some kind: it happens when \(c_1\) gets close to 0.  A likelihood scan for \(\AUC\) in this example analysis within the range that works is shown in \cref{fig:examplelikelihoodscan}, together with the fitted values of \(\Lambda\), \(c_1\), and \(c_2\).
+A bigger issue is that beyond a certain point, \texttt{solve\_bvp} fails to converge even if I give it a guess based on an \(\AUC\) that is very close by.  A likelihood scan for \(\AUC\) in this example analysis within the range that works is shown in \cref{fig:examplelikelihoodscan}, together with the fitted values of \(\Lambda\), \(c_1\), and \(c_2\).
+
+\begin{figure}
+\begin{center}
+\includegraphics[width=0.32\textwidth]{examplescan.pdf}
+\includegraphics[width=0.32\textwidth]{exampleparameters.pdf}
+\caption{Left: Likelihood scan for the \(\AUC\) using the example distributions.  Right: Fitted values of \(\Lambda\), \(c_1\), and \(c_2\) at each point in the likelihood scan.}
+\label{fig:examplelikelihoodscan}
+\end{center}
+\end{figure}
+
+These plots go in steps of \(\Delta\AUC=\num{0.002}\) and down to \(\AUC=\num{0.564}\); by taking successively smaller steps, I can get down to \(\AUC=\num{0.55940501}\), where \(c_1=\num{6.36e-06}\).  Either \(c_1\) asymptotically goes to 0, in which case the issue might be numerical precision and a reparameterization could help, or there is some kind of phase transition and the solution jumps somewhere else in the space of possible ROC curves and parameters.
+
+\section{Vision for next steps}
+
+\subsection{Treatment of \texorpdfstring{\(\Xdot\)}{X dot} and \texorpdfstring{\(\Ydot\)}{Y dot}}
+\label{sec:deltafunctions}
+
+I'm not sure yet if I should be regarding \(\Xdot\) and \(\Ydot\) as continuous, as I've been doing here, or if I should treat them as sums of \(\delta\) functions.  The issue I'm grappling with is that the real probability densities for responders and non-responders \(\xdot\) and \(\ydot\) are, of course, continuous functions.  \Cref{eq:eulerlagrange_AUC} gives \(\Xdot=0\implies\xdot=0\) and \(\Ydot=0\implies\ydot=0\), meaning that \(\xdot\) and \(\ydot\) are also \(\delta\) functions.  This is ok as far as ROC curves go, but won't work when we get a new patient (whose \(t\) will not be exactly the same as any of the previous patients) and want to predict whether they will respond to treatment.
+
+Mathematica gives a closed-form solution to \cref{eq:eulerlagrange_AUC}.  It's in terms of integrals of \(\Xdot\) and \(\Ydot\), but if I use \(\delta\) functions I can trivially evaluate those integrals and plug in the boundary conditions to find \(c_1\), \(c_2\), and \(\Lambda\).  There might even be an analytical solution, but at the very least doing it numerically would be easier than \texttt{solve\_bvp}.
+
+Even if I don't use \(\delta\) functions for the real result, the solution from Mathematica using them might at least give a better starting point for \texttt{solve\_bvp}.
+
+Ideally I think I'd like to keep \(\Xdot\) and \(\Ydot\) as \(\delta\) functions (they are in data, after all) and add a term in the Lagrangian to help \(\xdot\) and \(\ydot\) to behave nicely.  The physicist in me wants this term to be \(\frac{1}{2}m(\xdot^2+\ydot^2)\), but I don't know if that's actually the right term.
+
+Once we do this, even the unconstrained Lagrangian (\cref{eq:lagrangian}) won't minimize at \(x=X/n_X, y=Y/n_Y\), but will probably be a smoothed version of that curve.
+
+My guess is that some of the logic underlying calculus of variations isn't technically correct when \(\Xdot\) and \(\Ydot\) are not continuous, but it will work out anyway.
+
+\subsection{Systematics}
+\label{sec:systematics}
+
+I'll probably find mistakes in this when I go to implement it, but my preliminary feeling is that the systematics will go in the data distributions, so that \(\Xdot(t)\) and \(\Ydot(t)\) will become \(\Xdot(t,\vec{\beta})\) and \(\Ydot(t,\vec{\beta})\).  For example, let's say we have one sample at \(t=t_0\) with a log-normal systematic with a variation of \(1+\alpha\) at \(1\sigma\).  We will get
+\begin{equation}
+\Xdot(t,\beta)=\delta(t(1+\alpha)^\beta-t_0)
+\end{equation}
+and the Lagrangian will get a term
+\begin{equation}
+\mathcal{\tilde{L}_\beta}=\beta^2
+\end{equation}
+
+A sample will, in general, have multiple systematics, including log-normal and Poisson and probably others.  Some of the systematics will be correlated between a subset of the samples (for example flatfielding and warping will be correlated between all samples in a batch).
+
+\subsection{Predicting response for a new patient}
+
+Let's say we get a sample from a new patient (\(t=t^*\)) and want to predict the probability that they will respond to treatment.  I think what we want to do is to find the best fit \(\xdot\) and \(\ydot\), as described in \cref{sec:deltafunctions}, with the addition of the systematics terms described in the previous section.  Then we will evaluate \(\xdot\) and \(\ydot\) at \(t^*\).  The new sample will also have systematics, and some of them may even be correlated with the systematics of (some of) the samples in the training set.  [I imagine these correlations are mostly an issue when writing a paper, when the training and test sets might be part of the same batch, and not so much when the model is used in the clinic.  Still it's better to have the capability to get it right.]
+
+\subsection{Kaplan-Meier curves}
+
+I imagine that you can construct a similar Lagrangian for Kaplan-Meier curves and use a similar method to predict survival time, with appropriate uncertainties, for a new patient.
+
+\subsection{Packaging}
+
+My vision is to put this together in an open source package like the CMS Collaboration's Combine tool (which is about to finally get its first formal paper \autocite{CAT-23-001}).  You would input a ``datacard'', a text file that lists \(t\) and its uncertainty for each sample and response or survival time, as appropriate, and it will run the fits for you.
+
+To continue the farming theme from CMS (Combine and its interface, Combine Harvester) I want to call it ROC Picker.  Still trying to come up with a farm-themed name for the Kaplan-Meier part.  There's a farm machinery company in Iowa called KM Ag Service$\ldots$
+
+Nothing here is specific to IF or even imaging, so I'd put it under the AstroPath Github organization but leave it decoupled from the pipeline and database code.
+
+\printbibliography
 
 \end{document}
