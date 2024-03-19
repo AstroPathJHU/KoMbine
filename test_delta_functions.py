@@ -14,7 +14,15 @@ def plot_params(responders, nonresponders, *, skip_aucs=[]):
 
   t = np.asarray(sorted(set(responders) | set(nonresponders) | {-np.inf, np.inf}))
 
-  AUC = 0.5
+  @np.vectorize
+  def X(t): return sum(1 for n in nonresponders if n < t)
+  @np.vectorize
+  def Y(t): return sum(1 for r in responders if r < t)
+
+  xx = X(t) / len(nonresponders)
+  yy = Y(t) / len(responders)
+  AUC = 1/2 * np.sum((yy[1:]+yy[:-1]) * (xx[1:] - xx[:-1]))
+
   linspaces = [
     [AUC] + [_ for _ in np.linspace(0, 1, 21) if _ >= AUC],
     [AUC] + [_ for _ in np.linspace(1, 0, 21) if _ <= AUC],
