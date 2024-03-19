@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt, numpy as np
 import delta_functions
 
-responders = np.linspace(-10, 10, 21)
-nonresponders = responders+.5
+responders = np.linspace(-10, 10, 3)
+nonresponders = responders+2.5
 
 def plot_params(responders, nonresponders, *, skip_aucs=[]):
   target_aucs = []
@@ -11,6 +11,7 @@ def plot_params(responders, nonresponders, *, skip_aucs=[]):
   L = []
   c1 = []
   c5 = []
+  NLL = []
 
   t = np.asarray(sorted(set(responders) | set(nonresponders) | {-np.inf, np.inf}))
 
@@ -55,6 +56,7 @@ def plot_params(responders, nonresponders, *, skip_aucs=[]):
       c1.append(result.c1)
       c5.append(result.c5)
       L.append(result.Lambda)
+      NLL.append(result.NLL)
   plt.legend()
   plt.show()
   plt.figure(figsize=(5, 5))
@@ -63,4 +65,19 @@ def plot_params(responders, nonresponders, *, skip_aucs=[]):
   plt.scatter(target_aucs, L, label=r"$\Lambda$")
   plt.ylim(-10, 100)
   plt.legend()
+  plt.show()
+
+  target_aucs = np.asarray(target_aucs)
+  deltaNLL = np.asarray(NLL)
+  deltaNLL -= np.nanmin(deltaNLL)
+  plt.figure(figsize=(5,5))
+  plt.scatter(target_aucs, 2*deltaNLL, label="$-2\Delta\ln{L}$")
+  slc = np.isclose(deltaNLL, np.nanmin(deltaNLL))
+  plt.scatter(target_aucs[slc], 2*deltaNLL[slc], label="best fit")
+  xlow, xhigh = plt.xlim()
+  plt.plot([xlow, xhigh], [1, 1], label="68% CL")
+  plt.plot([xlow, xhigh], [3.84, 3.84], label="95% CL")
+  plt.legend()
+  plt.xlabel("AUC")
+  plt.ylabel("$-2\Delta\ln{L}$")
   plt.show()

@@ -62,10 +62,20 @@ def findparams(responders, nonresponders, *, AUC, c1_guess, c5_guess, Lambda_gue
 def findxy(responders, nonresponders, *, AUC, c1_guess, c5_guess, Lambda_guess):
   c1, c5, Lambda = findparams(responders, nonresponders, AUC=AUC, c1_guess=c1_guess, c5_guess=c5_guess, Lambda_guess=Lambda_guess)
   x, y = xy(responders, nonresponders, c1, c5, Lambda)
+
+  NLL = 0
+  #sum(-Xdot ln xdot - Ydot ln ydot)
+  for r in responders:
+    NLL -= np.log(y(r+0.00001) - y(r-0.00001))
+    
+  for n in nonresponders:
+    NLL -= np.log(x(n+0.00001) - x(n-0.00001))
+
   return scipy.optimize.OptimizeResult(
     x=x,
     y=y,
     c1=c1,
     c5=c5,
     Lambda=Lambda,
+    NLL=NLL,
   )
