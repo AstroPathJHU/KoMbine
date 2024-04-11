@@ -41,15 +41,17 @@ class Discrete:
     for i, t in enumerate([-np.inf] + self.ts + [np.inf]):
       x[i] = sum(v for k, v in xdot.items() if k < t)
       y[i] = sum(v for k, v in ydot.items() if k < t)
-      x /= x[-1]
-      y /= y[-1]
+      if x[-1]:
+        x /= x[-1]
+      if y[-1]:
+        y /= y[-1]
     return x, y
 
   def evalAUC(self, xdot, ydot):
     xx, yy = self.buildroc(xdot, ydot)
     return np.sum(0.5 * (xx[1:] - xx[:-1]) * (yy[1:] + yy[:-1]))
 
-  def optimize(self):
+  def optimize(self, AUC=None):
     def unpackxy(xy):
       np.testing.assert_equal(len(xy), sum((self.Xdot[t] != 0) + (self.Ydot[t] != 0) for t in self.ts))
       xy_iterator = iter(xy)
@@ -87,5 +89,16 @@ class Discrete:
       if self.Ydot[t] != 0:
         guess.append(self.Ydot[t])
 
-    return scipy.optimize.minimize(NLL, guess)
+    constraints = []
+    if AUC is not None:
+      def constraintfunction(xy):
+        xdot, ydot = unpackxy(xy)
+        return self.evalAUC(xdot, ydot) - AUC
+      constraints.append({
+        "type": "eq",
+        "fun": constraintfunction,
+      })
 
+    result = scipy.optimize.minimize(NLL, guess, constraints=constraints, method="SLSQP")
+    result["AUC"] = self.evalAUC(*unpackxy(result.x))
+    return result
