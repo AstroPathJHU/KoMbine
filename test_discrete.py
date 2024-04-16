@@ -32,7 +32,6 @@ def plot_params(responders, nonresponders, *, skip_aucs=[]):
   for linspace in linspaces:
     last_failed = False
     for target_auc in linspace:
-      if target_auc in (0, 1): continue
       print(target_auc)
       if target_auc in skip_aucs: continue
       result = optimizer.optimize(AUC=target_auc)
@@ -40,15 +39,13 @@ def plot_params(responders, nonresponders, *, skip_aucs=[]):
       yy = result.y
       auc = 1/2 * np.sum((yy[1:]+yy[:-1]) * (xx[1:] - xx[:-1]))
       delta_auc = auc - target_auc
-      """
-      if abs(delta_auc) > 1e-4 or abs(xx[-1]-1) > 1e-4 or abs(yy[-1]-1) > 1e-4:
+      if abs(delta_auc) > 1e-4 or not result.success:
         print("failed", target_auc)
         if last_failed:
           break
         else:
           last_failed = True
           continue
-      """
       last_failed = False
       plt.scatter(xx, yy, label=f"{target_auc:.3g}")
       target_aucs.append(target_auc)
