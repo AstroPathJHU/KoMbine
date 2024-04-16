@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt, numpy as np, scipy.integrate, scipy.stats
-import roc_auc
+import roc_picker.roc_auc
 
 h = .6
 
@@ -27,7 +27,7 @@ def run(target_AUC, verbose=True, prev_rocs={AUC: (t_plot, X, Y, None, None)}):
     optimize_result = prev_result
     xy_guess = optimize_result.y
   else:
-    xy_guess = roc_auc.xy_guess(X=X_for_guess, Y=Y_for_guess, t_guess=t_for_guess, AUC=target_AUC)
+    xy_guess = roc_picker.roc_auc.xy_guess(X=X_for_guess, Y=Y_for_guess, t_guess=t_for_guess, AUC=target_AUC)
 
     if Lambda_guess is None:
       if target_AUC < AUC:
@@ -35,7 +35,7 @@ def run(target_AUC, verbose=True, prev_rocs={AUC: (t_plot, X, Y, None, None)}):
       else:
         Lambda_guess = -2
 
-    optimize_result = roc_auc.optimize(X=X, Y=Y, Xdot=Xdot, Ydot=Ydot, AUC=target_AUC, Lambda_scaling=1, Lambda_guess=Lambda_guess, guess=xy_guess, t_guess=t_for_guess)
+    optimize_result = roc_picker.roc_auc.optimize(X=X, Y=Y, Xdot=Xdot, Ydot=Ydot, AUC=target_AUC, Lambda_scaling=1, Lambda_guess=Lambda_guess, guess=xy_guess, t_guess=t_for_guess)
 
   t = optimize_result.x
   x, y = xy = optimize_result.y

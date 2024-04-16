@@ -28,7 +28,7 @@
 
 We want to solve the following problem:
 
-We have a set of samples characterized by a parameter \(t\) (for example, density of CD8+FoxP3+-like donuts).  They are divided into two groups (responders and non-responders to anti-PD1).  We expect that one group (responders) will have a higher \(t\) than the other group (non-responders) and want to illustrate this using a ROC curve.  How can we estimate the uncertainties on the ROC curve?
+We have a set of samples characterized by a parameter \(t\) (for example, density of CD8+FoxP3+-like neighborhoods).  They are divided into two groups (responders and non-responders to anti-PD1).  We expect that one group (responders) will have a higher \(t\) than the other group (non-responders) and want to illustrate this using a ROC curve.  How can we estimate the uncertainties on the ROC curve?
 
 One source of uncertainty is the statistics of our sample set.  We don't know the real distribution of \(t\) for the two groups; we only know the distribution for the samples we have.
 
@@ -113,7 +113,7 @@ We want to find a way to estimate the error on the AUC.  To do this, we will use
 	\item Plot the negative log likelihood (\cref{eq:loglikelihood}) as a function of the AUC.  The most likely AUC is the one that minimizes this log likelihood, which we found in \cref{sec:lagrangian}, and we subtract this minimum to obtain \(-2\Delta\ln{L}\).  The 68\% confidence interval is where \(-2\Delta\ln{L}<1\), and the 95\% confidence interval is where \(-2\Delta\ln{L}<3.84\).
 \end{enumerate}
 
-To minimize the log likelihood given a fixed AUC, we add a Lagrange multiplier term to the Lagrangian \cref{eq:lagrangian} to obtain
+To minimize the log likelihood given a fixed AUC, we add a Lagrange multiplier term to \cref{eq:lagrangian} to obtain
 \begin{equation}
 \mathcal{\tilde{L}}[x,\xdot,y,\ydot,t,\Lambda]=-2\left(\Xdot(t)\ln{\xdot(t)}+\Ydot(t)\ln{\ydot(t)}\right)+\Lambda y\xdot
 \end{equation}

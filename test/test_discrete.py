@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt, numpy as np
-import delta_functions
+import roc_picker.discrete
 
 responders = np.linspace(-10, 10, 3)
 nonresponders = responders+2.5
@@ -8,10 +8,9 @@ def plot_params(responders, nonresponders, *, skip_aucs=[]):
   target_aucs = []
   aucs = []
   delta_aucs = []
-  L = []
-  c1 = []
-  c5 = []
   NLL = []
+
+  optimizer = roc_picker.discrete.Discrete(responders=responders, nonresponders=nonresponders)
 
   t = np.asarray(sorted(set(responders) | set(nonresponders) | {-np.inf, np.inf}))
 
@@ -35,14 +34,12 @@ def plot_params(responders, nonresponders, *, skip_aucs=[]):
     for target_auc in linspace:
       print(target_auc)
       if target_auc in skip_aucs: continue
-      result = delta_functions.findxy(responders, nonresponders, AUC=target_auc, c1_guess=1, c5_guess=1, Lambda_guess=1)
-      x = result.x
-      y = result.y
-      xx = x(t)
-      yy = y(t)
+      result = optimizer.optimize(AUC=target_auc)
+      xx = result.x
+      yy = result.y
       auc = 1/2 * np.sum((yy[1:]+yy[:-1]) * (xx[1:] - xx[:-1]))
       delta_auc = auc - target_auc
-      if abs(delta_auc) > 1e-4 or abs(xx[-1]-1) > 1e-4 or abs(yy[-1]-1) > 1e-4:
+      if abs(delta_auc) > 1e-4 or not result.success:
         print("failed", target_auc)
         if last_failed:
           break
@@ -53,25 +50,16 @@ def plot_params(responders, nonresponders, *, skip_aucs=[]):
       plt.scatter(xx, yy, label=f"{target_auc:.3g}")
       target_aucs.append(target_auc)
       delta_aucs.append(delta_auc)
-      c1.append(result.c1)
-      c5.append(result.c5)
-      L.append(result.Lambda)
       NLL.append(result.NLL)
-  plt.legend()
-  plt.show()
-  plt.figure(figsize=(5, 5))
-  plt.scatter(target_aucs, c1, label="$c_{1}$")
-  plt.scatter(target_aucs, c5, label="$c_{5}$")
-  plt.scatter(target_aucs, L, label=r"$\Lambda$")
-  plt.ylim(-10, 100)
   plt.legend()
   plt.show()
 
   target_aucs = np.asarray(target_aucs)
+  print(NLL)
   deltaNLL = np.asarray(NLL)
   deltaNLL -= np.nanmin(deltaNLL)
   plt.figure(figsize=(5,5))
-  plt.scatter(target_aucs, 2*deltaNLL, label="$-2\Delta\ln{L}$")
+  plt.scatter(target_aucs, 2*deltaNLL, label=r"$-2\Delta\ln{L}$")
   slc = np.isclose(deltaNLL, np.nanmin(deltaNLL))
   plt.scatter(target_aucs[slc], 2*deltaNLL[slc], label="best fit")
   xlow, xhigh = plt.xlim()
@@ -79,5 +67,5 @@ def plot_params(responders, nonresponders, *, skip_aucs=[]):
   plt.plot([xlow, xhigh], [3.84, 3.84], label="95% CL")
   plt.legend()
   plt.xlabel("AUC")
-  plt.ylabel("$-2\Delta\ln{L}$")
+  plt.ylabel(r"$-2\Delta\ln{L}$")
   plt.show()
