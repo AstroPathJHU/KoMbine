@@ -100,5 +100,9 @@ class Discrete:
       })
 
     result = scipy.optimize.minimize(NLL, guess, constraints=constraints, method="SLSQP")
-    result["AUC"] = self.evalAUC(*unpackxy(result.x))
+    result["xdotydot"] = xdotydot = result.pop("x")
+    xdot, ydot = unpackxy(xdotydot)
+    result["x"], result["y"] = self.buildroc(xdot, ydot)
+    result["AUC"] = self.evalAUC(xdot, ydot)
+    result["NLL"] = result["fun"]
     return result
