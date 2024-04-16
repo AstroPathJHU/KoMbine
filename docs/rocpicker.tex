@@ -1,3 +1,4 @@
+% !TeX program = xelatex
 % !TeX TXS-program:bibliography = txs:///biber
 
 \documentclass[11pt]{article}
@@ -9,6 +10,11 @@
 \usepackage{hyperref}
 \usepackage{cleveref}
 \usepackage{siunitx}
+\usepackage{fontspec}
+\usepackage{unicode-math}
+%\setmainfont{TeX Gyre Pagella}
+\setmathfont{Asana Math}
+
 
 \addbibresource{rocpicker.bib}
 
@@ -46,12 +52,77 @@ There is something similar for Kaplan-Meier curves \autocite{kaplanmeier_sachs}.
 
 \section{Formalizing the problem}
 
-\subsection{Lagrangian approach}
-\label{sec:lagrangian}
-
 A ROC curve is a plot of \(x(t), y(t)\), where \(x(t)\) is the cumulative density function (CDF) of \(t\) for one group (non-responders) and \(y(t)\) is the CDF for the other group (responders).  The derivatives, \(\xdot(t)\) and \(\ydot(t)\), give the probability density functions (PDFs) for the two groups.   We want to find a probability distribution for the ``true'' \(x\) and \(y\) distributions, given our observed data.
 
-Our observed data for the two groups have CDFs \(X(t), Y(t)\) and PDFs \(\Xdot(t), \Ydot(t)\).  In reality \(\Xdot\) and \(\Ydot\) are going to be sums of delta functions, but for the time being we will treat them as continuous and use continuous distributions in our tests.  They are normalized so that
+Our observed data for the two groups have CDFs \(X(t), Y(t)\) and PDFs \(\Xdot(t), \Ydot(t)\).  In reality, \(\Xdot\) and \(\Ydot\) are going to be sums of delta functions, while the true probability distributions \(\xdot\) and \(\ydot\) are unknown, continuous distributions.  In order to make the problem feasible, we have to make some assumptions on the form of \(\xdot\) and \(\ydot\).  The current package includes three implementations.
+
+\subsection{Discrete points}
+\label{sec:discrete}
+
+In the first implementation, we consider \(\Xdot\) and \(\Ydot\) as discrete.  Furthermore, we assume that the true probability distributions \(\xdot\) and \(\ydot\) are also sums of delta functions, where \(\xdot\) only has nonzero probability where \(\Xdot\) does and \(\ydot\) only has nonzero probability where \(\Ydot\) does, but possibly with different relative weights.  This is equivalent to assuming that all future patients will be identical to one of the current ones.  Formally,
+\begin{align}
+\begin{aligned}
+\Xdot(t)&=\sum_n \mathscr{X}_n \delta(t-t_n) \\
+\Ydot(t)&=\sum_r \mathscr{Y}_r \delta(t-t_r) \\
+\xdot(t)&=\sum_n \mathscr{x}_n \delta(t-t_n) \\
+\ydot(t)&=\sum_r \mathscr{y}_r \delta(t-t_r) \\
+\end{aligned}
+\end{align}
+The indices \(n\) and \(r\) index the non-responders and responders, \(\mathscr{X}_n\) and \(\mathscr{Y}_r\) are the numbers of non-responders and responders with \(t=t_n\) or \(t=t_r\), and \(\mathscr{x}_n\) and \(\mathscr{y}_r\) are the fractions of non-responders and responders with \(t=t_n\) or \(t=t_r\) in the true probability distribution.
+
+\subsubsection{The most likely \texorpdfstring{\(\mathscr{x}\)}{x} and \texorpdfstring{\(\mathscr{y}\)}{y}}
+\label{sec:discrete_unconstrained}
+
+Given \(\mathscr{x}_n\) and \(\mathscr{y}_r\), the probability to observe our data \((\mathscr{X}_n, \mathscr{Y}_r)\) is
+\begin{equation}
+\ln{L}=-\sum_{n}\mathscr{X}_n\ln{\mathscr{x}_n}-\sum_{r}\mathscr{Y}_r\ln{\mathscr{y}_r}
+\label{eq:discrete_loglikelihood}
+\end{equation}
+We want to maximize this likelihood with the constraint
+\begin{align}
+\begin{aligned}
+\sum_n{\mathscr{x}_n}&=1 \\
+\sum_r{\mathscr{y}_r}&=1
+\end{aligned}
+\end{align}
+We get
+\begin{align}
+\begin{aligned}
+\frac{\partial}{\partial \mathscr{x}_n}(\ln{L} + \lambda_x \sum_n {\mathscr{x}_n} + \lambda_y \sum_r{\mathscr{y}_r})&=0 \\
+-\frac{\mathscr{X}_n}{\mathscr{x}_n}+\lambda_x&=0 \\
+\end{aligned}
+\end{align}
+The result is
+\begin{align}
+\begin{aligned}
+\mathscr{x}_n&=\frac{\mathscr{X}_n}{\sum_{n^\prime}\mathscr{X}_{n^\prime}} \\
+\mathscr{y}_r&=\frac{\mathscr{Y}_r}{\sum_{r^\prime}\mathscr{Y}_{r^\prime}}
+\end{aligned}
+\end{align}
+In other words, the most likely probability distribution given our data is the probability distribution that we observe in the data.  No surprise.
+
+\subsubsection{Likelihood scan for AUC}
+\label{sec:discrete_likelihood_scan}
+
+One metric that is commonly used to assess the power of \(t\) to separate the two groups is the AUC, or area under the ROC curve.  Using our notation, this is
+\begin{align}
+	\begin{aligned}
+		\AUC&=\int_{0}^{1}ydx\\
+		&=\int_{-\infty}^{\infty}y\xdot dt \label{eq:AUC}
+	\end{aligned}
+\end{align}
+We want to find a way to estimate the error on the AUC.  To do this, we will use a likelihood scan:
+\begin{enumerate}
+	\item Fix the AUC to a particular value
+	\item Of all possible curves \(x(t), y(t)\) that satisfy \cref{eq:AUC}, find the one that is most likely given our data
+	\item Evaluate its negative log likelihood (\cref{eq:discrete_loglikelihood})
+	\item Plot the best fit negative log likelihood as a function of the AUC.  The most likely AUC is the one that minimizes this log likelihood, which we found in \cref{sec:discrete_unconstrained}, and we subtract this minimum to obtain \(-2\Delta\ln{L}\).  The 68\% confidence interval is where \(-2\Delta\ln{L}<1\), and the 95\% confidence interval is where \(-2\Delta\ln{L}<3.84\).
+\end{enumerate}
+
+\subsection{Continuous distributions}
+\label{sec:lagrangian}
+
+In reality \(\Xdot\) and \(\Ydot\) are going to be sums of delta functions, but for the time being we will treat them as continuous and use continuous distributions in our tests.  They are normalized so that
 \begin{align}
 \begin{aligned}
 X(-\infty)=Y(-\infty)&=0 \\
@@ -99,19 +170,7 @@ In other words, the most likely probability distribution given our data is the p
 
 \subsection{Likelihood scan for AUC}
 
-One metric that is commonly used to assess the power of \(t\) to separate the two groups is the AUC, or area under the ROC curve.  Using our notation, this is
-\begin{align}
-\begin{aligned}
-	\AUC&=\int_{0}^{1}ydx\\
-	&=\int_{-\infty}^{\infty}y\xdot dt \label{eq:AUC}
-\end{aligned}
-\end{align}
-We want to find a way to estimate the error on the AUC.  To do this, we will use a likelihood scan:
-\begin{enumerate}
-	\item Fix the AUC to a particular value
-	\item Of all possible curves \(x(t), y(t)\) that satisfy \cref{eq:AUC}, find the one that is most likely given our data
-	\item Plot the negative log likelihood (\cref{eq:loglikelihood}) as a function of the AUC.  The most likely AUC is the one that minimizes this log likelihood, which we found in \cref{sec:lagrangian}, and we subtract this minimum to obtain \(-2\Delta\ln{L}\).  The 68\% confidence interval is where \(-2\Delta\ln{L}<1\), and the 95\% confidence interval is where \(-2\Delta\ln{L}<3.84\).
-\end{enumerate}
+We want to produce a likelihood scan for the AUC, similar to how we did it in \cref{sec:discrete_likelihood_scan}.
 
 To minimize the log likelihood given a fixed AUC, we add a Lagrange multiplier term to \cref{eq:lagrangian} to obtain
 \begin{equation}
