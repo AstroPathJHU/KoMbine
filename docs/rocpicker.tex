@@ -84,6 +84,7 @@ We want to maximize this likelihood with the constraint
 \sum_n{\mathscr{x}_n}&=1 \\
 \sum_r{\mathscr{y}_r}&=1
 \end{aligned}
+\label{eq:discrete_normalization}
 \end{align}
 We get
 \begin{align}
@@ -118,6 +119,21 @@ We want to find a way to estimate the error on the AUC.  To do this, we will use
 	\item Evaluate its negative log likelihood (\cref{eq:discrete_loglikelihood})
 	\item Plot the best fit negative log likelihood as a function of the AUC.  The most likely AUC is the one that minimizes this log likelihood, which we found in \cref{sec:discrete_unconstrained}, and we subtract this minimum to obtain \(-2\Delta\ln{L}\).  The 68\% confidence interval is where \(-2\Delta\ln{L}<1\), and the 95\% confidence interval is where \(-2\Delta\ln{L}<3.84\).
 \end{enumerate}
+
+Our implementation uses \texttt{scipy.optimize.minimize} with \texttt{method=SLSQP}.  We introduce an explicit constraint for the AUC.  For the normalizations (\cref{eq:discrete_normalization}), we do not introduce a constraint, but instead apply the normalization internally before calculating the log-likelihood and AUC.  In our tests, this minimization converges reliably and instantaneously.
+
+\subsection{Example}
+
+In this simple example, we have 3 responders and 3 non-responders (in reality, there don't have to be the same number of patients in both categories).  The responders have \(t_r=(-2, -2, 1)\), while the non-responders have \(t_n=(-1, 2, 2)\).  The ROC curve is shown in \cref{fig:exampledata_discrete}.
+
+\begin{figure}
+	\begin{center}
+		\includegraphics[width=0.32\textwidth]{discrete_exampleroc.pdf}
+		\includegraphics[width=0.32\textwidth]{discrete_scan.pdf}
+		\caption{Plots for the example distributions. Left: The ROC curve. Middle: The likelihood scan. Right: The best-fitted ROC curve, with 68\% and 95\% error bands indicating the best-fitted ROC curves with AUCs at the edges of the 68\% and 95\% CL regions from the likelihood scan.}
+		\label{fig:exampledata_discrete}
+	\end{center}
+\end{figure}
 
 \subsection{Continuous distributions}
 \label{sec:lagrangian}

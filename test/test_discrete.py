@@ -1,10 +1,13 @@
-import matplotlib.pyplot as plt, numpy as np
+import matplotlib.pyplot as plt, numpy as np, pathlib
 import roc_picker.discrete
 
-responders = np.linspace(-10, 10, 3)
-nonresponders = responders+2.5
+here = pathlib.Path(__file__).parent
+docsfolder = here.parent/"docs"
 
-def plot_params(responders, nonresponders, *, skip_aucs=[]):
+responders = np.array([-2, -2, 1])
+nonresponders = -responders
+
+def plot_params(responders, nonresponders, *, skip_aucs=[], show=False, yupperlim=None):
   target_aucs = []
   aucs = []
   delta_aucs = []
@@ -24,15 +27,14 @@ def plot_params(responders, nonresponders, *, skip_aucs=[]):
   AUC = 1/2 * np.sum((yy[1:]+yy[:-1]) * (xx[1:] - xx[:-1]))
 
   linspaces = [
-    [AUC] + [_ for _ in np.linspace(0, 1, 21) if _ >= AUC],
-    [AUC] + [_ for _ in np.linspace(1, 0, 21) if _ <= AUC],
+    [AUC] + [_ for _ in np.linspace(0, 1, 1001) if _ >= AUC],
+    [AUC] + [_ for _ in np.linspace(1, 0, 1001) if _ <= AUC],
   ]
 
   plt.figure(figsize=(5, 5))
   for linspace in linspaces:
     last_failed = False
     for target_auc in linspace:
-      print(target_auc)
       if target_auc in skip_aucs: continue
       result = optimizer.optimize(AUC=target_auc)
       xx = result.x
@@ -40,19 +42,24 @@ def plot_params(responders, nonresponders, *, skip_aucs=[]):
       auc = 1/2 * np.sum((yy[1:]+yy[:-1]) * (xx[1:] - xx[:-1]))
       delta_auc = auc - target_auc
       if abs(delta_auc) > 1e-4 or not result.success:
-        print("failed", target_auc)
         if last_failed:
           break
         else:
           last_failed = True
           continue
       last_failed = False
-      plt.scatter(xx, yy, label=f"{target_auc:.3g}")
+      if target_auc == AUC and linspace is linspaces[0]:
+        plt.scatter(xx, yy)
       target_aucs.append(target_auc)
       delta_aucs.append(delta_auc)
       NLL.append(result.NLL)
-  plt.legend()
-  plt.show()
+      if yupperlim is not None and 2*(result.NLL - min(NLL)) > yupperlim: break
+  plt.xlabel("X (Fraction of non-responders)")
+  plt.ylabel("Y (Fraction of responders)")
+  plt.savefig(docsfolder/"discrete_exampleroc.pdf")
+  if show:
+    plt.show()
+  plt.close()
 
   target_aucs = np.asarray(target_aucs)
   print(NLL)
@@ -68,4 +75,11 @@ def plot_params(responders, nonresponders, *, skip_aucs=[]):
   plt.legend()
   plt.xlabel("AUC")
   plt.ylabel(r"$-2\Delta\ln{L}$")
-  plt.show()
+  plt.ylim(top=yupperlim)
+  plt.savefig(docsfolder/"discrete_scan.pdf")
+  if show:
+    plt.show()
+  plt.close()
+
+def main():
+  plot_params(responders=responders, nonresponders=nonresponders, yupperlim=20)
