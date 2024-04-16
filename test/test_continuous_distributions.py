@@ -1,5 +1,8 @@
-import matplotlib.pyplot as plt, numpy as np, scipy.integrate, scipy.stats
-import roc_picker.roc_auc
+import matplotlib.pyplot as plt, numpy as np, pathlib, scipy.integrate, scipy.stats
+import roc_picker.continuous_distributions
+
+here = pathlib.Path(__file__).parent
+docsfolder = here.parent/"docs"
 
 h = .6
 
@@ -27,7 +30,7 @@ def run(target_AUC, verbose=True, prev_rocs={AUC: (t_plot, X, Y, None, None)}):
     optimize_result = prev_result
     xy_guess = optimize_result.y
   else:
-    xy_guess = roc_picker.roc_auc.xy_guess(X=X_for_guess, Y=Y_for_guess, t_guess=t_for_guess, AUC=target_AUC)
+    xy_guess = roc_picker.continuous_distributions.xy_guess(X=X_for_guess, Y=Y_for_guess, t_guess=t_for_guess, AUC=target_AUC)
 
     if Lambda_guess is None:
       if target_AUC < AUC:
@@ -35,14 +38,14 @@ def run(target_AUC, verbose=True, prev_rocs={AUC: (t_plot, X, Y, None, None)}):
       else:
         Lambda_guess = -2
 
-    optimize_result = roc_picker.roc_auc.optimize(X=X, Y=Y, Xdot=Xdot, Ydot=Ydot, AUC=target_AUC, Lambda_scaling=1, Lambda_guess=Lambda_guess, guess=xy_guess, t_guess=t_for_guess)
+    optimize_result = roc_picker.continuous_distributions.optimize(X=X, Y=Y, Xdot=Xdot, Ydot=Ydot, AUC=target_AUC, Lambda_scaling=1, Lambda_guess=Lambda_guess, guess=xy_guess, t_guess=t_for_guess)
 
   t = optimize_result.x
   x, y = xy = optimize_result.y
   xd, yd = xyd = optimize_result.yp
   Lambda, c1, c2 = params = optimize_result.p
 
-  if verbose:  
+  if verbose:
     plt.scatter(X(t_plot)/NX, Y(t_plot)/NY, label="X, Y")
     plt.scatter(xy_guess[0], xy_guess[1], label="guess")
     plt.scatter(xy[0], xy[1], label="optimized")
@@ -62,7 +65,7 @@ def run(target_AUC, verbose=True, prev_rocs={AUC: (t_plot, X, Y, None, None)}):
 
   return optimize_result
 
-def plot_params(*, skip_aucs=[]):
+def plot_params(*, skip_aucs=[], show=False):
   target_aucs = []
   aucs = []
   delta_aucs = []
@@ -97,21 +100,24 @@ def plot_params(*, skip_aucs=[]):
       c2.append(result.p[2])
       NLL.append(result.NLL)
   plt.figure(figsize=(5,5))
-  #plt.scatter(target_aucs, delta_aucs, label="$\Delta$AUC")
-  plt.scatter(target_aucs, L, label="$\Lambda$")
+  #plt.scatter(target_aucs, delta_aucs, label=r"$\Delta$AUC")
+  plt.scatter(target_aucs, L, label=r"$\Lambda$")
   plt.scatter(target_aucs, c1, label="$c_1$")
   plt.scatter(target_aucs, c2, label="$c_2$")
   plt.ylim(-10, 10)
   plt.xlabel("AUC")
   plt.ylabel("Parameters")
   plt.legend()
-  plt.savefig("docs/examplescan.pdf")
-  plt.show()
+  plt.savefig(docsfolder/"examplescan.pdf")
+  if show:
+    plt.show()
+  plt.close()
+
   target_aucs = np.asarray(target_aucs)
   deltaNLL = np.asarray(NLL)
   deltaNLL -= np.nanmin(deltaNLL)
   plt.figure(figsize=(5,5))
-  plt.scatter(target_aucs, 2*deltaNLL, label="$-2\Delta\ln{L}$")
+  plt.scatter(target_aucs, 2*deltaNLL, label=r"$-2\Delta\ln{L}$")
   slc = np.isclose(deltaNLL, np.nanmin(deltaNLL))
   plt.scatter(target_aucs[slc], 2*deltaNLL[slc], label="best fit")
   xlow, xhigh = plt.xlim()
@@ -119,9 +125,11 @@ def plot_params(*, skip_aucs=[]):
   plt.plot([xlow, xhigh], [3.84, 3.84], label="95% CL")
   plt.legend()
   plt.xlabel("AUC")
-  plt.ylabel("$-2\Delta\ln{L}$")
-  plt.savefig("docs/exampleparameters.pdf")
-  plt.show()
+  plt.ylabel(r"$-2\Delta\ln{L}$")
+  plt.savefig(docsfolder/"exampleparameters.pdf")
+  if show:
+    plt.show()
+  plt.close()
   return target_aucs, delta_aucs, L, c1, c2, NLL
 
 def plots(show=False):
@@ -131,7 +139,7 @@ def plots(show=False):
   plt.xlabel("$t$")
   plt.ylabel(r"$\dot{X}$, $\dot{Y}$")
   plt.legend()
-  plt.savefig("docs/exampleXdotYdot.pdf")
+  plt.savefig(docsfolder/"exampleXdotYdot.pdf")
   if show:
     plt.show()
   plt.close()
@@ -142,7 +150,7 @@ def plots(show=False):
   plt.xlabel("$t$")
   plt.ylabel(r"$X$, $Y$")
   plt.legend()
-  plt.savefig("docs/exampleXY.pdf")
+  plt.savefig(docsfolder/"exampleXY.pdf")
   if show:
     plt.show()
   plt.close()
@@ -153,7 +161,11 @@ def plots(show=False):
   plt.ylabel("$Y$")
   plt.xlim(0, 1)
   plt.ylim(0, 1)
-  plt.savefig("docs/exampleroc.pdf")
+  plt.savefig(docsfolder/"exampleroc.pdf")
   if show:
     plt.show()
   plt.close()
+
+if __name__ == "__main__":
+  plot_params()
+  plots()
