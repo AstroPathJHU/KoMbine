@@ -81,5 +81,30 @@ def plot_params(responders, nonresponders, *, skip_aucs=[], show=False, yupperli
     plt.show()
   plt.close()
 
+  #find the 68% and 95% bands
+  for (nsigma, d2NLLcut) in ((1, 1), (2, 3.84)):
+    withinsigma = 2 * deltaNLL < d2NLLcut
+
+    from_above_to_below = withinsigma[:-1] & ~withinsigma[1:]
+    from_above_to_below_left = np.concatenate((from_above_to_below, [False]))
+    from_above_to_below_right = np.concatenate(([False], from_above_to_below))
+    np.testing.assert_equal(sum(from_above_to_below_left), 1)
+    np.testing.assert_equal(sum(from_above_to_below_right), 1)
+
+    from_below_to_above = ~withinsigma[:-1] & withinsigma[1:]
+    from_below_to_above_left = np.concatenate((from_below_to_above, [False]))
+    from_below_to_above_right = np.concatenate(([False], from_below_to_above))
+    np.testing.assert_equal(sum(from_below_to_above_left), 1)
+    np.testing.assert_equal(sum(from_below_to_above_right), 1)
+
+    def tosolve(target_auc):
+      result = optimizer.optimize(AUC=target_auc)
+      return 2 * (result.NLL - np.nanmin(NLL)) - d2NLLcut
+
+    left_auc = scipy.optimize.root_scalar(tosolve, bracket=[from_above_to_below_left, from_above_to_below_right])
+    left_result = optimizer.optimize(AUC=left_auc)
+    right_auc = scipy.optimize.root_scalar(tosolve, bracket=[from_below_to_above_left, from_below_to_above_right])
+    left_result = optimizer.optimize(AUC=left_auc)
+
 def main():
   plot_params(responders=responders, nonresponders=nonresponders, yupperlim=20)
