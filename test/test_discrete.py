@@ -15,7 +15,7 @@ def main():
     yupperlim=20,
     rocfilename=docsfolder/"discrete_exampleroc.pdf",
     scanfilename=docsfolder/"discrete_scan.pdf",
-    rocerrorsfilename=docsfolder/"discrete_exampleroc_errors.pdf"
+    rocerrorsfilename=docsfolder/"discrete_exampleroc_errors.pdf",
     show=False,
   )
 
