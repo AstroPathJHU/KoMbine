@@ -4,8 +4,8 @@ import roc_picker.discrete
 here = pathlib.Path(__file__).parent
 docsfolder = here.parent/"docs"
 
-responders = np.array([-2, -2, 1])
-nonresponders = -responders
+responders = [1, 1, 2, 2, 3, 9, 10]
+nonresponders = [2, 3, 3, 4, 6, 8, 9, 10, 10, 10, 10, 11, 12, 13]
 
 def plot_params(responders, nonresponders, *, skip_aucs=[], show=False, yupperlim=None):
   target_aucs = []
@@ -140,10 +140,11 @@ def plot_params(responders, nonresponders, *, skip_aucs=[], show=False, yupperli
     addyy_p68 = list(y_p68[x_p68 == x])
     addyy_m68 = list(y_m68[x_m68 == x])
     xx_pm68 += [x] * max(len(addyy_p68), len(addyy_m68))
-    if len(addyy_p68) < len(addyy_m68):
-      addyy_p68 = [max(y_p68[x_p68 < x])] * (len(addyy_m68) - len(addyy_p68)) + addyy_p68
-    elif len(addyy_m68) < len(addyy_p68):
-      addyy_m68 = [max(y_m68[x_m68 < x])] * (len(addyy_p68) - len(addyy_m68)) + addyy_m68
+    if not len(addyy_p68):
+      addyy_p68 = [np.interp(x, x_p68, y_p68)] * len(addyy_m68)
+    elif not len(addyy_m68):
+      addyy_m68 = [np.interp(x, x_m68, y_m68)] * len(addyy_p68)
+    np.testing.assert_equal(len(addyy_p68), len(addyy_m68))
     yy_p68 += addyy_p68
     yy_m68 += addyy_m68
 
@@ -154,10 +155,11 @@ def plot_params(responders, nonresponders, *, skip_aucs=[], show=False, yupperli
     addyy_p95 = list(y_p95[x_p95 == x])
     addyy_m95 = list(y_m95[x_m95 == x])
     xx_pm95 += [x] * max(len(addyy_p95), len(addyy_m95))
-    if len(addyy_p95) < len(addyy_m95):
-      addyy_p95 = [max(y_p95[x_p95 < x])] * (len(addyy_m95) - len(addyy_p95)) + addyy_p95
-    elif len(addyy_m95) < len(addyy_p95):
-      addyy_m95 = [max(y_m95[x_m95 < x])] * (len(addyy_p95) - len(addyy_m95)) + addyy_m95
+    if not len(addyy_p95):
+      addyy_p95 = [np.interp(x, x_p95, y_p95)] * len(addyy_m95)
+    elif not len(addyy_m95):
+      addyy_m95 = [np.interp(x, x_m95, y_m95)] * len(addyy_p95)
+    np.testing.assert_equal(len(addyy_p95), len(addyy_m95))
     yy_p95 += addyy_p95
     yy_m95 += addyy_m95
 

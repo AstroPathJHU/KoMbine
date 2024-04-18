@@ -126,7 +126,7 @@ Our implementation uses \texttt{scipy.optimize.minimize} with \texttt{method=SLS
 
 \subsubsection{Example}
 
-In this simple example, we have 3 responders and 3 non-responders (in reality, there don't have to be the same number of patients in both categories).  The responders have \(t_r=(-2, -2, 1)\), while the non-responders have \(t_n=(-1, 2, 2)\).  The ROC curve is shown in \cref{fig:exampledata_discrete} (left).  The middle plot shows a likelihood scan for the AUC.  The right hand plot shows the ROC curves corresponding to the 68\% and 95\% AUCs.
+In this simple example, we have 7 responders \(t_r=(1, 1, 2, 2, 3, 9, 10)\) and 14 non-responders \(t_n=(2, 3, 3, 4, 6, 8, 9, 10, 10, 10, 10, 11, 12, 13)\).  The ROC curve is shown in \cref{fig:exampledata_discrete} (left).  The middle plot shows a likelihood scan for the AUC.  The right hand plot shows the ROC curves corresponding to the 68\% and 95\% AUCs.
 
 It is important to note that there is not just one up and down variation of the curve for a given confidence level, and any choice is only an illustration.  In other words, the edges of the error bands in \cref{fig:exampledata_discrete} (right) are \emph{not} the only possible ROC curves that mark the boundaries of the 68\% and 95\% regions.  They are only the 68\% and 95\% ROC curves with AUCs most distant from the nominal AUC, and are therefore informative for illustration.  Other packages, such as \autocite{roc_fernandez}, have a different method of illustrating the uncertainty band for the whole curve.
 
