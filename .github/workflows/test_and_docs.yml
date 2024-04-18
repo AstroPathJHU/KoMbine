@@ -28,13 +28,13 @@ jobs:
         run: |
           python test/test_delta_functions.py
 
-      #- name: Compile docs
-      #  uses: xu-cheng/latex-action@v2
-      #  with:
-      #    working_directory: docs
-      #    root_file: rocpicker.tex
-      #    latexmk_use_xelatex: true
-      #- uses: actions/upload-artifact@v2
-      #  with:
-      #    name: docs pdf
-      #    path: docs/rocpicker.pdf
+      - name: Compile docs
+        uses: xu-cheng/latex-action@v2
+        with:
+          working_directory: docs
+          root_file: rocpicker.tex
+          latexmk_use_xelatex: true
+      - uses: actions/upload-artifact@v2
+        with:
+          name: docs pdf
+          path: docs/rocpicker.pdf
