@@ -6,7 +6,6 @@ nonresponders = responders+2.5
 
 def plot_params(responders, nonresponders, *, skip_aucs=[]):
   target_aucs = []
-  aucs = []
   delta_aucs = []
   L = []
   c1 = []

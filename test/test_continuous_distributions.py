@@ -42,8 +42,8 @@ def run(target_AUC, verbose=True, prev_rocs={AUC: (t_plot, X, Y, None, None)}):
 
   t = optimize_result.x
   x, y = xy = optimize_result.y
-  xd, yd = xyd = optimize_result.yp
-  Lambda, c1, c2 = params = optimize_result.p
+  xd, yd = optimize_result.yp
+  Lambda, c1, c2 = optimize_result.p
 
   if verbose:
     plt.scatter(X(t_plot)/NX, Y(t_plot)/NY, label="X, Y")
@@ -67,7 +67,6 @@ def run(target_AUC, verbose=True, prev_rocs={AUC: (t_plot, X, Y, None, None)}):
 
 def plot_params(*, skip_aucs=[], show=False):
   target_aucs = []
-  aucs = []
   delta_aucs = []
   L = []
   c1 = []

@@ -1,4 +1,4 @@
-import pathlib, setuptools, sys
+import setuptools
 
 setuptools.setup(
   name = "roc_picker",
