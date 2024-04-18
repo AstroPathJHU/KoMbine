@@ -176,11 +176,11 @@ def plot_params(responders, nonresponders, *, skip_aucs=[], show=False, yupperli
   color95="skyblue"
   #plt.plot(x_m95, y_m95, label=r"$-2\sigma$")
   #plt.plot(x_m68, y_m68, label=r"$-1\sigma$")
-  plt.plot(x_n, y_n, label=f"nominal\nAUC={nominal.AUC:.3f}", color=colornominal)
+  plt.plot(x_n, y_n, label=f"nominal\nAUC={nominal.AUC:.2f}", color=colornominal)
   #plt.plot(x_p68, y_p68, label=r"$+1\sigma$")
   #plt.plot(x_p95, y_p95, label=r"$+2\sigma$")
-  plt.fill_between(xx_pm68, yy_m68, yy_p68, alpha=0.5, label=f"68% CL\nAUC$\\in$({m68.AUC:.3f}, {p68.AUC:.3f})", color=color68)
-  plt.fill_between(xx_pm95, yy_m95, yy_p95, alpha=0.5, label=f"95% CL\nAUC$\\in$({m95.AUC:.3f}, {p95.AUC:.3f})", color=color95)
+  plt.fill_between(xx_pm68, yy_m68, yy_p68, alpha=0.5, label=f"68% CL\nAUC$\\in$({m68.AUC:.2f}, {p68.AUC:.2f})", color=color68)
+  plt.fill_between(xx_pm95, yy_m95, yy_p95, alpha=0.5, label=f"95% CL\nAUC$\\in$({m95.AUC:.2f}, {p95.AUC:.2f})", color=color95)
   plt.legend()
 
   plt.savefig(docsfolder/"discrete_exampleroc_errors.pdf")
