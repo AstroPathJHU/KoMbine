@@ -8,7 +8,7 @@ responders = [1, 1, 2, 2, 3, 9, 10]
 nonresponders = [2, 3, 3, 4, 6, 8, 9, 10, 10, 10, 10, 11, 12, 13]
 
 def main():
-  roc_picker.discrete.Discrete(
+  roc_picker.discrete.DiscreteROC(
     responders=responders,
     nonresponders=nonresponders
   ).plot_roc(

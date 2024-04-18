@@ -1,6 +1,6 @@
 import collections, functools, matplotlib.pyplot as plt, numpy as np, scipy.optimize
 
-class Discrete:
+class DiscreteROC:
   def __init__(self, responders, nonresponders):
     self.responders = responders
     self.nonresponders = nonresponders
