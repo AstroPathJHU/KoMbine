@@ -44,9 +44,11 @@ At this point I want to address the first source of uncertainty.  I think the me
 
 \section{Previous approaches}
 
-I haven't been able to find any recent papers that deal with this.  Many methods \autocite{roc_kerekes} deal with individual points on the ROC curve without taking their correlations into account.  There is a paper from Tilbury 25 years ago \autocite{roc_tilbury} that does something similar to what I'm doing here, but in a \emph{very} computationally expensive way, with a discrete and small number of points.  Tilbury notes that one of the computations done for that paper ``ran for over a month on a powerful Unix workstation''.  A quarter century later, I'm sure it would run faster, but the method still scales poorly with the number of points on the ROC curve.
+Many methods \autocite{roc_kerekes} deal with individual points on the ROC curve without taking their correlations into account.  There is a paper from Tilbury 25 years ago \autocite{roc_tilbury} that does something similar to what we're doing here, but in a \emph{very} computationally expensive way, with only three points.  It would scale terribly to a ROC curve with more points.  The authors note that one of the computations done for that paper ``ran for over a month on a powerful Unix workstation''.  A quarter century later, it would run faster, but the method still scales poorly with the number of points on the ROC curve.
 
-In any case, none of the papers I saw considered any uncertainties other than the binomial statistical uncertainty on the number of samples.  We want a method that can generalize to sample-wise uncertainties, which can include statistical uncertainties on counts and any kind of systematic uncertainty.
+A more recent paper and accompanying R package \autocite{roc_fernandez} includes three methods of computing confidence intervals on a ROC curve, using various assumptions and approximations.
+
+In any case, none of these papers considered any uncertainties other than the binomial statistical uncertainty on the number of samples.  We want a method that can generalize to sample-wise uncertainties, which can include statistical uncertainties on counts and any kind of systematic uncertainty.
 
 There is something similar for Kaplan-Meier curves \autocite{kaplanmeier_sachs}.  It correctly considers the whole curve as a unit, but also doesn't include systematic uncertainties.
 
@@ -126,7 +128,7 @@ Our implementation uses \texttt{scipy.optimize.minimize} with \texttt{method=SLS
 
 In this simple example, we have 3 responders and 3 non-responders (in reality, there don't have to be the same number of patients in both categories).  The responders have \(t_r=(-2, -2, 1)\), while the non-responders have \(t_n=(-1, 2, 2)\).  The ROC curve is shown in \cref{fig:exampledata_discrete} (left).  The middle plot shows a likelihood scan for the AUC.  The right hand plot shows the ROC curves corresponding to the 68\% and 95\% AUCs.
 
-It is important to note that the edges of the error bands in \cref{fig:exampledata_discrete} (right) are \emph{not} the only possible ROC curves that mark the boundaries of the 68\% and 95\% regions.  They are only the 68\% and 95\% ROC curves with AUCs most distant from the nominal AUC, and are therefore informative for illustration.
+It is important to note that there is not just one up and down variation of the curve for a given confidence level, and any choice is only an illustration.  In other words, the edges of the error bands in \cref{fig:exampledata_discrete} (right) are \emph{not} the only possible ROC curves that mark the boundaries of the 68\% and 95\% regions.  They are only the 68\% and 95\% ROC curves with AUCs most distant from the nominal AUC, and are therefore informative for illustration.  Other packages, such as \autocite{roc_fernandez}, have a different method of illustrating the uncertainty band for the whole curve.
 
 \begin{figure}
 	\begin{center}
