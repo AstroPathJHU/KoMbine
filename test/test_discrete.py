@@ -188,3 +188,6 @@ def plot_params(responders, nonresponders, *, skip_aucs=[], show=False, yupperli
 
 def main():
   plot_params(responders=responders, nonresponders=nonresponders, yupperlim=20)
+
+if __name__ == "__main__":
+  main()
