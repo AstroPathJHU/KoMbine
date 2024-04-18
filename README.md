@@ -19,6 +19,7 @@ DiscreteROC(
   responders=responders,
   nonresponders=nonresponders,
 ).plot_roc(
+  npoints=100,
   yupperlim=20,
   #if you want to save the output plots
   rocfilename="roc.pdf",

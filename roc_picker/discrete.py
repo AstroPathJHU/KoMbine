@@ -121,7 +121,7 @@ class DiscreteROC:
     result["NLL"] = result["fun"]
     return result
 
-  def plot_roc(self, *, show=False, rocfilename=None, scanfilename=None, rocerrorsfilename=None, yupperlim=None):
+  def plot_roc(self, *, show=False, rocfilename=None, scanfilename=None, rocerrorsfilename=None, yupperlim=None, npoints=100):
     if not show and rocfilename is None and scanfilename is None and rocerrorsfilename is None:
       raise RuntimeError("If you're not showing or saving the plots, there's nothing to do")
 
@@ -140,8 +140,8 @@ class DiscreteROC:
     AUC = 1/2 * np.sum((yy[1:]+yy[:-1]) * (xx[1:] - xx[:-1]))
 
     linspaces = [
-      [AUC] + [_ for _ in np.linspace(0, 1, 1001) if _ >= AUC],
-      [AUC] + [_ for _ in np.linspace(1, 0, 101) if _ <= AUC],
+      [AUC] + [_ for _ in np.linspace(0, 1, npoints+1) if _ >= AUC],
+      [AUC] + [_ for _ in np.linspace(1, 0, npoints+1) if _ <= AUC],
     ]
 
     plt.figure(figsize=(5, 5))

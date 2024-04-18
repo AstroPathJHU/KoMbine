@@ -12,6 +12,7 @@ def main():
     responders=responders,
     nonresponders=nonresponders
   ).plot_roc(
+    npoints=100,
     yupperlim=20,
     rocfilename=docsfolder/"discrete_exampleroc.pdf",
     scanfilename=docsfolder/"discrete_scan.pdf",
