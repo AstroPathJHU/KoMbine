@@ -34,6 +34,7 @@ jobs:
           working_directory: docs
           root_file: rocpicker.tex
           latexmk_use_xelatex: true
+          texlive_version: 2023
       - uses: actions/upload-artifact@v2
         with:
           name: docs pdf
