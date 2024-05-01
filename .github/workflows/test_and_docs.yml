@@ -29,7 +29,7 @@ jobs:
           python test/test_delta_functions.py
 
       - name: Compile docs
-        uses: xu-cheng/latex-action@v2
+        uses: xu-cheng/latex-action@v3
         with:
           working_directory: docs
           root_file: rocpicker.tex
