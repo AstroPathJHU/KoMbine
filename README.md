@@ -32,4 +32,6 @@ DiscreteROC(
 
 For more detailed information, please see the latex document in the `docs/` folder.
 (The plots can be compiled by running the scripts in the test folder.)
+Alternatively, it's compiled by Github Actions, so you can download it from the
+artifacts there.
 
