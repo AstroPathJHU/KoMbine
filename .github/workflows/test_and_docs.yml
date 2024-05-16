@@ -6,10 +6,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: checkout
-        uses: actions/checkout@v3.1.0
+        uses: actions/checkout@v4.1.6
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v4.3.0
+        uses: actions/setup-python@v5.1.0
         with:
           python-version: 3.11
       - name: pip install
@@ -34,8 +34,7 @@ jobs:
           working_directory: docs
           root_file: rocpicker.tex
           latexmk_use_xelatex: true
-          texlive_version: 2023
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4.3.3
         with:
           name: docs pdf
           path: docs/rocpicker.pdf
