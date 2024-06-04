@@ -1,4 +1,4 @@
-import abc, numbers
+import abc, collections, functools, matplotlib.pyplot as plt, numbers, numpy as np, scipy
 
 class DistributionBase(abc.ABC):
   @abc.abstractmethod
@@ -148,7 +148,7 @@ class ROCDistributions:
   def generate(self, size, random_state):
     responders = np.array([r.rvs(size=size, random_state=random_state) for r in self.responders])
     nonresponders = np.array([n.rvs(size=size, random_state=random_state) for n in self.nonresponders])
-    rocs = ROCCollection([ROCInstance(responders=responders[:, i], nonresponders=nonresponders[:, i] for i in range(size))], nominalroc=self.nominal)
+    return ROCCollection([ROCInstance(responders=responders[:, i], nonresponders=nonresponders[:, i]) for i in range(size)], nominalroc=self.nominal)
 
 class ROCInstance:
   #using the same convention as DiscreteROC, but with x = X and y = Y
@@ -156,6 +156,11 @@ class ROCInstance:
   def __init__(self, responders, nonresponders):
     self.__responders = responders
     self.__nonresponders = nonresponders
+
+  @property
+  def responders(self): return self.__responders
+  @property
+  def nonresponders(self): return self.__nonresponders
 
   @functools.cached_property
   def ts(self):
@@ -197,7 +202,7 @@ class ROCInstance:
   xplusy_interp = np.linspace(0, 2, 1001)
   @functools.cached_property
   def xminusy_interp(self):
-    return np.interp(self.xplusy_interp, self.xplusy[::-1], self.xminusy[::-1])
+    return np.interp(self.xplusy_interp, self.xplusy, self.xminusy)
 
   @functools.cached_property
   def AUC(self):
@@ -225,7 +230,7 @@ class ROCCollection:
     return np.array([roc.xminusy_interp for roc in self.__rocinstances])
 
   def xminusy_quantiles(self, quantiles):
-    return np.quantile(self.xminusy_interp, quantiles, axis=1)
+    return np.quantile(self.xminusy_interp, quantiles, axis=0)
   def roc_quantiles(self, quantiles):
     xminusy_quantiles = self.xminusy_quantiles(quantiles)
     x = (self.xplusy_interp + xminusy_quantiles) / 2
@@ -250,9 +255,11 @@ class ROCCollection:
     AUC_68_low, AUC_68_high = sorted([AUC_m68, AUC_p68])
     AUC_95_low, AUC_95_high = sorted([AUC_m95, AUC_p95])
 
-    plt.plot(self.nominal.x, self.nominal.y, label=f"nominal\nAUC={AUC_nominal:.2f}", color="blue")
-    plt.fill_between(x_m68, y_m68, y_p68_interp_to_m68, alpha=0.5, label="68% CL\nAUC$\\in$({AUC_68_low:.2f}, {AUC_68_high:.2f})", color="dodgerblue")
-    plt.fill_between(x_m95, y_m95, y_p95_interp_to_m95, alpha=0.5, label="95% CL\nAUC$\\in$({AUC_95_low:.2f}, {AUC_95_high:.2f})", color="skyblue")
+    fig, ax = plt.subplots(figsize=(7, 7))
+
+    plt.plot(self.nominalroc.x, self.nominalroc.y, label=f"nominal\nAUC={AUC_nominal:.2f}", color="blue")
+    plt.fill_between(x_m68, y_m68, y_p68_interp_to_m68, alpha=0.5, label=f"68% CL\nAUC$\\in$({AUC_68_low:.2f}, {AUC_68_high:.2f})", color="dodgerblue")
+    plt.fill_between(x_m95, y_m95, y_p95_interp_to_m95, alpha=0.5, label=f"95% CL\nAUC$\\in$({AUC_95_low:.2f}, {AUC_95_high:.2f})", color="skyblue")
 
     plt.legend(fontsize=16)
     plt.ylabel("Sensitivity (true positive rate)", fontsize=16)
