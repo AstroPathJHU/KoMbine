@@ -1,9 +1,10 @@
 import collections, functools, matplotlib.pyplot as plt, numpy as np, scipy.optimize
 
 class DiscreteROC:
-  def __init__(self, responders, nonresponders):
+  def __init__(self, responders, nonresponders, *, flip_sign=False):
     self.responders = responders
     self.nonresponders = nonresponders
+    self.flip_sign = flip_sign
 
   @functools.cached_property
   def ts(self):
@@ -38,9 +39,14 @@ class DiscreteROC:
     self.checkvalidity(xscr, yscr)
     x = np.zeros(shape=len(self.ts)+2)
     y = np.zeros(shape=len(self.ts)+2)
-    for i, t in enumerate([-np.inf] + self.ts + [np.inf]):
-      x[i] = sum(v for k, v in xscr.items() if k < t)
-      y[i] = sum(v for k, v in yscr.items() if k < t)
+    sign = 1
+    ts = [-np.inf] + self.ts + [np.inf]
+    if self.flip_sign:
+      sign = -1
+      ts = ts[::-1]
+    for i, t in enumerate(ts):
+      x[i] = sum(v for k, v in xscr.items() if k*sign < t*sign)
+      y[i] = sum(v for k, v in yscr.items() if k*sign < t*sign)
       if x[-1]:
         x /= x[-1]
       if y[-1]:
@@ -128,12 +134,16 @@ class DiscreteROC:
     target_aucs = []
     NLL = []
 
+    sign = 1
     t = np.asarray(sorted(set(self.responders) | set(self.nonresponders) | {-np.inf, np.inf}))
+    if self.flip_sign:
+      sign = -1
+      t = t[::-1]
 
     @np.vectorize
-    def X(t): return sum(1 for n in self.nonresponders if n < t)
+    def X(t): return sum(1 for n in self.nonresponders if n*sign < t*sign)
     @np.vectorize
-    def Y(t): return sum(1 for r in self.responders if r < t)
+    def Y(t): return sum(1 for r in self.responders if r*sign < t*sign)
 
     xx = X(t) / len(self.nonresponders)
     yy = Y(t) / len(self.responders)
