@@ -21,8 +21,8 @@ def plot_poisson(responder_numerators, responder_denominators, nonresponder_nume
   responders = [num / denom for num, denom in zip(responder_num_distributions, responder_denom_distributions, strict=True)]
   nonresponders = [num / denom for num, denom in zip(nonresponder_num_distributions, nonresponder_denom_distributions, strict=True)]
 
-  rd = roc_picker.systematics_mc.ROCDistributions(responders=responders, nonresponders=nonresponders)
-  rocs = rd.generate(size=1000, random_state=123456)
+  rd = roc_picker.systematics_mc.ROCDistributions(responders=responders, nonresponders=nonresponders, flip_sign=True)
+  rocs = rd.generate(size=10000, random_state=123456)
   rocs.plot(
     saveas=saveas,
   )

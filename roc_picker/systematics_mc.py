@@ -132,35 +132,41 @@ class PowerDistributions(DistributionBase):
     return base ** exp
 
 class ROCDistributions:
-  def __init__(self, responders, nonresponders):
+  def __init__(self, responders, nonresponders, *, flip_sign=False):
     self.__responders = responders
     self.__nonresponders = nonresponders
+    self.__flip_sign = flip_sign
 
   @property
   def responders(self): return self.__responders
   @property
   def nonresponders(self): return self.__nonresponders
+  @property
+  def flip_sign(self): return self.__flip_sign
 
   @property
   def nominal(self):
-    return ROCInstance(responders=[r.nominal for r in self.responders], nonresponders=[n.nominal for n in self.nonresponders])
+    return ROCInstance(responders=[r.nominal for r in self.responders], nonresponders=[n.nominal for n in self.nonresponders], flip_sign=self.flip_sign)
 
   def generate(self, size, random_state):
     responders = np.array([r.rvs(size=size, random_state=random_state) for r in self.responders])
     nonresponders = np.array([n.rvs(size=size, random_state=random_state) for n in self.nonresponders])
-    return ROCCollection([ROCInstance(responders=responders[:, i], nonresponders=nonresponders[:, i]) for i in range(size)], nominalroc=self.nominal)
+    return ROCCollection([ROCInstance(responders=responders[:, i], nonresponders=nonresponders[:, i], flip_sign=self.flip_sign) for i in range(size)], nominalroc=self.nominal)
 
 class ROCInstance:
   #using the same convention as DiscreteROC, but with x = X and y = Y
   #(i.e. not handling statistical error on number of patients yet)
-  def __init__(self, responders, nonresponders):
+  def __init__(self, responders, nonresponders, *, flip_sign=False):
     self.__responders = responders
     self.__nonresponders = nonresponders
+    self.__flip_sign = flip_sign
 
   @property
   def responders(self): return self.__responders
   @property
   def nonresponders(self): return self.__nonresponders
+  @property
+  def flip_sign(self): return self.__flip_sign
 
   @functools.cached_property
   def ts(self):
@@ -178,9 +184,14 @@ class ROCInstance:
     yscr = self.Yscr
     x = np.zeros(shape=len(self.ts)+2)
     y = np.zeros(shape=len(self.ts)+2)
-    for i, t in enumerate([-np.inf] + self.ts + [np.inf]):
-      x[i] = sum(v for k, v in xscr.items() if k < t)
-      y[i] = sum(v for k, v in yscr.items() if k < t)
+    sign = 1
+    ts = [-np.inf] + self.ts + [np.inf]
+    if self.flip_sign:
+      sign = -1
+      ts = ts[::-1]
+    for i, t in enumerate(ts):
+      x[i] = sum(v for k, v in xscr.items() if k*sign < t*sign)
+      y[i] = sum(v for k, v in yscr.items() if k*sign < t*sign)
       if x[-1]:
         x /= x[-1]
       if y[-1]:
