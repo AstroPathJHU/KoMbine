@@ -9,5 +9,6 @@
 *.pdf
 *.pyc
 *.run.xml
+*.synctex(busy)
 *.synctex.gz
 .ipynb_checkpoints/*-checkpoint.py
