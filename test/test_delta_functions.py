@@ -4,7 +4,7 @@ import roc_picker.delta_functions
 responders = np.linspace(-10, 10, 3)
 nonresponders = responders+2.5
 
-def plot_params(responders, nonresponders, *, skip_aucs=[]):
+def plot_params(responders, nonresponders, *, skip_aucs=[], flip_sign=False):
   target_aucs = []
   delta_aucs = []
   L = []
@@ -13,6 +13,10 @@ def plot_params(responders, nonresponders, *, skip_aucs=[]):
   NLL = []
 
   t = np.asarray(sorted(set(responders) | set(nonresponders) | {-np.inf, np.inf}))
+  sign = 1
+  if flip_sign:
+    t = t[::-1]
+    sign = -1
 
   @np.vectorize
   def X(t): return sum(1 for n in nonresponders if n < t)
@@ -21,7 +25,7 @@ def plot_params(responders, nonresponders, *, skip_aucs=[]):
 
   xx = X(t) / len(nonresponders)
   yy = Y(t) / len(responders)
-  AUC = 1/2 * np.sum((yy[1:]+yy[:-1]) * (xx[1:] - xx[:-1]))
+  AUC = 1/2 * np.sum((yy[1:]+yy[:-1]) * (xx[1:] - xx[:-1])) * sign
 
   linspaces = [
     [AUC] + [_ for _ in np.linspace(0, 1, 21) if _ >= AUC],
@@ -34,7 +38,7 @@ def plot_params(responders, nonresponders, *, skip_aucs=[]):
     for target_auc in linspace:
       print(target_auc)
       if target_auc in skip_aucs: continue
-      result = roc_picker.delta_functions.findxy(responders, nonresponders, AUC=target_auc, c1_guess=1, c5_guess=1, Lambda_guess=1)
+      result = roc_picker.delta_functions.findxy(responders, nonresponders, AUC=target_auc, c1_guess=1, c5_guess=1, Lambda_guess=1, flip_sign=flip_sign)
       x = result.x
       y = result.y
       xx = x(t)
