@@ -202,7 +202,8 @@ class DiscreteROC:
     plt.legend()
     plt.xlabel("AUC")
     plt.ylabel(r"$-2\Delta\ln{L}$")
-    plt.ylim(top=yupperlim)
+    plt.xlim(0, 1)
+    plt.ylim(0, yupperlim)
     if scanfilename is not None:
       plt.savefig(scanfilename)
     if show:

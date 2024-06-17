@@ -4,7 +4,7 @@ import roc_picker.delta_functions
 responders = np.linspace(-10, 10, 3)
 nonresponders = responders+2.5
 
-def plot_params(responders, nonresponders, *, skip_aucs=[], flip_sign=False):
+def plot_params(responders, nonresponders, *, skip_aucs=[], flip_sign=False, yupperlim=None):
   target_aucs = []
   delta_aucs = []
   L = []
@@ -83,4 +83,6 @@ def plot_params(responders, nonresponders, *, skip_aucs=[], flip_sign=False):
   plt.legend()
   plt.xlabel("AUC")
   plt.ylabel(r"$-2\Delta\ln{L}$")
+  plt.xlim(0, 1)
+  plt.ylim(0, yupperlim)
   plt.show()
