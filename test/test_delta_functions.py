@@ -12,7 +12,9 @@ def plot_params(responders, nonresponders, *, skip_aucs=[], flip_sign=False, yup
   c5 = []
   NLL = []
 
-  t = np.asarray(sorted(set(responders) | set(nonresponders) | {-np.inf, np.inf}))
+  optimizer = roc_picker.delta_functions.DeltaFunctions(responders=responders, nonresponders=nonresponders, flip_sign=flip_sign)
+
+  t = optimizer.ts
   sign = 1
   if flip_sign:
     t = t[::-1]
@@ -38,7 +40,7 @@ def plot_params(responders, nonresponders, *, skip_aucs=[], flip_sign=False, yup
     for target_auc in linspace:
       print(target_auc)
       if target_auc in skip_aucs: continue
-      result = roc_picker.delta_functions.findxy(responders, nonresponders, AUC=target_auc, c1_guess=1, c5_guess=1, Lambda_guess=1, flip_sign=flip_sign)
+      result = optimizer.findxy(AUC=target_auc, c1_guess=1, c5_guess=1, Lambda_guess=1)
       x = result.x
       y = result.y
       xx = x(t)
