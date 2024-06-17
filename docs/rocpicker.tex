@@ -308,6 +308,8 @@ y(t)=c_3+\frac{2}{c_5}\sum_{\substack{r^\prime\\t_{r^\prime}<t}} \frac{\mathscr{
 \end{aligned}
 \end{align}
 
+We have five unknown parameters \((c_1, c_3, c_4, c_5, \Lambda)\) and five constraints \cref{eq:AUC,eq:boundaryconditions}, which we can solve using \texttt{scipy.optimize.fsolve}.
+
 By plugging in this solution, we get a likelihood scan in agreement with \cref{sec:discrete}, which is validation that we didn't make a math mistake in either approach.
 
 \section{Vision for next steps}
