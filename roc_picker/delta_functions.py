@@ -79,7 +79,7 @@ class DeltaFunctions:
     guess = [c1_guess, c5_guess, Lambda_guess]
     return scipy.optimize.fsolve(bc, guess)
 
-  def findxy(self, *, AUC, c1_guess, c5_guess, Lambda_guess):
+  def optimize(self, *, AUC, c1_guess=1, c5_guess=1, Lambda_guess=1):
     c1, c5, Lambda = self.findparams(AUC=AUC, c1_guess=c1_guess, c5_guess=c5_guess, Lambda_guess=Lambda_guess)
     x, y = self.xy(c1, c5, Lambda)
 
@@ -91,11 +91,19 @@ class DeltaFunctions:
     for n in self.nonresponders:
       NLL -= np.log(self.sign*(x(n+0.00001) - x(n-0.00001)))
 
+    xx = x(self.ts)
+    yy = y(self.ts)
+    auc = 1/2 * np.sum((yy[1:]+yy[:-1]) * (xx[1:] - xx[:-1]))
+
     return scipy.optimize.OptimizeResult(
-      x=x,
-      y=y,
+      xfun=x,
+      yfun=y,
+      x=x(self.ts),
+      y=y(self.ts),
       c1=c1,
       c5=c5,
       Lambda=Lambda,
       NLL=NLL,
+      AUC=AUC,
+      success=abs(auc-AUC) < 1e-4 and abs(xx[-1]-1) < 1e-4 and abs(yy[-1]-1) < 1e-4,
     )

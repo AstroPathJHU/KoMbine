@@ -40,14 +40,12 @@ def plot_params(responders, nonresponders, *, skip_aucs=[], flip_sign=False, yup
     for target_auc in linspace:
       print(target_auc)
       if target_auc in skip_aucs: continue
-      result = optimizer.findxy(AUC=target_auc, c1_guess=1, c5_guess=1, Lambda_guess=1)
-      x = result.x
-      y = result.y
-      xx = x(t)
-      yy = y(t)
-      auc = 1/2 * np.sum((yy[1:]+yy[:-1]) * (xx[1:] - xx[:-1]))
+      result = optimizer.optimize(AUC=target_auc, c1_guess=1, c5_guess=1, Lambda_guess=1)
+      xx = result.x
+      yy = result.y
+      auc = result.AUC
       delta_auc = auc - target_auc
-      if abs(delta_auc) > 1e-4 or abs(xx[-1]-1) > 1e-4 or abs(yy[-1]-1) > 1e-4:
+      if not result.success:
         print("failed", target_auc)
         if last_failed:
           break

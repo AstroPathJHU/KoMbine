@@ -125,6 +125,9 @@ class DiscreteROC:
     result["x"], result["y"] = self.buildroc(xscr, yscr)
     result["AUC"] = self.evalAUC(xscr, yscr)
     result["NLL"] = result["fun"]
+    if AUC is not None:
+      if abs(constraintfunction(xscryscr)) > 1e-4:
+        result["success"] = False
     return result
 
   def plot_roc(self, *, show=False, rocfilename=None, scanfilename=None, rocerrorsfilename=None, yupperlim=None, npoints=100):
@@ -163,7 +166,7 @@ class DiscreteROC:
         yy = result.y
         auc = 1/2 * np.sum((yy[1:]+yy[:-1]) * (xx[1:] - xx[:-1]))
         delta_auc = auc - target_auc
-        if abs(delta_auc) > 1e-4 or not result.success:
+        if not result.success:
           if last_failed:
             break
           else:
