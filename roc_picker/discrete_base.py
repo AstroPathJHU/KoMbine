@@ -43,7 +43,6 @@ class DiscreteROCBase(abc.ABC):
         result = self.optimize(AUC=target_auc)
         xx = result.x
         yy = result.y
-        auc = 1/2 * np.sum((yy[1:]+yy[:-1]) * (xx[1:] - xx[:-1]))
         if not result.success:
           if last_failed:
             break
