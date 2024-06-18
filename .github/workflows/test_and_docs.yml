@@ -14,7 +14,7 @@ jobs:
           python-version: 3.11
       - name: pip install
         run: |
-          pip install . pyflakes
+          pip install . pyflakes texoutparse
       - name: pyflakes
         run: |
           python -m pyflakes .
@@ -41,3 +41,6 @@ jobs:
         with:
           name: docs pdf
           path: docs/rocpicker.pdf
+      - name: Check latex log
+        run: |
+          python .github/workflows/checklog.py docs/rocpicker.log
