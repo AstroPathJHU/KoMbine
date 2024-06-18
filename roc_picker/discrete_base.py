@@ -190,6 +190,9 @@ class DiscreteROCBase(abc.ABC):
     plt.fill_between(xx_pm95, yy_m95, yy_p95, alpha=0.5, label=f"95% CL\nAUC$\\in$({m95.AUC:.2f}, {p95.AUC:.2f})", color=color95)
     plt.legend()
 
+    plt.xlabel("X (Fraction of non-responders)")
+    plt.ylabel("Y (Fraction of responders)")
+
     if rocerrorsfilename is not None:
       plt.savefig(rocerrorsfilename)
     if show:

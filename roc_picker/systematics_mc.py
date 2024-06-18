@@ -273,8 +273,8 @@ class ROCCollection:
     plt.fill_between(x_m95, y_m95, y_p95_interp_to_m95, alpha=0.5, label=f"95% CL\nAUC$\\in$({AUC_95_low:.2f}, {AUC_95_high:.2f})", color="skyblue")
 
     plt.legend(fontsize=16)
-    plt.ylabel("Sensitivity (true positive rate)", fontsize=16)
-    plt.xlabel("$1-$specificity (false positive rate)", fontsize=16)
+    plt.xlabel("X (Fraction of non-responders)", fontsize=16)
+    plt.ylabel("Y (Fraction of responders)", fontsize=16)
     ax.tick_params(axis='both', which='major', labelsize=16)
     if saveas is None:
       plt.show()
