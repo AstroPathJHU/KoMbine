@@ -310,7 +310,28 @@ y(t)=c_3+\frac{2}{c_5}\sum_{\substack{r^\prime\\t_{r^\prime}<t}} \frac{\mathscr{
 
 We have five unknown parameters \((c_1, c_3, c_4, c_5, \Lambda)\) and five constraints \cref{eq:AUC,eq:boundaryconditions}, which we can solve using \texttt{scipy.optimize.fsolve}.
 
-By plugging in this solution, we get a likelihood scan in agreement with \cref{sec:discrete}, which is validation that we didn't make a math mistake in either approach.
+We plug in this solution and, for a simple enough ROC curve, get results that are 100\% in agreement with the solution from \cref{sec:discrete}.  \Cref{fig:exampledata_delta_functions_agreement} shows the likelihood scan and fitted ROC curve for responders \((-10, 0, 10)\) and non-responders \((-5, 5, 15)\).
+
+For a more complicated ROC curve (\cref{fig:exampledata_delta_functions_disagreement}), the results are slightly different, and the calculated negative log likelihood is consistently higher using the \(\delta\) functions approach than using the discrete method.  Because the simple case in \cref{fig:exampledata_delta_functions_agreement} gives 100\% agreement, this is most likely a numerical issue in the solution using one of the methods.  Furthermore, we can conclude that the problem probably arises in the \(\delta\) functions solution, because when we optimize the log likelihood for a fixed \AUC, we can only incorrectly find a worse ROC curve, not a better one.  However, this deserves further investigation.
+
+\begin{figure}
+\begin{center}
+\includegraphics[width=0.32\textwidth]{deltafunctions_scan.pdf}
+\includegraphics[width=0.32\textwidth]{discrete_scan_compare_to_delta_functions.pdf}
+\includegraphics[width=0.32\textwidth]{deltafunctions_exampleroc_errors.pdf}
+\caption{Left: Likelihood scan for the \(\AUC\) using the example distributions, using the Lagrangian approach with \(\delta\) functions.  Middle: Likelihood scan using the discrete method from \cref{sec:discrete}.  Right: The ROC curve with error bars.}
+\label{fig:exampledata_delta_functions_agreement}
+\end{center}
+\end{figure}
+
+\begin{figure}
+\begin{center}
+\includegraphics[width=0.32\textwidth]{discrete_scan.pdf}
+\includegraphics[width=0.32\textwidth]{deltafunctions_scan_compare_to_discrete.pdf}
+\caption{Left: Likelihood scan for the \(\AUC\) from \cref{fig:exampledata_discrete}.  Right: Likelihood scan using the Lagrangian approach with \(\delta\) functions.}
+\label{fig:exampledata_delta_functions_disagreement}
+\end{center}
+\end{figure}
 
 \section{Vision for next steps}
 

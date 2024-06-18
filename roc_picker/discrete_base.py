@@ -77,14 +77,14 @@ class DiscreteROCBase(abc.ABC):
     plt.scatter(target_aucs, 2*deltaNLL, label=r"$-2\Delta\ln{L}$")
     slc = np.isclose(deltaNLL, np.nanmin(deltaNLL))
     plt.scatter(target_aucs[slc], 2*deltaNLL[slc], label="best fit")
-    xlow, xhigh = plt.xlim()
-    plt.plot([xlow, xhigh], [1, 1], label="68% CL")
-    plt.plot([xlow, xhigh], [3.84, 3.84], label="95% CL")
-    plt.legend()
     plt.xlabel("AUC")
     plt.ylabel(r"$-2\Delta\ln{L}$")
     plt.xlim(0, 1)
     plt.ylim(0, yupperlim)
+    xlow, xhigh = plt.xlim()
+    plt.plot([xlow, xhigh], [1, 1], label="68% CL")
+    plt.plot([xlow, xhigh], [3.84, 3.84], label="95% CL")
+    plt.legend()
     if scanfilename is not None:
       plt.savefig(scanfilename)
     if show:
