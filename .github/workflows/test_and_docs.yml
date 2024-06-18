@@ -14,19 +14,22 @@ jobs:
           python-version: 3.11
       - name: pip install
         run: |
-          pip install . pyflakes
+          pip install . pyflakes texoutparse
       - name: pyflakes
         run: |
           python -m pyflakes .
       - name: discrete plots
         run: |
-          python test/test_discrete.py
+          python -m test.test_discrete
       - name: continuous distributions
         run: |
-          python test/test_continuous_distributions.py
+          python -m test.test_continuous_distributions
       - name: delta functions
         run: |
-          python test/test_delta_functions.py
+          python -m test.test_delta_functions
+      - name: systematics using MC method
+        run: |
+          python -m test.test_systematics_mc
 
       - name: Compile docs
         uses: xu-cheng/latex-action@v3
@@ -38,3 +41,6 @@ jobs:
         with:
           name: docs pdf
           path: docs/rocpicker.pdf
+      - name: Check latex log
+        run: |
+          python .github/workflows/checklog.py docs/rocpicker.log

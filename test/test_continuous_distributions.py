@@ -107,7 +107,7 @@ def plot_params(*, skip_aucs=[], show=False):
   plt.xlabel("AUC")
   plt.ylabel("Parameters")
   plt.legend()
-  plt.savefig(docsfolder/"examplescan.pdf")
+  plt.savefig(docsfolder/"exampleparameters.pdf", bbox_inches="tight")
   if show:
     plt.show()
   plt.close()
@@ -125,7 +125,7 @@ def plot_params(*, skip_aucs=[], show=False):
   plt.legend()
   plt.xlabel("AUC")
   plt.ylabel(r"$-2\Delta\ln{L}$")
-  plt.savefig(docsfolder/"exampleparameters.pdf")
+  plt.savefig(docsfolder/"examplescan.pdf")
   if show:
     plt.show()
   plt.close()

@@ -26,6 +26,7 @@
 \newcommand{\ydot}{\dot{y}}
 \newcommand{\Xdot}{\dot{X}}
 \newcommand{\Ydot}{\dot{Y}}
+\newcommand{\Xdotdot}{\ddot{X}}
 \newcommand{\AUC}{AUC}
 \begin{document}
 \maketitle
@@ -52,7 +53,8 @@ In any case, none of these papers considered any uncertainties other than the bi
 
 There is something similar for Kaplan-Meier curves \autocite{kaplanmeier_sachs}.  It correctly considers the whole curve as a unit, but also doesn't include systematic uncertainties.
 
-\section{Formalizing the problem}
+\section{Statistical uncertainty}
+\label{sec:stat}
 
 A ROC curve is a plot of \(x(t), y(t)\), where \(x(t)\) is the cumulative density function (CDF) of \(t\) for one group (non-responders) and \(y(t)\) is the CDF for the other group (responders).  The derivatives, \(\xdot(t)\) and \(\ydot(t)\), give the probability density functions (PDFs) for the two groups.   We want to find a probability distribution for the ``true'' \(x\) and \(y\) distributions, given our observed data.
 
@@ -275,29 +277,95 @@ These plots go in steps of \(\Delta\AUC=\num{0.002}\) and down to \(\AUC=\num{0.
 
 \subsection{Lagrangian approach with delta functions}
 
-We can also construct a Lagrangian, as in \cref{sec:lagrangian}, with discrete data distributions as in \cref{sec:discrete}, by constructing \(\Xdot\) and \(\Ydot\) as a sum of \(\delta\) functions.
+We can also construct a Lagrangian, as in \cref{sec:lagrangian}, with discrete data distributions as in \cref{sec:discrete}, by constructing \(\Xdot\) and \(\Ydot\) as a sum of \(\delta\) functions.  Probably some of the logic underlying calculus of variations isn't technically correct when \(\Xdot\) and \(\Ydot\) are not continuous, but it will likely work out anyway.
 \begin{align}
 \begin{aligned}
 \Xdot(t)&=\sum_n \mathscr{X}_n\delta(t-t_n) \\
-\Ydot(t)&=\sum_r \mathscr{Y}_r\delta(t-t_r)
+\Ydot(t)&=\sum_r \mathscr{Y}_r\delta(t-t_r) \label{eq:XdotYdotdelta}
 \end{aligned}
 \end{align}
 \Cref{eq:eulerlagrange_AUC} gives \(\Xdot=0\implies\xdot=0\) and \(\Ydot=0\implies\ydot=0\), meaning that \(\xdot\) and \(\ydot\) are also \(\delta\) functions.
 
-Mathematica gives a closed-form solution to \cref{eq:eulerlagrange_AUC} in terms of integrals of \(\Xdot\) and \(\Ydot\):
-\begin{equation}
-content...
-\end{equation}
-By plugging in this solution, we get a likelihood scan in agreement with \cref{sec:discrete}, which is validation that we didn't make a math mistake in either approach.
+Mathematica gives a closed-form solution\footnote{Mathematica actually puts 1 for the lower limits of integration, but we can fold that into the constants and set it to \(-\infty\) to make it easier to deal with} to \cref{eq:eulerlagrange_AUC} in terms of integrals of \(\Xdot\) and \(\Ydot\):
+\begin{align}
+x(t)=c_4+c_2\int_{-\infty}^{t} dT &\exp\left[\int_{-\infty}^{T} d\tau \left(\frac{\Xdotdot(\tau)}{\Xdot(\tau)}-\frac{\Lambda\Ydot(\tau)}{2c_1-\Lambda (X(\tau)-Y(\tau))}\right) \right] \label{eq:eulerlagrange_AUC_mathematica_x} \\
+y(t)=c_3+\frac{2}{c_2}\int_{-\infty}^{t} dT \frac{\Xdot(T)\Ydot(T)}{2c_1-\Lambda(X(T)-Y(T))} &\exp\left[ -\int_{-\infty}^{T} d\tau \left(\frac{\Xdotdot(\tau)}{\Xdot(\tau)}-\frac{\Lambda\Ydot(\tau)}{2c_1-\Lambda (X(\tau)-Y(\tau))}\right) \right] \label{eq:eulerlagrange_AUC_mathematica_y}
+\end{align}
+We can integrate the \(\Xdotdot/\Xdot\) term into \(\ln \Xdot\).  Because it's in an exponential, the lower limit of integration becomes a multiplicative constant \(k\), and we can fold it into \(c_5\equiv c_2k\).  This works in both \(x\) and \(y\), because \cref{eq:eulerlagrange_AUC_mathematica_x} has \(c_2\) in the numerator and a positive sign in front of the integral in the exponential, and \cref{eq:eulerlagrange_AUC_mathematica_y} has \(c_2\) in the denominator and a negative sign in front of the exponential.
+\begin{align}
+	x(t)=c_4+c_5\int_{-\infty}^{t} dT &\exp\left[\ln{\Xdot(T)}-\int_{-\infty}^{T} d\tau \left(\frac{\Lambda\Ydot(\tau)}{2c_1-\Lambda (X(\tau)-Y(\tau))}\right) \right] \label{eq:eulerlagrange_AUC_mathematica_x_simplify} \\
+	y(t)=c_3+\frac{2}{c_5}\int_{-\infty}^{t} dT \frac{\Xdot(T)\Ydot(T)}{2c_1-\Lambda(X(T)-Y(T))} &\exp\left[ -\ln{\Xdot(T)}+\int_{-\infty}^{T} d\tau \left(\frac{\Lambda\Ydot(\tau)}{2c_1-\Lambda (X(\tau)-Y(\tau))}\right) \right] \label{eq:eulerlagrange_AUC_mathematica_y_simplify}
+\end{align}
 
-\section{Vision for next steps}
+Now we plug in \cref{eq:XdotYdotdelta}:
+\begin{align}
+\begin{aligned}
+x(t)=c_4+c_5\int_{-\infty}^{t} dT &\Xdot(T)\exp\left[-\sum_{\substack{r\\t_r<T}} \left(\frac{\Lambda\mathscr{Y}_r}{2c_1-\Lambda (X(t_r)-Y(t_r))}\right) \right] \\
+    =c_4+c_5\sum_{\substack{n\\t_n<t}} &\mathscr{X}_n\exp\left[-\sum_{\substack{r\\t_r<t_n}} \left(\frac{\Lambda\mathscr{Y}_r}{2c_1-\Lambda (X(t_r)-Y(t_r))}\right) \right]
+\end{aligned} \\
+\begin{aligned}
+y(t)=c_3+\frac{2}{c_5}\int_{-\infty}^{t} dT \frac{\Ydot(T)}{2c_1-\Lambda(X(T)-Y(T))} &\exp\left[\sum_{\substack{r\\t_r<T}} \left(\frac{\Lambda\mathscr{Y}_r}{2c_1-\Lambda (X(t_r)-Y(t_r))}\right) \right] \\
+y(t)=c_3+\frac{2}{c_5}\sum_{\substack{r^\prime\\t_{r^\prime}<t}} \frac{\mathscr{Y}_{r^\prime}}{2c_1-\Lambda(X(t_{r^\prime})-Y(t_{r^\prime}))} &\exp\left[\sum_{\substack{r\\t_r<t_{r^\prime}}} \left(\frac{\Lambda\mathscr{Y}_r}{2c_1-\Lambda (X(t_r)-Y(t_r))}\right) \right]
+\end{aligned}
+\end{align}
 
-\subsection{Discrete \(\Xdot\) and \(\Ydot\), continuous \(\xdot\) and \(\ydot\)}
+We have five unknown parameters \((c_1, c_3, c_4, c_5, \Lambda)\) and five constraints \cref{eq:AUC,eq:boundaryconditions}, which we can solve using \texttt{scipy.optimize.fsolve}.
+
+We plug in this solution and, for a simple enough ROC curve, get results that are 100\% in agreement with the solution from \cref{sec:discrete}.  \Cref{fig:exampledata_delta_functions_agreement} shows the likelihood scan and fitted ROC curve for responders \((-10, 0, 10)\) and non-responders \((-5, 5, 15)\).
+
+For a more complicated ROC curve (\cref{fig:exampledata_delta_functions_disagreement}), the results are slightly different, and the calculated negative log likelihood is consistently higher using the \(\delta\) functions approach than using the discrete method.  Because the simple case in \cref{fig:exampledata_delta_functions_agreement} gives 100\% agreement, this is most likely a numerical issue in the solution using one of the methods.  Furthermore, we can conclude that the problem probably arises in the \(\delta\) functions solution, because when we optimize the log likelihood for a fixed \AUC, we can only incorrectly find a worse ROC curve, not a better one.  However, this deserves further investigation.
+
+\begin{figure}
+\begin{center}
+\includegraphics[width=0.32\textwidth]{deltafunctions_scan.pdf}
+\includegraphics[width=0.32\textwidth]{discrete_scan_compare_to_delta_functions.pdf}
+\includegraphics[width=0.32\textwidth]{deltafunctions_exampleroc_errors.pdf}
+\caption{Left: Likelihood scan for the \(\AUC\) using the example distributions, using the Lagrangian approach with \(\delta\) functions.  Middle: Likelihood scan using the discrete method from \cref{sec:discrete}.  Right: The ROC curve with error bars.}
+\label{fig:exampledata_delta_functions_agreement}
+\end{center}
+\end{figure}
+
+\begin{figure}
+\begin{center}
+\includegraphics[width=0.32\textwidth]{discrete_scan.pdf}
+\includegraphics[width=0.32\textwidth]{deltafunctions_scan_compare_to_discrete.pdf}
+\caption{Left: Likelihood scan for the \(\AUC\) from \cref{fig:exampledata_discrete}.  Right: Likelihood scan using the Lagrangian approach with \(\delta\) functions.}
+\label{fig:exampledata_delta_functions_disagreement}
+\end{center}
+\end{figure}
+
+\section{Incorporating systematic uncertainties}
+
+Our ultimate goal is to incorporate systematic uncertainties into the methods described in the previous section.
+
+To be more precise, the ``systematic'' uncertainties we consider here include every sample-by-sample uncertainty.  These include real systematic uncertainties, but also certain statistical uncertainties---for example, if our parameter \(t\) is a count or a ratio of counts, then they have Poisson uncertainties, and those would be included here.
+
+\subsection{Monte Carlo method for systematics}
+
+As a first step, we implemented error bands on ROC curves using \emph{only} systematic uncertainties, ignoring the binomial error that we dealt with in \cref{sec:stat}.  We use \(x=X\) and \(y=Y\), with the modification that we don't know exactly what \(X\) and \(Y\) are: they depend on the systematic uncertainties.
+
+We model each responder and non-responder using a distribution of the systematic uncertainties, and generate a large sample of ROC curves from those distributions.  We then take percentiles of those ROC curves to estimate the 68\% and 95\% confidence intervals.
+
+\Cref{fig:exampleroc_systematics_mc} shows example ROC curves calculated using this method.  They were previously presented as \autocite{SITC2023poster}, and are based on an analysis using CD8+FoxP3+ cells in non-small-cell lung cancer.  A higher density of these cells correlate with response to anti-PD1 immunotherapy, but the cells are quite rare and their count has a high Poisson uncertainty.  We also define ``CD8+FoxP3+-like neighborhoods,'' which also correlate with response to treatment, but are much more common.  The two left plots show ROC curves based on the densities of CD8+FoxP3+ cells and CD8+FoxP3+-like neighborhoods, respectively.  Although the nominal \AUC's are almost the same, the plot using the rare CD8+FoxP3+ cells has a much larger error.
+
+The right plot shows an example systematic uncertainty on the density of CD8+FoxP3+-like neighborhoods.  The uncertainty is estimated using the overlap region between two high-power fields of the microscope, which provide two independent measurements of a subset of the cells and is modeled using a log-normal distribution.  The systematic uncertainty is assumed to arise from residual errors after the flatfielding and lens corrections have been applied to the raw data from the microscope, and it is therefore modeled as 100\% correlated between different samples scanned in the same batch (which can include both responders and non-responders).
+
+\begin{figure}
+\begin{center}
+\includegraphics[width=0.32\textwidth]{poisson_roc_cells.pdf}
+\includegraphics[width=0.32\textwidth]{poisson_roc_neighborhoods.pdf}
+\includegraphics[width=0.32\textwidth]{lognormal_roc.pdf}
+\caption{ROC curves \autocite{SITC2023poster} showing the separation power of CD8+FoxP3+ cells (left) and CD8+FoxP3+-like neighborhoods (middle and right) to predict response to immunotherapy.  The \qty{68}{\%} and \qty{95}{\%} confidence bands on the ROC curves, coming from the Poisson error on the number of cells or neighborhoods (left and middle) and from the systematic error estimated using the overlap regions (right), are indicated.  The legends show the areas under the ROC curves (AUC) and their \qty{68}{\%} and \qty{95}{\%} confidence intervals.}
+\label{fig:exampleroc_systematics_mc}
+\end{center}
+\end{figure}
+
+\section{Next steps}
+
+\subsection{Discrete \texorpdfstring{\(\Xdot\)}{Xdot} and \texorpdfstring{\(\Ydot\)}{Ydot}, continuous \texorpdfstring{\(\xdot\)}{xdot} and \texorpdfstring{\(\ydot\)}{ydot}}
 In reality, \(\Xdot\) and \(\Ydot\) should be \(\delta\) functions (they are in data, after all), and we can either make some assumptions on the form of \(\xdot\) and \(\ydot\) or add a term in the Lagrangian to help them behave nicely.  A physics analogy could lead to something like \(\frac{1}{2}m(\xdot^2+\ydot^2)\).
 
 Once we do this, even the unconstrained Lagrangian (\cref{eq:lagrangian}) won't minimize at \(x=X/n_X, y=Y/n_Y\), but will probably be a smoothed version of that curve.
-
-Probably some of the logic underlying calculus of variations isn't technically correct when \(\Xdot\) and \(\Ydot\) are not continuous, but it will likely work out anyway.
 
 \subsection{Systematics}
 \label{sec:systematics}
@@ -311,7 +379,7 @@ and the Lagrangian will get a term
 \mathcal{\tilde{L}_\beta}=\beta^2
 \end{equation}
 
-A sample will, in general, have multiple systematics, including log-normal and Poisson and probably others.  Some of the systematics will be correlated between a subset of the samples (for example flatfielding and warping will be correlated between all samples in a batch).
+A sample will, in general, have multiple systematics, including log-normal and Poisson and probably others.  Some of the systematics will be correlated between a subset of the samples (for example, flatfielding and warping will be correlated between all samples in a batch).
 
 \printbibliography
 
