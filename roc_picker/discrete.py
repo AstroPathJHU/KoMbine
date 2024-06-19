@@ -38,13 +38,14 @@ class DiscreteROC(DiscreteROCBase):
 
   def buildroc(self, xscr, yscr):
     self.checkvalidity(xscr, yscr)
-    x = np.zeros(shape=len(self.ts)+2)
-    y = np.zeros(shape=len(self.ts)+2)
-    sign = 1
-    ts = [-np.inf] + self.ts + [np.inf]
+    x = np.zeros(shape=len(self.ts)+1)
+    y = np.zeros(shape=len(self.ts)+1)
     if self.flip_sign:
       sign = -1
-      ts = ts[::-1]
+      ts = self.ts[::-1] + [-np.inf]
+    else:
+      sign = 1
+      ts = self.ts + [np.inf]
     for i, t in enumerate(ts):
       x[i] = sum(v for k, v in xscr.items() if k*sign < t*sign)
       y[i] = sum(v for k, v in yscr.items() if k*sign < t*sign)

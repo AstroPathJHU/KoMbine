@@ -53,8 +53,6 @@ def main():
       "m95": "p95",
     }[k]
     flip = rocs_flip[flipk]
-    hack_fix_roc(roc)
-    hack_fix_roc(flip)
     np.testing.assert_allclose(np.array([roc.x, roc.y]), 1-np.array([flip.x, flip.y])[:,::-1], **tolerance)
     np.testing.assert_allclose(roc.AUC, 1-flip.AUC, **tolerance)
     np.testing.assert_allclose(roc.NLL, flip.NLL, **tolerance)
@@ -65,7 +63,6 @@ def main():
     for k in set(rocs) | set(refs):
       roc = rocs[k]
       ref = refs[k]
-      hack_fix_roc(roc)
       hack_fix_roc(ref)
       np.testing.assert_allclose(np.array([roc.x, roc.y]), np.array([ref.x, ref.y]), **tolerance)
       np.testing.assert_allclose(roc.AUC, ref.AUC, **tolerance)
