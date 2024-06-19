@@ -2,51 +2,59 @@ import collections, functools, numpy as np, scipy.optimize
 from .discrete_base import DiscreteROCBase
 
 class DiscreteROC(DiscreteROCBase):
+  def __init__(self, *args, check_validity=False, **kwargs):
+    self.__check_validity = check_validity
+    super().__init__(*args, **kwargs)
+
   @functools.cached_property
   def ts(self):
-    return sorted(set(self.responders) | set(self.nonresponders))
+    return np.array(sorted(set(self.responders) | set(self.nonresponders)))
   @functools.cached_property
   def Xscr(self):
-    return collections.Counter(self.nonresponders)
+    counter = collections.Counter(self.nonresponders)
+    return np.array([counter[t] for t in self.ts])
   @functools.cached_property
   def Yscr(self):
-    return collections.Counter(self.responders)
+    counter = collections.Counter(self.responders)
+    return np.array([counter[t] for t in self.ts])
+  @functools.cached_property
+  def nonzeroX(self):
+    return self.Xscr != 0
+  @functools.cached_property
+  def nonzeroY(self):
+    return self.Yscr != 0
+  @functools.cached_property
+  def numnonzeroX(self):
+    return np.count_nonzero(self.nonzeroX)
 
   def checkvalidity(self, xscr, yscr):
-    for t in xscr:
-      if xscr[t] != 0 and self.Xscr[t] == 0:
-        raise ValueError(f"xscr has nonzero at t={t} but Xscr does not")
-    for t in yscr:
-      if yscr[t] != 0 and self.Yscr[t] == 0:
-        raise ValueError(f"yscr has nonzero at t={t} but Yscr does not")
-    np.testing.assert_allclose([sum(xscr.values()), sum(yscr.values())], 1)
+    if not self.__check_validity: return
+    np.testing.assert_array_equal(xscr[self.Xscr==0], 0)
+    np.testing.assert_array_equal(yscr[self.Yscr==0], 0)
+    np.testing.assert_allclose([xscr.sum(), yscr.sum()], 1)
 
   def evalNLL(self, xscr, yscr):
     self.checkvalidity(xscr, yscr)
     NLL = 0
-    for t in self.ts:
-      if self.Xscr[t] != 0:
-        NLL -= self.Xscr[t] * np.log(xscr[t])
-      if self.Yscr[t] != 0:
-        NLL -= self.Yscr[t] * np.log(yscr[t])
+    NLL -= (self.Xscr * np.log(xscr))[self.nonzeroX].sum()
+    NLL -= (self.Yscr * np.log(yscr))[self.nonzeroY].sum()
     return NLL
 
   def buildroc(self, xscr, yscr):
     self.checkvalidity(xscr, yscr)
-    x = np.zeros(shape=len(self.ts)+2)
-    y = np.zeros(shape=len(self.ts)+2)
-    sign = 1
-    ts = [-np.inf] + self.ts + [np.inf]
+    x = np.zeros(shape=len(self.ts)+1)
+    y = np.zeros(shape=len(self.ts)+1)
+
     if self.flip_sign:
-      sign = -1
-      ts = ts[::-1]
-    for i, t in enumerate(ts):
-      x[i] = sum(v for k, v in xscr.items() if k*sign < t*sign)
-      y[i] = sum(v for k, v in yscr.items() if k*sign < t*sign)
-      if x[-1]:
-        x /= x[-1]
-      if y[-1]:
-        y /= y[-1]
+      xscr = xscr[::-1]
+      yscr = yscr[::-1]
+
+    x[1:] = np.cumsum(xscr)
+    y[1:] = np.cumsum(yscr)
+    if x[-1]:
+      x /= x[-1]
+    if y[-1]:
+      y /= y[-1]
     return x, y
 
   def evalAUC(self, xscr, yscr):
@@ -55,27 +63,15 @@ class DiscreteROC(DiscreteROCBase):
 
   def optimize(self, AUC=None):
     def unpackxy(xy):
-      np.testing.assert_equal(len(xy), sum((self.Xscr[t] != 0) + (self.Yscr[t] != 0) for t in self.ts))
-      xy_iterator = iter(xy)
-      xscr = collections.Counter()
-      yscr = collections.Counter()
-      for t in self.ts:
-        if self.Xscr[t] != 0:
-          xscr[t] = next(xy_iterator)
-      for t in self.ts:
-        if self.Yscr[t] != 0:
-          yscr[t] = next(xy_iterator)
-      try:
-        next(xy_iterator)
-      except StopIteration:
-        pass
-      else:
-        assert False
+      length = len(self.ts)
+      xscr = np.zeros(length)
+      yscr = np.zeros(length)
 
-      xsum = sum(xscr.values())
-      ysum = sum(yscr.values())
-      for k in xscr: xscr[k] /= xsum
-      for k in yscr: yscr[k] /= ysum
+      xscr[self.nonzeroX] = xy[:self.numnonzeroX]
+      yscr[self.nonzeroY] = xy[self.numnonzeroX:]
+
+      xscr /= xscr.sum()
+      yscr /= yscr.sum()
 
       return xscr, yscr
 
@@ -83,13 +79,7 @@ class DiscreteROC(DiscreteROCBase):
       xscr, yscr = unpackxy(xy)
       return self.evalNLL(xscr, yscr)
 
-    guess = []
-    for t in self.ts:
-      if self.Xscr[t] != 0:
-        guess.append(self.Xscr[t])
-    for t in self.ts:
-      if self.Yscr[t] != 0:
-        guess.append(self.Yscr[t])
+    guess = np.concatenate([self.Xscr[self.nonzeroX], self.Yscr[self.nonzeroY]])
 
     def sumxscr(xy):
       xscr, yscr = unpackxy(xy)
