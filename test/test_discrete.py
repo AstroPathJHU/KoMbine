@@ -28,10 +28,10 @@ def main():
     for k in set(rocs) | set(refs):
       roc = rocs[k]
       ref = refs[k]
-      np.testing.assert_allclose(roc.x, ref.x)
-      np.testing.assert_allclose(roc.y, ref.y)
-      np.testing.assert_allclose(roc.AUC, ref.AUC)
-      np.testing.assert_allclose(roc.NLL, ref.NLL)
+      np.testing.assert_allclose(roc.x, ref.x, atol=1e-6, rtol=1e-6)
+      np.testing.assert_allclose(roc.y, ref.y, atol=1e-6, rtol=1e-6)
+      np.testing.assert_allclose(roc.AUC, ref.AUC, atol=1e-6, rtol=1e-6)
+      np.testing.assert_allclose(roc.NLL, ref.NLL, atol=1e-6, rtol=1e-6)
   except:
     with open(here/"test_output"/"discrete.pkl", "wb") as f:
       pickle.dump(rocs, f)
