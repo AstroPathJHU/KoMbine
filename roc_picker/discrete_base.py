@@ -198,3 +198,11 @@ class DiscreteROCBase(abc.ABC):
     if show:
       plt.show()
     plt.close()
+
+    return {
+      "nominal": nominal,
+      "m68": m68,
+      "p68": p68,
+      "m95": m95,
+      "p95": p95,
+    }
