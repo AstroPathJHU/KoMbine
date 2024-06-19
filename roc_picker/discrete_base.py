@@ -10,9 +10,6 @@ class DiscreteROCBase(abc.ABC):
   def optimize(self, AUC=None): pass
 
   def plot_roc(self, *, show=False, rocfilename=None, scanfilename=None, rocerrorsfilename=None, yupperlim=None, npoints=100):
-    if not show and rocfilename is None and scanfilename is None and rocerrorsfilename is None:
-      raise RuntimeError("If you're not showing or saving the plots, there's nothing to do")
-
     target_aucs = []
     NLL = []
 
