@@ -12,6 +12,7 @@ def main():
     responders=responders,
     nonresponders=nonresponders,
     flip_sign=False,
+    check_validity=True,
   ).plot_roc(
     npoints=100,
     yupperlim=20,

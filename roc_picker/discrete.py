@@ -2,6 +2,10 @@ import collections, functools, numpy as np, scipy.optimize
 from .discrete_base import DiscreteROCBase
 
 class DiscreteROC(DiscreteROCBase):
+  def __init__(self, *args, check_validity=False, **kwargs):
+    self.__check_validity = check_validity
+    super().__init__(*args, **kwargs)
+
   @functools.cached_property
   def ts(self):
     return sorted(set(self.responders) | set(self.nonresponders))
@@ -13,6 +17,7 @@ class DiscreteROC(DiscreteROCBase):
     return collections.Counter(self.responders)
 
   def checkvalidity(self, xscr, yscr):
+    if not self.__check_validity: return
     for t in xscr:
       if xscr[t] != 0 and self.Xscr[t] == 0:
         raise ValueError(f"xscr has nonzero at t={t} but Xscr does not")
