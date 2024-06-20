@@ -1,4 +1,6 @@
-import os, pathlib
+#this script was generated using ChatGPT
+
+import pathlib
 from roc_picker.systematics_mc import plot_from_datacard
 
 here = pathlib.Path(__file__).parent
