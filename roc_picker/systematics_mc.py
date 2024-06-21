@@ -1,4 +1,4 @@
-import abc, collections, functools, itertools, matplotlib.pyplot as plt, numbers, numpy as np, re, scipy
+import abc, argparse, collections, functools, itertools, matplotlib.pyplot as plt, numbers, numpy as np, pathlib, re, scipy
 
 class DistributionBase(abc.ABC):
   @abc.abstractmethod
@@ -423,3 +423,11 @@ def plot_from_datacard(file_path, saveas=None, *, id_start=0):
   rd = ROCDistributions(responders=responders, nonresponders=nonresponders, flip_sign=True)
   rocs = rd.generate(size=10000, random_state=123456)
   rocs.plot(saveas=saveas)
+
+def plot_from_datacard_argparse():
+  parser = argparse.ArgumentParser(description="Run MC method from a datacard.")
+  parser.add_argument("datacard", type=pathlib.Path, help="Path to the datacard file.")
+  parser.add_argument("output_file", type=pathlib.Path, help="Path to the output file for the plot.")
+
+  args = parser.parse_args()
+  plot_from_datacard(args.datacard, args.output_file)

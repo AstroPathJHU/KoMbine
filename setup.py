@@ -10,4 +10,9 @@ setuptools.setup(
     "numpy",
     "scipy",
   ],
+  entry_points = {
+    "console_scripts": [
+      "rocpicker_mc=roc_picker.systematics_mc:plot_from_datacard_argparse",
+    ],
+  }
 )
