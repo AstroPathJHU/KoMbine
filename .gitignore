@@ -11,4 +11,5 @@
 *.run.xml
 *.synctex(busy)
 *.synctex.gz
+.ipynb_checkpoints/*-checkpoint.md
 .ipynb_checkpoints/*-checkpoint.py
