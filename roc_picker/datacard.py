@@ -20,7 +20,7 @@ class Datacard:
     self.observable_type = observable_type
 
   @staticmethod
-  def parse_datacard(file_path, id_start=0):
+  def parse_datacard(file_path):
     with open(file_path, 'r') as file:
       lines = file.readlines()
 
@@ -105,7 +105,7 @@ class Datacard:
 
     return Datacard(patients=data["patients"], systematics=data["systematics"], observable_type=data["observable_type"])
 
-  def plot_systematics_mc(self, saveas=None, *, id_start=0):
+  def systematics_mc(self, saveas=None, *, id_start=0):
     id_generator = itertools.count(id_start)
     patient_distributions = []
 
