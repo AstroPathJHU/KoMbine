@@ -2,11 +2,6 @@ import functools, numpy as np, scipy.optimize
 from .discrete_base import DiscreteROCBase
 
 class DeltaFunctions(DiscreteROCBase):
-  def __init__(self, responders, nonresponders, *, flip_sign=False):
-    self.responders = responders
-    self.nonresponders = nonresponders
-    self.flip_sign = flip_sign
-
   @functools.cached_property
   def sign(self):
     if self.flip_sign: return -1

@@ -1,19 +1,17 @@
 import numpy as np, pathlib, pickle
-import roc_picker.discrete
+import roc_picker.datacard
 
 here = pathlib.Path(__file__).parent
+datacards = here/"datacards"
 docsfolder = here.parent/"docs"
 
 responders = [1, 1, 2, 2, 3, 9, 10]
 nonresponders = [2, 3, 3, 4, 6, 8, 9, 10, 10, 10, 10, 11, 12, 13]
 
 def main():
-  rocs = roc_picker.discrete.DiscreteROC(
-    responders=responders,
-    nonresponders=nonresponders,
-    flip_sign=False,
-    check_validity=True,
-  ).plot_roc(
+  datacard = roc_picker.datacard.Datacard.parse_datacard(datacards/"datacard_example_1.txt")
+  discrete = datacard.discrete(flip_sign=False, check_validity=True)
+  rocs = discrete.plot_roc(
     npoints=100,
     yupperlim=20,
     rocfilename=docsfolder/"discrete_exampleroc.pdf",
@@ -22,12 +20,8 @@ def main():
     show=False,
   )
 
-  rocs_flip = roc_picker.discrete.DiscreteROC(
-    responders=responders,
-    nonresponders=nonresponders,
-    flip_sign=True,
-    check_validity=True,
-  ).plot_roc(
+  discrete_flip = datacard.discrete(flip_sign=True, check_validity=True)
+  rocs_flip = discrete_flip.plot_roc(
     npoints=100,
     yupperlim=20,
     show=False,

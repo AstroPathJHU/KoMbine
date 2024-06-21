@@ -1,4 +1,6 @@
 import argparse, itertools, pathlib, re, scipy.stats
+from .delta_functions import DeltaFunctions
+from .discrete import DiscreteROC
 from .systematics_mc import ROCDistributions, ScipyDistribution
 
 class Datacard:
@@ -103,7 +105,7 @@ class Datacard:
 
     return Datacard(patients=data["patients"], systematics=data["systematics"], observable_type=data["observable_type"])
 
-  def plot(self, saveas=None, *, id_start=0):
+  def plot_systematics_mc(self, saveas=None, *, id_start=0):
     id_generator = itertools.count(id_start)
     patient_distributions = []
 
@@ -151,14 +153,81 @@ class Datacard:
     responders = [p["ratio"] for p in patient_distributions if p["response"] == "responder"]
     nonresponders = [p["ratio"] for p in patient_distributions if p["response"] == "non-responder"]
 
-    rd = ROCDistributions(responders=responders, nonresponders=nonresponders, flip_sign=True)
-    rocs = rd.generate(size=10000, random_state=123456)
-    rocs.plot(saveas=saveas)
+    return ROCDistributions(responders=responders, nonresponders=nonresponders, flip_sign=True)
+
+  def discrete(self, **kwargs):
+    if self.observable_type != "fixed":
+      raise ValueError(f"Invalid observable_type {self.observable_type} for discrete")
+    if self.systematics:
+      raise ValueError(f"Can't do systematics for discrete")
+
+    responders = []
+    nonresponders = []
+    dct = {
+      "responder": responders,
+      "non-responder": nonresponders,
+    }
+    for p in self.patients:
+      dct[p["response"]].append(p["value"])
+
+    return DiscreteROC(responders=responders, nonresponders=nonresponders, **kwargs)
+
+  def delta_functions(self, **kwargs):
+    if self.observable_type != "fixed":
+      raise ValueError(f"Invalid observable_type {self.observable_type} for delta_functions")
+    if self.systematics:
+      raise ValueError(f"Can't do systematics for delta_functions")
+
+    responders = []
+    nonresponders = []
+    dct = {
+      "responder": responders,
+      "non-responder": nonresponders,
+    }
+    for p in self.patients:
+      dct[p["response"]].append(p["value"])
+
+    return DeltaFunctions(responders=responders, nonresponders=nonresponders, **kwargs)
 
 def plot_systematics_mc():
   parser = argparse.ArgumentParser(description="Run MC method from a datacard.")
   parser.add_argument("datacard", type=pathlib.Path, help="Path to the datacard file.")
   parser.add_argument("output_file", type=pathlib.Path, help="Path to the output file for the plot.")
+  parser.add_argument("--nrocs", type=int, help="Number of MC samples to generate.", default=10000, dest="size")
+  parser.add_argument("--random-seed", type=int, help="Random seed for generation", dest="random_state")
 
   args = parser.parse_args()
-  Datacard.parse_datacard(args.datacard).plot(args.output_file)
+  datacard = Datacard.parse_datacard(args.datacard)
+  rd = datacard.systematics_mc()
+  rocs = rd.generate(size=args.size, random_state=args.random_state)
+  rocs.plot(saveas=args.output_file)
+
+def plot_discrete():
+  parser = argparse.ArgumentParser(description="Run discrete method from a datacard.")
+  parser.add_argument("datacard", type=pathlib.Path, help="Path to the datacard file.")
+  parser.add_argument("--roc-filename", type=pathlib.Path, help="Path to the output file for the ROC curve.", target="rocfilename")
+  parser.add_argument("--roc-errors-filename", type=pathlib.Path, help="Path to the output file for the ROC curve with error bands.", target="rocerrorsfilename")
+  parser.add_argument("--scan-filename", type=pathlib.Path, help="Path to the output file for the likelihood scan", target="scanfilename")
+  parser.add_argument("--y-upper-limit", type=float, help="y axis upper limit of the likelihood scan plot", target="yupperlimit")
+  parser.add_argument("--npoints", type=int, help="number of points in the likelihood scan", target="npoints")
+  parser.add_argument("--flip-sign", action="store_true", help="flip the sign of the observable (use this if AUC is < 0.5 and you want it to be > 0.5)")
+
+  args = parser.parse_args()
+  datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
+  discrete = datacard.discrete()
+  discrete.plot(**args.__dict__)
+
+def plot_delta_functions():
+  parser = argparse.ArgumentParser(description="Run discrete method from a datacard.")
+  parser.add_argument("datacard", type=pathlib.Path, help="Path to the datacard file.")
+  parser.add_argument("--roc-filename", type=pathlib.Path, help="Path to the output file for the ROC curve.", target="rocfilename")
+  parser.add_argument("--roc-errors-filename", type=pathlib.Path, help="Path to the output file for the ROC curve with error bands.", target="rocerrorsfilename")
+  parser.add_argument("--scan-filename", type=pathlib.Path, help="Path to the output file for the likelihood scan", target="scanfilename")
+  parser.add_argument("--y-upper-limit", type=float, help="y axis upper limit of the likelihood scan plot", target="yupperlimit")
+  parser.add_argument("--npoints", type=int, help="number of points in the likelihood scan", target="npoints")
+  parser.add_argument("--flip-sign", action="store_true", help="flip the sign of the observable (use this if AUC is < 0.5 and you want it to be > 0.5)")
+
+  args = parser.parse_args()
+  datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
+  deltafunctions = datacard.delta_functions()
+  deltafunctions.plot(**args.__dict__)
