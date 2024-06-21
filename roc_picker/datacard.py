@@ -159,7 +159,7 @@ class Datacard:
     if self.observable_type != "fixed":
       raise ValueError(f"Invalid observable_type {self.observable_type} for discrete")
     if self.systematics:
-      raise ValueError(f"Can't do systematics for discrete")
+      raise ValueError("Can't do systematics for discrete")
 
     responders = []
     nonresponders = []
@@ -176,7 +176,7 @@ class Datacard:
     if self.observable_type != "fixed":
       raise ValueError(f"Invalid observable_type {self.observable_type} for delta_functions")
     if self.systematics:
-      raise ValueError(f"Can't do systematics for delta_functions")
+      raise ValueError("Can't do systematics for delta_functions")
 
     responders = []
     nonresponders = []
