@@ -49,10 +49,13 @@ def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, t_guess=None, guess=None, L
   dt = (result.x[1:] - result.x[:-1])
   Xd, Yd = Xdot(t), Ydot(t)
   xd, yd = (result.yp[:, 1:] + result.yp[:, :-1]) / 2
-  result.NLL = (
-    - np.sum((Xd * np.log(xd) * dt)[xd > 0])
-    - np.sum((Yd * np.log(yd) * dt)[yd > 0])
-  )
+  if np.min(xd) <= 0 or np.min(yd) <= 0:
+    result.NLL = np.inf
+  else:
+    result.NLL = (
+      - np.sum((Xd * np.log(xd) * dt)[xd > 0])
+      - np.sum((Yd * np.log(yd) * dt)[yd > 0])
+    )
 
   return result
 
