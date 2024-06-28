@@ -18,6 +18,14 @@ jobs:
       - name: pyflakes
         run: |
           python -m pyflakes .
+
+      - name: convert notebooks
+        run: |
+          jupytext --sync docs/*.md
+      - name: test notebooks
+        run: |
+          jupyter nbconvert --execute --to html -- *.ipynb
+
       - name: discrete plots
         run: |
           python -m test.test_discrete
@@ -39,8 +47,10 @@ jobs:
           latexmk_use_xelatex: true
       - uses: actions/upload-artifact@v4.3.3
         with:
-          name: docs pdf
-          path: docs/rocpicker.pdf
+          name: docs
+          path: |
+            docs/rocpicker.pdf
+            docs/examples.html
       - name: Check latex log
         run: |
           python .github/workflows/checklog.py docs/rocpicker.log

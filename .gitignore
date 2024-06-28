@@ -3,6 +3,7 @@
 *.bcf
 *.blg
 *.egg-info
+*.html
 *.ipynb
 *.log
 *.out
