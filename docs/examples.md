@@ -45,7 +45,7 @@ Options are:
 * `poisson_ratio`: The observable for each patient is a ratio of two counts.  Again, it may have additional uncertainties defined in the systematics section.
 
 Next is the list of patients.
-- `bin`: This might be used in the future to group patients (into, for example, immunotherapy and chemo).  It currently doesn't do anything.
+- `bin`: This might be used in the future to group patients (for example, into immunotherapy- and chemo-treated patients).  It currently doesn't do anything, and doesn't have to be included.
 - `response`: Options are `responder` and `non-responder`.  These define the two categories the observable is meant to separate between and are plotted on the two axes of the ROC curve.
 - The observables for each patient, which depends on the observable_type given above.
   - For `fixed`, the line should be labeled `observable`, as it is in the example here
