@@ -14,7 +14,7 @@ jobs:
           python-version: 3.11
       - name: pip install
         run: |
-          pip install . jupytext nbconvert pyflakes texoutparse
+          pip install . ipykernel jupytext nbconvert pyflakes texoutparse
       - name: pyflakes
         run: |
           python -m pyflakes .
