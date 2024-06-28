@@ -1,3 +1,6 @@
+import warnings
+warnings.simplefilter("error")
+
 import matplotlib.pyplot as plt, numpy as np, pathlib, scipy.integrate, scipy.stats
 import roc_picker.continuous_distributions
 

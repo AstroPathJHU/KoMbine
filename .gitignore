@@ -3,6 +3,7 @@
 *.bcf
 *.blg
 *.egg-info
+*.html
 *.ipynb
 *.log
 *.out
@@ -11,4 +12,5 @@
 *.run.xml
 *.synctex(busy)
 *.synctex.gz
-.ipynb_checkpoints/*-checkpoint.py
+**/.ipynb_checkpoints/*-checkpoint.md
+**/.ipynb_checkpoints/*-checkpoint.py

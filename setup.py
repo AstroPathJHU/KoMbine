@@ -10,4 +10,11 @@ setuptools.setup(
     "numpy",
     "scipy",
   ],
+  entry_points = {
+    "console_scripts": [
+      "rocpicker_mc=roc_picker.datacard:plot_systematics_mc",
+      "rocpicker_discrete=roc_picker.datacard:plot_discrete",
+      "rocpicker_delta_functions=roc_picker.datacard:plot_delta_functions",
+    ],
+  }
 )

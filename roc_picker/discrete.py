@@ -17,15 +17,23 @@ class DiscreteROC(DiscreteROCBase):
   def Yscr(self):
     counter = collections.Counter(self.responders)
     return np.array([counter[t] for t in self.ts])
+
   @functools.cached_property
-  def nonzeroX(self):
+  def nonzeroXindices(self):
     return self.Xscr != 0
   @functools.cached_property
-  def nonzeroY(self):
+  def nonzeroYindices(self):
     return self.Yscr != 0
   @functools.cached_property
-  def numnonzeroX(self):
-    return np.count_nonzero(self.nonzeroX)
+  def numnonzeroXindices(self):
+    return np.count_nonzero(self.nonzeroXindices)
+
+  @functools.cached_property
+  def nonzeroXscr(self):
+    return self.Xscr[self.nonzeroXindices]
+  @functools.cached_property
+  def nonzeroYscr(self):
+    return self.Yscr[self.nonzeroYindices]
 
   def checkvalidity(self, xscr, yscr):
     if not self.__check_validity: return
@@ -35,9 +43,16 @@ class DiscreteROC(DiscreteROCBase):
 
   def evalNLL(self, xscr, yscr):
     self.checkvalidity(xscr, yscr)
+
+    nonzeroxscr = xscr[self.nonzeroXindices]
+    nonzeroyscr = yscr[self.nonzeroYindices]
+    if np.min(nonzeroxscr) <= 0 or np.min(nonzeroyscr) <= 0:
+      return np.inf
+
     NLL = 0
-    NLL -= (self.Xscr * np.log(xscr))[self.nonzeroX].sum()
-    NLL -= (self.Yscr * np.log(yscr))[self.nonzeroY].sum()
+    NLL -= (self.nonzeroXscr * np.log(nonzeroxscr)).sum()
+    NLL -= (self.nonzeroYscr * np.log(nonzeroyscr)).sum()
+
     return NLL
 
   def buildroc(self, xscr, yscr):
@@ -67,8 +82,8 @@ class DiscreteROC(DiscreteROCBase):
       xscr = np.zeros(length)
       yscr = np.zeros(length)
 
-      xscr[self.nonzeroX] = xy[:self.numnonzeroX]
-      yscr[self.nonzeroY] = xy[self.numnonzeroX:]
+      xscr[self.nonzeroXindices] = xy[:self.numnonzeroXindices]
+      yscr[self.nonzeroYindices] = xy[self.numnonzeroXindices:]
 
       xscr /= xscr.sum()
       yscr /= yscr.sum()
@@ -79,7 +94,7 @@ class DiscreteROC(DiscreteROCBase):
       xscr, yscr = unpackxy(xy)
       return self.evalNLL(xscr, yscr)
 
-    guess = np.concatenate([self.Xscr[self.nonzeroX], self.Yscr[self.nonzeroY]])
+    guess = np.concatenate([self.Xscr[self.nonzeroXindices], self.Yscr[self.nonzeroYindices]])
 
     def sumxscr(xy):
       xscr, yscr = unpackxy(xy)

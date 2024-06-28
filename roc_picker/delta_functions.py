@@ -1,12 +1,7 @@
-import functools, numpy as np, scipy.optimize
+import functools, numpy as np, scipy.optimize, warnings
 from .discrete_base import DiscreteROCBase
 
 class DeltaFunctions(DiscreteROCBase):
-  def __init__(self, responders, nonresponders, *, flip_sign=False):
-    self.responders = responders
-    self.nonresponders = nonresponders
-    self.flip_sign = flip_sign
-
   @functools.cached_property
   def sign(self):
     if self.flip_sign: return -1
@@ -81,7 +76,10 @@ class DeltaFunctions(DiscreteROCBase):
     return scipy.optimize.fsolve(bc, guess)
 
   def optimize(self, *, AUC, c1_guess=1, c5_guess=1, Lambda_guess=1):
-    c1, c5, Lambda = self.findparams(AUC=AUC, c1_guess=c1_guess, c5_guess=c5_guess, Lambda_guess=Lambda_guess)
+    with warnings.catch_warnings():
+      warnings.filterwarnings("ignore", "The number of calls to function has reached maxfev = |The iteration is not making good progress")
+      c1, c5, Lambda = self.findparams(AUC=AUC, c1_guess=c1_guess, c5_guess=c5_guess, Lambda_guess=Lambda_guess)
+
     x, y = self.xy(c1, c5, Lambda)
 
     NLL = 0

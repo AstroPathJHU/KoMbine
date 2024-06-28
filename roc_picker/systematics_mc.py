@@ -1,4 +1,4 @@
-import abc, collections, functools, matplotlib.pyplot as plt, numbers, numpy as np, scipy
+import abc, collections, functools, matplotlib.pyplot as plt, numbers, numpy as np, scipy.special
 
 class DistributionBase(abc.ABC):
   @abc.abstractmethod
@@ -58,7 +58,7 @@ class MultiplyDistributions(DistributionBase):
   def __init__(self, *distributions):
     self.__distributions = distributions
   def rvs(self, *args, **kwargs):
-    result = 1
+    result = 1.
     for d in self.__distributions:
       if isinstance(d, numbers.Number):
         result *= d
@@ -67,7 +67,7 @@ class MultiplyDistributions(DistributionBase):
     return result
   @property
   def nominal(self):
-    result = 1
+    result = 1.
     for d in self.__distributions:
       if isinstance(d, numbers.Number):
         result *= d

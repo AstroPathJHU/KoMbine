@@ -1,19 +1,17 @@
-import numpy as np, pathlib
-import roc_picker.delta_functions, roc_picker.discrete
-from . import test_discrete
+import warnings
+warnings.simplefilter("error")
+
+import pathlib
+import roc_picker.datacard
 
 here = pathlib.Path(__file__).parent
+datacards = here/"datacards"
 docsfolder = here.parent/"docs"
 
-responders = np.linspace(-10, 10, 3)
-nonresponders = responders+5
-
 def main():
-  roc_picker.delta_functions.DeltaFunctions(
-    responders=responders,
-    nonresponders=nonresponders,
-    flip_sign=False,
-  ).plot_roc(
+  datacard = roc_picker.datacard.Datacard.parse_datacard(datacards/"datacard_example_2.txt")
+  delta_functions = datacard.delta_functions(flip_sign=False)
+  delta_functions.plot_roc(
     npoints=100,
     yupperlim=20,
     rocfilename=docsfolder/"deltafunctions_exampleroc.pdf",
@@ -22,22 +20,17 @@ def main():
     show=False,
   )
 
-  roc_picker.discrete.DiscreteROC(
-    responders=responders,
-    nonresponders=nonresponders,
-    flip_sign=False,
-  ).plot_roc(
+  discrete = datacard.discrete(flip_sign=False)
+  discrete.plot_roc(
     npoints=100,
     yupperlim=20,
     scanfilename=docsfolder/"discrete_scan_compare_to_delta_functions.pdf",
     show=False,
   )
 
-  roc_picker.delta_functions.DeltaFunctions(
-    responders=test_discrete.responders,
-    nonresponders=test_discrete.nonresponders,
-    flip_sign=False,
-  ).plot_roc(
+  discrete_datacard = roc_picker.datacard.Datacard.parse_datacard(datacards/"datacard_example_1.txt")
+  delta_functions_2 = discrete_datacard.delta_functions(flip_sign=False)
+  delta_functions_2.plot_roc(
     npoints=100,
     yupperlim=20,
     scanfilename=docsfolder/"deltafunctions_scan_compare_to_discrete.pdf",
