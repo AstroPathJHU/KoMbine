@@ -24,7 +24,7 @@ jobs:
           jupytext --sync docs/*.md
       - name: test notebooks
         run: |
-          jupyter nbconvert --execute --to html -- *.ipynb
+          jupyter nbconvert --execute --to html -- docs/*.ipynb
 
       - name: discrete plots
         run: |
