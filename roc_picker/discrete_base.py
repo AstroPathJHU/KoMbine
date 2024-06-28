@@ -183,8 +183,10 @@ class DiscreteROCBase(abc.ABC):
     plt.plot(x_n, y_n, label=f"nominal\nAUC={nominal.AUC:.2f}", color=colornominal)
     #plt.plot(x_p68, y_p68, label=r"$+1\sigma$")
     #plt.plot(x_p95, y_p95, label=r"$+2\sigma$")
-    plt.fill_between(xx_pm68, yy_m68, yy_p68, alpha=0.5, label=f"68% CL\nAUC$\\in$({m68.AUC:.2f}, {p68.AUC:.2f})", color=color68)
-    plt.fill_between(xx_pm95, yy_m95, yy_p95, alpha=0.5, label=f"95% CL\nAUC$\\in$({m95.AUC:.2f}, {p95.AUC:.2f})", color=color95)
+    lowAUC_68, highAUC_68 = sorted((m68.AUC, p68.AUC))
+    lowAUC_95, highAUC_95 = sorted((m95.AUC, p95.AUC))
+    plt.fill_between(xx_pm68, yy_m68, yy_p68, alpha=0.5, label=f"68% CL\nAUC$\\in$({lowAUC_68:.2f}, {highAUC_68:.2f})", color=color68)
+    plt.fill_between(xx_pm95, yy_m95, yy_p95, alpha=0.5, label=f"95% CL\nAUC$\\in$({lowAUC_95:.2f}, {highAUC_95:.2f})", color=color95)
     plt.legend()
 
     plt.xlabel("X (Fraction of non-responders)")
