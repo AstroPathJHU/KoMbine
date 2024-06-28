@@ -1,5 +1,8 @@
 #this script was generated using ChatGPT
 
+import warnings
+warnings.simplefilter("error")
+
 import pathlib
 from roc_picker.datacard import Datacard
 

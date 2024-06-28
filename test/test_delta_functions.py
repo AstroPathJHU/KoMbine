@@ -1,3 +1,6 @@
+import warnings
+warnings.simplefilter("error")
+
 import pathlib
 import roc_picker.datacard
 

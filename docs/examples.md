@@ -13,6 +13,11 @@ jupyter:
     name: python3
 ---
 
+```python
+import warnings
+warnings.simplefilter("error")
+```
+
 # ROC Picker
 
 

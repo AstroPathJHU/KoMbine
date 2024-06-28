@@ -1,3 +1,6 @@
+import warnings
+warnings.simplefilter("error")
+
 import numpy as np, pathlib, pickle
 import roc_picker.datacard
 
