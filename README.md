@@ -32,6 +32,7 @@ DiscreteROC(
 
 For more detailed information, please see the latex document and example notebooks
 in the `docs/` folder.
-(The plots can be compiled by running the scripts in the test folder.)
+(The plots can be compiled by running the scripts in the test folder;
+to convert the example notebooks to `.ipynb`, run `jupytext --sync docs/*.md`)
 Alternatively, they're compiled by Github Actions, so you can download them from
 [this link](https://nightly.link/AstroPathJHU/ROCPicker/workflows/test_and_docs/main/docs.zip).
