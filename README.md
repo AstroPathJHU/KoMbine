@@ -37,14 +37,14 @@ The source is in the `docs/` folder, and you can download the output
 
 It contains:
  - LaTeX:
+   - source is committed to the repo, output `.pdf` is in the [zip file](https://nightly.link/AstroPathJHU/ROCPicker/workflows/test_and_docs/main/docs.zip).
+   - first run the `docs/compile_plots.sh` script, then compile using `xelatex`
+     and `biber`.  I open the LaTeX document in TeXstudio and compile using F5.
    - `rocpicker.tex` (compiled: `.pdf`): a detailed explanation of the math that
-      goes into all the methods used in ROC Picker.  To compile the plots, first run
-      the scripts in the `test/` folder, then compile the LaTeX document
-      using xelatex and biber.
+      goes into all the methods used in ROC Picker.
  - Jupyter notebooks:
    - These are all committed as `.md`.  To convert them to `.ipynb`, use
-     `jupytext --sync *.md`.  They are stored as `.html` in the zip file in
-     the link above.
+     `jupytext --sync *.md`.  They are stored as `.html` in the [zip file](https://nightly.link/AstroPathJHU/ROCPicker/workflows/test_and_docs/main/docs.zip).
    - `examples.md`: examples of how to run the various methods included in ROC Picker
      using the datacard interface.
    - `small_perturbation.md`: an illustration of small perturbations to one of the

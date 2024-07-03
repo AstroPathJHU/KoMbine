@@ -26,19 +26,13 @@ jobs:
         run: |
           jupyter nbconvert --execute --to html -- docs/*.ipynb
 
-      - name: discrete plots
+      - name: discrete unit test
         run: |
           python -m test.test_discrete
-      - name: continuous distributions
-        run: |
-          python -m test.test_continuous_distributions
-      - name: delta functions
-        run: |
-          python -m test.test_delta_functions
-      - name: systematics using MC method
-        run: |
-          python -m test.test_systematics_mc
 
+      - name: Compile plots
+        run: |
+          ./docs/compile_plots.sh
       - name: Compile docs
         uses: xu-cheng/latex-action@v3
         with:
