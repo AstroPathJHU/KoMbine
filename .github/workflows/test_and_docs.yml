@@ -50,7 +50,7 @@ jobs:
           name: docs
           path: |
             docs/rocpicker.pdf
-            docs/examples.html
+            docs/*.html
       - name: Check latex log
         run: |
           python .github/workflows/checklog.py docs/rocpicker.log
