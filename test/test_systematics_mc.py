@@ -30,7 +30,7 @@ def plot(datacard, output, id_start=0, size=10000, random_state=123456):
   d = Datacard.parse_datacard(datacard)
   rd = d.systematics_mc(id_start=id_start)
   rocs = rd.generate(size=size, random_state=random_state)
-  rocs.plot(output)
+  rocs.plot(saveas=output)
 
 if __name__ == "__main__":
   # Generate plots for neighborhoods without systematics (Poisson uncertainty)
