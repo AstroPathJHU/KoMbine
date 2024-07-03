@@ -1,4 +1,4 @@
-import abc, matplotlib.pyplot as plt, numpy as np, scipy.optimize
+import abc, collections, matplotlib.pyplot as plt, numpy as np, scipy.optimize
 
 class DiscreteROCBase(abc.ABC):
   def __init__(self, responders, nonresponders, *, flip_sign=False):
@@ -10,6 +10,10 @@ class DiscreteROCBase(abc.ABC):
   def optimize(self, AUC=None): pass
 
   def plot_roc(self, *, show=False, rocfilename=None, scanfilename=None, rocerrorsfilename=None, yupperlim=None, npoints=100):
+    if not isinstance(show, collections.abc.Sequence):
+      show = [show, show, show]
+    show_roc, show_scan, show_rocerrors = show
+
     target_aucs = []
     NLL = []
 
@@ -56,7 +60,7 @@ class DiscreteROCBase(abc.ABC):
     plt.ylabel("Y (Fraction of responders)")
     if rocfilename is not None:
       plt.savefig(rocfilename)
-    if show:
+    if show_roc:
       plt.show()
     plt.close()
 
@@ -69,7 +73,7 @@ class DiscreteROCBase(abc.ABC):
 
     deltaNLL = NLL.copy()
     deltaNLL -= np.nanmin(deltaNLL)
-    plt.figure(figsize=(5,5))
+    plt.figure(figsize=(5, 5))
     plt.scatter(target_aucs, 2*deltaNLL, label=r"$-2\Delta\ln{L}$")
     slc = np.isclose(deltaNLL, np.nanmin(deltaNLL))
     plt.scatter(target_aucs[slc], 2*deltaNLL[slc], label="best fit")
@@ -83,7 +87,7 @@ class DiscreteROCBase(abc.ABC):
     plt.legend()
     if scanfilename is not None:
       plt.savefig(scanfilename)
-    if show:
+    if show_scan:
       plt.show()
     plt.close()
 
@@ -194,7 +198,7 @@ class DiscreteROCBase(abc.ABC):
 
     if rocerrorsfilename is not None:
       plt.savefig(rocerrorsfilename)
-    if show:
+    if show_rocerrors:
       plt.show()
     plt.close()
 

@@ -5,11 +5,7 @@ import numpy as np, pathlib, pickle
 import roc_picker.datacard
 
 here = pathlib.Path(__file__).parent
-datacards = here/"datacards"
-docsfolder = here.parent/"docs"
-
-responders = [1, 1, 2, 2, 3, 9, 10]
-nonresponders = [2, 3, 3, 4, 6, 8, 9, 10, 10, 10, 10, 11, 12, 13]
+datacards = here/"datacards"/"simple_examples"
 
 def main():
   datacard = roc_picker.datacard.Datacard.parse_datacard(datacards/"datacard_example_1.txt")
@@ -17,9 +13,6 @@ def main():
   rocs = discrete.plot_roc(
     npoints=100,
     yupperlim=20,
-    rocfilename=docsfolder/"discrete_exampleroc.pdf",
-    scanfilename=docsfolder/"discrete_scan.pdf",
-    rocerrorsfilename=docsfolder/"discrete_exampleroc_errors.pdf",
     show=False,
   )
 

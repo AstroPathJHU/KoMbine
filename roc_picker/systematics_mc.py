@@ -28,7 +28,7 @@ class DistributionBase(abc.ABC):
     return PowerDistributions(other, self)
 
 class ScipyDistribution(DistributionBase):
-  __ids = {}
+  __ids = set()
 
   def __init__(self, nominal, scipydistribution, id):
     self.__scipydistribution = scipydistribution
@@ -36,7 +36,10 @@ class ScipyDistribution(DistributionBase):
     self.__id = id
     if id in self.__ids:
       raise KeyError(f"Created scipy distributions with duplicate id: {id}")
-    self.__ids[id] = self
+    self.__ids.add(id)
+
+  def __del__(self):
+    self.__ids.remove(self.__id)
 
   def rvs(self, size=None, random_state=None):
     if random_state is None: raise TypeError("Need a random state")
@@ -248,7 +251,7 @@ class ROCCollection:
     y = (self.xplusy_interp - xminusy_quantiles) / 2
     return x, y
 
-  def plot(self, saveas=None):
+  def plot(self, *, saveas=None, show=False):
     sigmas = [-2, -1, 0, 1, 2]
     quantiles = [(1 + scipy.special.erf(nsigma/np.sqrt(2))) / 2 for nsigma in sigmas]
 
@@ -266,17 +269,17 @@ class ROCCollection:
     AUC_68_low, AUC_68_high = sorted([AUC_m68, AUC_p68])
     AUC_95_low, AUC_95_high = sorted([AUC_m95, AUC_p95])
 
-    fig, ax = plt.subplots(figsize=(7, 7))
+    fig, ax = plt.subplots(figsize=(5, 5))
 
     plt.plot(self.nominalroc.x, self.nominalroc.y, label=f"nominal\nAUC={AUC_nominal:.2f}", color="blue")
     plt.fill_between(x_m68, y_m68, y_p68_interp_to_m68, alpha=0.5, label=f"68% CL\nAUC$\\in$({AUC_68_low:.2f}, {AUC_68_high:.2f})", color="dodgerblue")
     plt.fill_between(x_m95, y_m95, y_p95_interp_to_m95, alpha=0.5, label=f"95% CL\nAUC$\\in$({AUC_95_low:.2f}, {AUC_95_high:.2f})", color="skyblue")
 
-    plt.legend(fontsize=16)
-    plt.xlabel("X (Fraction of non-responders)", fontsize=16)
-    plt.ylabel("Y (Fraction of responders)", fontsize=16)
-    ax.tick_params(axis='both', which='major', labelsize=16)
-    if saveas is None:
+    plt.legend()
+    plt.xlabel("X (Fraction of non-responders)")
+    plt.ylabel("Y (Fraction of responders)")
+    ax.tick_params(axis='both', which='major')
+    if show:
       plt.show()
-    else:
+    if saveas is not None:
       plt.savefig(saveas)

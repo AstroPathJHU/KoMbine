@@ -35,7 +35,7 @@ ROC Picker works using datacards.  The datacard format is inspired by the CMS Co
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"datacard_example_2.txt"
+datacardfile = here.parent/"test"/"datacards"/"simple_examples"/"datacard_example_2.txt"
 ```
 
 ```python
@@ -93,7 +93,7 @@ Here's an example datacard.  This is from an actual analysis of the density of C
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"datacard_neighborhoods.txt"
+datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_neighborhoods.txt"
 
 with open(datacardfile) as f:
     print(f.read())
@@ -113,5 +113,5 @@ Each of the systematic parameters can vary independently.
 The method currently implemented for systematics uses a Monte Carlo method to vary the parameters and produce a family of ROC curves.  The 68% and 95% CL regions are estimated using quantiles of this family of ROC curves.  This does not take into account the statistical uncertainty on the number of samples, which was described in the previous section, but it does include the sample-wise statistical uncertainty on the numerator and denominator counts.
 
 ```python
-_ = datacard.systematics_mc().generate(size=10000, random_state=123456).plot()
+_ = datacard.systematics_mc(flip_sign=True).generate(size=10000, random_state=123456).plot(show=True)
 ```
