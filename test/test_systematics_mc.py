@@ -12,10 +12,10 @@ docs = here.parent/"docs"
 
 # Define paths to datacards
 datacards = {
-  "neighborhoods_no_systematics": datacards/"datacard_neighborhoods_no_systematics.txt",
-  "neighborhoods_no_poisson_uncertainty": datacards/"datacard_neighborhoods_no_poisson_uncertainty.txt",
-  "cells_no_systematics": datacards/"datacard_cells_no_systematics.txt",
-  "cells_no_poisson_uncertainty": datacards/"datacard_cells_no_poisson_uncertainty.txt"
+  "neighborhoods_poisson": datacards/"datacard_neighborhoods_poisson.txt",
+  "neighborhoods_systematics": datacards/"datacard_neighborhoods_systematics.txt",
+  "cells_poisson": datacards/"datacard_cells_poisson.txt",
+  "cells_systematics": datacards/"datacard_cells_systematics.txt"
 }
 
 # Define output paths for plots
@@ -34,13 +34,13 @@ def plot(datacard, output, id_start=0, size=10000, random_state=123456):
 
 if __name__ == "__main__":
   # Generate plots for neighborhoods without systematics (Poisson uncertainty)
-  plot(datacards["neighborhoods_no_systematics"], output_paths["poisson_roc_neighborhoods"])
+  plot(datacards["neighborhoods_poisson"], output_paths["poisson_roc_neighborhoods"])
 
   # Generate plots for neighborhoods with systematics but without Poisson uncertainty
-  plot(datacards["neighborhoods_no_poisson_uncertainty"], output_paths["lognormal_roc_neighborhoods"], id_start=100)
+  plot(datacards["neighborhoods_systematics"], output_paths["lognormal_roc_neighborhoods"], id_start=100)
 
   # Generate plots for cells without systematics (Poisson uncertainty)
-  plot(datacards["cells_no_systematics"], output_paths["poisson_roc_cells"], id_start=200)
+  plot(datacards["cells_poisson"], output_paths["poisson_roc_cells"], id_start=200)
 
   # Generate plots for cells with systematics but without Poisson uncertainty
-  plot(datacards["cells_no_poisson_uncertainty"], output_paths["lognormal_roc_cells"], id_start=300)
+  plot(datacards["cells_systematics"], output_paths["lognormal_roc_cells"], id_start=300)

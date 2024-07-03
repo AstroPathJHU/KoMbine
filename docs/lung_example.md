@@ -61,7 +61,7 @@ We propagate this uncertainty using the Monte Carlo method.
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"datacard_cells_no_systematics.txt"
+datacardfile = here.parent/"test"/"datacards"/"datacard_cells_poisson.txt"
 datacard = Datacard.parse_datacard(datacardfile)
 _ = datacard.systematics_mc().generate(size=10000, random_state=123456).plot()
 ```
@@ -95,7 +95,7 @@ We use the Monte Carlo method.  Because the neighborhoods are so much more commo
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"datacard_neighborhoods_no_systematics.txt"
+datacardfile = here.parent/"test"/"datacards"/"datacard_neighborhoods_poisson.txt"
 datacard = Datacard.parse_datacard(datacardfile)
 _ = datacard.systematics_mc().generate(size=10000, random_state=123456).plot(show=True)
 ```
@@ -112,7 +112,7 @@ We use the Monte Carlo method again and find that this uncertainty is larger tha
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"datacard_neighborhoods_no_poisson_uncertainty.txt"
+datacardfile = here.parent/"test"/"datacards"/"datacard_neighborhoods_systematics.txt"
 datacard = Datacard.parse_datacard(datacardfile)
 _ = datacard.systematics_mc().generate(size=10000, random_state=123456).plot(show=True)
 ```
