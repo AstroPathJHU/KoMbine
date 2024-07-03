@@ -5,7 +5,7 @@ import numpy as np, pathlib, pickle
 import roc_picker.datacard
 
 here = pathlib.Path(__file__).parent
-datacards = here/"datacards"
+datacards = here/"datacards"/"simple_examples"
 docsfolder = here.parent/"docs"
 
 responders = [1, 1, 2, 2, 3, 9, 10]

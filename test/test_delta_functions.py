@@ -5,7 +5,7 @@ import pathlib
 import roc_picker.datacard
 
 here = pathlib.Path(__file__).parent
-datacards = here/"datacards"
+datacards = here/"datacards"/"simple_examples"
 docsfolder = here.parent/"docs"
 
 def main():

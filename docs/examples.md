@@ -35,7 +35,7 @@ ROC Picker works using datacards.  The datacard format is inspired by the CMS Co
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"datacard_example_2.txt"
+datacardfile = here.parent/"test"/"datacards"/"simple_examples"/"datacard_example_2.txt"
 ```
 
 ```python
@@ -93,7 +93,7 @@ Here's an example datacard.  This is from an actual analysis of the density of C
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"datacard_neighborhoods.txt"
+datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_neighborhoods.txt"
 
 with open(datacardfile) as f:
     print(f.read())
