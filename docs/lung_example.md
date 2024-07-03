@@ -63,7 +63,7 @@ We propagate this uncertainty using the Monte Carlo method.
 here = pathlib.Path(".").resolve()
 datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_cells_poisson.txt"
 datacard = Datacard.parse_datacard(datacardfile)
-_ = datacard.systematics_mc().generate(size=10000, random_state=123456).plot()
+_ = datacard.systematics_mc(flip_sign=True).generate(size=10000, random_state=123456).plot()
 ```
 
 ## Discussion
@@ -97,7 +97,7 @@ We use the Monte Carlo method.  Because the neighborhoods are so much more commo
 here = pathlib.Path(".").resolve()
 datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_neighborhoods_poisson.txt"
 datacard = Datacard.parse_datacard(datacardfile)
-_ = datacard.systematics_mc().generate(size=10000, random_state=123456).plot(show=True)
+_ = datacard.systematics_mc(flip_sign=True).generate(size=10000, random_state=123456).plot(show=True)
 ```
 
 ## Systematic uncertainty
@@ -114,5 +114,5 @@ We use the Monte Carlo method again and find that this uncertainty is larger tha
 here = pathlib.Path(".").resolve()
 datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_neighborhoods_systematics.txt"
 datacard = Datacard.parse_datacard(datacardfile)
-_ = datacard.systematics_mc().generate(size=10000, random_state=123456).plot(show=True)
+_ = datacard.systematics_mc(flip_sign=True).generate(size=10000, random_state=123456).plot(show=True)
 ```

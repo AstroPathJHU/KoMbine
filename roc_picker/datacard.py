@@ -105,7 +105,7 @@ class Datacard:
 
     return Datacard(patients=data["patients"], systematics=data["systematics"], observable_type=data["observable_type"])
 
-  def systematics_mc(self, saveas=None, *, id_start=0):
+  def systematics_mc(self, saveas=None, *, id_start=0, flip_sign=False):
     id_generator = itertools.count(id_start)
     patient_distributions = []
 
@@ -153,7 +153,7 @@ class Datacard:
     responders = [p["ratio"] for p in patient_distributions if p["response"] == "responder"]
     nonresponders = [p["ratio"] for p in patient_distributions if p["response"] == "non-responder"]
 
-    return ROCDistributions(responders=responders, nonresponders=nonresponders, flip_sign=True)
+    return ROCDistributions(responders=responders, nonresponders=nonresponders, flip_sign=flip_sign)
 
   def discrete(self, **kwargs):
     if self.observable_type != "fixed":

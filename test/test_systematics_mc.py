@@ -28,7 +28,7 @@ output_paths = {
 
 def plot(datacard, output, id_start=0, size=10000, random_state=123456):
   d = Datacard.parse_datacard(datacard)
-  rd = d.systematics_mc(id_start=id_start)
+  rd = d.systematics_mc(id_start=id_start, flip_sign=True)
   rocs = rd.generate(size=size, random_state=random_state)
   rocs.plot(saveas=output)
 
