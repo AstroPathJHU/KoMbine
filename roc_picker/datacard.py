@@ -195,10 +195,11 @@ def plot_systematics_mc():
   parser.add_argument("output_file", type=pathlib.Path, help="Path to the output file for the plot.")
   parser.add_argument("--nrocs", type=int, help="Number of MC samples to generate.", default=10000, dest="size")
   parser.add_argument("--random-seed", type=int, help="Random seed for generation", dest="random_state")
+  parser.add_argument("--flip-sign", action="store_true", help="flip the sign of the observable (use this if AUC is < 0.5 and you want it to be > 0.5)")
 
   args = parser.parse_args()
   datacard = Datacard.parse_datacard(args.datacard)
-  rd = datacard.systematics_mc()
+  rd = datacard.systematics_mc(flip_sign=args.__dict__.pop("flip_sign"))
   rocs = rd.generate(size=args.size, random_state=args.random_state)
   rocs.plot(saveas=args.output_file)
 
@@ -214,7 +215,7 @@ def plot_discrete():
 
   args = parser.parse_args()
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
-  discrete = datacard.discrete()
+  discrete = datacard.discrete(flip_sign=args.__dict__.pop("flip_sign"))
   discrete.plot(**args.__dict__)
 
 def plot_delta_functions():
@@ -229,5 +230,5 @@ def plot_delta_functions():
 
   args = parser.parse_args()
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
-  deltafunctions = datacard.delta_functions()
+  deltafunctions = datacard.delta_functions(flip_sign=args.__dict__.pop("flip_sign"))
   deltafunctions.plot(**args.__dict__)
