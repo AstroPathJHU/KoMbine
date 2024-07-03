@@ -28,7 +28,7 @@ class DistributionBase(abc.ABC):
     return PowerDistributions(other, self)
 
 class ScipyDistribution(DistributionBase):
-  __ids = {}
+  __ids = set()
 
   def __init__(self, nominal, scipydistribution, id):
     self.__scipydistribution = scipydistribution
@@ -36,7 +36,10 @@ class ScipyDistribution(DistributionBase):
     self.__id = id
     if id in self.__ids:
       raise KeyError(f"Created scipy distributions with duplicate id: {id}")
-    self.__ids[id] = self
+    self.__ids.add(id)
+
+  def __del__(self):
+    self.__ids.remove(self.__id)
 
   def rvs(self, size=None, random_state=None):
     if random_state is None: raise TypeError("Need a random state")
