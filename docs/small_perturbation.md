@@ -53,14 +53,14 @@ datacard_shift_down = Datacard(patients=shift_down, systematics=[], observable_t
 ```
 
 ```python
-# _ = datacard.discrete().plot_roc(show=[False, False, True])
-# _ = datacard_shift_up.discrete().plot_roc(show=[False, False, True])
-# _ = datacard_shift_down.discrete().plot_roc(show=[False, False, True])
+_ = datacard.discrete().plot_roc(show=[False, False, True])
+_ = datacard_shift_up.discrete().plot_roc(show=[False, False, True])
+_ = datacard_shift_down.discrete().plot_roc(show=[False, False, True])
 ```
 
 # Systematics MC
 
-Now the actual value does matter (especially relative to the error).
+Now the actual value does matter (relative to the error).  For this example I use Poisson uncertainties.  Again, one of the responders nominally has the same count as a responder, and I shift it up or down by 1.  We expect the nominal ROC curve to change, but minimal change to the error bands.  And this is exactly what we get.
 
 ```python
 here = pathlib.Path(".").resolve()
