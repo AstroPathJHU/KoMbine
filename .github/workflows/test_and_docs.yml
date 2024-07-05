@@ -37,14 +37,14 @@ jobs:
         uses: xu-cheng/latex-action@v3
         with:
           working_directory: docs
-          root_file: rocpicker.tex
+          root_file: 02_rocpicker.tex
           latexmk_use_xelatex: true
       - uses: actions/upload-artifact@v4.3.3
         with:
           name: docs
           path: |
-            docs/rocpicker.pdf
+            docs/02_rocpicker.pdf
             docs/*.html
       - name: Check latex log
         run: |
-          python .github/workflows/checklog.py docs/rocpicker.log
+          python .github/workflows/checklog.py docs/02_rocpicker.log
