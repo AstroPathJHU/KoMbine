@@ -1,0 +1,48 @@
+---
+jupyter:
+  jupytext:
+    cell_metadata_filter: -all
+    formats: ipynb,md
+    main_language: python
+    text_representation:
+      extension: .md
+      format_name: markdown
+      format_version: '1.3'
+      jupytext_version: 1.16.1
+---
+
+# Table of Contents
+
+1. `01_table_of_contents.html`
+  - this file
+2. `02_rocpicker.pdf`
+  - This LaTeX document contains a detailed explanation of the math that
+    goes into all the methods used in ROC Picker.
+3. `03_examples.html`
+  - examples of how to run the various methods included in ROC Picker
+    using the datacard interface.
+4. `04_small_perturbation.html`
+  - an illustration of small perturbations to one of the
+    observables and how that affects the results.
+5. `05_lung_example.md`
+  - an example analysis of statistical and systematic uncertainties
+    using AstroPath lung cancer data
+
+# Compilation instructions
+
+The documentation is all compiled with Github Actions and provided as a single
+zip file in the artifacts.  If you want to compile it yourself anyway, here are the
+instructions.
+
+ - First, install ROC Picker with `pip install`.
+ - LaTeX:
+   - Run `compile_plots.sh`
+   - Then compile the LaTeX.
+     - Use `xelatex` and `biber`.  It will take a few iterations, as usual with
+       LaTeX.
+     - I included the relevant magic comments and find that it compiles out of
+       the box in TeXstudio.
+ - Jupyter notebooks
+   - Run `jupytext --sync *.md` to convert the markdown files to `.ipynb`
+   - This one (the table of contents) is trivial, but the rest contain functioning
+     code that you can play with.
