@@ -13,26 +13,28 @@ jupyter:
 
 # Table of Contents
 
-1. `01_table_of_contents.html`
-  - this file
-2. `02_rocpicker.pdf`
-  - This LaTeX document contains a detailed explanation of the math that
-    goes into all the methods used in ROC Picker.
-3. `03_examples.html`
-  - examples of how to run the various methods included in ROC Picker
-    using the datacard interface.
-4. `04_small_perturbation.html`
-  - an illustration of small perturbations to one of the
-    observables and how that affects the results.
-5. `05_lung_example.md`
-  - an example analysis of statistical and systematic uncertainties
-    using AstroPath lung cancer data
+ - `01_table_of_contents.html`
+   - this file
+ - `02_rocpicker.pdf`
+   - This LaTeX document contains a detailed explanation of the math that
+     goes into all the methods used in ROC Picker.
+ - `03_examples.html`
+   - examples of how to run the various methods included in ROC Picker
+     using the datacard interface.
+ - `04_small_perturbation.html`
+   - an illustration of small perturbations to one of the
+     observables and how that affects the results.
+ - `05_lung_example.md`
+   - an example analysis of statistical and systematic uncertainties
+     using AstroPath lung cancer data
 
 # Compilation instructions
 
 The documentation is all compiled with Github Actions and provided as a single
-zip file in the artifacts.  If you want to compile it yourself anyway, here are the
-instructions.
+zip file in the artifacts.  The latest version from the `main` branch is
+[here](https://nightly.link/AstroPathJHU/ROCPicker/workflows/test_and_docs/main/docs.zip).
+
+If you want to compile it yourself anyway, here are the instructions.
 
  - First, install ROC Picker with `pip install`.
  - LaTeX:
