@@ -1,5 +1,7 @@
 # ROC Picker
 
+![ROC Picker logo](logo.png)
+
 Welcome!
 
 ROC Picker is a software package for propagating statistical and systematic
