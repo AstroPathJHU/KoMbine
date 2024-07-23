@@ -19,6 +19,12 @@ jobs:
         run: |
           python -m pyflakes .
 
+      - name: test code in README
+        run: |
+          startlinenumber="$(grep -n import README.md | sed "s/:.*//")"
+          endlinenumber="$(expr "$startlinenumber" + "$(sed -n 26,1000p README.md | grep -n '```' | sed "s/:.*//")" - 2)"
+          sed -n "${startlinenumber},${endlinenumber}p" README.md | python
+
       - name: convert notebooks
         run: |
           jupytext --sync docs/*.md
