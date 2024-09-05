@@ -279,7 +279,8 @@ class ROCCollection:
     plt.xlabel("X (Fraction of non-responders)")
     plt.ylabel("Y (Fraction of responders)")
     ax.tick_params(axis='both', which='major')
-    if show:
-      plt.show()
     if saveas is not None:
       plt.savefig(saveas)
+    if show:
+      plt.show()
+    plt.close()

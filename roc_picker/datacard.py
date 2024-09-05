@@ -105,7 +105,7 @@ class Datacard:
 
     return Datacard(patients=data["patients"], systematics=data["systematics"], observable_type=data["observable_type"])
 
-  def systematics_mc(self, saveas=None, *, id_start=0, flip_sign=False):
+  def systematics_mc(self, *, id_start=0, flip_sign=False):
     id_generator = itertools.count(id_start)
     patient_distributions = []
 
