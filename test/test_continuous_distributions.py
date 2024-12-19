@@ -1,8 +1,13 @@
-import warnings
-warnings.simplefilter("error")
+"""
+Test the continuous distributions module, and generate the figures
+for that section of the documentation.
+"""
 
-import matplotlib.pyplot as plt, numpy as np, pathlib, scipy.integrate, scipy.stats
+import pathlib, warnings
+import matplotlib.pyplot as plt, numpy as np, scipy.integrate, scipy.stats
 import roc_picker.continuous_distributions
+
+warnings.simplefilter("error")
 
 here = pathlib.Path(__file__).parent
 docsfolder = here.parent/"docs"
@@ -12,13 +17,37 @@ h = .6
 NX = NY = 3
 
 def X(t):
-  return (scipy.stats.norm.cdf(t, loc=-1, scale=h) + 2*scipy.stats.norm.cdf(t, loc=2, scale=h)) / 3 * NX
+  """
+  The X coordinates of the ROC curve, which comes from the non-responder CDF.
+  """
+  return (
+    scipy.stats.norm.cdf(t, loc=-1, scale=h)
+      + 2*scipy.stats.norm.cdf(t, loc=2, scale=h)
+  ) / 3 * NX
 def Y(t):
-  return (scipy.stats.norm.cdf(t, loc=1, scale=h) + 2*scipy.stats.norm.cdf(t, loc=-2, scale=h)) / 3 * NY
+  """
+  The Y coordinates of the ROC curve, which comes from the responder CDF.
+  """
+  return (
+    scipy.stats.norm.cdf(t, loc=1, scale=h)
+      + 2*scipy.stats.norm.cdf(t, loc=-2, scale=h)
+  ) / 3 * NY
 def Xdot(t):
-  return (scipy.stats.norm.pdf(t, loc=-1, scale=h) + 2*scipy.stats.norm.pdf(t, loc=2, scale=h)) / 3 * NX
+  """
+  The derivative of the X coordinates of the ROC curve.
+  """
+  return (
+    scipy.stats.norm.pdf(t, loc=-1, scale=h)
+      + 2*scipy.stats.norm.pdf(t, loc=2, scale=h)
+  ) / 3 * NX
 def Ydot(t):
-  return (scipy.stats.norm.pdf(t, loc=1, scale=h) + 2*scipy.stats.norm.pdf(t, loc=-2, scale=h)) / 3 * NY
+  """
+  The derivative of the Y coordinates of the ROC curve.
+  """
+  return (
+    scipy.stats.norm.pdf(t, loc=1, scale=h)
+      + 2*scipy.stats.norm.pdf(t, loc=-2, scale=h)
+  ) / 3 * NY
 
 t_plot = np.linspace(-10, 10, 1001)
 dt_plot = t_plot[1] - t_plot[0]
@@ -26,14 +55,33 @@ NX = X(np.inf)
 NY = Y(np.inf)
 AUC = np.sum(Y(t_plot)/NY * Xdot(t_plot)/NX) * dt_plot
 
-def run(target_AUC, verbose=True, prev_rocs={AUC: (t_plot, X, Y, None, None)}):
+def run(   # pylint: disable=dangerous-default-value
+  target_AUC,
+  verbose=True,
+  prev_rocs={AUC: (t_plot, X, Y, None, None)},
+):
+  """
+  Run the optimization for a given target AUC.
+
+  Parameters
+  ----------
+  target_AUC : float
+    The target AUC.
+  verbose : bool
+    Whether to print and plot the results.
+  prev_rocs : dict
+    The previous results, which are used to guess the initial parameters.
+    This gets updated automatically if the optimization is successful.
+  """
   AUC_for_guess = min(prev_rocs.keys(), key=lambda x: abs(x-target_AUC))
   t_for_guess, X_for_guess, Y_for_guess, Lambda_guess, prev_result = prev_rocs[AUC_for_guess]
   if AUC_for_guess == target_AUC and prev_result is not None:
     optimize_result = prev_result
     xy_guess = optimize_result.y
   else:
-    xy_guess = roc_picker.continuous_distributions.xy_guess(X=X_for_guess, Y=Y_for_guess, t_guess=t_for_guess, AUC=target_AUC)
+    xy_guess = roc_picker.continuous_distributions.xy_guess(
+      X=X_for_guess, Y=Y_for_guess, t_guess=t_for_guess, AUC=target_AUC
+    )
 
     if Lambda_guess is None:
       if target_AUC < AUC:
@@ -41,11 +89,15 @@ def run(target_AUC, verbose=True, prev_rocs={AUC: (t_plot, X, Y, None, None)}):
       else:
         Lambda_guess = -2
 
-    optimize_result = roc_picker.continuous_distributions.optimize(X=X, Y=Y, Xdot=Xdot, Ydot=Ydot, AUC=target_AUC, Lambda_scaling=1, Lambda_guess=Lambda_guess, guess=xy_guess, t_guess=t_for_guess)
+    optimize_result = roc_picker.continuous_distributions.optimize(
+      X=X, Y=Y, Xdot=Xdot, Ydot=Ydot,
+      AUC=target_AUC, Lambda_scaling=1, Lambda_guess=Lambda_guess,
+      guess=xy_guess, t_guess=t_for_guess
+    )
 
   t = optimize_result.x
   x, y = xy = optimize_result.y
-  xd, yd = optimize_result.yp
+  #xd, yd = optimize_result.yp
   Lambda, c1, c2 = optimize_result.p
 
   if verbose:
@@ -62,13 +114,25 @@ def run(target_AUC, verbose=True, prev_rocs={AUC: (t_plot, X, Y, None, None)}):
     plt.legend()
     plt.show()
 
-  if optimize_result is not prev_result and optimize_result.success and np.isclose(target_AUC, 1/2 * np.sum((y[1:]+y[:-1]) * (x[1:] - x[:-1])), rtol=0, atol=1e-3):
+  if (
+    optimize_result is not prev_result
+    and optimize_result.success
+    and np.isclose(
+      target_AUC,
+      1/2 * np.sum((y[1:]+y[:-1]) * (x[1:] - x[:-1])),
+      rtol=0, atol=1e-3,
+    )
+  ):
     slc = slice(None)#(xd>0) & (yd>0)
     prev_rocs[target_AUC] = t[slc], x[slc], y[slc], Lambda, optimize_result
 
   return optimize_result
 
-def plot_params(*, skip_aucs=[], show=False):
+def plot_params(*, skip_aucs=(), show=False):
+  """
+  Generate the plots of the fitted parameters and negative log likelihood
+  as a function of the target AUC.
+  """
   target_aucs = []
   delta_aucs = []
   L = []
@@ -82,7 +146,8 @@ def plot_params(*, skip_aucs=[], show=False):
   for linspace in linspaces:
     last_failed = False
     for target_auc in linspace:
-      if target_auc in skip_aucs: continue
+      if target_auc in skip_aucs:
+        continue
       result = run(target_auc, verbose=False)
       x, y = result.y
       auc = 1/2 * np.sum((y[1:]+y[:-1]) * (x[1:] - x[:-1]))
@@ -135,6 +200,15 @@ def plot_params(*, skip_aucs=[], show=False):
   return target_aucs, delta_aucs, L, c1, c2, NLL
 
 def plots(show=False):
+  """
+  Generate the illustrations of the continuous distributions used for
+  the example in the documentation.
+
+  Parameters
+  ----------
+  show : bool
+    Whether to show the plots.
+  """
   plt.figure(figsize=(5, 5))
   plt.scatter(t_plot, Xdot(t_plot), label=r"$\dot{X}$")
   plt.scatter(t_plot, Ydot(t_plot), label=r"$\dot{Y}$")

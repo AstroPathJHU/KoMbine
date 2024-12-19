@@ -1,3 +1,9 @@
+"""
+ROC Picker is a software package for propagating statistical and systematic
+uncertainties in a biomedical analysis.
+
+Please see the docs/ folder for full documentation.
+"""
 import setuptools
 
 setuptools.setup(

@@ -58,15 +58,13 @@ In any case, none of these papers considered any uncertainties other than the bi
 
 There is something similar for Kaplan-Meier curves \autocite{kaplanmeier_sachs}.  It correctly considers the whole curve as a unit, but also doesn't include systematic uncertainties.
 
-\section{Statistical uncertainty}
-\label{sec:stat}
+\section{Statistical uncertainty}\label{sec:stat}
 
 A ROC curve is a plot of \(x(t), y(t)\), where \(x(t)\) is the cumulative density function (CDF) of \(t\) for one group (non-responders) and \(y(t)\) is the CDF for the other group (responders).  The derivatives, \(\xdot(t)\) and \(\ydot(t)\), give the probability density functions (PDFs) for the two groups.   We want to find a probability distribution for the ``true'' \(x\) and \(y\) distributions, given our observed data.
 
 Our observed data for the two groups have CDFs \(X(t), Y(t)\) and PDFs \(\Xdot(t), \Ydot(t)\).  In reality, \(\Xdot\) and \(\Ydot\) are going to be sums of delta functions, while the true probability distributions \(\xdot\) and \(\ydot\) are unknown, continuous distributions.  In order to make the problem feasible, we have to make some assumptions on the form of \(\xdot\) and \(\ydot\).  The current package includes three implementations.
 
-\subsection{Discrete points}
-\label{sec:discrete}
+\subsection{Discrete points}\label{sec:discrete}
 
 In the first implementation, we consider \(\Xdot\) and \(\Ydot\) as discrete.  Furthermore, we assume that the true probability distributions \(\xdot\) and \(\ydot\) are also sums of delta functions, where \(\xdot\) only has nonzero probability where \(\Xdot\) does and \(\ydot\) only has nonzero probability where \(\Ydot\) does, but possibly with different relative weights.  This is equivalent to assuming that all future patients will be identical to one of the current ones.  Formally,
 \begin{align}
@@ -80,8 +78,7 @@ In the first implementation, we consider \(\Xdot\) and \(\Ydot\) as discrete.  F
 \end{align}
 The indices \(n\) and \(r\) index the non-responders and responders, \(\mathscr{X}_n\) and \(\mathscr{Y}_r\) are the numbers of non-responders and responders with \(t=t_n\) or \(t=t_r\), and \(\mathscr{x}_n\) and \(\mathscr{y}_r\) are the fractions of non-responders and responders with \(t=t_n\) or \(t=t_r\) in the true probability distribution.
 
-\subsubsection{The most likely \texorpdfstring{\(\mathscr{x}\)}{x} and \texorpdfstring{\(\mathscr{y}\)}{y}}
-\label{sec:discrete_unconstrained}
+\subsubsection{The most likely \texorpdfstring{\(\mathscr{x}\)}{x} and \texorpdfstring{\(\mathscr{y}\)}{y}}\label{sec:discrete_unconstrained}
 
 Given \(\mathscr{x}_n\) and \(\mathscr{y}_r\), the probability to observe our data \((\mathscr{X}_n, \mathscr{Y}_r)\) is
 \begin{equation}
@@ -112,8 +109,7 @@ The result is
 \end{align}
 In other words, the most likely probability distribution given our data is the probability distribution that we observe in the data.  No surprise.
 
-\subsubsection{Likelihood scan for AUC}
-\label{sec:discrete_likelihood_scan}
+\subsubsection{Likelihood scan for AUC}\label{sec:discrete_likelihood_scan}
 
 One metric that is commonly used to assess the power of \(t\) to separate the two groups is the AUC, or area under the ROC curve.  Using our notation, this is
 \begin{align}
@@ -143,13 +139,11 @@ It is important to note that there is not just one up and down variation of the 
 		\includegraphics[width=0.32\textwidth]{discrete_exampleroc.pdf}
 		\includegraphics[width=0.32\textwidth]{discrete_scan.pdf}
 		\includegraphics[width=0.32\textwidth]{discrete_exampleroc_errors.pdf}
-		\caption{Plots for the example distributions. Left: The ROC curve. Middle: The likelihood scan. Right: The best-fitted ROC curve, with 68\% and 95\% error bands indicating the best-fitted ROC curves with AUCs at the edges of the 68\% and 95\% CL regions from the likelihood scan.}
-		\label{fig:exampledata_discrete}
+		\caption{Plots for the example distributions. Left: The ROC curve. Middle: The likelihood scan. Right: The best-fitted ROC curve, with 68\% and 95\% error bands indicating the best-fitted ROC curves with AUCs at the edges of the 68\% and 95\% CL regions from the likelihood scan.\label{fig:exampledata_discrete}}
 	\end{center}
 \end{figure}
 
-\subsection{Continuous distributions}
-\label{sec:lagrangian}
+\subsection{Continuous distributions}\label{sec:lagrangian}
 
 Our second implementation uses \(\Xdot\) and \(\Ydot\) as continuous, and in this way we use continuous distributions in our tests.  They are normalized so that
 \begin{align}
@@ -249,8 +243,7 @@ This is a simple test with three events in each category: the non-responders hav
 \includegraphics[width=0.32\textwidth]{exampleXdotYdot.pdf}
 \includegraphics[width=0.32\textwidth]{exampleXY.pdf}
 \includegraphics[width=0.32\textwidth]{exampleroc.pdf}
-\caption{Plots for the example distributions.  Left: The density of non-responders \(\Xdot\) and responders \(\Ydot\).  Middle: The cumulative density of non-responders \(X\) and responders \(Y\).  Right: The ROC curve.}
-\label{fig:exampledata}
+\caption{Plots for the example distributions.  Left: The density of non-responders \(\Xdot\) and responders \(\Ydot\).  Middle: The cumulative density of non-responders \(X\) and responders \(Y\).  Right: The ROC curve.\label{fig:exampledata}}
 \end{center}
 \end{figure}
 
@@ -274,8 +267,7 @@ A bigger issue is that beyond a certain point, \texttt{solve\_bvp} fails to conv
 \begin{center}
 \includegraphics[width=0.32\textwidth]{examplescan.pdf}
 \includegraphics[width=0.32\textwidth]{exampleparameters.pdf}
-\caption{Left: Likelihood scan for the \(\AUC\) using the example distributions.  Right: Fitted values of \(\Lambda\), \(c_1\), and \(c_2\) at each point in the likelihood scan.}
-\label{fig:examplelikelihoodscan}
+\caption{Left: Likelihood scan for the \(\AUC\) using the example distributions.  Right: Fitted values of \(\Lambda\), \(c_1\), and \(c_2\) at each point in the likelihood scan.\label{fig:examplelikelihoodscan}}
 \end{center}
 \end{figure}
 
@@ -326,8 +318,7 @@ For a more complicated ROC curve (\cref{fig:exampledata_delta_functions_disagree
 \includegraphics[width=0.32\textwidth]{deltafunctions_scan.pdf}
 \includegraphics[width=0.32\textwidth]{discrete_scan_compare_to_delta_functions.pdf}
 \includegraphics[width=0.32\textwidth]{deltafunctions_exampleroc_errors.pdf}
-\caption{Left: Likelihood scan for the \(\AUC\) using the example distributions, using the Lagrangian approach with \(\delta\) functions.  Middle: Likelihood scan using the discrete method from \cref{sec:discrete}.  Right: The ROC curve with error bars.}
-\label{fig:exampledata_delta_functions_agreement}
+\caption{Left: Likelihood scan for the \(\AUC\) using the example distributions, using the Lagrangian approach with \(\delta\) functions.  Middle: Likelihood scan using the discrete method from \cref{sec:discrete}.  Right: The ROC curve with error bars.\label{fig:exampledata_delta_functions_agreement}}
 \end{center}
 \end{figure}
 
@@ -335,8 +326,7 @@ For a more complicated ROC curve (\cref{fig:exampledata_delta_functions_disagree
 \begin{center}
 \includegraphics[width=0.32\textwidth]{discrete_scan.pdf}
 \includegraphics[width=0.32\textwidth]{delta_functions_scan_compare_to_discrete.pdf}
-\caption{Left: Likelihood scan for the \(\AUC\) from \cref{fig:exampledata_discrete}.  Right: Likelihood scan using the Lagrangian approach with \(\delta\) functions.}
-\label{fig:exampledata_delta_functions_disagreement}
+\caption{Left: Likelihood scan for the \(\AUC\) from \cref{fig:exampledata_discrete}.  Right: Likelihood scan using the Lagrangian approach with \(\delta\) functions.\label{fig:exampledata_delta_functions_disagreement}}
 \end{center}
 \end{figure}
 
@@ -361,8 +351,7 @@ The right plot shows an example systematic uncertainty on the density of CD8+Fox
 \includegraphics[width=0.32\textwidth]{poisson_roc_cells.pdf}
 \includegraphics[width=0.32\textwidth]{poisson_roc_neighborhoods.pdf}
 \includegraphics[width=0.32\textwidth]{lognormal_roc_neighborhoods.pdf}
-\caption{ROC curves \autocite{SITC2023poster} showing the separation power of CD8+FoxP3+ cells (left) and CD8+FoxP3+-like neighborhoods (middle and right) to predict response to immunotherapy.  The \qty{68}{\%} and \qty{95}{\%} confidence bands on the ROC curves, coming from the Poisson error on the number of cells or neighborhoods (left and middle) and from the systematic error estimated using the overlap regions (right), are indicated.  The legends show the areas under the ROC curves (AUC) and their \qty{68}{\%} and \qty{95}{\%} confidence intervals.}
-\label{fig:exampleroc_systematics_mc}
+\caption{ROC curves \autocite{SITC2023poster} showing the separation power of CD8+FoxP3+ cells (left) and CD8+FoxP3+-like neighborhoods (middle and right) to predict response to immunotherapy.  The \qty{68}{\%} and \qty{95}{\%} confidence bands on the ROC curves, coming from the Poisson error on the number of cells or neighborhoods (left and middle) and from the systematic error estimated using the overlap regions (right), are indicated.  The legends show the areas under the ROC curves (AUC) and their \qty{68}{\%} and \qty{95}{\%} confidence intervals.\label{fig:exampleroc_systematics_mc}}
 \end{center}
 \end{figure}
 
@@ -373,12 +362,11 @@ In reality, \(\Xdot\) and \(\Ydot\) should be \(\delta\) functions (they are in 
 
 Once we do this, even the unconstrained Lagrangian (\cref{eq:lagrangian}) won't minimize at \(x=X/n_X, y=Y/n_Y\), but will probably be a smoothed version of that curve.
 
-\subsection{Systematics}
-\label{sec:systematics}
+\subsection{Systematics}\label{sec:systematics}
 
 The systematics will most likely go in the data distributions, so that \(\Xdot(t)\) and \(\Ydot(t)\) will become \(\Xdot(t,\vec{\beta})\) and \(\Ydot(t,\vec{\beta})\).  For example, let's say we have one sample at \(t=t_0\) with a log-normal systematic with a variation of \(1+\alpha\) at \(1\sigma\).  We will get
 \begin{equation}
-\Xdot(t,\beta)=\delta(t(1+\alpha)^\beta-t_0)
+\Xdot(t,\beta)=\delta(t(1+\alpha)^{\beta}-t_0)
 \end{equation}
 and the Lagrangian will get a term
 \begin{equation}
@@ -388,5 +376,4 @@ and the Lagrangian will get a term
 A sample will, in general, have multiple systematics, including log-normal and Poisson and probably others.  Some of the systematics will be correlated between a subset of the samples (for example, flatfielding and warping will be correlated between all samples in a batch).
 
 \printbibliography
-
 \end{document}

@@ -1,13 +1,19 @@
-import warnings
-warnings.simplefilter("error")
+"""
+Test the discrete module, and generate the figures for that section of the documentation.
+"""
 
-import numpy as np, pathlib, pickle
+import pathlib, pickle, warnings
+import numpy as np
 import roc_picker.datacard
+warnings.simplefilter("error")
 
 here = pathlib.Path(__file__).parent
 datacards = here/"datacards"/"simple_examples"
 
 def main():
+  """
+  Test the discrete module, and generate the figures for that section of the documentation.
+  """
   datacard = roc_picker.datacard.Datacard.parse_datacard(datacards/"datacard_example_1.txt")
   discrete = datacard.discrete(flip_sign=False, check_validity=True)
   rocs = discrete.plot_roc(
@@ -43,7 +49,11 @@ def main():
       "m95": "p95",
     }[k]
     flip = rocs_flip[flipk]
-    np.testing.assert_allclose(np.array([roc.x, roc.y]), 1-np.array([flip.x, flip.y])[:,::-1], **tolerance)
+    np.testing.assert_allclose(
+      np.array([roc.x, roc.y]),
+      1-np.array([flip.x, flip.y])[:,::-1],
+      **tolerance,
+    )
     np.testing.assert_allclose(roc.AUC, 1-flip.AUC, **tolerance)
     np.testing.assert_allclose(roc.NLL, flip.NLL, **tolerance)
 
