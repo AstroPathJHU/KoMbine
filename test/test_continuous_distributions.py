@@ -123,22 +123,23 @@ def run(   # pylint: disable=dangerous-default-value
       rtol=0, atol=1e-3,
     )
   ):
-    slc = slice(None)#(xd>0) & (yd>0)
-    prev_rocs[target_AUC] = t[slc], x[slc], y[slc], Lambda, optimize_result
+    prev_rocs[target_AUC] = t, x, y, Lambda, optimize_result
 
   return optimize_result
 
-def plot_params(*, skip_aucs=(), show=False):
+def make_continuous_distribution_plots(*, skip_aucs=(), show=False):
   """
   Generate the plots of the fitted parameters and negative log likelihood
   as a function of the target AUC.
   """
-  target_aucs = []
-  delta_aucs = []
-  L = []
-  c1 = []
-  c2 = []
-  NLL = []
+  results = {
+    "target_aucs": [],
+    "delta_aucs": [],
+    "L": [],
+    "c1": [],
+    "c2": [],
+    "NLL": []
+  }
   linspaces = [
     [AUC] + [_ for _ in np.linspace(0, 1, 1001) if _ >= AUC],
     [AUC] + [_ for _ in np.linspace(1, 0, 1001) if _ <= AUC],
@@ -156,16 +157,35 @@ def plot_params(*, skip_aucs=(), show=False):
         print("failed", target_auc)
         if last_failed:
           break
-        else:
-          last_failed = True
-          continue
+        last_failed = True
+        continue
       last_failed = False
-      target_aucs.append(target_auc)
-      delta_aucs.append(delta_auc)
-      L.append(result.p[0])
-      c1.append(result.p[1])
-      c2.append(result.p[2])
-      NLL.append(result.NLL)
+      results["target_aucs"].append(target_auc)
+      results["delta_aucs"].append(delta_auc)
+      results["L"].append(result.p[0])
+      results["c1"].append(result.p[1])
+      results["c2"].append(result.p[2])
+      results["NLL"].append(result.NLL)
+
+  plot_params(
+    target_aucs=results["target_aucs"],
+    L=results["L"],
+    c1=results["c1"],
+    c2=results["c2"],
+    show=show
+  )
+  plot_scan(
+    target_aucs=results["target_aucs"],
+    NLL=results["NLL"],
+    show=show
+  )
+
+  return results
+
+def plot_params(target_aucs, L, c1, c2, show=False):
+  """
+  Generate the plot of the fitted parameters as a function of the target AUC.
+  """
   plt.figure(figsize=(5,5))
   #plt.scatter(target_aucs, delta_aucs, label=r"$\Delta$AUC")
   plt.scatter(target_aucs, L, label=r"$\Lambda$")
@@ -180,6 +200,10 @@ def plot_params(*, skip_aucs=(), show=False):
     plt.show()
   plt.close()
 
+def plot_scan(NLL, target_aucs, show=False):
+  """
+  Generate the plot of the scan of the negative log likelihood.
+  """
   target_aucs = np.asarray(target_aucs)
   deltaNLL = np.asarray(NLL)
   deltaNLL -= np.nanmin(deltaNLL)
@@ -197,7 +221,6 @@ def plot_params(*, skip_aucs=(), show=False):
   if show:
     plt.show()
   plt.close()
-  return target_aucs, delta_aucs, L, c1, c2, NLL
 
 def plots(show=False):
   """
@@ -243,5 +266,5 @@ def plots(show=False):
   plt.close()
 
 if __name__ == "__main__":
-  plot_params()
+  make_continuous_distribution_plots()
   plots()
