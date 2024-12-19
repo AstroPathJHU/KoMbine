@@ -27,7 +27,7 @@ class DiscreteROCBase(abc.ABC):
     self.flip_sign = flip_sign
 
   @abc.abstractmethod
-  def optimize(self, AUC=None):
+  def optimize(self, *, AUC=None):
     """
     Optimize the ROC curve, either unconditionally or for a given AUC.
     """

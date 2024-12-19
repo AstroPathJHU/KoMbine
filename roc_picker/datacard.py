@@ -155,7 +155,7 @@ class Datacard:
         count = ScipyDistribution(
           nominal=p["value"],
           scipydistribution=scipy.stats.poisson(mu=p["value"]),
-          id=next(id_generator)
+          unique_id=next(id_generator)
         )
         patient_distributions.append({
           "response": p["response"],
@@ -167,12 +167,12 @@ class Datacard:
         numerator = ScipyDistribution(
           nominal=p["numerator"],
           scipydistribution=scipy.stats.poisson(mu=p["numerator"]),
-          id=next(id_generator)
+          unique_id=next(id_generator)
         )
         denominator = ScipyDistribution(
           nominal=p["denominator"],
           scipydistribution=scipy.stats.poisson(mu=p["denominator"]),
-          id=next(id_generator)
+          unique_id=next(id_generator)
         )
         ratio = numerator / denominator
         patient_distributions.append({
@@ -186,7 +186,7 @@ class Datacard:
         log_norm_factor = ScipyDistribution(
           nominal=0,
           scipydistribution=scipy.stats.norm(),
-          id=next(id_generator)
+          unique_id=next(id_generator)
         )
         try:
           for patient, value in zip(patient_distributions, systematic["values"], strict=True):

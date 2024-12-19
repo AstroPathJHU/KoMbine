@@ -1,21 +1,67 @@
-import functools, numpy as np, scipy.optimize, warnings
+"""
+Optimize the discrete ROC curve using the Lagrangian method
+applied to delta functions.  This is a sanity check and should
+be equivalent to the discrete method.  See docs/02_rocpicker.tex
+for the math details and docs/03_examples.md for usage examples.
+"""
+
+import functools, warnings
+import numpy as np, scipy.optimize
 from .discrete_base import DiscreteROCBase
 
 class DeltaFunctions(DiscreteROCBase):
+  """
+  Optimize the discrete ROC curve using the Lagrangian method
+  applied to delta functions.  This is a sanity check and should
+  be equivalent to the discrete method.  See docs/02_rocpicker.tex
+  for the math details and docs/03_examples.md for usage examples.
+
+  Parameters
+  ----------
+  responders: array-like
+    The parameter values for the responders.
+  nonresponders: array-like
+    The parameter values for the nonresponders.
+  flip_sign: bool, optional
+    If True, the sign of the parameter is flipped.
+    Default is False.
+  """
   @functools.cached_property
   def sign(self):
-    if self.flip_sign: return -1
-    return 1
+    """
+    The sign to multiply the parameter values by.
+    """
+    if self.flip_sign:
+      return -1
+    else:
+      return 1
   @functools.cached_property
   def ts(self):
+    """
+    The parameter values for all patients.
+    """
     return sorted(set(self.responders) | set(self.nonresponders) | {np.inf, -np.inf})
 
   def X(self, t):
+    """
+    The X coordinate of the nominal ROC curve at the parameter value t,
+    which represents the number of nonresponders at or below t.
+    """
     return sum(1 for ni in self.nonresponders if ni*self.sign < t*self.sign)
   def Y(self, t):
+    """
+    The Y coordinate of the nominal ROC curve at the parameter value t,
+    which represents the number of responders at or below t.
+    """
     return sum(1 for ri in self.responders if ri*self.sign < t*self.sign)
 
   def xy(self, c1, c5, Lambda):
+    """
+    The x and y functions for the fitted ROC curve,
+    given the parameters c1, c5, and Lambda.
+    (The optimization is to determine those parameters.)
+    c3 and c4 are trivial to calculate from the boundary conditions.
+    """
     c3 = c4 = 0
     if self.flip_sign:
       c3 = c4 = 1
@@ -53,6 +99,9 @@ class DeltaFunctions(DiscreteROCBase):
     return x, y
 
   def findparams(self, *, AUC, c1_guess, c5_guess, Lambda_guess):
+    """
+    Find the parameters c1, c5, and Lambda that satisfy the boundary conditions.
+    """
     def bc(params):
       if not self.flip_sign:
         target_at_inf = 1
@@ -75,10 +124,37 @@ class DeltaFunctions(DiscreteROCBase):
     guess = [c1_guess, c5_guess, Lambda_guess]
     return scipy.optimize.fsolve(bc, guess)
 
-  def optimize(self, *, AUC, c1_guess=1, c5_guess=1, Lambda_guess=1):
+  def optimize(self, *, AUC=None, c1_guess=1, c5_guess=1, Lambda_guess=1):
+    """
+    Optimize the ROC curve to match the given AUC.
+
+    Parameters
+    ----------
+    AUC: float
+      The target AUC.
+    c1_guess: float, optional
+      The initial guess for the parameter c1.
+      Default is 1.
+    c5_guess: float, optional
+      The initial guess for the parameter c5.
+      Default is 1.
+    Lambda_guess: float, optional
+      The initial guess for the parameter Lambda.
+      Default is 1.
+    """
     with warnings.catch_warnings():
-      warnings.filterwarnings("ignore", "The number of calls to function has reached maxfev = |The iteration is not making good progress")
-      c1, c5, Lambda = self.findparams(AUC=AUC, c1_guess=c1_guess, c5_guess=c5_guess, Lambda_guess=Lambda_guess)
+      warnings.filterwarnings(
+        "ignore",
+        "The number of calls to function has reached maxfev = "
+        "|"
+        "The iteration is not making good progress"
+      )
+      c1, c5, Lambda = self.findparams(
+        AUC=AUC,
+        c1_guess=c1_guess,
+        c5_guess=c5_guess,
+        Lambda_guess=Lambda_guess
+      )
 
     x, y = self.xy(c1, c5, Lambda)
 
