@@ -1,15 +1,68 @@
+"""
+Base class for ROC curve optimization using discrete points.
+This includes the discrete and delta functions methods.
+The plotting code is implemented here.
+"""
+
 import abc, collections, matplotlib.pyplot as plt, numpy as np, scipy.optimize
 
 class DiscreteROCBase(abc.ABC):
+  """
+  Base class for ROC curve optimization using discrete points.
+  This includes the discrete and delta functions methods.
+  The plotting code is implemented here.
+
+  Parameters
+  ----------
+  responders: array-like
+    The values of the observable for the responders.
+  nonresponders: array-like
+    The values of the observable for the non-responders.
+  flip_sign: bool, optional
+    If True, the sign of the observable is flipped.
+  """
   def __init__(self, responders, nonresponders, *, flip_sign=False):
     self.responders = responders
     self.nonresponders = nonresponders
     self.flip_sign = flip_sign
 
   @abc.abstractmethod
-  def optimize(self, AUC=None): pass
+  def optimize(self, AUC=None):
+    """
+    Optimize the ROC curve, either unconditionally or for a given AUC.
+    """
 
-  def plot_roc(self, *, show=False, rocfilename=None, scanfilename=None, rocerrorsfilename=None, yupperlim=None, npoints=100):
+  def plot_roc(
+    self, *,
+    show=False,
+    rocfilename=None,
+    scanfilename=None,
+    rocerrorsfilename=None,
+    yupperlim=None,
+    npoints=100
+  ):
+    """
+    Plot the optimized ROC curve, the scan of the NLL,
+    and the 68% and 95% CL bands.
+
+    Parameters
+    ----------
+    show: bool or tuple of bool, optional
+      Whether to show the plots.
+      If a tuple, the first element is for the ROC curve,
+      the second for the scan of the NLL,
+      and the third for the 68% and 95% CL bands.
+    rocfilename: os.PathLike, optional
+      The filename to save the ROC curve plot.
+    scanfilename: os.PathLike, optional
+      The filename to save the scan of the NLL plot.
+    rocerrorsfilename: os.PathLike, optional
+      The filename to save the 68% and 95% CL bands plot.
+    yupperlim: float, optional
+      The upper limit for the y-axis of the scan of the NLL plot.
+    npoints: int, optional
+      The number of points to scan for the NLL.
+    """
     if not isinstance(show, collections.abc.Sequence):
       show = [show, show, show]
     show_roc, show_scan, show_rocerrors = show
@@ -24,9 +77,11 @@ class DiscreteROCBase(abc.ABC):
       t = t[::-1]
 
     @np.vectorize
-    def X(t): return sum(1 for n in self.nonresponders if n*sign < t*sign)
+    def X(t):
+      return sum(1 for n in self.nonresponders if n*sign < t*sign)
     @np.vectorize
-    def Y(t): return sum(1 for r in self.responders if r*sign < t*sign)
+    def Y(t):
+      return sum(1 for r in self.responders if r*sign < t*sign)
 
     xx = X(t) / len(self.nonresponders)
     yy = Y(t) / len(self.responders)
@@ -55,7 +110,8 @@ class DiscreteROCBase(abc.ABC):
           plt.scatter(xx, yy)
         target_aucs.append(target_auc)
         NLL.append(result.NLL)
-        if yupperlim is not None and 2*(result.NLL - min(NLL)) > yupperlim: break
+        if yupperlim is not None and 2*(result.NLL - min(NLL)) > yupperlim:
+          break
     plt.xlabel("X (Fraction of non-responders)")
     plt.ylabel("Y (Fraction of responders)")
     if rocfilename is not None:
@@ -108,7 +164,7 @@ class DiscreteROCBase(abc.ABC):
       np.testing.assert_equal(sum(from_above_to_below_left), 1)
       np.testing.assert_equal(sum(from_above_to_below_right), 1)
 
-      def tosolve(target_auc):
+      def tosolve(target_auc, d2NLLcut=d2NLLcut):
         result = self.optimize(AUC=target_auc)
         return 2 * (result.NLL - np.nanmin(NLL)) - d2NLLcut
 
@@ -117,10 +173,16 @@ class DiscreteROCBase(abc.ABC):
       right_auc_left_bracket = target_aucs[from_above_to_below_left].item()
       right_auc_right_bracket = target_aucs[from_above_to_below_right].item()
 
-      left_auc = scipy.optimize.root_scalar(tosolve, bracket=[left_auc_left_bracket, left_auc_right_bracket])
+      left_auc = scipy.optimize.root_scalar(
+        tosolve,
+        bracket=[left_auc_left_bracket, left_auc_right_bracket]
+      )
       assert left_auc.converged, left_auc
       left_result = self.optimize(AUC=left_auc.root)
-      right_auc = scipy.optimize.root_scalar(tosolve, bracket=[right_auc_left_bracket, right_auc_right_bracket])
+      right_auc = scipy.optimize.root_scalar(
+        tosolve,
+        bracket=[right_auc_left_bracket, right_auc_right_bracket]
+      )
       assert right_auc.converged, right_auc
       right_result = self.optimize(AUC=right_auc.root)
 
@@ -148,9 +210,9 @@ class DiscreteROCBase(abc.ABC):
       addyy_p68 = list(y_p68[x_p68 == x])
       addyy_m68 = list(y_m68[x_m68 == x])
       xx_pm68 += [x] * max(len(addyy_p68), len(addyy_m68))
-      if not len(addyy_p68):
+      if not addyy_p68:
         addyy_p68 = [np.interp(x, x_p68, y_p68)] * len(addyy_m68)
-      elif not len(addyy_m68):
+      elif not addyy_m68:
         addyy_m68 = [np.interp(x, x_m68, y_m68)] * len(addyy_p68)
       np.testing.assert_equal(len(addyy_p68), len(addyy_m68))
       yy_p68 += addyy_p68
@@ -163,9 +225,9 @@ class DiscreteROCBase(abc.ABC):
       addyy_p95 = list(y_p95[x_p95 == x])
       addyy_m95 = list(y_m95[x_m95 == x])
       xx_pm95 += [x] * max(len(addyy_p95), len(addyy_m95))
-      if not len(addyy_p95):
+      if not addyy_p95:
         addyy_p95 = [np.interp(x, x_p95, y_p95)] * len(addyy_m95)
-      elif not len(addyy_m95):
+      elif not addyy_m95:
         addyy_m95 = [np.interp(x, x_m95, y_m95)] * len(addyy_p95)
       np.testing.assert_equal(len(addyy_p95), len(addyy_m95))
       yy_p95 += addyy_p95
@@ -184,13 +246,25 @@ class DiscreteROCBase(abc.ABC):
     color95="skyblue"
     #plt.plot(x_m95, y_m95, label=r"$-2\sigma$")
     #plt.plot(x_m68, y_m68, label=r"$-1\sigma$")
-    plt.plot(x_n, y_n, label=f"nominal\nAUC={nominal.AUC:.2f}", color=colornominal)
+    plt.plot(
+      x_n, y_n,
+      label=f"nominal\nAUC={nominal.AUC:.2f}",
+      color=colornominal
+    )
     #plt.plot(x_p68, y_p68, label=r"$+1\sigma$")
     #plt.plot(x_p95, y_p95, label=r"$+2\sigma$")
     lowAUC_68, highAUC_68 = sorted((m68.AUC, p68.AUC))
     lowAUC_95, highAUC_95 = sorted((m95.AUC, p95.AUC))
-    plt.fill_between(xx_pm68, yy_m68, yy_p68, alpha=0.5, label=f"68% CL\nAUC$\\in$({lowAUC_68:.2f}, {highAUC_68:.2f})", color=color68)
-    plt.fill_between(xx_pm95, yy_m95, yy_p95, alpha=0.5, label=f"95% CL\nAUC$\\in$({lowAUC_95:.2f}, {highAUC_95:.2f})", color=color95)
+    plt.fill_between(
+      xx_pm68, yy_m68, yy_p68,
+      color=color68, alpha=0.5,
+      label=f"68% CL\nAUC$\\in$({lowAUC_68:.2f}, {highAUC_68:.2f})",
+    )
+    plt.fill_between(
+      xx_pm95, yy_m95, yy_p95,
+      color=color95, alpha=0.5,
+      label=f"95% CL\nAUC$\\in$({lowAUC_95:.2f}, {highAUC_95:.2f})",
+    )
     plt.legend()
 
     plt.xlabel("X (Fraction of non-responders)")

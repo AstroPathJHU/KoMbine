@@ -18,6 +18,9 @@ jobs:
       - name: pyflakes
         run: |
           python -m pyflakes .
+      - name: pylint
+        run: |
+          python -m pylint .
 
       - name: test code in README
         run: |

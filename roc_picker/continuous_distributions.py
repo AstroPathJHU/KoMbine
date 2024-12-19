@@ -1,6 +1,23 @@
-import matplotlib.pyplot as plt, numpy as np, scipy.integrate
+"""
+Optimize the ROC curve using the responder and non-responder
+distributions Xdot and Ydot as continuous distributions.
+
+See the LaTeX document in docs for more information.
+"""
+
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy.integrate
 
 def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, t_guess=None, guess=None, Lambda_scaling=1):
+  """
+  Optimize the ROC curve using the responder and non-responder
+  distributions Xdot and Ydot.
+
+  Parameters
+  ----------
+  X : callable responder distribution
+  """
   NX = X(np.inf)
   NY = Y(np.inf)
 
@@ -20,7 +37,11 @@ def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, t_guess=None, guess=None, L
     Lambda, c1, c2 = params
     Lambda *= Lambda_scaling
 
-    bcs = [xminusinfinity, yminusinfinity, xplusinfinity-1, yplusinfinity-1, Lambda * AUC + c1 - 2*NX, -Lambda * (1-AUC) + c2 - 2*NY]
+    bcs = [
+      xminusinfinity, yminusinfinity,
+      xplusinfinity-1, yplusinfinity-1,
+      Lambda * AUC + c1 - 2*NX, -Lambda * (1-AUC) + c2 - 2*NY,
+    ]
     return np.asarray(bcs[:-1])
 
   if guess is not None and t_guess is None:
@@ -43,10 +64,17 @@ def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, t_guess=None, guess=None, L
   c2_guess = 2*NY + Lambda_guess * (1-AUC)
   params_guess = np.array([Lambda_guess, c1_guess, c2_guess])
 
-  result = scipy.integrate.solve_bvp(fun=fun, bc=bc, x=t_guess, y=guess, p=params_guess, max_nodes=100000)
+  result = scipy.integrate.solve_bvp(
+    fun=fun,
+    bc=bc,
+    x=t_guess,
+    y=guess,
+    p=params_guess,
+    max_nodes=100000
+  )
 
   t = (result.x[1:] + result.x[:-1]) / 2
-  dt = (result.x[1:] - result.x[:-1])
+  dt = result.x[1:] - result.x[:-1]
   Xd, Yd = Xdot(t), Ydot(t)
   xd, yd = (result.yp[:, 1:] + result.yp[:, :-1]) / 2
   if np.min(xd) <= 0 or np.min(yd) <= 0:
@@ -60,6 +88,18 @@ def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, t_guess=None, guess=None, L
   return result
 
 def xy_guess(X, Y, t_guess, AUC):
+  """
+  Generate an initial guess for the ROC curve x and y
+  given the responder and non-responder distributions X and Y
+  and the desired AUC.
+
+  Parameters
+  ----------
+  X : callable responder distribution
+  Y : callable non-responder distribution
+  t_guess : array-like
+    The time points at which to evaluate the guess
+  """
   if not 0 <= AUC <= 1:
     raise ValueError(f"AUC={AUC} is not between 0 and 1")
 
@@ -82,6 +122,8 @@ def xy_guess(X, Y, t_guess, AUC):
       xminusy = XminusY * (1-s) + min_allowed_xminusy * s
     elif s < 0:
       xminusy = XminusY * (1+s) + max_allowed_xminusy * (-s)
+    else:
+      assert False, s
 
     return xminusy
 

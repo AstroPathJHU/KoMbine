@@ -1,3 +1,10 @@
+#This code was generated with the help of ChatGPT.
+
+"""
+A datacard class to specify the inputs to ROC Picker.
+This is heavily modeled after the datacard format used in the Higgs Combine Tool.
+"""
+
 import argparse, itertools, pathlib, re, scipy.stats
 from .delta_functions import DeltaFunctions
 from .discrete import DiscreteROC
@@ -5,23 +12,34 @@ from .systematics_mc import ROCDistributions, ScipyDistribution
 
 class Datacard:
   """
-  Generated with the help of ChatGPT
+  A datacard class to specify the inputs to ROC Picker.
+  Refer to docs/03_examples.md for usage examples.
   """
   def __init__(self, patients=None, systematics=None, observable_type=None):
+    """
+    Initialize a datacard.
+    This function should not be called directly. Use `parse_datacard` instead.
+    """
     if patients is None:
       patients = []
     if systematics is None:
       systematics = []
     if observable_type is None:
       raise ValueError("observable_type must be provided")
-    
+
     self.patients = patients
     self.systematics = systematics
     self.observable_type = observable_type
 
   @staticmethod
   def parse_datacard(file_path):
-    with open(file_path, 'r') as file:
+    """
+    Parse a datacard file and return a Datacard object.
+
+    Parameters:
+    file_path (os.PathLike): Path to the datacard file.
+    """
+    with open(file_path, 'r', encoding='utf-8') as file:
       lines = file.readlines()
 
     data = {
@@ -46,7 +64,9 @@ class Datacard:
         continue
       elif line.startswith("observable"):
         if data["observable_type"] != "fixed":
-          raise ValueError(f"Unexpected 'observable' line for observable_type '{data['observable_type']}'")
+          raise ValueError(
+            f"Unexpected 'observable' line for observable_type '{data['observable_type']}'"
+          )
         values = list(map(float, line.split()[1:]))
         try:
           for response, value in zip(responses, values, strict=True):
@@ -59,7 +79,9 @@ class Datacard:
         continue
       elif line.startswith("count"):
         if data["observable_type"] != "poisson":
-          raise ValueError(f"Unexpected 'count' line for observable_type '{data['observable_type']}'")
+          raise ValueError(
+            f"Unexpected 'count' line for observable_type '{data['observable_type']}'"
+          )
         values = list(map(int, line.split()[1:]))
         try:
           for response, value in zip(responses, values, strict=True):
@@ -77,7 +99,9 @@ class Datacard:
         continue
       elif line.startswith("denom"):
         if data["observable_type"] != "poisson_ratio":
-          raise ValueError(f"Unexpected 'denom' line for observable_type '{data['observable_type']}'")
+          raise ValueError(
+            f"Unexpected 'denom' line for observable_type '{data['observable_type']}'"
+          )
         denominators = list(map(int, line.split()[1:]))
         try:
           for response, num, denom in zip(responses, numerators, denominators, strict=True):
@@ -103,9 +127,18 @@ class Datacard:
     if data["observable_type"] not in ["fixed", "poisson", "poisson_ratio"]:
       raise ValueError(f"Invalid observable_type: {data['observable_type']}")
 
-    return Datacard(patients=data["patients"], systematics=data["systematics"], observable_type=data["observable_type"])
+    return Datacard(
+      patients=data["patients"],
+      systematics=data["systematics"],
+      observable_type=data["observable_type"]
+    )
 
   def systematics_mc(self, *, id_start=0, flip_sign=False):
+    """
+    Generate a set of ROCDistributions for generating ROC curve
+    error bands using the MC method.  See docs/02_rocpicker.tex for 
+    math details and docs/03_examples.md for usage examples.
+    """
     id_generator = itertools.count(id_start)
     patient_distributions = []
 
@@ -119,7 +152,11 @@ class Datacard:
 
     elif self.observable_type == "poisson":
       for p in self.patients:
-        count = ScipyDistribution(nominal=p["value"], scipydistribution=scipy.stats.poisson(mu=p["value"]), id=next(id_generator))
+        count = ScipyDistribution(
+          nominal=p["value"],
+          scipydistribution=scipy.stats.poisson(mu=p["value"]),
+          id=next(id_generator)
+        )
         patient_distributions.append({
           "response": p["response"],
           "ratio": count
@@ -127,8 +164,16 @@ class Datacard:
 
     elif self.observable_type == "poisson_ratio":
       for p in self.patients:
-        numerator = ScipyDistribution(nominal=p["numerator"], scipydistribution=scipy.stats.poisson(mu=p["numerator"]), id=next(id_generator))
-        denominator = ScipyDistribution(nominal=p["denominator"], scipydistribution=scipy.stats.poisson(mu=p["denominator"]), id=next(id_generator))
+        numerator = ScipyDistribution(
+          nominal=p["numerator"],
+          scipydistribution=scipy.stats.poisson(mu=p["numerator"]),
+          id=next(id_generator)
+        )
+        denominator = ScipyDistribution(
+          nominal=p["denominator"],
+          scipydistribution=scipy.stats.poisson(mu=p["denominator"]),
+          id=next(id_generator)
+        )
         ratio = numerator / denominator
         patient_distributions.append({
           "response": p["response"],
@@ -148,7 +193,9 @@ class Datacard:
             if value is not None:
               patient["ratio"] *= value ** log_norm_factor
         except ValueError as e:
-          raise ValueError("Mismatched lengths in patient distributions and systematic values") from e
+          raise ValueError(
+            "Mismatched lengths in patient distributions and systematic values"
+          ) from e
 
     responders = [p["ratio"] for p in patient_distributions if p["response"] == "responder"]
     nonresponders = [p["ratio"] for p in patient_distributions if p["response"] == "non-responder"]
@@ -156,6 +203,11 @@ class Datacard:
     return ROCDistributions(responders=responders, nonresponders=nonresponders, flip_sign=flip_sign)
 
   def discrete(self, **kwargs):
+    """
+    Generate a DiscreteROC object for the discrete method.
+    See docs/02_rocpicker.tex for math details and docs/03_examples.md
+    for usage examples.
+    """
     if self.observable_type != "fixed":
       raise ValueError(f"Invalid observable_type {self.observable_type} for discrete")
     if self.systematics:
@@ -173,6 +225,11 @@ class Datacard:
     return DiscreteROC(responders=responders, nonresponders=nonresponders, **kwargs)
 
   def delta_functions(self, **kwargs):
+    """
+    Generate a DeltaFunctions object for the delta_functions method.
+    See docs/02_rocpicker.tex for math details and docs/03_examples.md
+    for usage examples.
+    """
     if self.observable_type != "fixed":
       raise ValueError(f"Invalid observable_type {self.observable_type} for delta_functions")
     if self.systematics:
@@ -190,12 +247,17 @@ class Datacard:
     return DeltaFunctions(responders=responders, nonresponders=nonresponders, **kwargs)
 
 def plot_systematics_mc():
+  """
+  Run MC method from a datacard.
+  """
+  # pylint: disable=C0301
   parser = argparse.ArgumentParser(description="Run MC method from a datacard.")
   parser.add_argument("datacard", type=pathlib.Path, help="Path to the datacard file.")
   parser.add_argument("output_file", type=pathlib.Path, help="Path to the output file for the plot.")
   parser.add_argument("--nrocs", type=int, help="Number of MC samples to generate.", default=10000, dest="size")
   parser.add_argument("--random-seed", type=int, help="Random seed for generation", dest="random_state", default=123456)
   parser.add_argument("--flip-sign", action="store_true", help="flip the sign of the observable (use this if AUC is < 0.5 and you want it to be > 0.5)")
+  # pylint: enable=C0301
 
   args = parser.parse_args()
   datacard = Datacard.parse_datacard(args.datacard)
@@ -204,6 +266,10 @@ def plot_systematics_mc():
   rocs.plot(saveas=args.output_file)
 
 def plot_discrete():
+  """
+  Run discrete method from a datacard.
+  """
+  # pylint: disable=C0301
   parser = argparse.ArgumentParser(description="Run discrete method from a datacard.")
   parser.add_argument("datacard", type=pathlib.Path, help="Path to the datacard file.")
   parser.add_argument("--roc-filename", type=pathlib.Path, help="Path to the output file for the ROC curve.", dest="rocfilename")
@@ -212,6 +278,7 @@ def plot_discrete():
   parser.add_argument("--y-upper-limit", type=float, help="y axis upper limit of the likelihood scan plot", dest="yupperlim")
   parser.add_argument("--npoints", type=int, help="number of points in the likelihood scan", dest="npoints")
   parser.add_argument("--flip-sign", action="store_true", help="flip the sign of the observable (use this if AUC is < 0.5 and you want it to be > 0.5)")
+  # pylint: enable=C0301
 
   args = parser.parse_args()
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
@@ -219,7 +286,11 @@ def plot_discrete():
   discrete.plot_roc(**args.__dict__)
 
 def plot_delta_functions():
-  parser = argparse.ArgumentParser(description="Run discrete method from a datacard.")
+  """
+  Run delta functions method from a datacard.
+  """
+  # pylint: disable=C0301
+  parser = argparse.ArgumentParser(description="Run delta functions method from a datacard.")
   parser.add_argument("datacard", type=pathlib.Path, help="Path to the datacard file.")
   parser.add_argument("--roc-filename", type=pathlib.Path, help="Path to the output file for the ROC curve.", dest="rocfilename")
   parser.add_argument("--roc-errors-filename", type=pathlib.Path, help="Path to the output file for the ROC curve with error bands.", dest="rocerrorsfilename")
@@ -227,6 +298,7 @@ def plot_delta_functions():
   parser.add_argument("--y-upper-limit", type=float, help="y axis upper limit of the likelihood scan plot", dest="yupperlim")
   parser.add_argument("--npoints", type=int, help="number of points in the likelihood scan", dest="npoints")
   parser.add_argument("--flip-sign", action="store_true", help="flip the sign of the observable (use this if AUC is < 0.5 and you want it to be > 0.5)")
+  # pylint: enable=C0301
 
   args = parser.parse_args()
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
