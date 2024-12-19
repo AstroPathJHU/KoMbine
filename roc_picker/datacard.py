@@ -32,7 +32,8 @@ class Datacard:
     self.observable_type = observable_type
 
   @staticmethod
-  def parse_datacard(file_path):
+  def parse_datacard(file_path): # pylint: disable=too-many-branches, too-many-statements
+    #disable warnings because this function is just parsing a file and is not too complex
     """
     Parse a datacard file and return a Datacard object.
 
@@ -144,40 +145,38 @@ class Datacard:
 
     if self.observable_type == "fixed":
       for p in self.patients:
-        fixed_value = p["value"]
+        observable = p["value"]
         patient_distributions.append({
           "response": p["response"],
-          "ratio": fixed_value
+          "observable": observable
         })
 
     elif self.observable_type == "poisson":
       for p in self.patients:
-        count = ScipyDistribution(
+        observable = ScipyDistribution(
           nominal=p["value"],
           scipydistribution=scipy.stats.poisson(mu=p["value"]),
           unique_id=next(id_generator)
         )
         patient_distributions.append({
           "response": p["response"],
-          "ratio": count
+          "observable": observable
         })
 
     elif self.observable_type == "poisson_ratio":
       for p in self.patients:
-        numerator = ScipyDistribution(
+        observable = ScipyDistribution(
           nominal=p["numerator"],
           scipydistribution=scipy.stats.poisson(mu=p["numerator"]),
           unique_id=next(id_generator)
-        )
-        denominator = ScipyDistribution(
+        ) / ScipyDistribution(
           nominal=p["denominator"],
           scipydistribution=scipy.stats.poisson(mu=p["denominator"]),
           unique_id=next(id_generator)
         )
-        ratio = numerator / denominator
         patient_distributions.append({
           "response": p["response"],
-          "ratio": ratio
+          "observable": observable
         })
 
     # Apply log-normal systematics
@@ -191,14 +190,24 @@ class Datacard:
         try:
           for patient, value in zip(patient_distributions, systematic["values"], strict=True):
             if value is not None:
-              patient["ratio"] *= value ** log_norm_factor
+              patient["observable"] *= value ** log_norm_factor
         except ValueError as e:
           raise ValueError(
             "Mismatched lengths in patient distributions and systematic values"
           ) from e
+      else:
+        raise ValueError(f"Unknown systematic method: {systematic['method']}")
 
-    responders = [p["ratio"] for p in patient_distributions if p["response"] == "responder"]
-    nonresponders = [p["ratio"] for p in patient_distributions if p["response"] == "non-responder"]
+    responders = [
+      p["observable"]
+      for p in patient_distributions
+      if p["response"] == "responder"
+    ]
+    nonresponders = [
+      p["observable"]
+      for p in patient_distributions
+      if p["response"] == "non-responder"
+    ]
 
     return ROCDistributions(responders=responders, nonresponders=nonresponders, flip_sign=flip_sign)
 

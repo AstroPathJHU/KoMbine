@@ -102,9 +102,8 @@ class DiscreteROCBase(abc.ABC):
         if not result.success:
           if last_failed:
             break
-          else:
-            last_failed = True
-            continue
+          last_failed = True
+          continue
         last_failed = False
         if target_auc == AUC and linspace is linspaces[0]:
           plt.scatter(xx, yy)
