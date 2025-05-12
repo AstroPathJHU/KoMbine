@@ -9,6 +9,7 @@ import collections
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.optimize
+import scipy.stats
 
 class DiscreteROCBase(abc.ABC):
   """
@@ -104,7 +105,7 @@ class DiscreteROCBase(abc.ABC):
       plt.show()
     plt.close()
 
-  def make_plots(
+  def make_plots( #pylint: disable=too-many-locals
     self, *,
     show=False,
     filenames=None,
@@ -136,9 +137,7 @@ class DiscreteROCBase(abc.ABC):
     show_roc, show_scan, show_rocerrors = show
 
     if filenames is None:
-      rocfilename = scanfilename = rocerrorsfilename = None
-    else:
-      rocfilename, scanfilename, rocerrorsfilename = filenames
+      filenames = None, None, None
 
     target_aucs = []
     NLL = []
@@ -182,7 +181,7 @@ class DiscreteROCBase(abc.ABC):
         if yupperlim is not None and 2*(result.NLL - min(NLL)) > yupperlim:
           break
 
-    self.plot_roc(xx=results[AUC].x, yy=results[AUC].y, saveas=rocfilename, show=show_roc)
+    self.plot_roc(xx=results[AUC].x, yy=results[AUC].y, saveas=filenames[0], show=show_roc)
     target_aucs = np.asarray(target_aucs)
     NLL = np.asarray(NLL)
 
@@ -190,52 +189,48 @@ class DiscreteROCBase(abc.ABC):
     target_aucs = target_aucs[sortslice]
     NLL = NLL[sortslice]
 
-    deltaNLL = NLL.copy()
-    deltaNLL -= np.nanmin(deltaNLL)
-    self.plot_scan(target_aucs, deltaNLL, saveas=scanfilename, show=show_scan, yupperlim=yupperlim)
+    deltaNLL = NLL - np.nanmin(NLL)
+    self.plot_scan(target_aucs, deltaNLL, saveas=filenames[1], show=show_scan, yupperlim=yupperlim)
 
     #find the 68% and 95% bands
-    error_band_results = {}
-    for (nsigma, d2NLLcut) in ((1, 1), (2, 3.84)):
-      withinsigma = 2 * deltaNLL < d2NLLcut
-
-      from_below_to_above = withinsigma[:-1] & ~withinsigma[1:]
-      from_below_to_above_left = np.concatenate((from_below_to_above, [False]))
-      from_below_to_above_right = np.concatenate(([False], from_below_to_above))
-      np.testing.assert_equal(sum(from_below_to_above_left), 1)
-      np.testing.assert_equal(sum(from_below_to_above_right), 1)
-
-      from_above_to_below = ~withinsigma[:-1] & withinsigma[1:]
-      from_above_to_below_left = np.concatenate((from_above_to_below, [False]))
-      from_above_to_below_right = np.concatenate(([False], from_above_to_below))
-      np.testing.assert_equal(sum(from_above_to_below_left), 1)
-      np.testing.assert_equal(sum(from_above_to_below_right), 1)
-
-      def tosolve(target_auc, d2NLLcut=d2NLLcut):
-        result = self.optimize(AUC=target_auc)
-        return 2 * (result.NLL - np.nanmin(NLL)) - d2NLLcut
-
-      left_auc_left_bracket = target_aucs[from_below_to_above_left].item()
-      left_auc_right_bracket = target_aucs[from_below_to_above_right].item()
-      right_auc_left_bracket = target_aucs[from_above_to_below_left].item()
-      right_auc_right_bracket = target_aucs[from_above_to_below_right].item()
-
-      left_auc = scipy.optimize.root_scalar(
-        tosolve,
-        bracket=[left_auc_left_bracket, left_auc_right_bracket]
+    error_band_results = {
+      nsigma: self.find_error_bands(target_aucs=target_aucs, NLL=NLL, CL=CL)
+      for nsigma, CL in (
+        (1, 0.68),
+        (2, 0.95),
       )
-      assert left_auc.converged, left_auc
-      left_result = self.optimize(AUC=left_auc.root)
-      right_auc = scipy.optimize.root_scalar(
-        tosolve,
-        bracket=[right_auc_left_bracket, right_auc_right_bracket]
-      )
-      assert right_auc.converged, right_auc
-      right_result = self.optimize(AUC=right_auc.root)
-
-      error_band_results[nsigma] = left_result, right_result
+    }
 
     nominal = self.optimize(AUC=AUC)
+    return self.plot_roc_errors(
+      nominal=nominal,
+      error_band_results=error_band_results,
+      show=show_rocerrors,
+      filename=filenames[2],
+    )
+
+  def plot_roc_errors( #pylint: disable=too-many-locals, too-many-statements
+    self,
+    nominal,
+    error_band_results,
+    *,
+    show=False,
+    filename=None,
+  ):
+    """
+    Plot the ROC curve with the error bands.
+
+    Parameters
+    ----------
+    nominal: object
+      The nominal result of the optimization.
+    error_band_results: dict
+      The results of the error band optimizations.
+    show: bool, optional
+      Whether to show the plot.
+    filename: os.PathLike, optional
+      The filename to save the plot.
+    """
     m68, p68 = error_band_results[1]
     m95, p95 = error_band_results[2]
 
@@ -317,9 +312,9 @@ class DiscreteROCBase(abc.ABC):
     plt.xlabel("X (Fraction of non-responders)")
     plt.ylabel("Y (Fraction of responders)")
 
-    if rocerrorsfilename is not None:
-      plt.savefig(rocerrorsfilename)
-    if show_rocerrors:
+    if filename is not None:
+      plt.savefig(filename)
+    if show:
       plt.show()
     plt.close()
 
@@ -330,3 +325,48 @@ class DiscreteROCBase(abc.ABC):
       "m95": m95,
       "p95": p95,
     }
+
+  def find_error_bands(self, *, target_aucs, NLL, CL): #pylint: disable=too-many-locals
+    """
+    Find the error bands on the ROC curve for a given confidence level.
+    """
+    d2NLLcut = scipy.stats.chi2.ppf(CL, 1)
+
+    deltaNLL = NLL - np.nanmin(NLL)
+    withinsigma = 2 * deltaNLL < d2NLLcut
+
+    from_below_to_above = withinsigma[:-1] & ~withinsigma[1:]
+    from_below_to_above_left = np.concatenate((from_below_to_above, [False]))
+    from_below_to_above_right = np.concatenate(([False], from_below_to_above))
+    np.testing.assert_equal(sum(from_below_to_above_left), 1)
+    np.testing.assert_equal(sum(from_below_to_above_right), 1)
+
+    from_above_to_below = ~withinsigma[:-1] & withinsigma[1:]
+    from_above_to_below_left = np.concatenate((from_above_to_below, [False]))
+    from_above_to_below_right = np.concatenate(([False], from_above_to_below))
+    np.testing.assert_equal(sum(from_above_to_below_left), 1)
+    np.testing.assert_equal(sum(from_above_to_below_right), 1)
+
+    def tosolve(target_auc, d2NLLcut=d2NLLcut):
+      result = self.optimize(AUC=target_auc)
+      return 2 * (result.NLL - np.nanmin(NLL)) - d2NLLcut
+
+    left_auc_left_bracket = target_aucs[from_below_to_above_left].item()
+    left_auc_right_bracket = target_aucs[from_below_to_above_right].item()
+    right_auc_left_bracket = target_aucs[from_above_to_below_left].item()
+    right_auc_right_bracket = target_aucs[from_above_to_below_right].item()
+
+    left_auc = scipy.optimize.root_scalar(
+      tosolve,
+      bracket=[left_auc_left_bracket, left_auc_right_bracket]
+    )
+    assert left_auc.converged, left_auc
+    left_result = self.optimize(AUC=left_auc.root)
+    right_auc = scipy.optimize.root_scalar(
+      tosolve,
+      bracket=[right_auc_left_bracket, right_auc_right_bracket]
+    )
+    assert right_auc.converged, right_auc
+    right_result = self.optimize(AUC=right_auc.root)
+
+    return left_result, right_result
