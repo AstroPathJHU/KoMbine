@@ -4,7 +4,11 @@ This includes the discrete and delta functions methods.
 The plotting code is implemented here.
 """
 
-import abc, collections, matplotlib.pyplot as plt, numpy as np, scipy.optimize
+import abc
+import collections
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy.optimize
 
 class DiscreteROCBase(abc.ABC):
   """
@@ -32,7 +36,67 @@ class DiscreteROCBase(abc.ABC):
     Optimize the ROC curve, either unconditionally or for a given AUC.
     """
 
-  def plot_roc(
+  def plot_roc(self, xx, yy, *, saveas=None, show=False):
+    """
+    Plot the ROC curve.
+
+    Parameters
+    ----------
+    xx: array-like
+      The x values of the ROC curve, corresponding to the fraction of non-responders.
+    yy: array-like
+      The y values of the ROC curve, corresponding to the fraction of responders.
+    saveas: os.PathLike, optional
+      The filename to save the plot.
+    show: bool, optional
+      Whether to show the plot.
+    """
+    plt.figure(figsize=(5, 5))
+    plt.scatter(xx, yy)
+    plt.xlabel("X (Fraction of non-responders)")
+    plt.ylabel("Y (Fraction of responders)")
+    if saveas is not None:
+      plt.savefig(saveas)
+    if show:
+      plt.show()
+    plt.close()
+
+  def plot_scan(self, target_aucs, deltaNLL, *, saveas=None, show=False, yupperlim=None):
+    """
+    Plot the likelihood scan.
+
+    Parameters
+    ----------
+    target_aucs: array-like
+      The target AUC values.
+    deltaNLL: array-like
+      The negative log-likelihood values for the target AUCs.
+    saveas: os.PathLike, optional
+      The filename to save the plot.
+    show: bool, optional
+      Whether to show the plot.
+    yupperlim: float, optional
+      The upper limit for the y-axis of the plot.
+    """
+    plt.figure(figsize=(5, 5))
+    plt.scatter(target_aucs, 2*deltaNLL, label=r"$-2\Delta\ln{L}$")
+    slc = np.isclose(deltaNLL, np.nanmin(deltaNLL))
+    plt.scatter(target_aucs[slc], 2*deltaNLL[slc], label="best fit")
+    plt.xlabel("AUC")
+    plt.ylabel(r"$-2\Delta\ln{L}$")
+    plt.xlim(0, 1)
+    plt.ylim(0, yupperlim)
+    xlow, xhigh = plt.xlim()
+    plt.plot([xlow, xhigh], [1, 1], label="68% CL")
+    plt.plot([xlow, xhigh], [3.84, 3.84], label="95% CL")
+    plt.legend()
+    if saveas is not None:
+      plt.savefig(saveas)
+    if show:
+      plt.show()
+    plt.close()
+
+  def make_plots(
     self, *,
     show=False,
     rocfilename=None,
@@ -92,33 +156,24 @@ class DiscreteROCBase(abc.ABC):
       [AUC] + [_ for _ in np.linspace(1, 0, npoints+1) if _ <= AUC],
     ]
 
-    plt.figure(figsize=(5, 5))
+    results = {}
     for linspace in linspaces:
       last_failed = False
       for target_auc in linspace:
         result = self.optimize(AUC=target_auc)
-        xx = result.x
-        yy = result.y
         if not result.success:
           if last_failed:
             break
           last_failed = True
           continue
         last_failed = False
-        if target_auc == AUC and linspace is linspaces[0]:
-          plt.scatter(xx, yy)
+        results[target_auc] = result
         target_aucs.append(target_auc)
         NLL.append(result.NLL)
         if yupperlim is not None and 2*(result.NLL - min(NLL)) > yupperlim:
           break
-    plt.xlabel("X (Fraction of non-responders)")
-    plt.ylabel("Y (Fraction of responders)")
-    if rocfilename is not None:
-      plt.savefig(rocfilename)
-    if show_roc:
-      plt.show()
-    plt.close()
 
+    self.plot_roc(xx=results[AUC].x, yy=results[AUC].y, saveas=rocfilename, show=show_roc)
     target_aucs = np.asarray(target_aucs)
     NLL = np.asarray(NLL)
 
@@ -128,23 +183,7 @@ class DiscreteROCBase(abc.ABC):
 
     deltaNLL = NLL.copy()
     deltaNLL -= np.nanmin(deltaNLL)
-    plt.figure(figsize=(5, 5))
-    plt.scatter(target_aucs, 2*deltaNLL, label=r"$-2\Delta\ln{L}$")
-    slc = np.isclose(deltaNLL, np.nanmin(deltaNLL))
-    plt.scatter(target_aucs[slc], 2*deltaNLL[slc], label="best fit")
-    plt.xlabel("AUC")
-    plt.ylabel(r"$-2\Delta\ln{L}$")
-    plt.xlim(0, 1)
-    plt.ylim(0, yupperlim)
-    xlow, xhigh = plt.xlim()
-    plt.plot([xlow, xhigh], [1, 1], label="68% CL")
-    plt.plot([xlow, xhigh], [3.84, 3.84], label="95% CL")
-    plt.legend()
-    if scanfilename is not None:
-      plt.savefig(scanfilename)
-    if show_scan:
-      plt.show()
-    plt.close()
+    self.plot_scan(target_aucs, deltaNLL, saveas=scanfilename, show=show_scan, yupperlim=yupperlim)
 
     #find the 68% and 95% bands
     error_band_results = {}

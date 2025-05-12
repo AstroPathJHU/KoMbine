@@ -2,7 +2,10 @@
 Test the discrete module, and generate the figures for that section of the documentation.
 """
 
-import pathlib, pickle, warnings
+import pathlib
+import pickle
+import warnings
+
 import numpy as np
 import roc_picker.datacard
 warnings.simplefilter("error")
@@ -16,14 +19,14 @@ def main():
   """
   datacard = roc_picker.datacard.Datacard.parse_datacard(datacards/"datacard_example_1.txt")
   discrete = datacard.discrete(flip_sign=False, check_validity=True)
-  rocs = discrete.plot_roc(
+  rocs = discrete.make_plots(
     npoints=100,
     yupperlim=20,
     show=False,
   )
 
   discrete_flip = datacard.discrete(flip_sign=True, check_validity=True)
-  rocs_flip = discrete_flip.plot_roc(
+  rocs_flip = discrete_flip.make_plots(
     npoints=100,
     yupperlim=20,
     show=False,

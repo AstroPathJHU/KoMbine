@@ -5,7 +5,11 @@ A datacard class to specify the inputs to ROC Picker.
 This is heavily modeled after the datacard format used in the Higgs Combine Tool.
 """
 
-import argparse, itertools, pathlib, re, scipy.stats
+import argparse
+import itertools
+import pathlib
+import re
+import scipy.stats
 from .delta_functions import DeltaFunctions
 from .discrete import DiscreteROC
 from .systematics_mc import ROCDistributions, ScipyDistribution
@@ -292,7 +296,7 @@ def plot_discrete():
   args = parser.parse_args()
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
   discrete = datacard.discrete(flip_sign=args.__dict__.pop("flip_sign"))
-  discrete.plot_roc(**args.__dict__)
+  discrete.make_plots(**args.__dict__)
 
 def plot_delta_functions():
   """
@@ -312,4 +316,4 @@ def plot_delta_functions():
   args = parser.parse_args()
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
   deltafunctions = datacard.delta_functions(flip_sign=args.__dict__.pop("flip_sign"))
-  deltafunctions.plot_roc(**args.__dict__)
+  deltafunctions.make_plots(**args.__dict__)
