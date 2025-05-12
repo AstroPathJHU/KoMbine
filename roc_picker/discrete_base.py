@@ -61,7 +61,15 @@ class DiscreteROCBase(abc.ABC):
       plt.show()
     plt.close()
 
-  def plot_scan(self, target_aucs, deltaNLL, *, saveas=None, show=False, yupperlim=None):
+  def plot_scan(  #pylint: disable=too-many-arguments
+    self,
+    target_aucs,
+    deltaNLL,
+    *,
+    saveas=None,
+    show=False,
+    yupperlim=None,
+  ):
     """
     Plot the likelihood scan.
 
@@ -99,9 +107,7 @@ class DiscreteROCBase(abc.ABC):
   def make_plots(
     self, *,
     show=False,
-    rocfilename=None,
-    scanfilename=None,
-    rocerrorsfilename=None,
+    filenames=None,
     yupperlim=None,
     npoints=100
   ):
@@ -116,12 +122,10 @@ class DiscreteROCBase(abc.ABC):
       If a tuple, the first element is for the ROC curve,
       the second for the scan of the NLL,
       and the third for the 68% and 95% CL bands.
-    rocfilename: os.PathLike, optional
-      The filename to save the ROC curve plot.
-    scanfilename: os.PathLike, optional
-      The filename to save the scan of the NLL plot.
-    rocerrorsfilename: os.PathLike, optional
-      The filename to save the 68% and 95% CL bands plot.
+    filenames: tuple of os.PathLike, optional
+      The filenames to save the plots:
+      the ROC curve, the scan of the NLL,
+      and the ROC curve with errors.
     yupperlim: float, optional
       The upper limit for the y-axis of the scan of the NLL plot.
     npoints: int, optional
@@ -130,6 +134,11 @@ class DiscreteROCBase(abc.ABC):
     if not isinstance(show, collections.abc.Sequence):
       show = [show, show, show]
     show_roc, show_scan, show_rocerrors = show
+
+    if filenames is None:
+      rocfilename = scanfilename = rocerrorsfilename = None
+    else:
+      rocfilename, scanfilename, rocerrorsfilename = filenames
 
     target_aucs = []
     NLL = []
