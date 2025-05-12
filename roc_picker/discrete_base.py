@@ -107,7 +107,7 @@ class DiscreteROCBase(abc.ABC):
 
   def make_plots( #pylint: disable=too-many-locals
     self, *,
-    show=False,
+    show: bool | collections.abc.Sequence[bool] = False,
     filenames=None,
     yupperlim=None,
     npoints=100

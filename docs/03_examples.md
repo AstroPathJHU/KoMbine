@@ -68,7 +68,7 @@ datacard = Datacard.parse_datacard(datacardfile)
 The first two methods implemented in ROC Picker only take into account the statistical uncertainty on the number of patients, and do not currently support systematics or any `observable_type` besides `fixed`.  If all the `scipy.optimize` methods involved converge, both should give identical results.  The mathematical details are in the latex document in this folder.
 
 ```python
-_ = datacard.discrete().plot_roc(show=True)
+_ = datacard.discrete().make_plots(show=True)
 ```
 
 We produced three plots:
@@ -81,7 +81,7 @@ See the latex document for more on these plots.
 We can also produce the same plots using the $\delta$ functions method.
 
 ```python
-_ = datacard.discrete().plot_roc(show=True)
+_ = datacard.discrete().make_plots(show=True)
 ```
 
 ## Systematics

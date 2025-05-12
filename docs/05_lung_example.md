@@ -8,7 +8,7 @@ jupyter:
       format_version: '1.3'
       jupytext_version: 1.16.4
   kernelspec:
-    display_name: Python 3 (ipykernel)
+    display_name: rocpicker
     language: python
     name: python3
 ---
@@ -52,7 +52,7 @@ We estimate this uncertainty using the discrete method.
 here = pathlib.Path(".").resolve()
 datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_cells_binomial.txt"
 datacard = Datacard.parse_datacard(datacardfile)
-_ = datacard.discrete(flip_sign=True).plot_roc(show=[False, False, True])
+_ = datacard.discrete(flip_sign=True).make_plots(show=[False, False, True])
 ```
 
 ## Statistical uncertainty from the number of cells
@@ -86,7 +86,7 @@ We again use the discrete method.  The ROC curve error bands and AUC error range
 here = pathlib.Path(".").resolve()
 datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_neighborhoods_binomial.txt"
 datacard = Datacard.parse_datacard(datacardfile)
-_ = datacard.discrete(flip_sign=True).plot_roc(show=[False, False, True])
+_ = datacard.discrete(flip_sign=True).make_plots(show=[False, False, True])
 ```
 
 ## Statistical uncertainty from the number of cells

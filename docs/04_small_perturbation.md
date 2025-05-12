@@ -8,7 +8,7 @@ jupyter:
       format_version: '1.3'
       jupytext_version: 1.16.4
   kernelspec:
-    display_name: Python 3 (ipykernel)
+    display_name: rocpicker
     language: python
     name: python3
 ---
@@ -53,14 +53,14 @@ datacard_shift_down = Datacard(patients=shift_down, systematics=[], observable_t
 ```
 
 ```python
-_ = datacard.discrete().plot_roc(show=[False, False, True])
-_ = datacard_shift_up.discrete().plot_roc(show=[False, False, True])
-_ = datacard_shift_down.discrete().plot_roc(show=[False, False, True])
+_ = datacard.discrete().make_plots(show=[False, False, True])
+_ = datacard_shift_up.discrete().make_plots(show=[False, False, True])
+_ = datacard_shift_down.discrete().make_plots(show=[False, False, True])
 ```
 
 # Systematics MC
 
-Now the actual value does matter (relative to the error).  For this example I use Poisson uncertainties.  Again, one of the responders nominally has the same count as a responder, and I shift it up or down by 1.  We expect the nominal ROC curve to change, but minimal change to the error bands.  And this is exactly what we get.
+Now the actual value does matter (relative to the error).  For this example I use Poisson uncertainties.  Again, one of the non-responders nominally has the same count as a responder, and I shift it up or down by 1.  We expect the nominal ROC curve to change, but minimal change to the error bands.  And this is exactly what we get.
 
 ```python
 here = pathlib.Path(".").resolve()
