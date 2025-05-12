@@ -29,13 +29,11 @@ nonresponders = [2, 3, 3, 4, 6, 8, 9, 10, 10, 10, 10, 11, 12, 13]
 DiscreteROC(
   responders=responders,
   nonresponders=nonresponders,
-).plot_roc(
+).make_plots(
   npoints=100,
   yupperlim=20,
   #if you want to save the output plots
-  rocfilename="roc.pdf",
-  scanfilename="auc_scan.pdf",
-  rocerrorsfilename="roc_errors.pdf",
+  filenames=("roc.pdf", "auc_scan.pdf", "roc_errors.pdf"),
   #if you're running in a jupyter notebook or similar, and want to see the plots
   show=True,
 )
