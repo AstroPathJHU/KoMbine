@@ -4,6 +4,7 @@ Test the discrete module, and generate the figures for that section of the docum
 
 import pathlib
 import pickle
+import typing
 import warnings
 
 import numpy as np
@@ -40,7 +41,10 @@ def main():
       roc["x"] = roc.x[:-1]
       roc["y"] = roc.y[:-1]
 
-  tolerance = {"atol": 1e-6, "rtol": 1e-6}
+  class Tolerance(typing.TypedDict):
+    rtol: float
+    atol: float
+  tolerance: Tolerance = {"atol": 1e-6, "rtol": 1e-6}
 
   for k in set(rocs) | set(rocs_flip):
     roc = rocs[k]

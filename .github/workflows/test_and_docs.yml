@@ -14,7 +14,7 @@ jobs:
           python-version: 3.11
       - name: pip install
         run: |
-          pip install . ipykernel jupytext nbconvert pyflakes pylint texoutparse &&
+          pip install . ipykernel jupytext nbconvert pyflakes pylance pylint texoutparse &&
           rm -r build
       - name: pyflakes
         run: |
