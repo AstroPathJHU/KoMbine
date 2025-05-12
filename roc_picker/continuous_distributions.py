@@ -9,14 +9,31 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.integrate
 
-def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, t_guess=None, guess=None, Lambda_scaling=1):
+def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, t_guess=None, guess=None, Lambda_scaling=1): #pylint: disable=too-many-arguments, too-many-locals
   """
   Optimize the ROC curve using the responder and non-responder
   distributions Xdot and Ydot.
 
   Parameters
   ----------
-  X : callable responder distribution
+  X : callable
+    Responder distribution
+  Y : callable
+    Non-responder distribution
+  Xdot : callable
+    Derivative of the responder distribution
+  Ydot : callable
+    Derivative of the non-responder distribution
+  AUC : float
+    Desired area under the ROC curve
+  Lambda_guess : float
+    Initial guess for the Lambda parameter
+  t_guess : array-like, optional
+    The time points at which to evaluate the guess
+  guess : array-like, optional
+    Initial guess for the ROC curve
+  Lambda_scaling : float, optional
+    Scaling factor for the Lambda parameter (for numerical stability)
   """
   NX = X(np.inf)
   NY = Y(np.inf)
@@ -87,7 +104,7 @@ def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, t_guess=None, guess=None, L
 
   return result
 
-def xy_guess(X, Y, t_guess, AUC):
+def xy_guess(X, Y, t_guess, AUC): #pylint: disable=too-many-statements
   """
   Generate an initial guess for the ROC curve x and y
   given the responder and non-responder distributions X and Y
