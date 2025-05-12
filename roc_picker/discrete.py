@@ -6,8 +6,10 @@ and docs/03_examples.md for usage examples.
 
 import collections
 import functools
+import typing
 
 import numpy as np
+import numpy.typing as npt
 import scipy.optimize
 
 from .discrete_base import DiscreteROCBase
@@ -180,14 +182,18 @@ class DiscreteROC(DiscreteROCBase):
       #  "fun": sumyscr,
       #}
     ]
+    constraintfunction: typing.Optional[typing.Callable[[npt.NDArray[np.floating]], float]]
     if AUC is not None:
-      def constraintfunction(xy):
+      def func(xy):
         xscr, yscr = unpackxy(xy)
         return self.evalAUC(xscr, yscr) - AUC
+      constraintfunction = func
       constraints.append({
         "type": "eq",
         "fun": constraintfunction,
       })
+    else:
+      constraintfunction = None
 
     result = scipy.optimize.minimize(NLL, guess, constraints=constraints, method="SLSQP")
     result["xscryscr"] = xscryscr = result.pop("x")
@@ -195,7 +201,7 @@ class DiscreteROC(DiscreteROCBase):
     result["x"], result["y"] = self.buildroc(xscr, yscr)
     result["AUC"] = self.evalAUC(xscr, yscr)
     result["NLL"] = result["fun"]
-    if AUC is not None:
+    if constraintfunction is not None:
       if abs(constraintfunction(xscryscr)) > 1e-4:
         result["success"] = False
     return result

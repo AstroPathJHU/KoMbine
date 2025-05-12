@@ -10,6 +10,7 @@ import functools
 import numbers
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
 import scipy.special
 
 class DistributionBase(abc.ABC):
@@ -17,7 +18,7 @@ class DistributionBase(abc.ABC):
   Base class for probability distributions with basic math functionality.
   """
   @abc.abstractmethod
-  def rvs(self, size=None, random_state=None) -> np.ndarray:
+  def rvs(self, *, size, random_state=None) -> npt.NDArray[np.floating]:
     """
     Generate random variates from the distribution.
     """
@@ -55,7 +56,7 @@ class DummyDistribution(DistributionBase):
   """
   def __init__(self, value):
     self.__value = value
-  def rvs(self, size=(1,), random_state=None):
+  def rvs(self, *, size, random_state=None):
     return np.full(size, self.__value)
   @property
   def nominal(self):
@@ -79,7 +80,7 @@ class ScipyDistribution(DistributionBase):
   def __del__(self):
     self.__ids.remove(self.__id)
 
-  def rvs(self, size=None, random_state=None):
+  def rvs(self, *, size, random_state=None):
     if random_state is None:
       raise TypeError("Need a random state")
     if random_state is not None:
@@ -104,10 +105,13 @@ class AddDistributions(DistributionBase):
         self.__distributions.append(d)
       else:
         raise TypeError(f"Invalid type for distribution: {type(d)}")
-  def rvs(self, *args, **kwargs):
+  def rvs(self, *, size, random_state=None):
     return sum(
-      d.rvs(*args, **kwargs)
-      for d in self.__distributions
+      (
+        d.rvs(size=size, random_state=random_state)
+        for d in self.__distributions
+      ),
+      start=np.zeros(size, dtype=np.float64)
     )
   @property
   def nominal(self):
@@ -130,13 +134,13 @@ class MultiplyDistributions(DistributionBase):
         self.__distributions.append(d)
       else:
         raise TypeError(f"Invalid type for distribution: {type(d)}")
-  def rvs(self, *args, **kwargs):
-    result = 1.
+  def rvs(self, *, size, random_state=None):
+    result = np.ones(size, dtype=np.float64)
     for d in self.__distributions:
       if isinstance(d, numbers.Number):
         result *= d
       else:
-        result *= d.rvs(*args, **kwargs)
+        result *= d.rvs(size=size, random_state=random_state)
     return result
   @property
   def nominal(self):
