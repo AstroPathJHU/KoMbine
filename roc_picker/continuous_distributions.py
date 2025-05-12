@@ -107,7 +107,7 @@ def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, t_guess=None, guess=None, L
 
   return result
 
-class FloatFunc(typing.Protocol):
+class FloatFunc(typing.Protocol): #pylint: disable=too-few-public-methods
   """
   A callable that takes a float or an array of floats and returns
   the same type.

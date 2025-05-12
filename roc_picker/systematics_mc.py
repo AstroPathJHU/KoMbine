@@ -47,7 +47,7 @@ class DistributionBase(abc.ABC):
     return PowerDistributions(self, other)
   def __rpow__(self, other):
     return PowerDistributions(other, self)
-  
+
 class DummyDistribution(DistributionBase):
   """
   A dummy distribution that returns a constant value.
