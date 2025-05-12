@@ -5,7 +5,7 @@ The plotting code is implemented here.
 """
 
 import abc
-import collections
+import collections.abc
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.optimize
@@ -32,7 +32,7 @@ class DiscreteROCBase(abc.ABC):
     self.flip_sign = flip_sign
 
   @abc.abstractmethod
-  def optimize(self, *, AUC=None):
+  def optimize(self, *, AUC=None) -> scipy.optimize.OptimizeResult:
     """
     Optimize the ROC curve, either unconditionally or for a given AUC.
     """

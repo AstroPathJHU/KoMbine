@@ -6,6 +6,7 @@ for the math details and docs/03_examples.md for usage examples.
 """
 
 import functools
+import typing
 import warnings
 
 import numpy as np
@@ -123,7 +124,8 @@ class DeltaFunctions(DiscreteROCBase):
       ]
 
     guess = [c1_guess, c5_guess, Lambda_guess]
-    return scipy.optimize.fsolve(bc, guess)
+    sol = typing.cast(np.ndarray, scipy.optimize.fsolve(bc, guess, full_output=False))
+    return sol
 
   def optimize(self, *, AUC=None, c1_guess=1, c5_guess=1, Lambda_guess=1): #pylint: disable=too-many-locals
     """

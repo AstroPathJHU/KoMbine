@@ -5,8 +5,11 @@ distributions Xdot and Ydot as continuous distributions.
 See the LaTeX document in docs for more information.
 """
 
+import typing
+
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
 import scipy.integrate
 
 def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, t_guess=None, guess=None, Lambda_scaling=1): #pylint: disable=too-many-arguments, too-many-locals
@@ -70,8 +73,8 @@ def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, t_guess=None, guess=None, L
 
   np.testing.assert_equal(t_guess.shape[0], guess.shape[1])
   guess_dot = guess[:, 1:] - guess[:, :-1]
-  guess_dot_left = np.concatenate((guess_dot, [[0], [0]]), axis=1)
-  guess_dot_right = np.concatenate(([[0], [0]], guess_dot), axis=1)
+  guess_dot_left : npt.NDArray[np.floating] = np.concatenate((guess_dot, [[0], [0]]), axis=1)
+  guess_dot_right : npt.NDArray[np.floating] = np.concatenate(([[0], [0]], guess_dot), axis=1)
   slc = np.any((abs(guess_dot_left)>1e-5) | (abs(guess_dot_right)>1e-5), axis=0)
   t_guess = t_guess[slc]
   guess = guess[:, slc]
@@ -104,7 +107,22 @@ def optimize(*, X, Y, Xdot, Ydot, AUC, Lambda_guess, t_guess=None, guess=None, L
 
   return result
 
-def xy_guess(X, Y, t_guess, AUC): #pylint: disable=too-many-statements
+class FloatFunc(typing.Protocol):
+  """
+  A callable that takes a float or an array of floats and returns
+  the same type.
+  """
+  @typing.overload
+  def __call__(self, x: float) -> float: ...
+  @typing.overload
+  def __call__(self, x: npt.NDArray[np.floating]) -> npt.NDArray[np.floating]: ...
+
+def xy_guess(  #pylint: disable=too-many-statements
+  X: float | npt.NDArray[np.floating] | FloatFunc,
+  Y: float | npt.NDArray[np.floating] | FloatFunc,
+  t_guess: npt.NDArray[np.floating],
+  AUC: float,
+):
   """
   Generate an initial guess for the ROC curve x and y
   given the responder and non-responder distributions X and Y
@@ -112,10 +130,14 @@ def xy_guess(X, Y, t_guess, AUC): #pylint: disable=too-many-statements
 
   Parameters
   ----------
-  X : callable responder distribution
-  Y : callable non-responder distribution
+  X : callable or array-like
+    responder distribution
+  Y : callable or array-like
+    non-responder distribution
   t_guess : array-like
     The time points at which to evaluate the guess
+  AUC : float
+    Desired area under the ROC curve
   """
   if not 0 <= AUC <= 1:
     raise ValueError(f"AUC={AUC} is not between 0 and 1")
@@ -132,7 +154,7 @@ def xy_guess(X, Y, t_guess, AUC): #pylint: disable=too-many-statements
   xplusy = XplusY
 
   def xminusy_s(s):
-    max_allowed_xminusy = np.min([xplusy, 2 - xplusy], axis=0)
+    max_allowed_xminusy = np.min(np.array([xplusy, 2 - xplusy]), axis=0)
     min_allowed_xminusy = -max_allowed_xminusy
 
     if s >= 0:

@@ -17,13 +17,13 @@ class DistributionBase(abc.ABC):
   Base class for probability distributions with basic math functionality.
   """
   @abc.abstractmethod
-  def rvs(self, size=None, random_state=None):
+  def rvs(self, size=None, random_state=None) -> np.ndarray:
     """
     Generate random variates from the distribution.
     """
   @property
   @abc.abstractmethod
-  def nominal(self):
+  def nominal(self) -> float:
     """
     The nominal value of the distribution.
     """
@@ -47,6 +47,19 @@ class DistributionBase(abc.ABC):
     return PowerDistributions(self, other)
   def __rpow__(self, other):
     return PowerDistributions(other, self)
+  
+class DummyDistribution(DistributionBase):
+  """
+  A dummy distribution that returns a constant value.
+  This is used when doing math with a distribution and a number.
+  """
+  def __init__(self, value):
+    self.__value = value
+  def rvs(self, size=(1,), random_state=None):
+    return np.full(size, self.__value)
+  @property
+  def nominal(self):
+    return self.__value
 
 class ScipyDistribution(DistributionBase):
   """
@@ -82,17 +95,24 @@ class AddDistributions(DistributionBase):
   Two probability distributions added together.
   You can also add a number to a distribution.
   """
-  def __init__(self, *distributions):
-    self.__distributions = distributions
+  def __init__(self, *distributions: numbers.Number | DistributionBase):
+    self.__distributions : list[DistributionBase] = []
+    for d in distributions:
+      if isinstance(d, numbers.Number):
+        self.__distributions.append(DummyDistribution(d))
+      elif isinstance(d, DistributionBase):
+        self.__distributions.append(d)
+      else:
+        raise TypeError(f"Invalid type for distribution: {type(d)}")
   def rvs(self, *args, **kwargs):
     return sum(
-      d if isinstance(d, numbers.Number) else d.rvs(*args, **kwargs)
+      d.rvs(*args, **kwargs)
       for d in self.__distributions
     )
   @property
   def nominal(self):
     return sum(
-      d if isinstance(d, numbers.Number) else d.nominal
+      d.nominal
       for d in self.__distributions
     )
 
@@ -101,8 +121,15 @@ class MultiplyDistributions(DistributionBase):
   Two probability distributions multiplied together.
   You can also multiply a distribution by a number.
   """
-  def __init__(self, *distributions):
-    self.__distributions = distributions
+  def __init__(self, *distributions: numbers.Number | DistributionBase):
+    self.__distributions : list[DistributionBase] = []
+    for d in distributions:
+      if isinstance(d, numbers.Number):
+        self.__distributions.append(DummyDistribution(d))
+      elif isinstance(d, DistributionBase):
+        self.__distributions.append(d)
+      else:
+        raise TypeError(f"Invalid type for distribution: {type(d)}")
   def rvs(self, *args, **kwargs):
     result = 1.
     for d in self.__distributions:
@@ -115,10 +142,7 @@ class MultiplyDistributions(DistributionBase):
   def nominal(self):
     result = 1.
     for d in self.__distributions:
-      if isinstance(d, numbers.Number):
-        result *= d
-      else:
-        result *= d.nominal
+      result *= d.nominal
     return result
 
 class DivideDistributions(DistributionBase):

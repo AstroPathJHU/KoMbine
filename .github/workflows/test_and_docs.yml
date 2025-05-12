@@ -22,6 +22,9 @@ jobs:
       - name: pylint
         run: |
           python -m pylint .
+      - name: pylance
+        run: |
+          python -m pylance . --mode basic
 
       - name: test code in README
         run: |
