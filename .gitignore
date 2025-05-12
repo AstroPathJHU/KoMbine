@@ -3,6 +3,8 @@
 *.bcf
 *.blg
 *.egg-info
+*.fdb_latexmk
+*.fls
 *.html
 *.ipynb
 *.log
