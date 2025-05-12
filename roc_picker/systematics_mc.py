@@ -4,8 +4,13 @@ See docs/02_rocpicker.tex for the math details and
 docs/03_examples.md for usage examples.
 """
 
-import abc, collections, functools, numbers
-import matplotlib.pyplot as plt, numpy as np, scipy.special
+import abc
+import collections
+import functools
+import numbers
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy.special
 
 class DistributionBase(abc.ABC):
   """
@@ -429,7 +434,7 @@ class ROCCollection:
     y = (self.xplusy_interp - xminusy_quantiles) / 2
     return x, y
 
-  def plot(self, *, saveas=None, show=False):
+  def plot(self, *, saveas=None, show=False): # pylint: disable=too-many-locals
     """
     Plot the ROC curve with the 68% and 95% CL bands.
 

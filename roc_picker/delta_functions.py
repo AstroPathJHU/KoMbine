@@ -5,8 +5,12 @@ be equivalent to the discrete method.  See docs/02_rocpicker.tex
 for the math details and docs/03_examples.md for usage examples.
 """
 
-import functools, warnings
-import numpy as np, scipy.optimize
+import functools
+import warnings
+
+import numpy as np
+import scipy.optimize
+
 from .discrete_base import DiscreteROCBase
 
 class DeltaFunctions(DiscreteROCBase):
@@ -31,10 +35,7 @@ class DeltaFunctions(DiscreteROCBase):
     """
     The sign to multiply the parameter values by.
     """
-    if self.flip_sign:
-      return -1
-    else:
-      return 1
+    return -1 if self.flip_sign else 1
   @functools.cached_property
   def ts(self):
     """
@@ -124,7 +125,7 @@ class DeltaFunctions(DiscreteROCBase):
     guess = [c1_guess, c5_guess, Lambda_guess]
     return scipy.optimize.fsolve(bc, guess)
 
-  def optimize(self, *, AUC=None, c1_guess=1, c5_guess=1, Lambda_guess=1):
+  def optimize(self, *, AUC=None, c1_guess=1, c5_guess=1, Lambda_guess=1): #pylint: disable=too-many-locals
     """
     Optimize the ROC curve to match the given AUC.
 
@@ -153,7 +154,7 @@ class DeltaFunctions(DiscreteROCBase):
         AUC=AUC,
         c1_guess=c1_guess,
         c5_guess=c5_guess,
-        Lambda_guess=Lambda_guess
+        Lambda_guess=Lambda_guess,
       )
 
     x, y = self.xy(c1, c5, Lambda)

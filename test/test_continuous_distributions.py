@@ -3,8 +3,13 @@ Test the continuous distributions module, and generate the figures
 for that section of the documentation.
 """
 
-import pathlib, warnings
-import matplotlib.pyplot as plt, numpy as np, scipy.integrate, scipy.stats
+import pathlib
+import warnings
+
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy.stats
+
 import roc_picker.continuous_distributions
 
 warnings.simplefilter("error")
@@ -55,7 +60,7 @@ NX = X(np.inf)
 NY = Y(np.inf)
 AUC = np.sum(Y(t_plot)/NY * Xdot(t_plot)/NX) * dt_plot
 
-def run(   # pylint: disable=dangerous-default-value
+def run(   # pylint: disable=dangerous-default-value, too-many-locals
   target_AUC,
   verbose=True,
   prev_rocs={AUC: (t_plot, X, Y, None, None)},
