@@ -42,6 +42,7 @@ def main():
       roc["y"] = roc.y[:-1]
 
   class Tolerance(typing.TypedDict):
+    "typed class for atol and rtol to pass to np.testing.assert_allclose"
     rtol: float
     atol: float
   tolerance: Tolerance = {"atol": 1e-6, "rtol": 1e-6}
