@@ -3,5 +3,7 @@ indent-string='  '
 
 [MESSAGES CONTROL]
 #C0103: invalid variable names - we have math parameters with capitalizations etc.
-#C0410: multiple imports on one line
-disable = C0103, C0410
+disable = C0103
+
+[SIMILARITIES]
+min-similarity-lines=6

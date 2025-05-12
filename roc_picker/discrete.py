@@ -4,7 +4,12 @@ See docs/02_rocpicker.tex for the math details
 and docs/03_examples.md for usage examples.
 """
 
-import collections, functools, numpy as np, scipy.optimize
+import collections
+import functools
+
+import numpy as np
+import scipy.optimize
+
 from .discrete_base import DiscreteROCBase
 
 class DiscreteROC(DiscreteROCBase):
