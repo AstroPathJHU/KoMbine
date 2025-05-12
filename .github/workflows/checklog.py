@@ -2,7 +2,9 @@
 Check the log from latex for warnings and errors.
 """
 
-import argparse, textwrap
+import argparse
+import textwrap
+
 from texoutparse import LatexLogParser
 
 def checklatex(filename):
