@@ -118,19 +118,19 @@ One metric that is commonly used to assess the power of \(t\) to separate the tw
 		&=\int_{-\infty}^{\infty}y\xdot dt \label{eq:AUC}
 	\end{aligned}
 \end{align}
-We want to find a way to estimate the error on the AUC.  To do this, we will use a likelihood scan:
+We want to find a way to estimate the error on the AUC\@.  To do this, we will use a likelihood scan:
 \begin{enumerate}
 	\item Fix the AUC to a particular value
 	\item Of all possible curves \(x(t), y(t)\) that satisfy \cref{eq:AUC}, find the one that is most likely given our data
 	\item Evaluate its negative log likelihood (\cref{eq:discrete_loglikelihood})
-	\item Plot the best fit negative log likelihood as a function of the AUC.  The most likely AUC is the one that minimizes this log likelihood, which we found in \cref{sec:discrete_unconstrained}, and we subtract this minimum to obtain \(-2\Delta\ln{L}\).  The 68\% confidence interval is where \(-2\Delta\ln{L}<1\), and the 95\% confidence interval is where \(-2\Delta\ln{L}<3.84\).
+	\item Plot the best fit negative log likelihood as a function of the AUC\@.  The most likely AUC is the one that minimizes this log likelihood, which we found in \cref{sec:discrete_unconstrained}, and we subtract this minimum to obtain \(-2\Delta\ln{L}\).  The 68\% confidence interval is where \(-2\Delta\ln{L}<1\), and the 95\% confidence interval is where \(-2\Delta\ln{L}<3.84\).
 \end{enumerate}
 
-Our implementation uses \texttt{scipy.optimize.minimize} with \texttt{method=SLSQP}.  We introduce an explicit constraint for the AUC.  For the normalizations (\cref{eq:discrete_normalization}), we do not introduce a constraint, but instead apply the normalization internally before calculating the log-likelihood and AUC.  In our tests, this minimization converges reliably and instantaneously.
+Our implementation uses \texttt{scipy.optimize.minimize} with \texttt{method=SLSQP}.  We introduce an explicit constraint for the AUC\@.  For the normalizations (\cref{eq:discrete_normalization}), we do not introduce a constraint, but instead apply the normalization internally before calculating the log-likelihood and AUC\@.  In our tests, this minimization converges reliably and instantaneously.
 
 \subsubsection{Example}
 
-In this simple example, we have 7 responders \(t_r=(1, 1, 2, 2, 3, 9, 10)\) and 14 non-responders \(t_n=(2, 3, 3, 4, 6, 8, 9, 10, 10, 10, 10, 11, 12, 13)\).  The ROC curve is shown in \cref{fig:exampledata_discrete} (left).  The middle plot shows a likelihood scan for the AUC.  The right hand plot shows the ROC curves corresponding to the 68\% and 95\% AUCs.
+In this simple example, we have 7 responders \(t_r=(1, 1, 2, 2, 3, 9, 10)\) and 14 non-responders \(t_n=(2, 3, 3, 4, 6, 8, 9, 10, 10, 10, 10, 11, 12, 13)\).  The ROC curve is shown in \cref{fig:exampledata_discrete} (left).  The middle plot shows a likelihood scan for the AUC\@.  The right hand plot shows the ROC curves corresponding to the 68\% and 95\% AUCs.
 
 It is important to note that there is not just one up and down variation of the curve for a given confidence level, and any choice is only an illustration.  In other words, the edges of the error bands in \cref{fig:exampledata_discrete} (right) are \emph{not} the only possible ROC curves that mark the boundaries of the 68\% and 95\% regions.  They are only the 68\% and 95\% ROC curves with AUCs most distant from the nominal AUC, and are therefore informative for illustration.  Other packages, such as \autocite{roc_fernandez}, have a different method of illustrating the uncertainty band for the whole curve.
 
@@ -342,7 +342,7 @@ As a first step, we implemented error bands on ROC curves using \emph{only} syst
 
 We model each responder and non-responder using a distribution of the systematic uncertainties, and generate a large sample of ROC curves from those distributions.  We then take percentiles of those ROC curves to estimate the 68\% and 95\% confidence intervals.
 
-\Cref{fig:exampleroc_systematics_mc} shows example ROC curves calculated using this method.  They were previously presented as \autocite{SITC2023poster}, and are based on an analysis using CD8+FoxP3+ cells in non-small-cell lung cancer.  A higher density of these cells correlate with response to anti-PD1 immunotherapy, but the cells are quite rare and their count has a high Poisson uncertainty.  We also define ``CD8+FoxP3+-like neighborhoods,'' which also correlate with response to treatment, but are much more common.  The two left plots show ROC curves based on the densities of CD8+FoxP3+ cells and CD8+FoxP3+-like neighborhoods, respectively.  Although the nominal \AUC's are almost the same, the plot using the rare CD8+FoxP3+ cells has a much larger error.
+\Cref{fig:exampleroc_systematics_mc} shows example ROC curves calculated using this method.  They were previously presented as \autocite{SITC2023poster}, and are based on an analysis using CD8+FoxP3+ cells in non-small-cell lung cancer.  A higher density of these cells correlate with response to anti-PD1 immunotherapy, but the cells are quite rare and their count has a high Poisson uncertainty.  We also define ``CD8+FoxP3+-like neighborhoods'', which also correlate with response to treatment, but are much more common.  The two left plots show ROC curves based on the densities of CD8+FoxP3+ cells and CD8+FoxP3+-like neighborhoods, respectively.  Although the nominal \AUC's are almost the same, the plot using the rare CD8+FoxP3+ cells has a much larger error.
 
 The right plot shows an example systematic uncertainty on the density of CD8+FoxP3+-like neighborhoods.  The uncertainty is estimated using the overlap region between two high-power fields of the microscope, which provide two independent measurements of a subset of the cells and is modeled using a log-normal distribution.  The systematic uncertainty is assumed to arise from residual errors after the flatfielding and lens corrections have been applied to the raw data from the microscope, and it is therefore modeled as 100\% correlated between different samples scanned in the same batch (which can include both responders and non-responders).
 
@@ -366,7 +366,7 @@ Once we do this, even the unconstrained Lagrangian (\cref{eq:lagrangian}) won't 
 
 The systematics will most likely go in the data distributions, so that \(\Xdot(t)\) and \(\Ydot(t)\) will become \(\Xdot(t,\vec{\beta})\) and \(\Ydot(t,\vec{\beta})\).  For example, let's say we have one sample at \(t=t_0\) with a log-normal systematic with a variation of \(1+\alpha\) at \(1\sigma\).  We will get
 \begin{equation}
-\Xdot(t,\beta)=\delta(t(1+\alpha)^{\beta}-t_0)
+\Xdot(t,\beta)=\delta(t{(1+\alpha)}^{\beta}-t_0)
 \end{equation}
 and the Lagrangian will get a term
 \begin{equation}
@@ -375,5 +375,5 @@ and the Lagrangian will get a term
 
 A sample will, in general, have multiple systematics, including log-normal and Poisson and probably others.  Some of the systematics will be correlated between a subset of the samples (for example, flatfielding and warping will be correlated between all samples in a batch).
 
-\printbibliography
+\printbibliography{}
 \end{document}
