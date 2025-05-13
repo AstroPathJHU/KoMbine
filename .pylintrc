@@ -1,3 +1,6 @@
+[MASTER]
+ignore=build
+
 [FORMAT]
 indent-string='  '
 

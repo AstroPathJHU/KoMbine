@@ -273,10 +273,12 @@ def plot_systematics_mc():
   # pylint: enable=C0301
 
   args = parser.parse_args()
-  datacard = Datacard.parse_datacard(args.datacard)
+  datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
   rd = datacard.systematics_mc(flip_sign=args.__dict__.pop("flip_sign"))
-  rocs = rd.generate(size=args.size, random_state=args.random_state)
-  rocs.plot(saveas=args.output_file)
+  rocs = rd.generate(size=args.__dict__.pop("size"), random_state=args.__dict__.pop("random_state"))
+  rocs.plot(saveas=args.__dict__.pop("output_file"))
+  if args.__dict__:
+    raise ValueError(f"Unused arguments: {args.__dict__}")
 
 def plot_discrete():
   """
@@ -296,7 +298,17 @@ def plot_discrete():
   args = parser.parse_args()
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
   discrete = datacard.discrete(flip_sign=args.__dict__.pop("flip_sign"))
-  discrete.make_plots(**args.__dict__)
+  discrete.make_plots(
+    filenames=[
+      args.__dict__.pop("rocfilename"),
+      args.__dict__.pop("scanfilename"),
+      args.__dict__.pop("rocerrorsfilename"),
+    ],
+    yupperlim=args.__dict__.pop("yupperlim"),
+    npoints=args.__dict__.pop("npoints"),
+  )
+  if args.__dict__:
+    raise ValueError(f"Unused arguments: {args.__dict__}")
 
 def plot_delta_functions():
   """
@@ -316,4 +328,14 @@ def plot_delta_functions():
   args = parser.parse_args()
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
   deltafunctions = datacard.delta_functions(flip_sign=args.__dict__.pop("flip_sign"))
-  deltafunctions.make_plots(**args.__dict__)
+  deltafunctions.make_plots(
+    filenames=[
+      args.__dict__.pop("rocfilename"),
+      args.__dict__.pop("scanfilename"),
+      args.__dict__.pop("rocerrorsfilename"),
+    ],
+    yupperlim=args.__dict__.pop("yupperlim"),
+    npoints=args.__dict__.pop("npoints"),
+  )
+  if args.__dict__:
+    raise ValueError(f"Unused arguments: {args.__dict__}")
