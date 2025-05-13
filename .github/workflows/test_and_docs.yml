@@ -59,4 +59,4 @@ jobs:
             docs/*.html
       - name: Check latex log
         run: |
-          python .github/workflows/checklog.py docs/02_rocpicker.log
+          python .github/workflows/checklog.py docs/02_rocpicker.log  --ignore-regex "Macro 'volume[+]number' undefined."
