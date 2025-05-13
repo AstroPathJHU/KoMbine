@@ -331,6 +331,14 @@ class DiscreteROCBase(abc.ABC):
     Find the error bands on the ROC curve for a given confidence level.
     """
     d2NLLcut = scipy.stats.chi2.ppf(CL, 1)
+    
+    #this is an approximation, here temporarily but should be removed
+    if CL == 0.95:
+      d2NLLcut = 3.84
+    elif CL == 0.68:
+      d2NLLcut = 1.0
+    else:
+      raise ValueError(f"CL must be 0.68 or 0.95, not {CL}")
 
     deltaNLL = NLL - np.nanmin(NLL)
     withinsigma = 2 * deltaNLL < d2NLLcut
