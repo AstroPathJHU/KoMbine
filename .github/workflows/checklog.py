@@ -3,12 +3,25 @@ Check the log from latex for warnings and errors.
 """
 
 import argparse
+import collections
 import re
 import textwrap
 
 from texoutparse import LatexLogParser
 
-def checklatex(filename, ignore_regexes=[]):
+class LatexMessage(collections.namedtuple("LatexMessage", ["type", "logmessage"])):
+  """
+  Wrapper for the log message from texoutparse.
+  """
+  @property
+  def message(self):
+    """
+    Get the message from the log message.
+    """
+    return self.logmessage.info["message"]
+
+
+def checklatex(filename, ignore_regexes=()):
   """
   Check the log from latex for warnings and errors.
   """
@@ -16,10 +29,21 @@ def checklatex(filename, ignore_regexes=[]):
   with open(filename, encoding="utf-8") as f:
     p.process(f)
 
-  errors = [e for e in p.errors if not any(r.search(e.info["message"]) for r in ignore_regexes)]
-  warnings = [e for e in p.warnings if not any(r.search(e.info["message"]) for r in ignore_regexes)]
-  badboxes = [e for e in p.badboxes if not any(r.search(e.info["message"]) for r in ignore_regexes)]
-  missing_refs = [e for e in getattr(p, "missing_refs", []) if not any(r.search(e.info["message"]) for r in ignore_regexes)]
+  messages = [
+    *(LatexMessage("error", e) for e in p.errors),
+    *(LatexMessage("warning", e) for e in p.warnings),
+    *(LatexMessage("badbox", e) for e in p.badboxes),
+    *(LatexMessage("missing_ref", e) for e in getattr(p, "missing_refs", [])),
+  ]
+
+  messages = [
+    m for m in messages if not any(r.search(m.message) for r in ignore_regexes)
+  ]
+
+  errors = [m for m in messages if m.type == "error"]
+  warnings = [m for m in messages if m.type == "warning"]
+  badboxes = [m for m in messages if m.type == "badbox"]
+  missing_refs = [m for m in messages if m.type == "missing_ref"]
 
   message = []
   if errors:
@@ -50,7 +74,8 @@ def main(args=None):
   """
   p = argparse.ArgumentParser()
   p.add_argument("filename")
-  p.add_argument("--ignore-regex", action="append", help="Ignore regex", type=re.compile, default=[])
+  p.add_argument("--ignore-regex", action="append", help="Ignore regex",
+                 type=re.compile, default=[])
   args = p.parse_args(args=args)
   checklatex(args.filename, ignore_regexes=args.ignore_regex)
 
