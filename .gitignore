@@ -17,4 +17,5 @@
 *.synctex.gz
 **/.ipynb_checkpoints/*-checkpoint.md
 **/.ipynb_checkpoints/*-checkpoint.py
+build/
 docs/logo.png
