@@ -19,6 +19,8 @@ class LatexMessage(collections.namedtuple("LatexMessage", ["type", "logmessage"]
     Get the message from the log message.
     """
     return self.logmessage.info["message"]
+  def __str__(self) -> str:
+    return str(self.logmessage)
 
 
 def checklatex(filename, ignore_regexes=()):
