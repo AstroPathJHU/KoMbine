@@ -14,7 +14,7 @@ import scipy.optimize
 
 from .discrete_base import DiscreteROCBase
 
-class DeltaFunctions(DiscreteROCBase):
+class DeltaFunctionsROC(DiscreteROCBase):
   """
   Optimize the discrete ROC curve using the Lagrangian method
   applied to delta functions.  This is a sanity check and should

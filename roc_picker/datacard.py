@@ -10,7 +10,7 @@ import itertools
 import pathlib
 import re
 import scipy.stats
-from .delta_functions import DeltaFunctions
+from .delta_functions import DeltaFunctionsROC
 from .discrete import DiscreteROC
 from .systematics_mc import ROCDistributions, ScipyDistribution
 
@@ -138,7 +138,7 @@ class Datacard:
       observable_type=data["observable_type"]
     )
 
-  def systematics_mc(self, *, id_start=0, flip_sign=False):
+  def systematics_mc_roc(self, *, id_start=0, flip_sign=False):
     """
     Generate a set of ROCDistributions for generating ROC curve
     error bands using the MC method.  See docs/02_rocpicker.tex for 
@@ -215,7 +215,7 @@ class Datacard:
 
     return ROCDistributions(responders=responders, nonresponders=nonresponders, flip_sign=flip_sign)
 
-  def discrete(self, **kwargs):
+  def discrete_roc(self, **kwargs):
     """
     Generate a DiscreteROC object for the discrete method.
     See docs/02_rocpicker.tex for math details and docs/03_examples.md
@@ -237,7 +237,7 @@ class Datacard:
 
     return DiscreteROC(responders=responders, nonresponders=nonresponders, **kwargs)
 
-  def delta_functions(self, **kwargs):
+  def delta_functions_roc(self, **kwargs):
     """
     Generate a DeltaFunctions object for the delta_functions method.
     See docs/02_rocpicker.tex for math details and docs/03_examples.md
@@ -257,9 +257,9 @@ class Datacard:
     for p in self.patients:
       dct[p["response"]].append(p["value"])
 
-    return DeltaFunctions(responders=responders, nonresponders=nonresponders, **kwargs)
+    return DeltaFunctionsROC(responders=responders, nonresponders=nonresponders, **kwargs)
 
-def plot_systematics_mc():
+def plot_systematics_mc_roc():
   """
   Run MC method from a datacard.
   """
@@ -274,13 +274,13 @@ def plot_systematics_mc():
 
   args = parser.parse_args()
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
-  rd = datacard.systematics_mc(flip_sign=args.__dict__.pop("flip_sign"))
+  rd = datacard.systematics_mc_roc(flip_sign=args.__dict__.pop("flip_sign"))
   rocs = rd.generate(size=args.__dict__.pop("size"), random_state=args.__dict__.pop("random_state"))
   rocs.plot(saveas=args.__dict__.pop("output_file"))
   if args.__dict__:
     raise ValueError(f"Unused arguments: {args.__dict__}")
 
-def plot_discrete():
+def plot_discrete_roc():
   """
   Run discrete method from a datacard.
   """
@@ -297,7 +297,7 @@ def plot_discrete():
 
   args = parser.parse_args()
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
-  discrete = datacard.discrete(flip_sign=args.__dict__.pop("flip_sign"))
+  discrete = datacard.discrete_roc(flip_sign=args.__dict__.pop("flip_sign"))
   discrete.make_plots(
     filenames=[
       args.__dict__.pop("rocfilename"),
@@ -310,7 +310,7 @@ def plot_discrete():
   if args.__dict__:
     raise ValueError(f"Unused arguments: {args.__dict__}")
 
-def plot_delta_functions():
+def plot_delta_functions_roc():
   """
   Run delta functions method from a datacard.
   """
@@ -327,7 +327,7 @@ def plot_delta_functions():
 
   args = parser.parse_args()
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
-  deltafunctions = datacard.delta_functions(flip_sign=args.__dict__.pop("flip_sign"))
+  deltafunctions = datacard.delta_functions_roc(flip_sign=args.__dict__.pop("flip_sign"))
   deltafunctions.make_plots(
     filenames=[
       args.__dict__.pop("rocfilename"),
