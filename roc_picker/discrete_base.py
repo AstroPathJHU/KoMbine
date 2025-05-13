@@ -331,7 +331,7 @@ class DiscreteROCBase(abc.ABC):
     Find the error bands on the ROC curve for a given confidence level.
     """
     d2NLLcut = scipy.stats.chi2.ppf(CL, 1)
-    
+
     #this is an approximation, here temporarily but should be removed
     if CL == 0.95:
       d2NLLcut = 3.84
