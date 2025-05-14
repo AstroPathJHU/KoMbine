@@ -220,11 +220,14 @@ class KaplanMeierCollection(KaplanMeierBase):
     """
     if times_for_plot is None:
       times_for_plot = self.times_for_plot
-    survival_probabilities = np.zeros((len(self.kminstances), len(times_for_plot)*2-1))
+    survival_probabilities = np.zeros((len(self.kminstances), len(times_for_plot)))
     for i, kmi in enumerate(self.kminstances):
-      _, survival_probabilities[i] = kmi.points_for_plot(times_for_plot)
+      try:
+        survival_probabilities[i] = kmi.survival_probabilities(times_for_plot)
+      except ZeroDivisionError:
+        survival_probabilities[i] = np.nan
 
-    return np.quantile(survival_probabilities, quantiles, axis=0)
+    return np.nanquantile(survival_probabilities, quantiles, axis=0)
   
   def plot(self, times_for_plot=None, show=False, saveas=None):
     """
