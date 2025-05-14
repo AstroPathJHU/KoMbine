@@ -2,11 +2,25 @@ import abc, functools
 
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.special
+
+from .systematics_mc import DistributionBase
 
 class KaplanMeierPatient:
-  def __init__(self, time, parameter):
+  def __init__(self, time, parameter : float):
     self.time = time
     self.parameter = parameter
+
+class KaplanMeierPatientDistribution:
+  def __init__(self, time, parameter : DistributionBase):
+    self.time = time
+    self.parameter = parameter
+
+  @property
+  def nominal(self):
+    return KaplanMeierPatient(self.time, self.parameter.nominal)
+  def rvs(self, size, random_state):
+    return np.vectorize(KaplanMeierPatient)(self.time, self.parameter.rvs(size=size, random_state=random_state))
 
 class KaplanMeierBase:
   @property
@@ -26,6 +40,21 @@ class KaplanMeierBase:
     times_for_plot = np.array([0] + times_for_plot + [times_for_plot[-1] * 1.1])
     return times_for_plot    
 
+  @staticmethod
+  def _points_for_plot(times_for_plot, survival_probabilities):
+    x = []
+    y = []
+    for i in range(len(times_for_plot)):
+      if (
+        i != 0
+        #and survival_probabilities[i] != survival_probabilities[i - 1]
+      ):
+        x.append(times_for_plot[i])
+        y.append(survival_probabilities[i-1])
+      x.append(times_for_plot[i])
+      y.append(survival_probabilities[i])
+    return np.array(x), np.array(y)
+  
 class KaplanMeierInstance(KaplanMeierBase):
   """
   Class to represent a Kaplan-Meier curve.
@@ -86,17 +115,8 @@ class KaplanMeierInstance(KaplanMeierBase):
     if times_for_plot is None:
       times_for_plot = self.times_for_plot
     survival_probabilities = self.survival_probabilities(times_for_plot)
+    return self._points_for_plot(times_for_plot, survival_probabilities)
 
-    x = []
-    y = []
-    for i in range(len(times_for_plot)):
-      if i != 0 and survival_probabilities[i] != survival_probabilities[i - 1]:
-        x.append(times_for_plot[i])
-        y.append(survival_probabilities[i-1])
-      x.append(times_for_plot[i])
-      y.append(survival_probabilities[i])
-    return np.array(x), np.array(y)
-  
 class KaplanMeierPlot(KaplanMeierBase):
   def __init__(
     self,
@@ -200,11 +220,102 @@ class KaplanMeierCollection(KaplanMeierBase):
     """
     if times_for_plot is None:
       times_for_plot = self.times_for_plot
-    survival_probabilities = np.zeros((len(self.kminstances), len(times_for_plot)))
+    survival_probabilities = np.zeros((len(self.kminstances), len(times_for_plot)*2-1))
     for i, kmi in enumerate(self.kminstances):
       _, survival_probabilities[i] = kmi.points_for_plot(times_for_plot)
 
     return np.quantile(survival_probabilities, quantiles, axis=0)
   
-  def plot(self, quantiles: list[float], times_for_plot=None):
-    ...
+  def plot(self, times_for_plot=None, show=False, saveas=None):
+    """
+    Plots the Kaplan-Meier curves.
+    """
+    if times_for_plot is None:
+      times_for_plot = self.times_for_plot
+    plt.figure()
+    nominal_x, nominal_y = self.nominalkm.points_for_plot(times_for_plot=times_for_plot)
+    plt.plot(
+      nominal_x,
+      nominal_y,
+      label="Nominal",
+      color='black',
+      linestyle='--'
+    )
+
+    sigmas = [-2, -1, 0, 1, 2]
+    quantiles = [(1 + scipy.special.erf(nsigma/np.sqrt(2))) / 2 for nsigma in sigmas]
+    p_m95, p_m68, _, p_p68, p_p95 = self.survival_probabilities_quantiles(quantiles, times_for_plot=times_for_plot)
+
+    x_m95, y_m95 = self._points_for_plot(times_for_plot, p_m95)
+    x_m68, y_m68 = self._points_for_plot(times_for_plot, p_m68)
+    x_p68, y_p68 = self._points_for_plot(times_for_plot, p_p68)
+    x_p95, y_p95 = self._points_for_plot(times_for_plot, p_p95)
+
+    np.testing.assert_array_equal(x_m95, x_p95)
+    np.testing.assert_array_equal(x_m68, x_p68)
+
+
+    plt.fill_between(
+      x_m68,
+      y_m68,
+      y_p68,
+      color='dodgerblue',
+      alpha=0.5,
+      label='68% CL'
+    )
+    plt.fill_between(
+      x_m95,
+      y_m95,
+      y_p95,
+      color='skyblue',
+      alpha=0.5,
+      label='95% CL'
+    )
+    
+    plt.xlabel("Time")
+    plt.ylabel("Survival Probability")
+    plt.legend()
+    plt.title("Kaplan-Meier Curves") 
+    plt.grid()
+    if saveas is not None:
+      plt.savefig(saveas)
+    if show:
+      plt.show()
+    plt.close()
+
+class KaplanMeierDistributions(KaplanMeierBase):
+  """
+  Class to represent a set of Kaplan-Meier curves.
+  It contains a list of patients with their survival times and parameters.
+  The patients are filtered based on a parameter range.
+
+  Parameters
+  ----------
+  all_patients : list of KMPatient
+    List of all patients with their survival times and parameters.
+  """
+  def __init__(
+    self,
+    all_patients: list[KaplanMeierPatientDistribution],
+    parameter_min: float = -np.inf,
+    parameter_max: float = np.inf,
+  ):
+    self.__all_patients = all_patients
+    self.__parameter_min = parameter_min
+    self.__parameter_max = parameter_max
+  @property
+  def all_patients(self):
+    return self.__all_patients
+  @property
+  def all_patients_nominal(self):
+    return [p.nominal for p in self.all_patients]
+  def generate(self, size, random_state):
+    """
+    Generates a list of Kaplan-Meier curves from the probability distributions.
+    """
+    patients = np.array([p.rvs(size=size, random_state=random_state) for p in self.all_patients])
+    patients = np.transpose(patients)
+    return KaplanMeierCollection(
+      [KaplanMeierInstance(generated_patients, self.__parameter_min, self.__parameter_max) for generated_patients in patients],
+      KaplanMeierInstance(self.all_patients_nominal, self.__parameter_min, self.__parameter_max)
+    )
