@@ -16,7 +16,7 @@ datacards = here/"datacards"/"simple_examples"
 
 def main():
   """
-  Test the discrete module, and generate the figures for that section of the documentation.
+  Test the discrete module.
   """
   datacard = roc_picker.datacard.Datacard.parse_datacard(datacards/"datacard_example_1.txt")
   discrete = datacard.discrete_roc(flip_sign=False, check_validity=True)
