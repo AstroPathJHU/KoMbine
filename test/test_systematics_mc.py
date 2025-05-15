@@ -18,7 +18,7 @@ warnings.simplefilter("error")
 here = pathlib.Path(__file__).parent
 datacards = here/"datacards"/"lung"
 
-def main():
+def main(): #pylint: disable=too-many-locals
   """
   Test the systematics_mc module.
   """
@@ -34,7 +34,21 @@ def main():
 
   x_quantiles = {}
   y_quantiles = {}
-  (x_quantiles["m95"], x_quantiles["m68"], x_quantiles["nominal"], x_quantiles["p68"], x_quantiles["p95"]), (y_quantiles["m95"], y_quantiles["m68"], y_quantiles["nominal"], y_quantiles["p68"], y_quantiles["p95"]) = rocs.roc_quantiles(quantiles)
+  (
+    (
+      x_quantiles["m95"],
+      x_quantiles["m68"],
+      x_quantiles["nominal"],
+      x_quantiles["p68"],
+      x_quantiles["p95"],
+    ), (
+      y_quantiles["m95"],
+      y_quantiles["m68"],
+      y_quantiles["nominal"],
+      y_quantiles["p68"],
+      y_quantiles["p95"],
+    )
+  ) = rocs.roc_quantiles(quantiles)
 
   del rocdistributions, rocs
 
@@ -46,15 +60,29 @@ def main():
 
   x_quantiles_flip = {}
   y_quantiles_flip = {}
-  (x_quantiles_flip["m95"], x_quantiles_flip["m68"], x_quantiles_flip["nominal"], x_quantiles_flip["p68"], x_quantiles_flip["p95"]), (y_quantiles_flip["m95"], y_quantiles_flip["m68"], y_quantiles_flip["nominal"], y_quantiles_flip["p68"], y_quantiles_flip["p95"]) = rocs_flip.roc_quantiles(quantiles)
+  (
+    (
+      x_quantiles_flip["m95"],
+      x_quantiles_flip["m68"],
+      x_quantiles_flip["nominal"],
+      x_quantiles_flip["p68"],
+      x_quantiles_flip["p95"],
+    ), (
+      y_quantiles_flip["m95"],
+      y_quantiles_flip["m68"],
+      y_quantiles_flip["nominal"],
+      y_quantiles_flip["p68"],
+      y_quantiles_flip["p95"],
+    )
+  ) = rocs_flip.roc_quantiles(quantiles)
 
   AUCs = {
     k: AUC(x_quantiles[k], y_quantiles[k])
-    for k in x_quantiles.keys()
+    for k in x_quantiles | y_quantiles
   }
   AUCs_flip = {
     k: AUC(x_quantiles_flip[k], y_quantiles_flip[k])
-    for k in x_quantiles_flip.keys()
+    for k in x_quantiles_flip | y_quantiles_flip
   }
 
   class Tolerance(typing.TypedDict):
