@@ -7,6 +7,7 @@ import pickle
 import typing
 import warnings
 
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy.special
 
@@ -31,18 +32,20 @@ def main():
   sigmas = [-2, -1, 0, 1, 2]
   quantiles = [(1 + scipy.special.erf(nsigma/np.sqrt(2))) / 2 for nsigma in sigmas]
 
-  rocdistributions_flip = datacard.systematics_mc_roc(flip_sign=True, id_start=100)
+  x_quantiles = {}
+  y_quantiles = {}
+  (x_quantiles["m95"], x_quantiles["m68"], x_quantiles["nominal"], x_quantiles["p68"], x_quantiles["p95"]), (y_quantiles["m95"], y_quantiles["m68"], y_quantiles["nominal"], y_quantiles["p68"], y_quantiles["p95"]) = rocs.roc_quantiles(quantiles)
+
+  del rocdistributions, rocs
+
+  rocdistributions_flip = datacard.systematics_mc_roc(flip_sign=True)
   rocs_flip = rocdistributions_flip.generate(
     size=100,
     random_state=123456
   )
 
-  x_quantiles = {}
-  y_quantiles = {}
   x_quantiles_flip = {}
   y_quantiles_flip = {}
-
-  (x_quantiles["m95"], x_quantiles["m68"], x_quantiles["nominal"], x_quantiles["p68"], x_quantiles["p95"]), (y_quantiles["m95"], y_quantiles["m68"], y_quantiles["nominal"], y_quantiles["p68"], y_quantiles["p95"]) = rocs.roc_quantiles(quantiles)
   (x_quantiles_flip["m95"], x_quantiles_flip["m68"], x_quantiles_flip["nominal"], x_quantiles_flip["p68"], x_quantiles_flip["p95"]), (y_quantiles_flip["m95"], y_quantiles_flip["m68"], y_quantiles_flip["nominal"], y_quantiles_flip["p68"], y_quantiles_flip["p95"]) = rocs_flip.roc_quantiles(quantiles)
 
   AUCs = {
@@ -60,7 +63,7 @@ def main():
     atol: float
   tolerance: Tolerance = {"atol": 1e-6, "rtol": 1e-6}
 
-  for k in set(x_quantiles) | set(x_quantiles_flip):
+  for k in sorted(set(x_quantiles) | set(x_quantiles_flip)):
     x = x_quantiles[k]
     y = y_quantiles[k]
     auc = AUCs[k]
@@ -74,11 +77,20 @@ def main():
     x_flip = x_quantiles_flip[flipk]
     y_flip = y_quantiles_flip[flipk]
     auc_flip = AUCs_flip[flipk]
-    np.testing.assert_allclose(
-      np.array([x, y]),
-      1-np.array([x_flip, y_flip])[:,::-1],
-      **tolerance,
-    )
+    try:
+      np.testing.assert_allclose(
+        np.array([x, y]),
+        1-np.array([x_flip, y_flip])[:,::-1],
+        **tolerance,
+      )
+    except AssertionError:
+      plt.figure()
+      plt.plot(x, y, label="unflipped")
+      plt.plot(1-x_flip, 1-y_flip, label="flipped twice")
+      plt.legend()
+      plt.savefig(here/"test_output"/f"roc_{k}.png")
+      plt.close()
+      raise
     np.testing.assert_allclose(auc, 1-auc_flip, **tolerance)
 
   try:

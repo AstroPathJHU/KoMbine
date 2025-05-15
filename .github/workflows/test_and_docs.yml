@@ -41,6 +41,11 @@ jobs:
       - name: discrete unit test
         run: |
           python -m test.test_discrete
+      - name: systematics MC unit test
+        run: |
+          python -m test.test_systematics
+      #no need for a separate step for continuous distributions unit test
+      #because it's run by compile_plots.sh
 
       - name: Compile plots
         run: |
