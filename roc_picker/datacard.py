@@ -134,11 +134,9 @@ class PoissonRatioObservable(Observable):
     return self.__numerator
   @numerator.setter
   def numerator(self, value):
-    if (
-      not isinstance(value, int) and value is not None
-    ) or (
-      value is not None and value < 0
-    ):
+    if value is None:
+      return
+    if not isinstance(value, int) or value < 0:
       raise ValueError(f"Invalid numerator: {value}")
     if self.__numerator is not None and self.__numerator != value:
       raise ValueError("Numerator already set")
@@ -151,11 +149,9 @@ class PoissonRatioObservable(Observable):
     return self.__denominator
   @denominator.setter
   def denominator(self, value):
-    if (
-      not isinstance(value, int) and value is not None
-    ) or (
-      value is not None and value <= 0
-    ):
+    if value is None:
+      return
+    if not isinstance(value, int) or value < 0:
       raise ValueError(f"Invalid denominator: {value}")
     if self.__denominator is not None and self.__denominator != value:
       raise ValueError("Denominator already set")
@@ -385,8 +381,8 @@ class Datacard:
         systematics.add(systematic)
     return systematics
 
-  @staticmethod
-  def parse_datacard(file_path): # pylint: disable=too-many-branches, too-many-statements
+  @classmethod
+  def parse_datacard(cls, file_path): # pylint: disable=too-many-branches, too-many-statements
     #disable warnings because this function is just parsing a file and is not too complex
     """
     Parse a datacard file and return a Datacard object.
@@ -413,90 +409,44 @@ class Datacard:
         if observable_type not in ["fixed", "poisson", "poisson_ratio"]:
           raise ValueError(f"Invalid observable_type: {observable_type}")
       elif split[0] == "bin":
-        continue
+        pass
       elif split[0] == "response":
-        responses = split[1:]
         if patients is not None:
           raise ValueError("Multiple 'response' lines found")
-        patients = [
-          Patient(response=Response(response))
-          for response in responses
-        ]
-        continue
+        patients = cls.process_response_line(
+          split=split,
+        )
       elif split[0] in ["observable", "count", "num", "denom"]:
         if observable_type is None:
           raise ValueError(f"No 'observable_type' line found before '{split[0]}' line")
         if patients is None:
           raise ValueError(f"No 'response' line found before '{split[0]}' line")
-        if (observable_type, split[0]) not in (
-          ("fixed", "observable"),
-          ("poisson", "count"),
-          ("poisson_ratio", "num"),
-          ("poisson_ratio", "denom"),
-        ):
+        observables = cls.process_observable_line(
+          split=split,
+          observable_type=observable_type,
+          unique_id_generator=unique_id_generator
+        )
+        if len(observables) != len(patients):
           raise ValueError(
-            f"Unexpected '{split[0]}' line for observable_type '{observable_type}'"
-          )
-        value_type = {
-          "fixed": float,
-          "poisson": int,
-          "poisson_ratio": int,
-        }[observable_type]
-        values = [value_type(_) for _ in split[1:]]
-        if len(values) != len(patients):
-          raise ValueError(
-            f"Number of {split[0]} values ({len(values)}) "
+            f"Number of {split[0]} values ({len(observables)}) "
             f"does not match number of patients ({len(patients)})"
           )
-
-        if observable_type == "fixed":
-          observables = [FixedObservable(value) for value in values]
-        elif observable_type == "poisson":
-          observables = [
-            PoissonObservable(
-              value,
-              unique_id=next(unique_id_generator)
-            ) for value in values
-          ]
-        elif observable_type == "poisson_ratio":
-          kw = {"num": "numerator", "denom": "denominator"}[split[0]]
-          otherkw = {"num": "denominator", "denom": "numerator"}[split[0]]
-          observables = [
-            PoissonRatioObservable(
-              **{
-                kw: value,
-                otherkw:
-                  getattr(patient.observable, otherkw)
-                  if patient.observable is not None
-                  else None
-              },
-              unique_id_numerator=next(unique_id_generator),
-              unique_id_denominator=next(unique_id_generator),
-            )
-            for value, patient in zip(values, patients, strict=True)
-          ]
-        else:
-          assert False, f"Unexpected observable_type: {observable_type}"
         for patient, observable in zip(patients, observables, strict=True):
           patient.observable = observable
-      elif split[1] == "lnN":
+      elif split[1] in ["lnN"]:
         if observable_type is None:
           raise ValueError(f"No 'observable_type' line found before '{split[0]}' line")
         if patients is None:
           raise ValueError(f"No 'response' line found before '{split[0]}' line")
-        systematic_name = split[0]
-        systematic_type = split[1]
-        systematic_values = [float(x) if x != '-' else None for x in split[2:]]
+        systematic, systematic_values = cls.process_systematic_line(
+          split=split,
+          unique_id_generator=unique_id_generator,
+        )
         if len(systematic_values) != len(patients):
           raise ValueError(
             f"Number of systematic values ({len(systematic_values)}) "
             f"does not match number of patients ({len(patients)})"
           )
-        systematic = Systematic(
-          name=systematic_name,
-          systematic_type=systematic_type,
-          unique_id=next(unique_id_generator),
-        )
         for patient, value in zip(patients, systematic_values, strict=True):
           if value is not None:
             patient.add_systematic(systematic, value)
@@ -510,6 +460,96 @@ class Datacard:
     return Datacard(
       patients=patients,
     )
+
+  @classmethod
+  def process_response_line(cls, split: list[str]):
+    """
+    Process a line of the datacard that specifies responses.
+    This function is used to create the appropriate response objects.
+    """
+    if len(split) < 2:
+      raise ValueError(f"Invalid response line: {split}")
+    if split[0] != "response":
+      raise ValueError(f"Invalid response line: {split}")
+    responses = [Response(response) for response in split[1:]]
+    patients = [Patient(response=response) for response in responses]
+    return patients
+
+  @classmethod
+  def process_observable_line(
+    cls,
+    *,
+    split: list[str],
+    observable_type: str,
+    unique_id_generator: itertools.count
+  ):
+    """
+    Process a line of the datacard that specifies observables.
+    This function is used to create the appropriate observable objects.
+    """
+    if (observable_type, split[0]) not in (
+      ("fixed", "observable"),
+      ("poisson", "count"),
+      ("poisson_ratio", "num"),
+      ("poisson_ratio", "denom"),
+    ):
+      raise ValueError(
+        f"Unexpected '{split[0]}' line for observable_type '{observable_type}'"
+      )
+    value_type = {
+      "fixed": float,
+      "poisson": int,
+      "poisson_ratio": int,
+    }[observable_type]
+    values = [value_type(_) for _ in split[1:]]
+
+    if observable_type == "fixed":
+      observables = [FixedObservable(value) for value in values]
+    elif observable_type == "poisson":
+      observables = [
+        PoissonObservable(
+          value,
+          unique_id=next(unique_id_generator)
+        ) for value in values
+      ]
+    elif observable_type == "poisson_ratio":
+      kw = {"num": "numerator", "denom": "denominator"}[split[0]]
+      unique_id_kw = "unique_id_" + kw
+      observables = [
+        PoissonRatioObservable(
+          **{
+            kw: value,
+            unique_id_kw: next(unique_id_generator),
+          },
+        )
+        for value in values
+      ]
+    else:
+      assert False, f"Unexpected observable_type: {observable_type}"
+
+    return observables
+
+  @classmethod
+  def process_systematic_line(
+    cls,
+    *,
+    split: list[str],
+    unique_id_generator: itertools.count,
+  ):
+    """
+    Process a line of the datacard that specifies systematics.
+    This function is used to create the appropriate systematic objects.
+    """
+    systematic_name = split[0]
+    systematic_type = split[1]
+    systematic_values = [float(x) if x != '-' else None for x in split[2:]]
+    systematic = Systematic(
+      name=systematic_name,
+      systematic_type=systematic_type,
+      unique_id=next(unique_id_generator),
+    )
+    return systematic, systematic_values
+
 
   def systematics_mc_roc(self, *, flip_sign=False):
     """
