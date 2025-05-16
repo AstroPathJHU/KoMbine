@@ -13,6 +13,7 @@ import scipy.special
 
 import roc_picker.datacard
 from roc_picker.systematics_mc import AUC
+from .utility_testing_functions import flip_sign_curve
 warnings.simplefilter("error")
 
 here = pathlib.Path(__file__).parent
@@ -95,13 +96,7 @@ def main(): #pylint: disable=too-many-locals
     x = x_quantiles[k]
     y = y_quantiles[k]
     auc = AUCs[k]
-    flipk = {
-      "nominal": "nominal",
-      "p68": "m68",
-      "p95": "m95",
-      "m68": "p68",
-      "m95": "p95",
-    }[k]
+    flipk = flip_sign_curve(k)
     x_flip = x_quantiles_flip[flipk]
     y_flip = y_quantiles_flip[flipk]
     auc_flip = AUCs_flip[flipk]

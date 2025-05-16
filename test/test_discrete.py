@@ -8,7 +8,10 @@ import typing
 import warnings
 
 import numpy as np
+
 import roc_picker.datacard
+from .utility_testing_functions import flip_sign_curve
+
 warnings.simplefilter("error")
 
 here = pathlib.Path(__file__).parent
@@ -49,13 +52,7 @@ def main():
 
   for k in set(rocs) | set(rocs_flip):
     roc = rocs[k]
-    flipk = {
-      "nominal": "nominal",
-      "p68": "m68",
-      "p95": "m95",
-      "m68": "p68",
-      "m95": "p95",
-    }[k]
+    flipk = flip_sign_curve(k)
     flip = rocs_flip[flipk]
     np.testing.assert_allclose(
       np.array([roc.x, roc.y]),
