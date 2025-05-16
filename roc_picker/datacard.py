@@ -271,7 +271,7 @@ class Patient:
     return self.__response
   @response.setter
   def response(self, value):
-    if not isinstance(value, Response):
+    if value is not None and not isinstance(value, Response):
       raise ValueError(f"Invalid response: {value}")
     if self.__response is not None:
       raise ValueError("Response already set")
@@ -296,7 +296,7 @@ class Patient:
     return self.__observable
   @observable.setter
   def observable(self, value):
-    if not isinstance(value, Observable):
+    if value is not None and not isinstance(value, Observable):
       raise ValueError(f"Invalid observable: {value}")
     if self.__observable is not None:
       if (
