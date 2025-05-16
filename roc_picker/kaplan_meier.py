@@ -102,14 +102,17 @@ class KaplanMeierBase(abc.ABC):
     survival probabilities at each time.
     Each time enters twice in the plot in order to have a step function.
     """
-    x = []
-    y = []
-    for i in range(len(times_for_plot)):
-      if i != 0:
-        x.append(times_for_plot[i])
-        y.append(survival_probabilities[i-1])
-      x.append(times_for_plot[i])
-      y.append(survival_probabilities[i])
+    x = [times_for_plot[0]]
+    y = [survival_probabilities[0]]
+    for (prevtime, prevprob), (time, prob) in zip(
+      zip(times_for_plot[:-1], survival_probabilities[:-1], strict=True),
+      zip(times_for_plot[1:], survival_probabilities[1:], strict=True),
+      strict=True,
+    ):
+      x.append(time)
+      y.append(prevprob)
+      x.append(time)
+      y.append(prob)
     return np.array(x), np.array(y)
 
 class KaplanMeierInstance(KaplanMeierBase):
