@@ -4,7 +4,6 @@ Test the discrete module, and generate the figures for that section of the docum
 
 import pathlib
 import pickle
-import typing
 import warnings
 
 import matplotlib.pyplot as plt
@@ -13,7 +12,7 @@ import scipy.special
 
 import roc_picker.datacard
 from roc_picker.systematics_mc import AUC
-from .utility_testing_functions import flip_sign_curve
+from .utility_testing_functions import flip_sign_curve, Tolerance
 warnings.simplefilter("error")
 
 here = pathlib.Path(__file__).parent
@@ -86,10 +85,6 @@ def main(): #pylint: disable=too-many-locals
     for k in x_quantiles_flip | y_quantiles_flip
   }
 
-  class Tolerance(typing.TypedDict):
-    "typed class for atol and rtol to pass to np.testing.assert_allclose"
-    rtol: float
-    atol: float
   tolerance: Tolerance = {"atol": 1e-6, "rtol": 1e-6}
 
   for k in sorted(set(x_quantiles) | set(x_quantiles_flip)):

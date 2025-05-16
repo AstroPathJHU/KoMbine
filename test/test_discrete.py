@@ -4,13 +4,12 @@ Test the discrete module, and generate the figures for that section of the docum
 
 import pathlib
 import pickle
-import typing
 import warnings
 
 import numpy as np
 
 import roc_picker.datacard
-from .utility_testing_functions import flip_sign_curve
+from .utility_testing_functions import flip_sign_curve, Tolerance
 
 warnings.simplefilter("error")
 
@@ -44,10 +43,6 @@ def main():
       roc["x"] = roc.x[:-1]
       roc["y"] = roc.y[:-1]
 
-  class Tolerance(typing.TypedDict):
-    "typed class for atol and rtol to pass to np.testing.assert_allclose"
-    rtol: float
-    atol: float
   tolerance: Tolerance = {"atol": 1e-6, "rtol": 1e-6}
 
   for k in set(rocs) | set(rocs_flip):
