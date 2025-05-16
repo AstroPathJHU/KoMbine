@@ -1,39 +1,321 @@
-#This code was generated with the help of ChatGPT.
-
 """
 A datacard class to specify the inputs to ROC Picker.
 This is heavily modeled after the datacard format used in the Higgs Combine Tool.
 """
 
+import abc
 import argparse
+import functools
 import itertools
 import pathlib
-import re
 import scipy.stats
 from .delta_functions import DeltaFunctionsROC
 from .discrete import DiscreteROC
-from .systematics_mc import ROCDistributions, ScipyDistribution
+from .systematics_mc import DistributionBase, ROCDistributions, ScipyDistribution
+
+class Response:
+  """
+  A class to represent the response of a patient.
+  """
+  def __init__(self, response):
+    self.response = response
+    if self.response not in ["responder", "non-responder"]:
+      raise ValueError(f"Invalid response: {self.response}")
+
+  def __repr__(self):
+    return f"Response(response={self.response})"
+
+  def __str__(self):
+    return f"Response: {self.response}"
+
+class Observable(abc.ABC):
+  """
+  An abstract base class for observables.
+  """
+  @abc.abstractmethod
+  def _create_observable_distribution(self) -> DistributionBase | float:
+    """
+    Abstract method to get the observable distribution.
+    """
+
+  @functools.cached_property
+  def observable_distribution(self) -> DistributionBase | float:
+    """
+    Get the observable distribution.
+    """
+    return self._create_observable_distribution()
+
+class FixedObservable(Observable):
+  """
+  A class to represent a fixed observable.
+  """
+  def __init__(self, value: float):
+    self.value = value
+
+  def __repr__(self):
+    return f"{type(self).__name__}(value={self.value})"
+
+  def _create_observable_distribution(self):
+    """
+    Get the observable distribution for a fixed observable.
+    """
+    return self.value
+
+class PoissonObservable(Observable):
+  """
+  A class to represent a Poisson observable.
+  """
+  def __init__(self, count: int, unique_id: int):
+    self.count = count
+    if not isinstance(self.count, int) or self.count < 0:
+      raise ValueError(f"Invalid count: {self.count}")
+    self.unique_id = unique_id
+    if not isinstance(self.unique_id, int):
+      raise ValueError(f"Invalid unique_id: {self.unique_id}")
+
+  def __repr__(self):
+    return f"{type(self).__name__}(count={self.count})"
+
+  def _create_observable_distribution(self):
+    """
+    Get the observable distribution for a Poisson observable.
+    """
+    return ScipyDistribution(
+      nominal=self.count,
+      scipydistribution=scipy.stats.poisson(mu=self.count),
+      unique_id=self.unique_id,
+    )
+
+class PoissonRatioObservable(Observable):
+  """
+  A class to represent a ratio of two Poisson observables.
+  """
+  def __init__(self, *, numerator: int | None = None, denominator: int | None = None, unique_id_numerator: int, unique_id_denominator: int):
+    self.__numerator = None
+    self.__denominator = None
+    self.numerator = numerator
+    self.denominator = denominator
+    self.unique_id_numerator = unique_id_numerator
+    self.unique_id_denominator = unique_id_denominator
+
+    if not isinstance(unique_id_numerator, int):
+      raise ValueError(f"Invalid unique_id_numerator: {unique_id_numerator}")
+    if not isinstance(unique_id_denominator, int):
+      raise ValueError(f"Invalid unique_id_denominator: {unique_id_denominator}")
+
+
+  def __repr__(self):
+    return f"{type(self).__name__}(numerator={self.numerator}, denominator={self.denominator})"
+
+  @property
+  def numerator(self):
+    return self.__numerator
+  @numerator.setter
+  def numerator(self, value):
+    if (
+      not isinstance(value, int) and value is not None
+    ) or (
+      value is not None and value < 0
+    ):
+      raise ValueError(f"Invalid numerator: {value}")
+    if self.__numerator is not None and self.__numerator != value:
+      raise ValueError("Numerator already set")
+    self.__numerator = value
+  @property
+  def denominator(self):
+    return self.__denominator
+  @denominator.setter
+  def denominator(self, value):
+    if (
+      not isinstance(value, int) and value is not None
+    ) or (
+      value is not None and value <= 0
+    ):
+      raise ValueError(f"Invalid denominator: {value}")
+    if self.__denominator is not None and self.__denominator != value:
+      raise ValueError("Denominator already set")
+    self.__denominator = value
+
+  def _create_observable_distribution(self):
+    """
+    Get the observable distribution for a ratio of two Poisson observables.
+    """
+    if self.numerator is None or self.denominator is None:
+      raise ValueError("Numerator and denominator must be set")
+    return ScipyDistribution(
+      nominal=self.numerator,
+      scipydistribution=scipy.stats.poisson(mu=self.numerator),
+      unique_id=self.unique_id_numerator,
+    ) / ScipyDistribution(
+      nominal=self.denominator,
+      scipydistribution=scipy.stats.poisson(mu=self.denominator),
+      unique_id=self.unique_id_denominator,
+    )
+
+
+class Systematic:
+  """
+  A class to represent a systematic uncertainty.
+  """
+  def __init__(self, name, systematic_type: str, unique_id: int):
+    self.name = name
+    if systematic_type not in ["lnN"]:
+      raise ValueError(f"Invalid systematic type: {systematic_type}")
+    self.systematic_type = systematic_type
+    self.unique_id = unique_id
+
+  def __repr__(self):
+    return f"Systematic(name={self.name}, systematic_type={self.systematic_type}, unique_id={self.unique_id})"
+
+  @functools.cached_property
+  def random_distribution(self):
+    """
+    Generate a random distribution for the systematic.
+    """
+    if self.systematic_type == "lnN":
+      return ScipyDistribution(
+        nominal=0,
+        scipydistribution=scipy.stats.norm(),
+        unique_id=self.unique_id
+      )
+    raise ValueError(f"Invalid systematic type: {self.systematic_type}")
+
+  def apply(self, nominal, value):
+    """
+    Apply the systematic to a nominal value.
+    """
+    if self.systematic_type == "lnN":
+      return nominal * value ** self.random_distribution
+    raise ValueError(f"Invalid systematic type: {self.systematic_type}")
+
+  def __eq__(self, other):
+    if not isinstance(other, Systematic):
+      return NotImplemented
+    if self.name == other.name:
+      if self.unique_id != other.unique_id:
+        raise ValueError(f"Systematic {self.name} has different unique IDs: {self.unique_id} and {other.unique_id}")
+      if self.systematic_type != other.systematic_type:
+        raise ValueError(f"Systematic {self.name} has different types: {self.systematic_type} and {other.systematic_type}")
+      return True
+    return False
+
+class Patient:
+  """
+  A class to represent a patient.
+  """
+  def __init__(self, response: Response | None = None, observable: Observable | None = None, systematics: list[tuple[Systematic, float]] | None = None):
+    self.__response = None
+    self.__observable = None
+    self.__systematics = []
+    self.response = response
+    self.observable = observable
+    if systematics is None:
+      systematics = []
+    for systematic, value in systematics:
+      self.add_systematic(systematic, value)
+
+  def __repr__(self):
+    return f"Patient(response={self.response}, observable={self.observable})"
+
+  @property
+  def response(self):
+    return self.__response
+  @response.setter
+  def response(self, value):
+    if not isinstance(value, Response):
+      raise ValueError(f"Invalid response: {value}")
+    if self.__response is not None:
+      raise ValueError("Response already set")
+    self.__response = value
+  @property
+  def is_responder(self):
+    """
+    Check if the patient is a responder.
+    """
+    if self.response is None:
+      raise ValueError("Response not set")
+    return {
+      "responder": True,
+      "non-responder": False,
+    }[self.response.response]
+
+  @property
+  def observable(self):
+    return self.__observable
+  @observable.setter
+  def observable(self, value):
+    if not isinstance(value, Observable):
+      raise ValueError(f"Invalid observable: {value}")
+    if self.__observable is not None:
+      if isinstance(value, PoissonRatioObservable) and isinstance(self.__observable, PoissonRatioObservable):
+        self.__observable.numerator = value.numerator
+        self.__observable.denominator = value.denominator
+      else:
+        raise ValueError("Observable already set")
+    else:
+      self.__observable = value
+
+  @property
+  def systematics(self):
+    """
+    Get the systematics for the patient.
+    """
+    return self.__systematics
+
+  def add_systematic(self, systematic: Systematic, value: float):
+    for s, v in self.__systematics:
+      if s == systematic:
+        raise ValueError(f"Systematic {systematic} already added with value {v}")
+    self.__systematics.append((systematic, value))
+
+  def get_distribution(self):
+    """
+    Get the distribution for the patient.
+    """
+    if self.observable is None:
+      raise ValueError("Observable not set")
+    result = self.observable.observable_distribution
+    for systematic, value in self.__systematics:
+      if value is not None:
+        result = systematic.apply(result, value)
+    return result
 
 class Datacard:
   """
   A datacard class to specify the inputs to ROC Picker.
   Refer to docs/03_examples.md for usage examples.
   """
-  def __init__(self, patients=None, systematics=None, observable_type=None):
+  def __init__(self, patients: list[Patient]):
     """
     Initialize a datacard.
     This function should not be called directly. Use `parse_datacard` instead.
     """
-    if patients is None:
-      patients = []
-    if systematics is None:
-      systematics = []
-    if observable_type is None:
-      raise ValueError("observable_type must be provided")
+    self.__patients = patients
 
-    self.patients = patients
-    self.systematics = systematics
-    self.observable_type = observable_type
+  @property
+  def patients(self):
+    return self.__patients
+
+  @property
+  def observable_type(self):
+    if not self.__patients:
+      raise ValueError("No patients found")
+    observable_types = {type(p.observable) for p in self.__patients}
+    if len(observable_types) != 1:
+      raise ValueError("Mismatched observable types")
+    result, = observable_types
+    return result
+
+  @property
+  def systematics(self):
+    """
+    Get the systematics for the datacard.
+    """
+    systematics = set()
+    for p in self.__patients:
+      for systematic, _ in p.systematics:
+        systematics.add(systematic)
+    return systematics
 
   @staticmethod
   def parse_datacard(file_path): # pylint: disable=too-many-branches, too-many-statements
@@ -47,170 +329,126 @@ class Datacard:
     with open(file_path, 'r', encoding='utf-8') as file:
       lines = file.readlines()
 
-    data = {
-      "patients": [],
-      "systematics": [],
-      "observable_type": None
-    }
+    observable_type = None
+    patients = None
 
-    responses, numerators, denominators = [], [], []
+    unique_id_generator = itertools.count(0)
 
     for line in lines:
       line = line.strip()
       if not line or line.startswith('#') or line.startswith('---'):
         continue
 
-      if line.startswith("observable_type"):
-        data["observable_type"] = line.split()[1]
-      elif line.startswith("bin"):
+      split = line.split()
+      if split[0] == "observable_type":
+        observable_type = split[1]
+        if observable_type not in ["fixed", "poisson", "poisson_ratio"]:
+          raise ValueError(f"Invalid observable_type: {observable_type}")
+      elif split[0] == "bin":
         continue
-      elif line.startswith("response"):
-        responses = line.split()[1:]
+      elif split[0] == "response":
+        responses = split[1:]
+        if patients is not None:
+          raise ValueError("Multiple 'response' lines found")
+        patients = [
+          Patient(response=Response(response))
+          for response in responses
+        ]
         continue
-      elif line.startswith("observable"):
-        if data["observable_type"] != "fixed":
+      elif split[0] in ["observable", "count", "num", "denom"]:
+        if observable_type is None:
+          raise ValueError(f"No 'observable_type' line found before '{split[0]}' line")
+        if patients is None:
+          raise ValueError(f"No 'response' line found before '{split[0]}' line")
+        if (observable_type, split[0]) not in (
+          ("fixed", "observable"),
+          ("poisson", "count"),
+          ("poisson_ratio", "num"),
+          ("poisson_ratio", "denom"),
+        ):
           raise ValueError(
-            f"Unexpected 'observable' line for observable_type '{data['observable_type']}'"
+            f"Unexpected '{split[0]}' line for observable_type '{observable_type}'"
           )
-        values = list(map(float, line.split()[1:]))
-        try:
-          for response, value in zip(responses, values, strict=True):
-            data["patients"].append({
-              "response": response,
-              "value": value
-            })
-        except ValueError as e:
-          raise ValueError("Mismatched lengths in responses and values") from e
-        continue
-      elif line.startswith("count"):
-        if data["observable_type"] != "poisson":
+        value_type = {
+          "fixed": float,
+          "poisson": int,
+          "poisson_ratio": int,
+        }[observable_type]
+        values = [value_type(_) for _ in split[1:]]
+        if len(values) != len(patients):
           raise ValueError(
-            f"Unexpected 'count' line for observable_type '{data['observable_type']}'"
+            f"Number of {split[0]} values ({len(values)}) does not match number of patients ({len(patients)})"
           )
-        values = list(map(int, line.split()[1:]))
-        try:
-          for response, value in zip(responses, values, strict=True):
-            data["patients"].append({
-              "response": response,
-              "value": value
-            })
-        except ValueError as e:
-          raise ValueError("Mismatched lengths in responses and values") from e
-        continue
-      elif line.startswith("num"):
-        if data["observable_type"] != "poisson_ratio":
-          raise ValueError(f"Unexpected 'num' line for observable_type '{data['observable_type']}'")
-        numerators = list(map(int, line.split()[1:]))
-        continue
-      elif line.startswith("denom"):
-        if data["observable_type"] != "poisson_ratio":
+
+        if observable_type == "fixed":
+          observables = [FixedObservable(value) for value in values]
+        elif observable_type == "poisson":
+          observables = [PoissonObservable(value, unique_id=next(unique_id_generator)) for value in values]
+        elif observable_type == "poisson_ratio":
+          kw = {"num": "numerator", "denom": "denominator"}[split[0]]
+          otherkw = {"num": "denominator", "denom": "numerator"}[split[0]]
+          observables = [
+            PoissonRatioObservable(
+              **{
+                kw: value,
+                otherkw: getattr(patient.observable, otherkw) if patient.observable is not None else None
+              },
+              unique_id_numerator=next(unique_id_generator),
+              unique_id_denominator=next(unique_id_generator),
+            )
+            for value, patient in zip(values, patients, strict=True)
+          ]
+        else:
+          assert False, f"Unexpected observable_type: {observable_type}"
+        for patient, observable in zip(patients, observables, strict=True):
+          patient.observable = observable
+      elif split[1] == "lnN":
+        if observable_type is None:
+          raise ValueError(f"No 'observable_type' line found before '{split[0]}' line")
+        if patients is None:
+          raise ValueError(f"No 'response' line found before '{split[0]}' line")
+        systematic_name = split[0]
+        systematic_type = split[1]
+        systematic_values = [float(x) if x != '-' else None for x in split[2:]]
+        if len(systematic_values) != len(patients):
           raise ValueError(
-            f"Unexpected 'denom' line for observable_type '{data['observable_type']}'"
+            f"Number of systematic values ({len(systematic_values)}) does not match number of patients ({len(patients)})"
           )
-        denominators = list(map(int, line.split()[1:]))
-        try:
-          for response, num, denom in zip(responses, numerators, denominators, strict=True):
-            data["patients"].append({
-              "response": response,
-              "numerator": num,
-              "denominator": denom
-            })
-        except ValueError as e:
-          raise ValueError("Mismatched lengths in responses, numerators, and denominators") from e
-        continue
-      elif re.match(r'.*\s+lnN\s+.*', line):
-        tokens = line.split()
-        data["systematics"].append({
-          "type": tokens[0],
-          "method": tokens[1],
-          "values": [float(x) if x != '-' else None for x in tokens[2:]]
-        })
-        continue
+        systematic = Systematic(
+          name=systematic_name,
+          systematic_type=systematic_type,
+          unique_id=next(unique_id_generator),
+        )
+        for patient, value in zip(patients, systematic_values, strict=True):
+          if value is not None:
+            patient.add_systematic(systematic, value)
       else:
         raise ValueError(f"Unexpected line format: {line}")
 
-    if data["observable_type"] not in ["fixed", "poisson", "poisson_ratio"]:
-      raise ValueError(f"Invalid observable_type: {data['observable_type']}")
-
+    if observable_type is None:
+      raise ValueError("No 'observable_type' line found")
+    if patients is None:
+      raise ValueError("No 'response' line found")
     return Datacard(
-      patients=data["patients"],
-      systematics=data["systematics"],
-      observable_type=data["observable_type"]
+      patients=patients,
     )
 
-  def systematics_mc_roc(self, *, id_start=0, flip_sign=False):
+  def systematics_mc_roc(self, *, flip_sign=False):
     """
     Generate a set of ROCDistributions for generating ROC curve
-    error bands using the MC method.  See docs/02_rocpicker.tex for 
+    error bands using the MC method.  See docs/02_rocpicker.tex for
     math details and docs/03_examples.md for usage examples.
     """
-    id_generator = itertools.count(id_start)
-    patient_distributions = []
-
-    if self.observable_type == "fixed":
-      for p in self.patients:
-        observable = p["value"]
-        patient_distributions.append({
-          "response": p["response"],
-          "observable": observable
-        })
-
-    elif self.observable_type == "poisson":
-      for p in self.patients:
-        observable = ScipyDistribution(
-          nominal=p["value"],
-          scipydistribution=scipy.stats.poisson(mu=p["value"]),
-          unique_id=next(id_generator)
-        )
-        patient_distributions.append({
-          "response": p["response"],
-          "observable": observable
-        })
-
-    elif self.observable_type == "poisson_ratio":
-      for p in self.patients:
-        observable = ScipyDistribution(
-          nominal=p["numerator"],
-          scipydistribution=scipy.stats.poisson(mu=p["numerator"]),
-          unique_id=next(id_generator)
-        ) / ScipyDistribution(
-          nominal=p["denominator"],
-          scipydistribution=scipy.stats.poisson(mu=p["denominator"]),
-          unique_id=next(id_generator)
-        )
-        patient_distributions.append({
-          "response": p["response"],
-          "observable": observable
-        })
-
-    # Apply log-normal systematics
-    for systematic in self.systematics:
-      if systematic["method"] == "lnN":
-        log_norm_factor = ScipyDistribution(
-          nominal=0,
-          scipydistribution=scipy.stats.norm(),
-          unique_id=next(id_generator)
-        )
-        try:
-          for patient, value in zip(patient_distributions, systematic["values"], strict=True):
-            if value is not None:
-              patient["observable"] *= value ** log_norm_factor
-        except ValueError as e:
-          raise ValueError(
-            "Mismatched lengths in patient distributions and systematic values"
-          ) from e
-      else:
-        raise ValueError(f"Unknown systematic method: {systematic['method']}")
 
     responders = [
-      p["observable"]
-      for p in patient_distributions
-      if p["response"] == "responder"
+      p.get_distribution()
+      for p in self.patients
+      if p.is_responder
     ]
     nonresponders = [
-      p["observable"]
-      for p in patient_distributions
-      if p["response"] == "non-responder"
+      p.get_distribution()
+      for p in self.patients
+      if not p.is_responder
     ]
 
     return ROCDistributions(responders=responders, nonresponders=nonresponders, flip_sign=flip_sign)
@@ -221,19 +459,24 @@ class Datacard:
     See docs/02_rocpicker.tex for math details and docs/03_examples.md
     for usage examples.
     """
-    if self.observable_type != "fixed":
+    if self.observable_type != FixedObservable:
       raise ValueError(f"Invalid observable_type {self.observable_type} for discrete")
     if self.systematics:
       raise ValueError("Can't do systematics for discrete")
 
-    responders = []
-    nonresponders = []
+    responders: list[float] = []
+    nonresponders: list[float] = []
     dct = {
-      "responder": responders,
-      "non-responder": nonresponders,
+      True: responders,
+      False: nonresponders,
     }
     for p in self.patients:
-      dct[p["response"]].append(p["value"])
+      if not isinstance(p.observable, FixedObservable):
+        raise ValueError(f"Invalid observable type {type(p.observable)} for discrete")
+      distribution = p.get_distribution()
+      if not isinstance(distribution, float):
+        assert False
+      dct[p.is_responder].append(distribution)
 
     return DiscreteROC(responders=responders, nonresponders=nonresponders, **kwargs)
 
@@ -243,19 +486,24 @@ class Datacard:
     See docs/02_rocpicker.tex for math details and docs/03_examples.md
     for usage examples.
     """
-    if self.observable_type != "fixed":
-      raise ValueError(f"Invalid observable_type {self.observable_type} for delta_functions")
+    if self.observable_type != FixedObservable:
+      raise ValueError(f"Invalid observable_type {self.observable_type} for discrete")
     if self.systematics:
-      raise ValueError("Can't do systematics for delta_functions")
+      raise ValueError("Can't do systematics for discrete")
 
-    responders = []
-    nonresponders = []
+    responders: list[float] = []
+    nonresponders: list[float] = []
     dct = {
-      "responder": responders,
-      "non-responder": nonresponders,
+      True: responders,
+      False: nonresponders,
     }
     for p in self.patients:
-      dct[p["response"]].append(p["value"])
+      if not isinstance(p.observable, FixedObservable):
+        raise ValueError(f"Invalid observable type {type(p.observable)} for discrete")
+      distribution = p.get_distribution()
+      if not isinstance(distribution, float):
+        assert False
+      dct[p.is_responder].append(distribution)
 
     return DeltaFunctionsROC(responders=responders, nonresponders=nonresponders, **kwargs)
 
