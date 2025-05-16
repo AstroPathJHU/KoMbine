@@ -28,7 +28,7 @@ class Response:
   def __str__(self):
     return f"Response: {self.response}"
 
-class Observable(abc.ABC):
+class Observable(abc.ABC): # pylint: disable=too-few-public-methods
   """
   An abstract base class for observables.
   """
@@ -89,8 +89,27 @@ class PoissonObservable(Observable):
 class PoissonRatioObservable(Observable):
   """
   A class to represent a ratio of two Poisson observables.
+
+  This class is used to create a ratio of two Poisson distributions,
+  which is useful for modeling the ratio of two counts.
+  The numerator and denominator are specified as integers, and the
+  unique IDs are used to identify the distributions in the datacard.
+
+  Parameters:
+  -----------
+  numerator (int): The count for the numerator.
+  denominator (int): The count for the denominator.
+  unique_id_numerator (int): A unique ID for the numerator distribution.
+  unique_id_denominator (int): A unique ID for the denominator distribution.
   """
-  def __init__(self, *, numerator: int | None = None, denominator: int | None = None, unique_id_numerator: int, unique_id_denominator: int):
+  def __init__(
+    self,
+    *,
+    numerator: int | None = None,
+    denominator: int | None = None,
+    unique_id_numerator: int,
+    unique_id_denominator: int
+  ):
     self.__numerator = None
     self.__denominator = None
     self.numerator = numerator
@@ -109,6 +128,9 @@ class PoissonRatioObservable(Observable):
 
   @property
   def numerator(self):
+    """
+    Get the count for the numerator.
+    """
     return self.__numerator
   @numerator.setter
   def numerator(self, value):
@@ -123,6 +145,9 @@ class PoissonRatioObservable(Observable):
     self.__numerator = value
   @property
   def denominator(self):
+    """
+    Get the count for the denominator.
+    """
     return self.__denominator
   @denominator.setter
   def denominator(self, value):
@@ -156,6 +181,17 @@ class PoissonRatioObservable(Observable):
 class Systematic:
   """
   A class to represent a systematic uncertainty.
+
+  This class is used to apply systematic uncertainties to the observable
+  distributions. The systematic type is specified as a string, and the
+  unique ID is used to identify the systematic in the datacard.
+  The only supported systematic type is "lnN", which represents a
+  log-normal distribution.
+
+  Parameters:
+  name (str): The name of the systematic.
+  systematic_type (str): The type of the systematic. Currently, only "lnN" is supported.
+  unique_id (int): A unique ID for the systematic.
   """
   def __init__(self, name, systematic_type: str, unique_id: int):
     self.name = name
@@ -165,7 +201,10 @@ class Systematic:
     self.unique_id = unique_id
 
   def __repr__(self):
-    return f"Systematic(name={self.name}, systematic_type={self.systematic_type}, unique_id={self.unique_id})"
+    return (
+      f"Systematic(name={self.name}, systematic_type={self.systematic_type}, "
+      f"unique_id={self.unique_id})"
+    )
 
   @functools.cached_property
   def random_distribution(self):
@@ -193,9 +232,15 @@ class Systematic:
       return NotImplemented
     if self.name == other.name:
       if self.unique_id != other.unique_id:
-        raise ValueError(f"Systematic {self.name} has different unique IDs: {self.unique_id} and {other.unique_id}")
+        raise ValueError(
+          f"Systematic {self.name} has different unique IDs: "
+          f"{self.unique_id} and {other.unique_id}"
+        )
       if self.systematic_type != other.systematic_type:
-        raise ValueError(f"Systematic {self.name} has different types: {self.systematic_type} and {other.systematic_type}")
+        raise ValueError(
+          f"Systematic {self.name} has different types: "
+          f"{self.systematic_type} and {other.systematic_type}"
+        )
       return True
     return False
 
@@ -203,7 +248,12 @@ class Patient:
   """
   A class to represent a patient.
   """
-  def __init__(self, response: Response | None = None, observable: Observable | None = None, systematics: list[tuple[Systematic, float]] | None = None):
+  def __init__(
+    self,
+    response: Response | None = None,
+    observable: Observable | None = None,
+    systematics: list[tuple[Systematic, float]] | None = None
+  ):
     self.__response = None
     self.__observable = None
     self.__systematics = []
@@ -219,6 +269,9 @@ class Patient:
 
   @property
   def response(self):
+    """
+    Get the response for the patient.
+    """
     return self.__response
   @response.setter
   def response(self, value):
@@ -241,13 +294,19 @@ class Patient:
 
   @property
   def observable(self):
+    """
+    Get the observable for the patient.
+    """
     return self.__observable
   @observable.setter
   def observable(self, value):
     if not isinstance(value, Observable):
       raise ValueError(f"Invalid observable: {value}")
     if self.__observable is not None:
-      if isinstance(value, PoissonRatioObservable) and isinstance(self.__observable, PoissonRatioObservable):
+      if (
+        isinstance(value, PoissonRatioObservable)
+        and isinstance(self.__observable, PoissonRatioObservable)
+      ):
         self.__observable.numerator = value.numerator
         self.__observable.denominator = value.denominator
       else:
@@ -263,6 +322,9 @@ class Patient:
     return self.__systematics
 
   def add_systematic(self, systematic: Systematic, value: float):
+    """
+    Add a systematic to the patient.
+    """
     for s, v in self.__systematics:
       if s == systematic:
         raise ValueError(f"Systematic {systematic} already added with value {v}")
@@ -294,10 +356,16 @@ class Datacard:
 
   @property
   def patients(self):
+    """
+    Get the patients in the datacard.
+    """
     return self.__patients
 
   @property
   def observable_type(self):
+    """
+    Get the observable type for the datacard.
+    """
     if not self.__patients:
       raise ValueError("No patients found")
     observable_types = {type(p.observable) for p in self.__patients}
@@ -377,13 +445,19 @@ class Datacard:
         values = [value_type(_) for _ in split[1:]]
         if len(values) != len(patients):
           raise ValueError(
-            f"Number of {split[0]} values ({len(values)}) does not match number of patients ({len(patients)})"
+            f"Number of {split[0]} values ({len(values)}) "
+            f"does not match number of patients ({len(patients)})"
           )
 
         if observable_type == "fixed":
           observables = [FixedObservable(value) for value in values]
         elif observable_type == "poisson":
-          observables = [PoissonObservable(value, unique_id=next(unique_id_generator)) for value in values]
+          observables = [
+            PoissonObservable(
+              value,
+              unique_id=next(unique_id_generator)
+            ) for value in values
+          ]
         elif observable_type == "poisson_ratio":
           kw = {"num": "numerator", "denom": "denominator"}[split[0]]
           otherkw = {"num": "denominator", "denom": "numerator"}[split[0]]
@@ -391,7 +465,10 @@ class Datacard:
             PoissonRatioObservable(
               **{
                 kw: value,
-                otherkw: getattr(patient.observable, otherkw) if patient.observable is not None else None
+                otherkw:
+                  getattr(patient.observable, otherkw)
+                  if patient.observable is not None
+                  else None
               },
               unique_id_numerator=next(unique_id_generator),
               unique_id_denominator=next(unique_id_generator),
@@ -412,7 +489,8 @@ class Datacard:
         systematic_values = [float(x) if x != '-' else None for x in split[2:]]
         if len(systematic_values) != len(patients):
           raise ValueError(
-            f"Number of systematic values ({len(systematic_values)}) does not match number of patients ({len(patients)})"
+            f"Number of systematic values ({len(systematic_values)}) "
+            f"does not match number of patients ({len(patients)})"
           )
         systematic = Systematic(
           name=systematic_name,
