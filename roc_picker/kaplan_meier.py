@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.special
 
-from .systematics_mc import DistributionBase
+from .systematics_mc import DistributionBase, DummyDistribution
 
 class KaplanMeierPatient:
   """
@@ -37,8 +37,10 @@ class KaplanMeierPatientDistribution:
   Class to represent a patient with their survival time and parameter,
   but with a probability distribution for the parameter.
   """
-  def __init__(self, time: float, parameter : DistributionBase):
+  def __init__(self, time: float, parameter : DistributionBase | float):
     self.__time = time
+    if not isinstance(parameter, DistributionBase):
+      parameter = DummyDistribution(parameter)
     self.__parameter = parameter
 
   @property
@@ -62,6 +64,7 @@ class KaplanMeierPatientDistribution:
     Returns the nominal patient.
     """
     return KaplanMeierPatient(self.time, self.parameter.nominal)
+
   def rvs(self, size, random_state):
     """
     Returns a random sample of patients using the probability distribution.
@@ -311,7 +314,7 @@ class KaplanMeierCollection(KaplanMeierBase):
 
     return np.nanquantile(survival_probabilities, quantiles, axis=0)
 
-  def plot(self, times_for_plot=None, show=False, saveas=None):
+  def plot(self, times_for_plot=None, show=False, saveas=None): #pylint: disable=too-many-locals
     """
     Plots the Kaplan-Meier curves.
     """

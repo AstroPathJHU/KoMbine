@@ -8,9 +8,13 @@ import argparse
 import functools
 import itertools
 import pathlib
+
+import numpy as np
 import scipy.stats
+
 from .delta_functions import DeltaFunctionsROC
 from .discrete import DiscreteROC
+from .kaplan_meier import KaplanMeierDistributions, KaplanMeierPatientDistribution
 from .systematics_mc import DistributionBase, ROCDistributions, ScipyDistribution
 
 class Response:
@@ -247,13 +251,16 @@ class Patient:
   def __init__(
     self,
     response: Response | None = None,
+    survival_time: float | None = None,
     observable: Observable | None = None,
     systematics: list[tuple[Systematic, float]] | None = None
   ):
     self.__response = None
+    self.__survival_time = None
     self.__observable = None
     self.__systematics = []
     self.response = response
+    self.survival_time = survival_time
     self.observable = observable
     if systematics is None:
       systematics = []
@@ -287,6 +294,20 @@ class Patient:
       "responder": True,
       "non-responder": False,
     }[self.response.response]
+
+  @property
+  def survival_time(self):
+    """
+    Get the survival time for the patient.
+    """
+    return self.__survival_time
+  @survival_time.setter
+  def survival_time(self, value):
+    if value is not None and not isinstance(value, (int, float)):
+      raise ValueError(f"Invalid survival time: {value}")
+    if self.__survival_time is not None:
+      raise ValueError("Survival time already set")
+    self.__survival_time = value
 
   @property
   def observable(self):
@@ -326,7 +347,7 @@ class Patient:
         raise ValueError(f"Systematic {systematic} already added with value {v}")
     self.__systematics.append((systematic, value))
 
-  def get_distribution(self):
+  def get_distribution(self) -> DistributionBase | float:
     """
     Get the distribution for the patient.
     """
@@ -410,7 +431,7 @@ class Datacard:
           raise ValueError(f"Invalid observable_type: {observable_type}")
       elif split[0] == "bin":
         pass
-      elif split[0] == "response":
+      elif split[0] in ["response", "survival_time"]:
         if patients is not None:
           raise ValueError("Multiple 'response' lines found")
         patients = cls.process_response_line(
@@ -476,10 +497,14 @@ class Datacard:
     """
     if len(split) < 2:
       raise ValueError(f"Invalid response line: {split}")
-    if split[0] != "response":
+    if split[0] == "response":
+      responses = [Response(response) for response in split[1:]]
+      patients = [Patient(response=response) for response in responses]
+    elif split[0] == "survival_time":
+      survival_times = [float(x) for x in split[1:]]
+      patients = [Patient(survival_time=survival_time) for survival_time in survival_times]
+    else:
       raise ValueError(f"Invalid response line: {split}")
-    responses = [Response(response) for response in split[1:]]
-    patients = [Patient(response=response) for response in responses]
     return patients
 
   @classmethod
@@ -631,6 +656,30 @@ class Datacard:
       dct[p.is_responder].append(distribution)
 
     return DeltaFunctionsROC(responders=responders, nonresponders=nonresponders, **kwargs)
+
+  def systematics_mc_km(self, parameter_min=-np.inf, parameter_max=np.inf):
+    """
+    Generate a KaplanMeierDistributions object for generating Kaplan-Meier
+    error bands using the MC method.
+    """
+    patients = []
+    for p in self.patients:
+      survival_time = p.survival_time
+      if survival_time is None:
+        raise ValueError("Survival time not set")
+      parameter = p.get_distribution()
+      patients.append(
+        KaplanMeierPatientDistribution(
+          parameter=parameter,
+          time=survival_time,
+        )
+      )
+    return KaplanMeierDistributions(
+      all_patients=patients,
+      parameter_min=parameter_min,
+      parameter_max=parameter_max,
+    )
+
 
 def plot_systematics_mc_roc():
   """
