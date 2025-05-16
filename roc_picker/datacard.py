@@ -421,10 +421,17 @@ class Datacard:
           raise ValueError(f"No 'observable_type' line found before '{split[0]}' line")
         if patients is None:
           raise ValueError(f"No 'response' line found before '{split[0]}' line")
+
         observables = cls.process_observable_line(
           split=split,
           observable_type=observable_type,
-          unique_id_generator=unique_id_generator
+          unique_id_generator=(
+            unique_id_generator
+            if patients[0].observable is None #pylint: disable=unsubscriptable-object
+            #if the observable is already set, then the new Observable
+            #object is not used and so we just use a dummy.
+            else itertools.count(0)
+          ),
         )
         if len(observables) != len(patients):
           raise ValueError(
@@ -514,13 +521,13 @@ class Datacard:
       ]
     elif observable_type == "poisson_ratio":
       kw = {"num": "numerator", "denom": "denominator"}[split[0]]
-      unique_id_kw = "unique_id_" + kw
       observables = [
         PoissonRatioObservable(
           **{
             kw: value,
-            unique_id_kw: next(unique_id_generator),
           },
+          unique_id_numerator=next(unique_id_generator),
+          unique_id_denominator=next(unique_id_generator),
         )
         for value in values
       ]
