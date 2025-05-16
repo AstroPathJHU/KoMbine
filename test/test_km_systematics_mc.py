@@ -44,7 +44,7 @@ def main():
   #test that (x, y) are the same as the reference
   #this serves to test that the plotting part of the code works correctly
   km_quantiles_xy = np.array([
-    kmcollection._points_for_plot(kmcollection.times_for_plot, km)
+    kmcollection.get_points_for_plot(kmcollection.times_for_plot, km)
     for km in km_quantiles
   ])
 

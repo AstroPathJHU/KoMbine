@@ -96,7 +96,7 @@ class KaplanMeierBase(abc.ABC):
     return times_for_plot
 
   @staticmethod
-  def _points_for_plot(times_for_plot, survival_probabilities):
+  def get_points_for_plot(times_for_plot, survival_probabilities):
     """
     Return (x, y) points for the Kaplan-Meier curve based on the
     survival probabilities at each time.
@@ -104,10 +104,11 @@ class KaplanMeierBase(abc.ABC):
     """
     x = [times_for_plot[0]]
     y = [survival_probabilities[0]]
-    for (prevtime, prevprob), (time, prob) in zip(
-      zip(times_for_plot[:-1], survival_probabilities[:-1], strict=True),
-      zip(times_for_plot[1:], survival_probabilities[1:], strict=True),
-      strict=True,
+    for prevprob, time, prob in zip(
+      survival_probabilities[:-1],
+      times_for_plot[1:],
+      survival_probabilities[1:],
+      strict=True
     ):
       x.append(time)
       y.append(prevprob)
@@ -189,7 +190,7 @@ class KaplanMeierInstance(KaplanMeierBase):
     if times_for_plot is None:
       times_for_plot = self.times_for_plot
     survival_probabilities = self.survival_probabilities(times_for_plot)
-    return self._points_for_plot(times_for_plot, survival_probabilities)
+    return self.get_points_for_plot(times_for_plot, survival_probabilities)
 
 class KaplanMeierPlot(KaplanMeierBase):
   """
@@ -340,10 +341,10 @@ class KaplanMeierCollection(KaplanMeierBase):
       times_for_plot=times_for_plot,
     )
 
-    x_m95, y_m95 = self._points_for_plot(times_for_plot, p_m95)
-    x_m68, y_m68 = self._points_for_plot(times_for_plot, p_m68)
-    x_p68, y_p68 = self._points_for_plot(times_for_plot, p_p68)
-    x_p95, y_p95 = self._points_for_plot(times_for_plot, p_p95)
+    x_m95, y_m95 = self.get_points_for_plot(times_for_plot, p_m95)
+    x_m68, y_m68 = self.get_points_for_plot(times_for_plot, p_m68)
+    x_p68, y_p68 = self.get_points_for_plot(times_for_plot, p_p68)
+    x_p95, y_p95 = self.get_points_for_plot(times_for_plot, p_p95)
 
     np.testing.assert_array_equal(x_m95, x_p95)
     np.testing.assert_array_equal(x_m68, x_p68)
