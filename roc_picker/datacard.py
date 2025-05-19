@@ -659,9 +659,9 @@ class Datacard:
       if not isinstance(p.observable, FixedObservable):
         raise ValueError(f"Invalid observable type {type(p.observable)} for discrete")
       distribution = p.get_distribution()
-      if not isinstance(distribution, float):
+      if not isinstance(distribution, DummyDistribution):
         assert False
-      dct[p.is_responder].append(distribution)
+      dct[p.is_responder].append(distribution.nominal)
 
     return DeltaFunctionsROC(responders=responders, nonresponders=nonresponders, **kwargs)
 
