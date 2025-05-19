@@ -1,7 +1,7 @@
 ---
 jupyter:
   jupytext:
-    formats: ipynb,md
+    formats: ipynb,md,py
     text_representation:
       extension: .md
       format_name: markdown
