@@ -4,6 +4,7 @@ Kaplan-Meier curves with systematic uncertainties, using the Monte Carlo method.
 
 import abc
 import functools
+import numbers
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -38,7 +39,7 @@ class KaplanMeierPatient(KaplanMeierPatientBase):
   """
   def __init__(self, time: float, parameter: float):
     super().__init__(time=time, parameter=parameter)
-    if not isinstance(parameter, (int, float)):
+    if not isinstance(parameter, (numbers.Number)):
       raise TypeError("Parameter must be a number")
 
   @property
