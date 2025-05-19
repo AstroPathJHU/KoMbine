@@ -1,7 +1,7 @@
 ---
 jupyter:
   jupytext:
-    formats: md,ipynb
+    formats: md,ipynb,py
     text_representation:
       extension: .md
       format_name: markdown
@@ -24,8 +24,8 @@ warnings.simplefilter("error")
 This notebook is meant to be a technical introduction to ROC Picker, with examples.  The math and discussion is in the latex document, also in this folder.
 
 ```python
-import pathlib
-from roc_picker.datacard import Datacard
+import pathlib  #noqa: E402
+from roc_picker.datacard import Datacard  #noqa: E402
 ```
 
 ## A simple datacard
@@ -68,7 +68,7 @@ datacard = Datacard.parse_datacard(datacardfile)
 The first two methods implemented in ROC Picker only take into account the statistical uncertainty on the number of patients, and do not currently support systematics or any `observable_type` besides `fixed`.  If all the `scipy.optimize` methods involved converge, both should give identical results.  The mathematical details are in the latex document in this folder.
 
 ```python
-_ = datacard.discrete().make_plots(show=True)
+_ = datacard.discrete_roc().make_plots(show=True)
 ```
 
 We produced three plots:
@@ -81,7 +81,7 @@ See the latex document for more on these plots.
 We can also produce the same plots using the $\delta$ functions method.
 
 ```python
-_ = datacard.discrete().make_plots(show=True)
+_ = datacard.delta_functions_roc().make_plots(show=True)
 ```
 
 ## Systematics
@@ -113,5 +113,5 @@ Each of the systematic parameters can vary independently.
 The method currently implemented for systematics uses a Monte Carlo method to vary the parameters and produce a family of ROC curves.  The 68% and 95% CL regions are estimated using quantiles of this family of ROC curves.  This does not take into account the statistical uncertainty on the number of samples, which was described in the previous section, but it does include the sample-wise statistical uncertainty on the numerator and denominator counts.
 
 ```python
-_ = datacard.systematics_mc(flip_sign=True).generate(size=10000, random_state=123456).plot(show=True)
+_ = datacard.systematics_mc_roc(flip_sign=True).generate(size=10000, random_state=123456).plot(show=True)
 ```

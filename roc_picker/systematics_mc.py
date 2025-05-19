@@ -61,6 +61,8 @@ class DummyDistribution(DistributionBase):
   @property
   def nominal(self):
     return self.__value
+  def __float__(self):
+    return float(self.__value)
 
 class ScipyDistribution(DistributionBase):
   """
@@ -89,7 +91,18 @@ class ScipyDistribution(DistributionBase):
 
   @property
   def nominal(self):
+    """
+    The nominal value of the distribution.
+    """
     return self.__nominal
+
+  @property
+  def unique_id(self):
+    """
+    Return the unique id of the distribution.
+    This is used for the random seed
+    """
+    return self.__id
 
 class AddDistributions(DistributionBase):
   """

@@ -4,11 +4,13 @@ Test the discrete module, and generate the figures for that section of the docum
 
 import pathlib
 import pickle
-import typing
 import warnings
 
 import numpy as np
+
 import roc_picker.datacard
+from .utility_testing_functions import flip_sign_curve, Tolerance
+
 warnings.simplefilter("error")
 
 here = pathlib.Path(__file__).parent
@@ -16,17 +18,17 @@ datacards = here/"datacards"/"simple_examples"
 
 def main():
   """
-  Test the discrete module, and generate the figures for that section of the documentation.
+  Test the discrete module.
   """
   datacard = roc_picker.datacard.Datacard.parse_datacard(datacards/"datacard_example_1.txt")
-  discrete = datacard.discrete(flip_sign=False, check_validity=True)
+  discrete = datacard.discrete_roc(flip_sign=False, check_validity=True)
   rocs = discrete.make_plots(
     npoints=100,
     yupperlim=20,
     show=False,
   )
 
-  discrete_flip = datacard.discrete(flip_sign=True, check_validity=True)
+  discrete_flip = datacard.discrete_roc(flip_sign=True, check_validity=True)
   rocs_flip = discrete_flip.make_plots(
     npoints=100,
     yupperlim=20,
@@ -41,21 +43,11 @@ def main():
       roc["x"] = roc.x[:-1]
       roc["y"] = roc.y[:-1]
 
-  class Tolerance(typing.TypedDict):
-    "typed class for atol and rtol to pass to np.testing.assert_allclose"
-    rtol: float
-    atol: float
   tolerance: Tolerance = {"atol": 1e-6, "rtol": 1e-6}
 
   for k in set(rocs) | set(rocs_flip):
     roc = rocs[k]
-    flipk = {
-      "nominal": "nominal",
-      "p68": "m68",
-      "p95": "m95",
-      "m68": "p68",
-      "m95": "p95",
-    }[k]
+    flipk = flip_sign_curve(k)
     flip = rocs_flip[flipk]
     np.testing.assert_allclose(
       np.array([roc.x, roc.y]),
