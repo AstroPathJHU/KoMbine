@@ -15,7 +15,7 @@ import scipy.stats
 from .delta_functions import DeltaFunctionsROC
 from .discrete import DiscreteROC
 from .kaplan_meier import KaplanMeierDistributions, KaplanMeierPatientDistribution
-from .systematics_mc import DistributionBase, ROCDistributions, ScipyDistribution
+from .systematics_mc import DistributionBase, DummyDistribution, ROCDistributions, ScipyDistribution
 
 class Response:
   """
@@ -37,13 +37,13 @@ class Observable(abc.ABC): # pylint: disable=too-few-public-methods
   An abstract base class for observables.
   """
   @abc.abstractmethod
-  def _create_observable_distribution(self) -> DistributionBase | float:
+  def _create_observable_distribution(self) -> DistributionBase:
     """
     Abstract method to get the observable distribution.
     """
 
   @functools.cached_property
-  def observable_distribution(self) -> DistributionBase | float:
+  def observable_distribution(self) -> DistributionBase:
     """
     Get the observable distribution.
     """
@@ -63,7 +63,15 @@ class FixedObservable(Observable):
     """
     Get the observable distribution for a fixed observable.
     """
-    return self.value
+    return DummyDistribution(self.value)
+
+  def __eq__(self, other):
+    if not isinstance(other, FixedObservable):
+      return NotImplemented
+    return self.value == other.value
+
+  def __str__(self):
+    return str(self.value)
 
 class PoissonObservable(Observable):
   """
@@ -347,7 +355,7 @@ class Patient:
         raise ValueError(f"Systematic {systematic} already added with value {v}")
     self.__systematics.append((systematic, value))
 
-  def get_distribution(self) -> DistributionBase | float:
+  def get_distribution(self) -> DistributionBase:
     """
     Get the distribution for the patient.
     """
@@ -624,9 +632,9 @@ class Datacard:
       if not isinstance(p.observable, FixedObservable):
         raise ValueError(f"Invalid observable type {type(p.observable)} for discrete")
       distribution = p.get_distribution()
-      if not isinstance(distribution, float):
+      if not isinstance(distribution, DummyDistribution):
         assert False
-      dct[p.is_responder].append(distribution)
+      dct[p.is_responder].append(float(distribution))
 
     return DiscreteROC(responders=responders, nonresponders=nonresponders, **kwargs)
 

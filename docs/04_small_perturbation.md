@@ -22,7 +22,7 @@ In this notebook I want to explore what happens if you make a small perturbation
 
 ```python
 import copy, numpy as np, pathlib
-from roc_picker.datacard import Datacard
+from roc_picker.datacard import Datacard, FixedObservable, Patient, PoissonObservable
 ```
 
 # Discrete
@@ -38,24 +38,24 @@ datacard = Datacard.parse_datacard(datacardfile)
 ```python
 shift_up = copy.deepcopy(datacard.patients)
 shift_down = copy.deepcopy(datacard.patients)
-np.testing.assert_equal(datacard.patients[13]["value"], 9)
-shift_up[13]["value"] = 9.1
-shift_down[13]["value"] = 8.9
+np.testing.assert_equal(datacard.patients[13].observable, FixedObservable(9.0))
+shift_up[13] = Patient(response=datacard.patients[13].response, observable=FixedObservable(9.1))
+shift_down[13] = Patient(response=datacard.patients[13].response, observable=FixedObservable(8.9))
 
 for patient, up, down in zip(datacard.patients, shift_up, shift_down, strict=True):
-    toprint = patient["response"], patient["value"]
-    if up["value"] != patient["value"]:
-        toprint = (*toprint, "shift to", up["value"], "or", down["value"])
+    toprint = patient.response, patient.observable
+    if up.observable != patient.observable:
+        toprint = (*toprint, "shift to", up.observable, "or", down.observable)
     print(*toprint)
 
-datacard_shift_up = Datacard(patients=shift_up, systematics=[], observable_type="fixed")
-datacard_shift_down = Datacard(patients=shift_down, systematics=[], observable_type="fixed")
+datacard_shift_up = Datacard(patients=shift_up)
+datacard_shift_down = Datacard(patients=shift_down)
 ```
 
 ```python
-_ = datacard.discrete().make_plots(show=[False, False, True])
-_ = datacard_shift_up.discrete().make_plots(show=[False, False, True])
-_ = datacard_shift_down.discrete().make_plots(show=[False, False, True])
+_ = datacard.discrete_roc().make_plots(show=[False, False, True])
+_ = datacard_shift_up.discrete_roc().make_plots(show=[False, False, True])
+_ = datacard_shift_down.discrete_roc().make_plots(show=[False, False, True])
 ```
 
 # Systematics MC
@@ -71,24 +71,32 @@ datacard = Datacard.parse_datacard(datacardfile)
 ```python
 shift_up = copy.deepcopy(datacard.patients)
 shift_down = copy.deepcopy(datacard.patients)
-np.testing.assert_equal(datacard.patients[6]["value"], 30)
-shift_up[6]["value"] = 31
-shift_down[6]["value"] = 29
+patient = datacard.patients[6]
+distribution = patient.get_distribution()
+np.testing.assert_equal(distribution.nominal, 30)
+assert isinstance(patient.observable, PoissonObservable)
+assert len(patient.systematics) == 0
+shift_up[6] = Patient(response=datacard.patients[6].response, observable=PoissonObservable(31, unique_id=distribution.unique_id))
+shift_down[6] = Patient(response=datacard.patients[6].response, observable=PoissonObservable(29, unique_id=distribution.unique_id))
+del distribution
 
 for patient, up, down in zip(datacard.patients, shift_up, shift_down, strict=True):
-    toprint = patient["response"], patient["value"]
-    if up["value"] != patient["value"]:
-        toprint = (*toprint, "shift to", up["value"], "or", down["value"])
+    toprint = patient.response, patient.observable
+    if up.observable.count != patient.observable.count:
+        toprint = (*toprint, "shift to", up.observable, "or", down.observable)
     print(*toprint)
 
-datacard_shift_up = Datacard(patients=shift_up, systematics=[], observable_type="poisson")
-datacard_shift_down = Datacard(patients=shift_down, systematics=[], observable_type="poisson")
+datacard_shift_up = Datacard(patients=shift_up)
+datacard_shift_down = Datacard(patients=shift_down)
 ```
 
 ```python
-datacard.systematics_mc(flip_sign=False).generate(size=10000, random_state=123456).plot(show=True)
-datacard_shift_up.systematics_mc(flip_sign=False).generate(size=10000, random_state=123456).plot(show=True)
-datacard_shift_down.systematics_mc(flip_sign=False).generate(size=10000, random_state=123456).plot(show=True)
+datacard.systematics_mc_roc(flip_sign=False).generate(size=10000, random_state=123456).plot(show=True)
+for patient in datacard.patients: del patient.observable.observable_distribution
+datacard_shift_up.systematics_mc_roc(flip_sign=False).generate(size=10000, random_state=123456).plot(show=True)
+for patient in datacard_shift_up.patients: del patient.observable.observable_distribution
+datacard_shift_down.systematics_mc_roc(flip_sign=False).generate(size=10000, random_state=123456).plot(show=True)
+for patient in datacard_shift_down.patients: del patient.observable.observable_distribution
 ```
 
 ```python

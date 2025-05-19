@@ -52,7 +52,7 @@ We estimate this uncertainty using the discrete method.
 here = pathlib.Path(".").resolve()
 datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_cells_binomial.txt"
 datacard = Datacard.parse_datacard(datacardfile)
-_ = datacard.discrete(flip_sign=True).make_plots(show=[False, False, True])
+_ = datacard.discrete_roc(flip_sign=True).make_plots(show=[False, False, True])
 ```
 
 ## Statistical uncertainty from the number of cells
@@ -63,7 +63,7 @@ We propagate this uncertainty using the Monte Carlo method.
 here = pathlib.Path(".").resolve()
 datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_cells_poisson.txt"
 datacard = Datacard.parse_datacard(datacardfile)
-_ = datacard.systematics_mc(flip_sign=True).generate(size=10000, random_state=123456).plot()
+_ = datacard.systematics_mc_roc(flip_sign=True).generate(size=10000, random_state=123456).plot()
 ```
 
 ## Discussion
