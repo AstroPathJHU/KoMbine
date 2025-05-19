@@ -21,13 +21,13 @@ warnings.simplefilter("error")
 In this notebook I want to explore what happens if you make a small perturbation to one of the values for the responders or non-responders.  Is the behavior stable?  This is a sanity check on the method.
 
 ```python
-import copy
-import pathlib
+import copy  #noqa: E402
+import pathlib  #noqa: E402
 
-import numpy as np
+import numpy as np  #noqa: E402
 
-from roc_picker.datacard import Datacard, FixedObservable, Patient, PoissonObservable
-from roc_picker.systematics_mc import ScipyDistribution
+from roc_picker.datacard import Datacard, FixedObservable, Patient, PoissonObservable  #noqa: E402
+from roc_picker.systematics_mc import ScipyDistribution  #noqa: E402
 ```
 
 # Discrete

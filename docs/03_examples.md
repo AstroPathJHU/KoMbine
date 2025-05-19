@@ -24,8 +24,8 @@ warnings.simplefilter("error")
 This notebook is meant to be a technical introduction to ROC Picker, with examples.  The math and discussion is in the latex document, also in this folder.
 
 ```python
-import pathlib
-from roc_picker.datacard import Datacard
+import pathlib  #noqa: E402
+from roc_picker.datacard import Datacard  #noqa: E402
 ```
 
 ## A simple datacard

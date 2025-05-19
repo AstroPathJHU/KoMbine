@@ -19,8 +19,8 @@ warnings.simplefilter("error")
 ```
 
 ```python
-import pathlib
-from roc_picker.datacard import Datacard
+import pathlib   #noqa: E402
+from roc_picker.datacard import Datacard  #noqa: E402
 ```
 
 # Introduction
@@ -86,7 +86,7 @@ We again use the discrete method.  The ROC curve error bands and AUC error range
 here = pathlib.Path(".").resolve()
 datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_neighborhoods_binomial.txt"
 datacard = Datacard.parse_datacard(datacardfile)
-_ = datacard.discrete(flip_sign=True).make_plots(show=[False, False, True])
+_ = datacard.discrete_roc(flip_sign=True).make_plots(show=[False, False, True])
 ```
 
 ## Statistical uncertainty from the number of cells
@@ -97,7 +97,7 @@ We use the Monte Carlo method.  Because the neighborhoods are so much more commo
 here = pathlib.Path(".").resolve()
 datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_neighborhoods_poisson.txt"
 datacard = Datacard.parse_datacard(datacardfile)
-_ = datacard.systematics_mc(flip_sign=True).generate(size=10000, random_state=123456).plot(show=True)
+_ = datacard.systematics_mc_roc(flip_sign=True).generate(size=10000, random_state=123456).plot(show=True)
 ```
 
 ## Systematic uncertainty
@@ -114,5 +114,5 @@ We use the Monte Carlo method again and find that this uncertainty is larger tha
 here = pathlib.Path(".").resolve()
 datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_neighborhoods_systematics.txt"
 datacard = Datacard.parse_datacard(datacardfile)
-_ = datacard.systematics_mc(flip_sign=True).generate(size=10000, random_state=123456).plot(show=True)
+_ = datacard.systematics_mc_roc(flip_sign=True).generate(size=10000, random_state=123456).plot(show=True)
 ```
