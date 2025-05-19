@@ -21,8 +21,13 @@ warnings.simplefilter("error")
 In this notebook I want to explore what happens if you make a small perturbation to one of the values for the responders or non-responders.  Is the behavior stable?  This is a sanity check on the method.
 
 ```python
-import copy, numpy as np, pathlib
+import copy
+import pathlib
+
+import numpy as np
+
 from roc_picker.datacard import Datacard, FixedObservable, Patient, PoissonObservable
+from roc_picker.systematics_mc import ScipyDistribution
 ```
 
 # Discrete
@@ -76,12 +81,15 @@ distribution = patient.get_distribution()
 np.testing.assert_equal(distribution.nominal, 30)
 assert isinstance(patient.observable, PoissonObservable)
 assert len(patient.systematics) == 0
+assert isinstance(distribution, ScipyDistribution)
 shift_up[6] = Patient(response=datacard.patients[6].response, observable=PoissonObservable(31, unique_id=distribution.unique_id))
 shift_down[6] = Patient(response=datacard.patients[6].response, observable=PoissonObservable(29, unique_id=distribution.unique_id))
 del distribution
 
 for patient, up, down in zip(datacard.patients, shift_up, shift_down, strict=True):
     toprint = patient.response, patient.observable
+    assert isinstance(patient.observable, PoissonObservable)
+    assert isinstance(up.observable, PoissonObservable)
     if up.observable.count != patient.observable.count:
         toprint = (*toprint, "shift to", up.observable, "or", down.observable)
     print(*toprint)
@@ -92,11 +100,11 @@ datacard_shift_down = Datacard(patients=shift_down)
 
 ```python
 datacard.systematics_mc_roc(flip_sign=False).generate(size=10000, random_state=123456).plot(show=True)
-for patient in datacard.patients: del patient.observable.observable_distribution
+datacard.clear_distributions()
 datacard_shift_up.systematics_mc_roc(flip_sign=False).generate(size=10000, random_state=123456).plot(show=True)
-for patient in datacard_shift_up.patients: del patient.observable.observable_distribution
+datacard_shift_up.clear_distributions()
 datacard_shift_down.systematics_mc_roc(flip_sign=False).generate(size=10000, random_state=123456).plot(show=True)
-for patient in datacard_shift_down.patients: del patient.observable.observable_distribution
+datacard_shift_down.clear_distributions()
 ```
 
 ```python

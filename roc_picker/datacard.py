@@ -688,6 +688,16 @@ class Datacard:
       parameter_max=parameter_max,
     )
 
+  def clear_distributions(self):
+    """
+    Delete the distributions for all patients.
+    This is useful for clearing the unique_ids so that they can be
+    regenerated.  You can always rerun systematics_mc_roc() or
+    systematics_mc_km() to regenerate the distributions.
+    """
+    for p in self.patients:
+      if p.observable is not None:
+        del p.observable.observable_distribution
 
 def plot_systematics_mc_roc():
   """
