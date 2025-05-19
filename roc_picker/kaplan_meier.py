@@ -490,7 +490,6 @@ class KaplanMeierDistributionsPlot(KaplanMeierBase):
     """
     Plots the Kaplan-Meier curves.
     """
-    fig, ax = plt.subplots()
     colors = (
       ('blue', 'dodgerblue', 'skyblue'),
       ('red', 'orangered', 'salmon'),
@@ -509,7 +508,7 @@ class KaplanMeierDistributionsPlot(KaplanMeierBase):
     for i, (curve, (color_nominal, color_68, color_95)) in enumerate(zip(self.__curves, colors)):
       kmc = curve.generate(size=size, random_state=random_state)
       nominal_x, nominal_y = kmc.nominalkm.points_for_plot(times_for_plot=times_for_plot)
-      ax.plot(
+      plt.plot(
         nominal_x,
         nominal_y,
         label=f"Nominal {i + 1}: {self.__thresholds[i]} <= parameter < {self.__thresholds[i + 1]}",
@@ -528,7 +527,7 @@ class KaplanMeierDistributionsPlot(KaplanMeierBase):
       x_p95, y_p95 = kmc.get_points_for_plot(times_for_plot, p_p95)
       np.testing.assert_array_equal(x_m95, x_p95)
       np.testing.assert_array_equal(x_m68, x_p68)
-      ax.fill_between(
+      plt.fill_between(
         x_m68,
         y_m68,
         y_p68,
@@ -536,7 +535,7 @@ class KaplanMeierDistributionsPlot(KaplanMeierBase):
         alpha=0.5,
         label=f'68% CL {i + 1}'
       )
-      ax.fill_between(
+      plt.fill_between(
         x_m95,
         y_m95,
         y_p95,
