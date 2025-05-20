@@ -77,7 +77,7 @@ class ILPForKM:
     self.__parameter_max = parameter_max
     self.__time_point = time_point
 
-  def run_ILP(self, expected_probability: float):
+  def run_ILP(self, expected_probability: float): # pylint: disable=too-many-locals
     """
     Run the ILP for the given time point.
     """
@@ -150,6 +150,7 @@ class ILPForKM:
     )
 
     # Piecewise approximation: for each possible n_total, define a separate PWL segment
+    indicator_vars = []
     for n_total_val in range(n_patients + 1):
       # Build x-y curve for this n_total
       x_vals = list(range(n_total_val + 1))
@@ -160,7 +161,8 @@ class ILPForKM:
 
       # Binary indicator if n_total equals this value
       indicator = model.addVar(vtype=GRB.BINARY, name=f"ind_ntotal_{n_total_val}")
-      model.addGenConstrIndicator(indicator, True, n_total == n_total_val)
+      indicator_vars.append(indicator)
+      model.addConstr((indicator == 1) >> (n_total == n_total_val))
 
       # Temp var for penalty at this n_total
       binom_piece = model.addVar(lb=0.0, name=f"binom_piece_{n_total_val}")
@@ -171,7 +173,7 @@ class ILPForKM:
       model.addConstr(binom_piece >= binom_penalty - (1 - indicator) * 1e6)
 
     # Only one n_total active
-    model.addConstr(gp.quicksum(model.getVarByName(f"ind_ntotal_{i}") for i in range(n_patients + 1)) == 1)
+    model.addConstr(gp.quicksum(indicator_vars) == 1)
 
     # Patient-wise penalties
     patient_penalty = gp.quicksum(
