@@ -17,7 +17,7 @@ class KaplanMeierPatientBase(abc.ABC):
   Base class for Kaplan-Meier patients.
   It contains the survival time and the parameter used to group the patients.
   """
-  def __init__(self, time: float, parameter: float | DistributionBase):
+  def __init__(self, time: float, parameter):
     self.__time = time
     self.__parameter = parameter
   @property
@@ -47,9 +47,7 @@ class KaplanMeierPatient(KaplanMeierPatientBase):
     """
     Returns the parameter used to group the patients.
     """
-    result = super().parameter
-    assert isinstance(result, (int, float))
-    return result
+    return super().parameter
 
 
 
@@ -70,9 +68,7 @@ class KaplanMeierPatientDistribution(KaplanMeierPatientBase):
     """
     Returns the parameter used to group the patients.
     """
-    result = super().parameter
-    assert isinstance(result, DistributionBase)
-    return result
+    return super().parameter
 
   @property
   def nominal(self):
