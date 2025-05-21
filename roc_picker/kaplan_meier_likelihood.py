@@ -77,27 +77,52 @@ class ILPForKM:
     self.__parameter_max = parameter_max
     self.__time_point = time_point
 
-  def run_ILP(self, expected_probability: float): # pylint: disable=too-many-locals
+  @property
+  def all_patients(self) -> list[KaplanMeierPatientNLL]:
+    """
+    The list of all patients.
+    """
+    return self.__all_patients
+  @property
+  def parameter_min(self) -> float:
+    """
+    The minimum parameter value.
+    """
+    return self.__parameter_min
+  @property
+  def parameter_max(self) -> float:
+    """
+    The maximum parameter value.
+    """
+    return self.__parameter_max
+  @property
+  def time_point(self) -> float:
+    """
+    The time point for the Kaplan-Meier curve.
+    """
+    return self.__time_point
+
+  def run_ILP(self, expected_probability: float, verbose=False): # pylint: disable=too-many-locals, too-many-statements
     """
     Run the ILP for the given time point.
     """
-    n_patients = len(self.__all_patients)
-    patient_times = np.array([p.time for p in self.__all_patients])
-    patient_alive = patient_times > self.__time_point
-    parameters = np.array([p.parameter for p in self.__all_patients])
+    n_patients = len(self.all_patients)
+    patient_times = np.array([p.time for p in self.all_patients])
+    patient_alive = patient_times > self.time_point
+    observed_parameters = np.array([p.observed_parameter for p in self.all_patients])
 
     parameter_in_range = (
-      (parameters > self.__parameter_min)
-      & (parameters < self.__parameter_max)
+      (observed_parameters > self.parameter_min)
+      & (observed_parameters < self.parameter_max)
     )
     sgn_nll_penalty_for_patient_in_range = 2 * parameter_in_range - 1
     abs_nll_penalty_for_patient_in_range = np.array([
       p.parameter(p.observed_parameter)
        - min(
-         p.parameter(self.__parameter_min),
-         p.parameter(self.__parameter_max),
+         p.parameter(self.parameter_min),
+         p.parameter(self.parameter_max),
        )
-      for p in self.__all_patients
+      for p in self.all_patients
     ])
 
     nll_penalty_for_patient_in_range = (
@@ -119,6 +144,8 @@ class ILPForKM:
     penalty_vals = []
 
     for n_total in range(n_patients + 1):
+      if n_total == 0:
+        continue
       for n_alive in range(n_total + 1):
         alive_vals.append((n_total, n_alive))
         penalty_vals.append(binomial_penalty_table[(n_alive, n_total)])
@@ -152,6 +179,9 @@ class ILPForKM:
     # Piecewise approximation: for each possible n_total, define a separate PWL segment
     indicator_vars = []
     for n_total_val in range(n_patients + 1):
+      # Skip if n_total is 0
+      if n_total_val == 0:
+        continue
       # Build x-y curve for this n_total
       x_vals = list(range(n_total_val + 1))
       y_vals = [
@@ -186,4 +216,25 @@ class ILPForKM:
       GRB.MINIMIZE,
     )
 
-    return model.optimize()
+    model.optimize()
+
+    selected = [i for i in range(n_patients) if x[i].X > 0.5]
+    if verbose:
+      if model.status == GRB.OPTIMAL:
+        print("Selected patients:", selected)
+        print("Total penalty:    ", model.ObjVal)
+        print("n_total:          ", int(n_total.X))
+        print("n_alive:          ", int(n_alive.X))
+        print("Binomial penalty: ", binom_penalty.X)
+      else:
+        print("No optimal solution found.")
+
+    return scipy.optimize.OptimizeResult(
+      x=model.ObjVal,
+      success=model.status == GRB.OPTIMAL,
+      n_total=int(n_total.X),
+      n_alive=int(n_alive.X),
+      binomial_penalty=binom_penalty.X,
+      patient_penalty=model.ObjVal - binom_penalty.X,
+      selected=selected,
+    )
