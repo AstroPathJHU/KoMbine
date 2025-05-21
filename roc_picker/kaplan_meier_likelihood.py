@@ -3,13 +3,21 @@ Kaplan-Meier curve with error bars calculated using the log-likelihood method.
 """
 
 import collections.abc
+import functools
 
 import gurobipy as gp
 from gurobipy import GRB
+import matplotlib.pyplot as plt
 import numpy as np
+import scipy.optimize
 import scipy.stats
 
-from .kaplan_meier import KaplanMeierPatientBase
+from .kaplan_meier import (
+  KaplanMeierBase,
+  KaplanMeierInstance,
+  KaplanMeierPatient,
+  KaplanMeierPatientBase
+)
 
 class KaplanMeierPatientNLL(KaplanMeierPatientBase):
   """
@@ -20,10 +28,10 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     self,
     time: float,
     parameter_nll: collections.abc.Callable[[float], float],
-    nominal_parameter: float,
+    observed_parameter: float,
   ):
     super().__init__(time=time, parameter=parameter_nll)
-    self.__observed_parameter = nominal_parameter
+    self.__observed_parameter = observed_parameter
 
   @property
   def parameter(self) -> collections.abc.Callable[[float], float]:
@@ -58,7 +66,17 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     return cls(
       time=time,
       parameter_nll=parameter_nll,
-      nominal_parameter=count,
+      observed_parameter=count,
+    )
+
+  @property
+  def nominal(self) -> KaplanMeierPatient:
+    """
+    The nominal value of the parameter.
+    """
+    return KaplanMeierPatient(
+      time=self.time,
+      parameter=self.observed_parameter,
     )
 
 class ILPForKM:
@@ -212,7 +230,7 @@ class ILPForKM:
 
     # Objective: minimize total penalty
     model.setObjective(
-      binom_penalty + patient_penalty,
+      2 * (binom_penalty + patient_penalty),
       GRB.MINIMIZE,
     )
 
@@ -238,3 +256,234 @@ class ILPForKM:
       patient_penalty=model.ObjVal - binom_penalty.X,
       selected=selected,
     )
+
+class KaplanMeierLikelihood(KaplanMeierBase):
+  """
+  Kaplan-Meier curve with error bars calculated using the log-likelihood method.
+  """
+  def __init__(
+    self,
+    *,
+    all_patients: list[KaplanMeierPatientNLL],
+    parameter_min: float,
+    parameter_max: float,
+    endpoint_epsilon: float = 1e-6,
+  ):
+    self.__all_patients = all_patients
+    self.__parameter_min = parameter_min
+    self.__parameter_max = parameter_max
+    self.__endpoint_epsilon = endpoint_epsilon
+
+  @property
+  def all_patients(self) -> list[KaplanMeierPatientNLL]:
+    """
+    The list of all patients.
+    """
+    return self.__all_patients
+
+  @property
+  def parameter_min(self) -> float:
+    """
+    The minimum parameter value.
+    """
+    return self.__parameter_min
+
+  @property
+  def parameter_max(self) -> float:
+    """
+    The maximum parameter value.
+    """
+    return self.__parameter_max
+
+  @functools.cached_property
+  def nominalkm(self) -> KaplanMeierInstance:
+    """
+    The nominal Kaplan-Meier curve.
+    """
+    return KaplanMeierInstance(
+      all_patients=[p.nominal for p in self.all_patients],
+      parameter_min=self.parameter_min,
+      parameter_max=self.parameter_max,
+    )
+  
+  def ilp_for_km(
+    self,
+    time_point: float,
+  ):
+    """
+    Get the ILP for the given time point.
+    """
+    return ILPForKM(
+      all_patients=self.all_patients,
+      parameter_min=self.parameter_min,
+      parameter_max=self.parameter_max,
+      time_point=time_point,
+    )
+  
+  def ilps_for_km(
+    self,
+    times_for_plot: np.ndarray | None,
+  ):
+    """
+    Get the ILPs for the given time points.
+    """
+    if times_for_plot is None:
+      times_for_plot = self.times_for_plot
+    return [
+      self.ilp_for_km(time_point=t)
+      for t in times_for_plot
+    ]
+  
+  def get_twoNLL_function(self, time_point: float):
+    """
+    Get the twoNLL function for the given time point.
+    """
+    ilp = self.ilp_for_km(time_point=time_point)
+    def twoNLL(expected_probability: float) -> float:
+      """
+      The negative log-likelihood function.
+      """
+      result = ilp.run_ILP(expected_probability=expected_probability)
+      if not result.success:
+        return np.inf
+      return result.x
+    return twoNLL
+  
+  @functools.cache
+  def best_probability(
+    self,
+    time_point: float,
+  ) -> tuple[float, float]:
+    """
+    Find the probability that minimizes the negative log-likelihood
+    for the given time point.
+    """
+    # Find the expected probability that minimizes the negative log-likelihood
+    # for the given time point
+    twoNLL = self.get_twoNLL_function(time_point=time_point)
+    result = scipy.optimize.minimize_scalar(
+      twoNLL,
+      bounds=(self.__endpoint_epsilon, 1 - self.__endpoint_epsilon),
+      method='bounded',
+    )
+    if not result.success:
+      raise RuntimeError("Failed to find the best probability")
+    return result.x, result.fun
+
+  def survival_probabilities_likelihood(
+    self,
+    CLs: list[float],
+    times_for_plot: np.ndarray,
+  ) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Get the survival probabilities for the given quantiles.
+    """
+    best_probabilities = []
+    survival_probabilities = []
+    for t in times_for_plot:
+      survival_probabilities_time_point = []
+      survival_probabilities.append(survival_probabilities_time_point)
+      twoNLL = self.get_twoNLL_function(time_point=t)
+      # Find the expected probability that minimizes the negative log-likelihood
+      # for the given time point
+      best_prob, twoNLL_min = self.best_probability(time_point=t)
+      best_probabilities.append(best_prob)
+
+      for CL in CLs:
+        d2NLLcut = scipy.stats.chi2.ppf(CL, 1).item()
+        def objective_function(expected_probability: float) -> float:
+          return twoNLL(expected_probability) - twoNLL_min - d2NLLcut
+        np.testing.assert_almost_equal(
+          objective_function(best_prob),
+          -d2NLLcut,
+        )
+        if objective_function(self.__endpoint_epsilon) < 0:
+          lower_bound = 0
+        else:
+          lower_bound = scipy.optimize.brentq(
+            objective_function,
+            self.__endpoint_epsilon,
+            best_prob,
+            xtol=1e-6,
+          )
+        if objective_function(1 - self.__endpoint_epsilon) < 0:
+          upper_bound = 1
+        else:
+          upper_bound = scipy.optimize.brentq(
+            objective_function,
+            best_prob,
+            1 - self.__endpoint_epsilon,
+            xtol=1e-6,
+          )
+        survival_probabilities_time_point.append((lower_bound, upper_bound))
+    return np.ndarray(best_probabilities), np.array(survival_probabilities)
+
+  def plot(self, times_for_plot=None, show=False, saveas=None): #pylint: disable=too-many-locals
+    """
+    Plots the Kaplan-Meier curves.
+    """
+    if times_for_plot is None:
+      times_for_plot = self.times_for_plot
+    plt.figure()
+    nominal_x, nominal_y = self.nominalkm.points_for_plot(times_for_plot=times_for_plot)
+    plt.plot(
+      nominal_x,
+      nominal_y,
+      label="Nominal",
+      color='black',
+      linestyle='--'
+    )
+
+    CLs = [0.68, 0.95]
+    best_probabilities, survival_probabilities = self.survival_probabilities_likelihood(
+      CLs=CLs,
+      times_for_plot=self.times_for_plot,
+    )
+    best_x, best_y = self.get_points_for_plot(times_for_plot, best_probabilities)
+    plt.plot(
+      best_x,
+      best_y,
+      label="Best Probability",
+      color='red',
+      linestyle='--'
+    )
+
+    survival_probabilities_68, survival_probabilities_95 = survival_probabilities
+    p_m68, p_p68 = survival_probabilities_68.T
+    p_m95, p_p95 = survival_probabilities_95.T
+    x_m95, y_m95 = self.get_points_for_plot(times_for_plot, p_m95)
+    x_m68, y_m68 = self.get_points_for_plot(times_for_plot, p_m68)
+    x_p68, y_p68 = self.get_points_for_plot(times_for_plot, p_p68)
+    x_p95, y_p95 = self.get_points_for_plot(times_for_plot, p_p95)
+
+    np.testing.assert_array_equal(x_m95, x_p95)
+    np.testing.assert_array_equal(x_m68, x_p68)
+
+
+    plt.fill_between(
+      x_m68,
+      y_m68,
+      y_p68,
+      color='dodgerblue',
+      alpha=0.5,
+      label='68% CL'
+    )
+    plt.fill_between(
+      x_m95,
+      y_m95,
+      y_p95,
+      color='skyblue',
+      alpha=0.5,
+      label='95% CL'
+    )
+
+    plt.xlabel("Time")
+    plt.ylabel("Survival Probability")
+    plt.legend()
+    plt.title("Kaplan-Meier Curves")
+    plt.grid()
+    if saveas is not None:
+      plt.savefig(saveas)
+    if show:
+      plt.show()
+    plt.close()
