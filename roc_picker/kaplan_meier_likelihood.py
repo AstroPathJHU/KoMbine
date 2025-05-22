@@ -164,7 +164,7 @@ class ILPForKM:
     if np.isfinite(range_boundary_nll).any() and not binomial_only:
       abs_nll_penalty_for_patient_in_range = observed_nll - range_boundary_nll
     else:
-      abs_nll_penalty_for_patient_in_range = np.full(n_patients, -1e10)
+      abs_nll_penalty_for_patient_in_range = np.full(n_patients, 5*scipy.stats.binom.logpmf(0, n_patients, 0.99999).item())
 
     nll_penalty_for_patient_in_range = (
       sgn_nll_penalty_for_patient_in_range
