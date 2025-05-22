@@ -429,7 +429,13 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         survival_probabilities_time_point.append((lower_bound, upper_bound))
     return np.array(best_probabilities), np.array(survival_probabilities)
 
-  def plot(self, times_for_plot=None, binomial_only=False, show=False, saveas=None): #pylint: disable=too-many-locals
+  def plot(
+    self,
+    times_for_plot=None,
+    include_binomial_only=False,
+    show=False,
+    saveas=None,
+  ): #pylint: disable=too-many-locals
     """
     Plots the Kaplan-Meier curves.
     """
@@ -449,8 +455,16 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     best_probabilities, survival_probabilities = self.survival_probabilities_likelihood(
       CLs=CLs,
       times_for_plot=self.times_for_plot,
-      binomial_only=binomial_only,
     )
+    if include_binomial_only:
+      _, survival_probabilities_binomial = self.survival_probabilities_likelihood(
+        CLs=CLs,
+        times_for_plot=self.times_for_plot,
+        binomial_only=True,
+      )
+    else:
+      survival_probabilities_binomial = None
+
     best_x, best_y = self.get_points_for_plot(times_for_plot, best_probabilities)
     plt.plot(
       best_x,
@@ -470,14 +484,13 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     np.testing.assert_array_equal(x_m95, x_p95)
     np.testing.assert_array_equal(x_m68, x_p68)
 
-
     plt.fill_between(
       x_m68,
       y_m68,
       y_p68,
       color='dodgerblue',
       alpha=0.5,
-      label='68% CL'
+      label='68% CL',
     )
     plt.fill_between(
       x_m95,
@@ -485,8 +498,36 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       y_p95,
       color='skyblue',
       alpha=0.5,
-      label='95% CL'
+      label='95% CL',
     )
+
+    if survival_probabilities_binomial is not None:
+      (p_m68_binomial, p_p68_binomial), (p_m95_binomial, p_p95_binomial) = survival_probabilities_binomial.transpose(1, 2, 0)
+      x_m95_binomial, y_m95_binomial = self.get_points_for_plot(times_for_plot, p_m95_binomial)
+      x_m68_binomial, y_m68_binomial = self.get_points_for_plot(times_for_plot, p_m68_binomial)
+      x_p68_binomial, y_p68_binomial = self.get_points_for_plot(times_for_plot, p_p68_binomial)
+      x_p95_binomial, y_p95_binomial = self.get_points_for_plot(times_for_plot, p_p95_binomial)
+
+      plt.fill_between(
+        x_m68_binomial,
+        y_m68_binomial,
+        y_p68_binomial,
+        edgecolor='dodgerblue',
+        facecolor='none',
+        hatch='//',
+        alpha=0.5,
+        label='68% CL (Binomial only)',
+      )
+      plt.fill_between(
+        x_m95_binomial,
+        y_m95_binomial,
+        y_p95_binomial,
+        edgecolor='skyblue',
+        facecolor='none',
+        hatch='//',
+        alpha=0.5,
+        label='95% CL (Binomial only)',
+      )
 
     plt.xlabel("Time")
     plt.ylabel("Survival Probability")
