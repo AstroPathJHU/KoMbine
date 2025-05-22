@@ -514,7 +514,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         y_p68_binomial,
         edgecolor='dodgerblue',
         facecolor='none',
-        hatch='//',
+        hatch='\\\\',
         alpha=0.5,
         label='68% CL (Binomial only)',
       )
