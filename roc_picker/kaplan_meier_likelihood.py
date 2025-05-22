@@ -164,7 +164,10 @@ class ILPForKM:
     if np.isfinite(range_boundary_nll).any() and not binomial_only:
       abs_nll_penalty_for_patient_in_range = observed_nll - range_boundary_nll
     else:
-      abs_nll_penalty_for_patient_in_range = np.full(n_patients, 5*scipy.stats.binom.logpmf(0, n_patients, 0.99999).item())
+      abs_nll_penalty_for_patient_in_range = np.full(
+        n_patients,
+        5*scipy.stats.binom.logpmf(0, n_patients, 0.99999).item()
+      )
 
     nll_penalty_for_patient_in_range = (
       sgn_nll_penalty_for_patient_in_range
@@ -502,11 +505,15 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     )
 
     if survival_probabilities_binomial is not None:
-      (p_m68_binomial, p_p68_binomial), (p_m95_binomial, p_p95_binomial) = survival_probabilities_binomial.transpose(1, 2, 0)
+      (p_m68_binomial, p_p68_binomial), (p_m95_binomial, p_p95_binomial) = \
+        survival_probabilities_binomial.transpose(1, 2, 0)
       x_m95_binomial, y_m95_binomial = self.get_points_for_plot(times_for_plot, p_m95_binomial)
       x_m68_binomial, y_m68_binomial = self.get_points_for_plot(times_for_plot, p_m68_binomial)
       x_p68_binomial, y_p68_binomial = self.get_points_for_plot(times_for_plot, p_p68_binomial)
       x_p95_binomial, y_p95_binomial = self.get_points_for_plot(times_for_plot, p_p95_binomial)
+
+      np.testing.assert_array_equal(x_m95_binomial, x_p95_binomial)
+      np.testing.assert_array_equal(x_m68_binomial, x_p68_binomial)
 
       plt.fill_between(
         x_m68_binomial,
