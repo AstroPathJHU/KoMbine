@@ -295,6 +295,13 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     """
     return self.__parameter_max
 
+  @property
+  def patient_times(self) -> frozenset:
+    """
+    The set of all patient times.
+    """
+    return frozenset(p.time for p in self.all_patients)
+
   @functools.cached_property
   def nominalkm(self) -> KaplanMeierInstance:
     """
@@ -305,7 +312,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       parameter_min=self.parameter_min,
       parameter_max=self.parameter_max,
     )
-  
+
   def ilp_for_km(
     self,
     time_point: float,
@@ -319,7 +326,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       parameter_max=self.parameter_max,
       time_point=time_point,
     )
-  
+
   def ilps_for_km(
     self,
     times_for_plot: np.ndarray | None,
@@ -333,7 +340,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       self.ilp_for_km(time_point=t)
       for t in times_for_plot
     ]
-  
+
   def get_twoNLL_function(self, time_point: float):
     """
     Get the twoNLL function for the given time point.
@@ -348,8 +355,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         return np.inf
       return result.x
     return twoNLL
-  
-  @functools.cache
+
   def best_probability(
     self,
     time_point: float,
@@ -391,7 +397,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
       for CL in CLs:
         d2NLLcut = scipy.stats.chi2.ppf(CL, 1).item()
-        def objective_function(expected_probability: float) -> float:
+        def objective_function(
+          expected_probability: float,
+          twoNLL=twoNLL, twoNLL_min=twoNLL_min, d2NLLcut=d2NLLcut
+        ) -> float:
           return twoNLL(expected_probability) - twoNLL_min - d2NLLcut
         np.testing.assert_almost_equal(
           objective_function(best_prob),
@@ -416,7 +425,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
             xtol=1e-6,
           )
         survival_probabilities_time_point.append((lower_bound, upper_bound))
-    return np.ndarray(best_probabilities), np.array(survival_probabilities)
+    return np.array(best_probabilities), np.array(survival_probabilities)
 
   def plot(self, times_for_plot=None, show=False, saveas=None): #pylint: disable=too-many-locals
     """
@@ -448,9 +457,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       linestyle='--'
     )
 
-    survival_probabilities_68, survival_probabilities_95 = survival_probabilities
-    p_m68, p_p68 = survival_probabilities_68.T
-    p_m95, p_p95 = survival_probabilities_95.T
+    print(survival_probabilities.shape)
+    (p_m68, p_p68), (p_m95, p_p95) = survival_probabilities.transpose(1, 2, 0)
     x_m95, y_m95 = self.get_points_for_plot(times_for_plot, p_m95)
     x_m68, y_m68 = self.get_points_for_plot(times_for_plot, p_m68)
     x_p68, y_p68 = self.get_points_for_plot(times_for_plot, p_p68)
