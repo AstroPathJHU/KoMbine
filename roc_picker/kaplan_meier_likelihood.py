@@ -197,12 +197,12 @@ class ILPForKM:
     # Create binary indicators for each valid (n_alive, n_total)
     indicator_vars = {}
     for n_total_val in range(n_patients + 1):
-        for n_alive_val in range(n_total_val + 1):
-            ind = model.addVar(vtype=GRB.BINARY, name=f"ind_{n_alive_val}_{n_total_val}")
-            indicator_vars[(n_alive_val, n_total_val)] = ind
-            # Add indicator constraint: if active, enforce n_alive and n_total match
-            model.addGenConstrIndicator(ind, True, n_alive == n_alive_val)
-            model.addGenConstrIndicator(ind, True, n_total == n_total_val)
+      for n_alive_val in range(n_total_val + 1):
+        ind = model.addVar(vtype=GRB.BINARY, name=f"ind_{n_alive_val}_{n_total_val}")
+        indicator_vars[(n_alive_val, n_total_val)] = ind
+        # Add indicator constraint: if active, enforce n_alive and n_total match
+        model.addGenConstrIndicator(ind, True, n_alive - n_alive_val, GRB.EQUAL, 0)
+        model.addGenConstrIndicator(ind, True, n_total - n_total_val, GRB.EQUAL, 0)
 
     # Only one pair can be active
     model.addConstr(gp.quicksum(indicator_vars.values()) == 1)
