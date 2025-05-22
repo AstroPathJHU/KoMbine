@@ -186,42 +186,32 @@ class ILPForKM:
     # Piecewise-linear penalty var
     binom_penalty = model.addVar(lb=0.0, name="binom_penalty")
 
-    # Constraint: link n_total to selected patients
+    # Constraints to link to totals
     model.addConstr(n_total == gp.quicksum(x[i] for i in range(n_patients)))
+    model.addConstr(n_alive == gp.quicksum(x[i] for i in range(n_patients) if patient_alive[i]))
 
-    # Constraint: link n_alive to selected & alive patients
-    model.addConstr(
-        n_alive == gp.quicksum(x[i] for i in range(n_patients) if patient_alive[i])
-    )
+    # ---------------------------
+    # Indicator grid for binomial penalty
+    # ---------------------------
 
-    # Piecewise approximation: for each possible n_total, define a separate PWL segment
-    indicator_vars = []
+    # Create binary indicators for each valid (n_alive, n_total)
+    indicator_vars = {}
     for n_total_val in range(n_patients + 1):
-      # Skip if n_total is 0
-      if n_total_val == 0:
-        continue
-      # Build x-y curve for this n_total
-      x_vals = list(range(n_total_val + 1))
-      y_vals = [
-        binomial_penalty_table[(n_alive_val, n_total_val)]
-        for n_alive_val in x_vals
-      ]
+        for n_alive_val in range(n_total_val + 1):
+            ind = model.addVar(vtype=GRB.BINARY, name=f"ind_{n_alive_val}_{n_total_val}")
+            indicator_vars[(n_alive_val, n_total_val)] = ind
+            # Add indicator constraint: if active, enforce n_alive and n_total match
+            model.addGenConstrIndicator(ind, True, n_alive == n_alive_val)
+            model.addGenConstrIndicator(ind, True, n_total == n_total_val)
 
-      # Binary indicator if n_total equals this value
-      indicator = model.addVar(vtype=GRB.BINARY, name=f"ind_ntotal_{n_total_val}")
-      indicator_vars.append(indicator)
-      model.addConstr((indicator == 1) >> (n_total == n_total_val))
+    # Only one pair can be active
+    model.addConstr(gp.quicksum(indicator_vars.values()) == 1)
 
-      # Temp var for penalty at this n_total
-      binom_piece = model.addVar(lb=0.0, name=f"binom_piece_{n_total_val}")
-      model.addGenConstrPWL(n_alive, binom_piece, x_vals, y_vals)
-
-      # Only include penalty if indicator is on
-      model.addConstr(binom_piece <= binom_penalty + (1 - indicator) * 1e6)
-      model.addConstr(binom_piece >= binom_penalty - (1 - indicator) * 1e6)
-
-    # Only one n_total active
-    model.addConstr(gp.quicksum(indicator_vars) == 1)
+    # Binomial penalty: weighted sum over indicators
+    binom_penalty = gp.quicksum(
+      binomial_penalty_table[(na, nt)] * ind
+      for (na, nt), ind in indicator_vars.items()
+    )
 
     # Patient-wise penalties
     patient_penalty = gp.quicksum(
@@ -243,17 +233,20 @@ class ILPForKM:
         print("Total penalty:    ", model.ObjVal)
         print("n_total:          ", int(n_total.X))
         print("n_alive:          ", int(n_alive.X))
-        print("Binomial penalty: ", binom_penalty.X)
       else:
         print("No optimal solution found.")
 
+    binomial_penalty_val = binomial_penalty_table[(n_alive.X, n_total.X)]
+    patient_penalty_val = sum(
+      nll_penalty_for_patient_in_range[i] * x[i].X for i in range(n_patients)
+    )
     return scipy.optimize.OptimizeResult(
       x=model.ObjVal,
       success=model.status == GRB.OPTIMAL,
       n_total=int(n_total.X),
       n_alive=int(n_alive.X),
-      binomial_penalty=binom_penalty.X,
-      patient_penalty=model.ObjVal - binom_penalty.X,
+      binomial_penalty=binomial_penalty_val,
+      patient_penalty=patient_penalty_val,
       selected=selected,
       model=model,
     )
