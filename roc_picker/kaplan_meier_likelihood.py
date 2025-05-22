@@ -255,6 +255,7 @@ class ILPForKM:
       binomial_penalty=binom_penalty.X,
       patient_penalty=model.ObjVal - binom_penalty.X,
       selected=selected,
+      model=model,
     )
 
 class KaplanMeierLikelihood(KaplanMeierBase):
