@@ -171,27 +171,11 @@ class ILPForKM:
       * abs_nll_penalty_for_patient_in_range
     )
 
-    #Gurobi implementation from ChatGPT
-
     binomial_penalty_table = {}
     for n_total in range(n_patients + 1):
       for n_alive in range(n_total + 1):
         penalty = -scipy.stats.binom.logpmf(n_alive, n_total, expected_probability)
         binomial_penalty_table[(n_alive, n_total)] = penalty.item()
-
-    # Create arrays for Gurobi PWL
-    # Flatten by row-major order: (n_total, n_alive) -> penalty
-    alive_vals = []
-    penalty_vals = []
-
-    for n_total in range(n_patients + 1):
-      if n_total == 0:
-        continue
-      for n_alive in range(n_total + 1):
-        alive_vals.append((n_total, n_alive))
-        penalty_vals.append(binomial_penalty_table[(n_alive, n_total)])
-
-    # We'll do PWL on just `n_alive` for fixed `n_total`, so build separate slices during modeling
 
     # ---------------------------
     # Gurobi model
@@ -205,9 +189,6 @@ class ILPForKM:
     # Integer vars to count totals
     n_total = model.addVar(vtype=GRB.INTEGER, name="n_total")
     n_alive = model.addVar(vtype=GRB.INTEGER, name="n_alive")
-
-    # Piecewise-linear penalty var
-    binom_penalty = model.addVar(lb=0.0, name="binom_penalty")
 
     # Constraints to link to totals
     model.addConstr(n_total == gp.quicksum(x[i] for i in range(n_patients)))
@@ -230,7 +211,7 @@ class ILPForKM:
     # Only one pair can be active
     model.addConstr(gp.quicksum(indicator_vars.values()) == 1)
 
-    # Binomial penalty: weighted sum over indicators
+    # Binomial penalty
     binom_penalty = gp.quicksum(
       binomial_penalty_table[(na, nt)] * ind
       for (na, nt), ind in indicator_vars.items()
@@ -250,19 +231,21 @@ class ILPForKM:
     model.optimize()
 
     selected = [i for i in range(n_patients) if x[i].X > 0.5]
-    if verbose:
-      if model.status == GRB.OPTIMAL:
-        print("Selected patients:", selected)
-        print("Total penalty:    ", model.ObjVal)
-        print("n_total:          ", int(n_total.X))
-        print("n_alive:          ", int(n_alive.X))
-      else:
-        print("No optimal solution found.")
-
     binomial_penalty_val = binomial_penalty_table[(n_alive.X, n_total.X)]
     patient_penalty_val = sum(
       nll_penalty_for_patient_in_range[i] * x[i].X for i in range(n_patients)
     )
+    if verbose:
+      if model.status == GRB.OPTIMAL:
+        print("Selected patients:", selected)
+        print("n_total:          ", int(n_total.X))
+        print("n_alive:          ", int(n_alive.X))
+        print("Binomial penalty: ", binomial_penalty_val)
+        print("Patient penalty:  ", patient_penalty_val)
+        print("Total penalty:    ", model.ObjVal)
+      else:
+        print("No optimal solution found.")
+
     return scipy.optimize.OptimizeResult(
       x=model.ObjVal,
       success=model.status == GRB.OPTIMAL,
