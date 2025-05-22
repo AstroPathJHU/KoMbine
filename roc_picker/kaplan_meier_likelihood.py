@@ -94,6 +94,10 @@ class ILPForKM:
     self.__parameter_min = parameter_min
     self.__parameter_max = parameter_max
     self.__time_point = time_point
+    if not np.isfinite(self.__parameter_min and self.__parameter_min != -np.inf):
+      raise ValueError("parameter_min must be finite or -inf")
+    if not np.isfinite(self.__parameter_max and self.__parameter_max != np.inf):
+      raise ValueError("parameter_max must be finite or inf")
 
   @property
   def all_patients(self) -> list[KaplanMeierPatientNLL]:
@@ -134,14 +138,33 @@ class ILPForKM:
       & (observed_parameters < self.parameter_max)
     )
     sgn_nll_penalty_for_patient_in_range = 2 * parameter_in_range - 1
-    abs_nll_penalty_for_patient_in_range = np.array([
+    observed_nll = np.array([
       p.parameter(p.observed_parameter)
-       - min(
-         p.parameter(self.parameter_min),
-         p.parameter(self.parameter_max),
-       )
       for p in self.all_patients
     ])
+    if np.isfinite(self.parameter_min):
+      parameter_min_nll = np.array([
+        p.parameter(self.parameter_min)
+        for p in self.all_patients
+      ])
+    else:
+      parameter_min_nll = np.full(n_patients, np.inf)
+    if np.isfinite(self.parameter_max):
+      parameter_max_nll = np.array([
+        p.parameter(self.parameter_max)
+        for p in self.all_patients
+      ])
+    else:
+      parameter_max_nll = np.full(n_patients, np.inf)
+
+    range_boundary_nll = np.min(
+      np.array([parameter_min_nll, parameter_max_nll]),
+      axis=0
+    )
+    if np.isfinite(range_boundary_nll).any():
+      abs_nll_penalty_for_patient_in_range = observed_nll - range_boundary_nll
+    else:
+      abs_nll_penalty_for_patient_in_range = np.full(n_patients, -1e10)
 
     nll_penalty_for_patient_in_range = (
       sgn_nll_penalty_for_patient_in_range
