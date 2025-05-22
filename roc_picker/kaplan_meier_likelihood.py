@@ -55,7 +55,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
   ):
     """
     Create a KaplanMeierPatientNLL from a count.
-    The gives the negative log-likelihood to observe the count
+    The parameter NLL gives the negative log-likelihood to observe the count
     given the parameter, which is the mean of the Poisson distribution.
     """
     def parameter_nll(x: float) -> float:
@@ -67,6 +67,52 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       time=time,
       parameter_nll=parameter_nll,
       observed_parameter=count,
+    )
+
+  @classmethod
+  def from_poisson_ratio(
+    cls,
+    time: float,
+    numerator_count: int,
+    denominator_count: int,
+  ):
+    """
+    Create a KaplanMeierPatientNLL from a ratio of two counts.
+    The parameter NLL gives the negative log-likelihood to observe the
+    numberator and denominator counts given the parameter, which is the
+    ratio of the two Poisson distribution means.  We do this by floating
+    the denominator mean and fixing the numerator mean to the ratio
+    times the denominator mean.  We then minimize the NLL to observe the
+    numerator and denominator counts given the denominator mean.
+    """
+    def parameter_nll(ratio: float) -> float:
+      if ratio <= 0:
+        return float('inf')  # Ratio must be positive
+
+      # Define the NLL as a function of the (latent) denominator mean
+      def nll_given_lambda_d(lambda_d: float) -> float:
+        lambda_n = ratio * lambda_d
+        # Poisson negative log-likelihoods
+        nll_numerator = -scipy.stats.poisson.logpmf(numerator_count, lambda_n)
+        nll_denominator = -scipy.stats.poisson.logpmf(denominator_count, lambda_d)
+        return (nll_numerator + nll_denominator).item()
+
+      # Optimize over lambda_d > 0
+      result = scipy.optimize.minimize_scalar(
+        nll_given_lambda_d,
+        bounds=(1e-8, 1e6),
+        method='bounded'
+      )
+      assert isinstance(result, scipy.optimize.OptimizeResult)
+      return result.fun if result.success else float('inf')
+
+    # Use the MLE ratio as the observed value
+    observed_ratio = numerator_count / denominator_count if denominator_count > 0 else float('inf')
+
+    return cls(
+      time=time,
+      parameter_nll=parameter_nll,
+      observed_parameter=observed_ratio,
     )
 
   @property
@@ -376,6 +422,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       bounds=(self.__endpoint_epsilon, 1 - self.__endpoint_epsilon),
       method='bounded',
     )
+    assert isinstance(result, scipy.optimize.OptimizeResult)
     if not result.success:
       raise RuntimeError("Failed to find the best probability")
     return result.x, result.fun
