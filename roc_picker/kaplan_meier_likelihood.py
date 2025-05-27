@@ -209,13 +209,7 @@ class ILPForKM:
       np.array([parameter_min_nll, parameter_max_nll]),
       axis=0
     )
-    if np.isfinite(range_boundary_nll).any() and not binomial_only:
-      abs_nll_penalty_for_patient_in_range = observed_nll - range_boundary_nll
-    else:
-      abs_nll_penalty_for_patient_in_range = np.full(
-        n_patients,
-        5*scipy.stats.binom.logpmf(0, n_patients, 0.99999).item()
-      )
+    abs_nll_penalty_for_patient_in_range = observed_nll - range_boundary_nll
 
     nll_penalty_for_patient_in_range = (
       sgn_nll_penalty_for_patient_in_range
@@ -227,6 +221,21 @@ class ILPForKM:
       for n_alive in range(n_total + 1):
         penalty = -scipy.stats.binom.logpmf(n_alive, n_total, expected_probability)
         binomial_penalty_table[(n_alive, n_total)] = penalty.item()
+
+    if binomial_only or not any(np.isfinite(range_boundary_nll)):
+      n_alive = np.sum(patient_alive & parameter_in_range)
+      n_total = np.sum(parameter_in_range)
+      binomial_penalty_val = binomial_penalty_table[(n_alive, n_total)]
+      return scipy.optimize.OptimizeResult(
+        x=2*binomial_penalty_val,
+        success=True,
+        n_total=n_total,
+        n_alive=n_alive,
+        binomial_2NLL=2*binomial_penalty_val,
+        patient_2NLL=0,
+        selected=parameter_in_range,
+        model=None,
+      )
 
     # ---------------------------
     # Gurobi model
@@ -302,8 +311,8 @@ class ILPForKM:
       success=model.status == GRB.OPTIMAL,
       n_total=int(n_total.X),
       n_alive=int(n_alive.X),
-      binomial_penalty=binomial_penalty_val,
-      patient_penalty=patient_penalty_val,
+      binomial_2NLL=2*binomial_penalty_val,
+      patient_2NLL=2*patient_penalty_val,
       selected=selected,
       model=model,
     )
