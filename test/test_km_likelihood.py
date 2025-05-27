@@ -16,7 +16,7 @@ warnings.simplefilter("error")
 here = pathlib.Path(__file__).parent
 datacards = here / "datacards" / "simple_examples"
 
-def main():
+def main():  #pylint: disable=too-many-locals
   """
   Test the Kaplan-Meier likelihood method.
   """
@@ -28,7 +28,9 @@ def main():
 
   # Test with no parameter limits
   # Only the binomial distribution enters the likelihood
-  nominal_probabilities_fullrange = kml.nominalkm.survival_probabilities(times_for_plot=times_for_plot)
+  nominal_probabilities_fullrange = kml.nominalkm.survival_probabilities(
+    times_for_plot=times_for_plot
+  )
   CLs = [0.68, 0.95]
   best_probabilities_fullrange, CL_probabilities_fullrange = kml.survival_probabilities_likelihood(
     CLs=CLs,
@@ -54,7 +56,6 @@ def main():
     binomial_only=True,
   )
 
-  """
   np.testing.assert_allclose(
     best_probabilities_binomial,
     nominal_probabilities,
@@ -70,8 +71,11 @@ def main():
   except AssertionError:
     pass
   else:
-    raise AssertionError("Nominal probabilities should not be the same with and without parameter limits.")
-  
+    raise AssertionError(
+      "Nominal probabilities should not be the same "
+      "with and without parameter limits."
+    )
+
   try:
     np.testing.assert_allclose(
       best_probabilities,
@@ -81,41 +85,44 @@ def main():
   except AssertionError:
     pass
   else:
-    raise AssertionError("Best probabilities don't have to be the same with and without parameter limits and in this case they are not.")
-  """
+    raise AssertionError(
+      "Best probabilities don't have to be the same "
+      "with and without parameter limits (and in this case they are not)."
+    )
 
+  array_names = (
+    "nominal_probabilities_fullrange",
+    "best_probabilities_fullrange",
+    "CL_probabilities_fullrange",
+    "nominal_probabilities",
+    "best_probabilities",
+    "CL_probabilities",
+    "best_probabilities_binomial",
+    "CL_probabilities_binomial",
+  )
+  to_compare_to_reference = (
+    nominal_probabilities_fullrange,
+    best_probabilities_fullrange,
+    CL_probabilities_fullrange,
+    nominal_probabilities,
+    best_probabilities,
+    CL_probabilities,
+    best_probabilities_binomial,
+    CL_probabilities_binomial,
+  )
   try:
     with open(here / "reference" / "km_likelihood.pkl", "rb") as f:
-      (
-        ref_nominal_fullrange, 
-        ref_best_fullrange, 
-        ref_CL_fullrange, 
-        ref_nominal, 
-        ref_best, 
-        ref_CL,
-        ref_best_binomial,
-        ref_CL_binomial,
-      ) = pickle.load(f)
-      np.testing.assert_allclose(nominal_probabilities_fullrange, ref_nominal_fullrange, **tolerance)
-      np.testing.assert_allclose(best_probabilities_fullrange, ref_best_fullrange, **tolerance)
-      np.testing.assert_allclose(CL_probabilities_fullrange, ref_CL_fullrange, **tolerance)
-      np.testing.assert_allclose(nominal_probabilities, ref_nominal, **tolerance)
-      np.testing.assert_allclose(best_probabilities, ref_best, **tolerance)
-      np.testing.assert_allclose(CL_probabilities, ref_CL, **tolerance)
-      np.testing.assert_allclose(best_probabilities_binomial, ref_best_binomial, **tolerance)
-      np.testing.assert_allclose(CL_probabilities_binomial, ref_CL_binomial, **tolerance)
+      reference = pickle.load(f)
+      for name, array, ref in zip(array_names, to_compare_to_reference, reference):
+        np.testing.assert_allclose(
+          array,
+          ref,
+          **tolerance,
+          err_msg=f"Array {name} does not match the reference."
+        )
   except:
     with open(here / "test_output" / "km_likelihood.pkl", "wb") as f:
-      pickle.dump((
-        nominal_probabilities_fullrange, 
-        best_probabilities_fullrange, 
-        CL_probabilities_fullrange, 
-        nominal_probabilities, 
-        best_probabilities, 
-        CL_probabilities,
-        best_probabilities_binomial,
-        CL_probabilities_binomial,
-      ), f)
+      pickle.dump(to_compare_to_reference, f)
     raise
 
 if __name__ == "__main__":

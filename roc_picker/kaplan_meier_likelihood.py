@@ -182,7 +182,7 @@ class ILPForKM:
     observed_parameters = np.array([p.observed_parameter for p in self.all_patients])
 
     parameter_in_range = (
-      (observed_parameters > self.parameter_min)
+      (observed_parameters >= self.parameter_min)
       & (observed_parameters < self.parameter_max)
     )
     sgn_nll_penalty_for_patient_in_range = 2 * parameter_in_range - 1
@@ -287,6 +287,10 @@ class ILPForKM:
       2 * (binom_penalty + patient_penalty),
       GRB.MINIMIZE,
     )
+
+    if not verbose:
+      # Suppress Gurobi output
+      model.setParam('OutputFlag', 0)
 
     model.optimize()
 

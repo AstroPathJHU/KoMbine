@@ -47,6 +47,9 @@ jobs:
       - name: KM systematics unit test
         run: |
           python -m test.test_km_systematics_mc
+      - name: KM likelihood unit test
+        run: |
+          python -m test.test_km_likelihood
       #no need for a separate step for continuous distributions unit test
       #because it's run by compile_plots.sh
 
