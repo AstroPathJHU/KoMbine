@@ -330,6 +330,7 @@ class KaplanMeierCollection(KaplanMeierBase):
 
     return np.nanquantile(survival_probabilities, quantiles, axis=0)
 
+  # pylint: disable=similarities
   def plot(self, times_for_plot=None, show=False, saveas=None): #pylint: disable=too-many-locals
     """
     Plots the Kaplan-Meier curves.
@@ -560,3 +561,4 @@ class KaplanMeierDistributionsPlot(KaplanMeierBase):
     return frozenset.union(
       *[kmd.patient_times for kmd in self.__curves]
     )
+  #pylint: enable=similarities
