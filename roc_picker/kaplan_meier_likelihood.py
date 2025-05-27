@@ -504,7 +504,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     )
 
     CLs = [0.68, 0.95]
-    best_probabilities, survival_probabilities = self.survival_probabilities_likelihood(
+    best_probabilities, CL_probabilities = self.survival_probabilities_likelihood(
       CLs=CLs,
       times_for_plot=self.times_for_plot,
     )
@@ -526,8 +526,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       linestyle='--'
     )
 
-    print(survival_probabilities.shape)
-    (p_m68, p_p68), (p_m95, p_p95) = survival_probabilities.transpose(1, 2, 0)
+    print(CL_probabilities.shape)
+    (p_m68, p_p68), (p_m95, p_p95) = CL_probabilities.transpose(1, 2, 0)
     x_m95, y_m95 = self.get_points_for_plot(times_for_plot, p_m95)
     x_m68, y_m68 = self.get_points_for_plot(times_for_plot, p_m68)
     x_p68, y_p68 = self.get_points_for_plot(times_for_plot, p_p68)

@@ -1,5 +1,5 @@
 """
-Test the discrete module, and generate the figures for that section of the documentation.
+Test the KM systematics module.
 """
 
 import pathlib
