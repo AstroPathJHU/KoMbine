@@ -735,7 +735,7 @@ class Datacard:
       parameter_max=parameter_max,
     )
 
-  def km_likelihood(self, parameter_min: float, parameter_max: float):
+  def km_likelihood(self, parameter_min: float, parameter_max: float) -> KaplanMeierLikelihood:
     """
     Generate a KaplanMeierLikelihood object for generating Kaplan-Meier
     error bands using the likelihood method.

@@ -174,6 +174,8 @@ class ILPForKM:
     """
     Run the ILP for the given time point.
     """
+    if expected_probability <= 0 or expected_probability >= 1:
+      raise ValueError("expected_probability must be in (0, 1)")
     n_patients = len(self.all_patients)
     patient_times = np.array([p.time for p in self.all_patients])
     patient_alive = patient_times > self.time_point
