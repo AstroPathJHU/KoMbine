@@ -28,6 +28,34 @@ jobs:
       - uses: jakebailey/pyright-action@v2
         with:
           version: 1.1.400
+
+      - name: Install Gurobi
+        run: |
+          wget https://packages.gurobi.com/10.0/gurobi10.0.3_linux64.tar.gz
+          tar -xvzf gurobi10.0.3_linux64.tar.gz
+          echo "export GUROBI_HOME=$PWD/gurobi1003/linux64" >> $GITHUB_ENV
+          echo "$PWD/gurobi1003/linux64/bin" >> $GITHUB_PATH
+          echo "LD_LIBRARY_PATH=$PWD/gurobi1003/linux64/lib" >> $GITHUB_ENV
+          cd gurobi1003/linux64
+          python setup.py install
+          cd ../..
+
+      #to get the license:
+      #go to https://www.gurobi.com/
+      #request a WLS license (free for academics)
+      #download the license file, which will be named gurobi.lic
+      #and contain the WLSACCESSID, WLSSECRET, and LICENSEID
+      #then set the secrets in the repo settings:
+      #GUROBI_WLSACCESSID, GUROBI_WLSSECRET, and GUROBI_LICENSEID
+      - name: Configure Gurobi WLS license
+        run: |
+          mkdir -p ~/.gurobi
+          cat <<EOF > ~/.gurobi/gurobi.lic
+          WLSACCESSID=${{ secrets.GUROBI_WLSACCESSID }}
+          WLSSECRET=${{ secrets.GUROBI_WLSSECRET }}
+          LICENSEID=${{ secrets.GUROBI_LICENSEID }}
+          EOF
+
       - name: test code in README
         run: |
           startlinenumber="$(grep -n import README.md | sed "s/:.*//")"
