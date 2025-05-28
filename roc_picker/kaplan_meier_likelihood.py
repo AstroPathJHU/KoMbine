@@ -331,15 +331,17 @@ class ILPForKM:
     model.optimize()
 
     selected = [i for i in range(n_patients) if x[i].X > 0.5]
-    binomial_penalty_val = binomial_penalty_table[(n_alive.X, n_total.X)]
+    n_alive_val = np.rint(n_alive.X)
+    n_total_val = np.rint(n_total.X)
+    binomial_penalty_val = binomial_penalty_table[(n_alive_val, n_total_val)]
     patient_penalty_val = sum(
       nll_penalty_for_patient_in_range[i] * x[i].X for i in range(n_patients)
     )
     if verbose:
       if model.status == GRB.OPTIMAL:
         print("Selected patients:", selected)
-        print("n_total:          ", int(n_total.X))
-        print("n_alive:          ", int(n_alive.X))
+        print("n_total:          ", int(n_total_val))
+        print("n_alive:          ", int(n_alive_val))
         print("Binomial penalty: ", binomial_penalty_val)
         print("Patient penalty:  ", patient_penalty_val)
         print("Total penalty:    ", model.ObjVal)
@@ -349,8 +351,8 @@ class ILPForKM:
     return scipy.optimize.OptimizeResult(
       x=model.ObjVal,
       success=model.status == GRB.OPTIMAL,
-      n_total=int(n_total.X),
-      n_alive=int(n_alive.X),
+      n_total=n_total_val,
+      n_alive=n_alive_val,
       binomial_2NLL=2*binomial_penalty_val,
       patient_2NLL=2*patient_penalty_val,
       selected=selected,

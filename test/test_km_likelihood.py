@@ -16,7 +16,7 @@ warnings.simplefilter("error")
 here = pathlib.Path(__file__).parent
 datacards = here / "datacards" / "simple_examples"
 
-def main():  #pylint: disable=too-many-locals
+def main():  #pylint: disable=too-many-locals, too-many-statements, too-many-branches
   """
   Test the Kaplan-Meier likelihood method.
   """
@@ -55,6 +55,13 @@ def main():  #pylint: disable=too-many-locals
     times_for_plot=times_for_plot,
     binomial_only=True,
   )
+  (
+    best_probabilities_patient_wise, CL_probabilities_patient_wise
+  ) = kml2.survival_probabilities_likelihood(
+    CLs=CLs,
+    times_for_plot=times_for_plot,
+    patient_wise_only=True,
+  )
 
   np.testing.assert_allclose(
     best_probabilities_binomial,
@@ -87,7 +94,80 @@ def main():  #pylint: disable=too-many-locals
   else:
     raise AssertionError(
       "Best probabilities don't have to be the same "
-      "with and without parameter limits (and in this case they are not)."
+      "with only the binomial penalty and with the full likelihood "
+      "(and in this case they are not)."
+    )
+
+  try:
+    np.testing.assert_allclose(
+      CL_probabilities,
+      CL_probabilities_binomial,
+      **tolerance
+    )
+  except AssertionError:
+    pass
+  else:
+    raise AssertionError(
+      "CL probabilities shouldn't be the same "
+      "with only the binomial penalty and with the full likelihood."
+    )
+
+  try:
+    np.testing.assert_allclose(
+      best_probabilities_patient_wise,
+      best_probabilities,
+      **tolerance
+    )
+  except AssertionError:
+    pass
+  else:
+    raise AssertionError(
+      "Best probabilities don't have to be the same "
+      "with only the patient-wise penalty and with the full likelihood "
+      "and in this case they are not."
+    )
+
+  try:
+    np.testing.assert_allclose(
+      CL_probabilities_patient_wise,
+      CL_probabilities,
+      **tolerance
+    )
+  except AssertionError:
+    pass
+  else:
+    raise AssertionError(
+      "CL probabilities shouldn't be the same "
+      "with only the patient-wise penalty and with the full likelihood."
+    )
+
+  try:
+    np.testing.assert_allclose(
+      best_probabilities_patient_wise,
+      best_probabilities_binomial,
+      **tolerance
+    )
+  except AssertionError:
+    pass
+  else:
+    raise AssertionError(
+      "Best probabilities don't have to be the same "
+      "with only the binomial penalty and with the patient-wise penalty "
+      "and in this case they are not."
+    )
+
+  try:
+    np.testing.assert_allclose(
+      CL_probabilities_patient_wise,
+      CL_probabilities_binomial,
+      **tolerance
+    )
+  except AssertionError:
+    pass
+  else:
+    raise AssertionError(
+      "CL probabilities shouldn't be the same "
+      "with only the binomial penalty and with the patient-wise penalty."
     )
 
   array_names = (
@@ -99,6 +179,8 @@ def main():  #pylint: disable=too-many-locals
     "CL_probabilities",
     "best_probabilities_binomial",
     "CL_probabilities_binomial",
+    "best_probabilities_patient_wise",
+    "CL_probabilities_patient_wise",
   )
   to_compare_to_reference = (
     nominal_probabilities_fullrange,
@@ -109,11 +191,13 @@ def main():  #pylint: disable=too-many-locals
     CL_probabilities,
     best_probabilities_binomial,
     CL_probabilities_binomial,
+    best_probabilities_patient_wise,
+    CL_probabilities_patient_wise,
   )
   try:
     with open(here / "reference" / "km_likelihood.pkl", "rb") as f:
       reference = pickle.load(f)
-      for name, array, ref in zip(array_names, to_compare_to_reference, reference):
+      for name, array, ref in zip(array_names, to_compare_to_reference, reference, strict=True):
         np.testing.assert_allclose(
           array,
           ref,
