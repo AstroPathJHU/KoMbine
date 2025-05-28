@@ -181,8 +181,10 @@ class ILPForKM:
     """
     Run the ILP for the given time point.
     """
-    if expected_probability <= 0 or expected_probability >= 1:
+    if not patient_wise_only and (expected_probability <= 0 or expected_probability >= 1):
       raise ValueError("expected_probability must be in (0, 1)")
+    if expected_probability < 0 or expected_probability > 1:
+      raise ValueError("expected_probability must be in [0, 1]")
     if binomial_only and patient_wise_only:
       raise ValueError("binomial_only and patient_wise_only cannot both be True")
     n_patients = len(self.all_patients)
@@ -467,23 +469,57 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       return result.x
     return twoNLL
 
-  def best_probability(
+  @functools.cached_property
+  def possible_probabilities(self) -> np.ndarray:
+    """
+    Get the possible probabilities for the given patients.
+    This is used to speed up the calculation of survival probabilities.
+    """
+    return np.unique([
+      n_alive / n_total
+      for n_total in range(len(self.all_patients) + 1)
+      for n_alive in range(n_total + 1)
+      if n_total > 0
+    ])
+
+  def best_probability( #pylint: disable=too-many-locals
     self,
     time_point: float,
     binomial_only=False,
     patient_wise_only=False,
   ) -> tuple[float, float]:
     """
-    Find the probability that minimizes the negative log-likelihood
+    Find the expected probability that minimizes the negative log-likelihood
     for the given time point.
     """
-    # Find the expected probability that minimizes the negative log-likelihood
-    # for the given time point
     twoNLL = self.get_twoNLL_function(
       time_point=time_point,
       binomial_only=binomial_only,
       patient_wise_only=patient_wise_only
     )
+    if patient_wise_only:
+      possible_probabilities = self.possible_probabilities
+      left = 0
+      right = len(possible_probabilities) - 1
+      while right - left > 3:
+        third = (right - left) // 3
+        mid1 = left + third
+        mid2 = right - third
+        p1 = possible_probabilities[mid1]
+        p2 = possible_probabilities[mid2]
+        v1 = twoNLL(p1)
+        v2 = twoNLL(p2)
+        if v1 < v2:
+          right = mid2
+        else:
+          left = mid1
+
+      # Evaluate final narrowed range to find the best
+      candidates = possible_probabilities[left:right+1]
+      values = [twoNLL(p) for p in candidates]
+      i_min = int(np.argmin(values))
+      return candidates[i_min], values[i_min]
+
     result = scipy.optimize.minimize_scalar(
       twoNLL,
       bounds=(self.__endpoint_epsilon, 1 - self.__endpoint_epsilon),
@@ -494,7 +530,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       raise RuntimeError("Failed to find the best probability")
     return result.x, result.fun
 
-  def survival_probabilities_likelihood( # pylint: disable=too-many-locals, too-many-branches
+  def survival_probabilities_likelihood( # pylint: disable=too-many-locals, too-many-branches, too-many-statements
     self,
     CLs: list[float],
     times_for_plot: np.ndarray,
@@ -506,15 +542,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     """
     best_probabilities = []
     survival_probabilities = []
-    if patient_wise_only:
-      possible_probabilities = np.unique([
-        n_alive / n_total
-        for n_total in range(len(self.all_patients) + 1)
-        for n_alive in range(n_total + 1)
-        if n_total > 0
-      ])
-    else:
-      possible_probabilities = None
     for t in times_for_plot:
       survival_probabilities_time_point = []
       survival_probabilities.append(survival_probabilities_time_point)
@@ -553,42 +580,74 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           -d2NLLcut,
         )
 
-        if objective_function(self.__endpoint_epsilon) < 0:
-          lower_bound = 0
-        elif patient_wise_only and False:  #pylint: disable=condition-evals-to-constant
-          #I thought this would be faster, but it's not.
-          assert possible_probabilities is not None
-          lower_bound = min(
-            p for p in possible_probabilities
-            if objective_function(
-              np.clip(p, self.__endpoint_epsilon, 1 - self.__endpoint_epsilon)
-            ) < 0
-          )
+        if patient_wise_only:
+          probs = self.possible_probabilities
+          i_best = int(np.searchsorted(probs, best_prob))
+
+          def binary_search_sign_change(
+            lo: int, hi: int,
+            objective_function=objective_function, probs=probs,
+          ) -> float:
+            """Binary search for first sign change across adjacent values."""
+            if objective_function(probs[lo]) * objective_function(probs[hi]) > 0:
+              raise ValueError(f"No sign change found between indices {lo} and {hi}")
+            v_hi = objective_function(probs[hi])
+            v_lo = objective_function(probs[lo])
+            while hi - lo > 1:
+              mid = (lo + hi) // 2
+              v_mid = objective_function(probs[mid])
+              if v_mid * v_hi <= 0:
+                lo = mid
+                v_lo = v_mid
+              elif v_mid * v_lo <= 0:
+                hi = mid
+                v_hi = v_mid
+              else:
+                raise ValueError(f"No sign change found between indices {lo} and {hi}")
+            if v_hi <= 0:
+              return probs[hi]
+            if v_lo <= 0:
+              return probs[lo]
+            raise ValueError(f"No sign change found between indices {lo} and {hi}")
+
+          # Check edge case: upper bound
+          if objective_function(probs[-1]) < 0:
+            upper_bound = 1
+          else:
+            upper = binary_search_sign_change(i_best, len(probs) - 1)
+            if upper is None:
+              raise RuntimeError("No upper sign change found")
+            upper_bound = upper
+
+          # Check edge case: lower bound
+          if objective_function(probs[0]) < 0:
+            lower_bound = 0
+          else:
+            lower = binary_search_sign_change(0, i_best)
+            if lower is None:
+              raise RuntimeError("No lower sign change found")
+            lower_bound = lower
+
         else:
-          lower_bound = scipy.optimize.brentq(
-            objective_function,
-            self.__endpoint_epsilon,
-            best_prob,
-            xtol=1e-6,
-          )
-        if objective_function(1 - self.__endpoint_epsilon) < 0:
-          upper_bound = 1
-        elif patient_wise_only and False: #pylint: disable=condition-evals-to-constant
-          #I thought this would be faster, but it's not.
-          assert possible_probabilities is not None
-          upper_bound = max(
-            p for p in possible_probabilities
-            if objective_function(
-              np.clip(p, self.__endpoint_epsilon, 1 - self.__endpoint_epsilon)
-            ) < 0
-          )
-        else:
-          upper_bound = scipy.optimize.brentq(
-            objective_function,
-            best_prob,
-            1 - self.__endpoint_epsilon,
-            xtol=1e-6,
-          )
+          if objective_function(self.__endpoint_epsilon) < 0:
+            lower_bound = 0
+          else:
+            lower_bound = scipy.optimize.brentq(
+              objective_function,
+              self.__endpoint_epsilon,
+              best_prob,
+              xtol=1e-6,
+            )
+          if objective_function(1 - self.__endpoint_epsilon) < 0:
+            upper_bound = 1
+          else:
+            upper_bound = scipy.optimize.brentq(
+              objective_function,
+              best_prob,
+              1 - self.__endpoint_epsilon,
+              xtol=1e-6,
+            )
+
         survival_probabilities_time_point.append((lower_bound, upper_bound))
     return np.array(best_probabilities), np.array(survival_probabilities)
 
