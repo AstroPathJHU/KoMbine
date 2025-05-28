@@ -308,10 +308,10 @@ class ILPForKM:
 
       if expected_probability >= observed_probability:
         #n_alive / n_total >= expected_probability
-        model.addConstr(n_alive >= expected_probability * n_total)
+        model.addConstr(n_alive >= 0.99 * expected_probability * n_total)
       else:
         #n_alive / n_total <= expected_probability
-        model.addConstr(n_alive <= expected_probability * n_total)
+        model.addConstr(n_alive <= 1.01 * expected_probability * n_total)
 
     # Patient-wise penalties
     patient_penalty = gp.quicksum(
