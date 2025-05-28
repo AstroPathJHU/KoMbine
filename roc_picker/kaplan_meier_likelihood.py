@@ -494,7 +494,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       raise RuntimeError("Failed to find the best probability")
     return result.x, result.fun
 
-  def survival_probabilities_likelihood( # pylint: disable=too-many-locals
+  def survival_probabilities_likelihood( # pylint: disable=too-many-locals, too-many-branches
     self,
     CLs: list[float],
     times_for_plot: np.ndarray,
@@ -506,6 +506,15 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     """
     best_probabilities = []
     survival_probabilities = []
+    if patient_wise_only:
+      possible_probabilities = np.unique([
+        n_alive / n_total
+        for n_total in range(len(self.all_patients) + 1)
+        for n_alive in range(n_total + 1)
+        if n_total > 0
+      ])
+    else:
+      possible_probabilities = None
     for t in times_for_plot:
       survival_probabilities_time_point = []
       survival_probabilities.append(survival_probabilities_time_point)
@@ -543,8 +552,18 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           objective_function(best_prob),
           -d2NLLcut,
         )
+
         if objective_function(self.__endpoint_epsilon) < 0:
           lower_bound = 0
+        elif patient_wise_only and False:  #pylint: disable=condition-evals-to-constant
+          #I thought this would be faster, but it's not.
+          assert possible_probabilities is not None
+          lower_bound = min(
+            p for p in possible_probabilities
+            if objective_function(
+              np.clip(p, self.__endpoint_epsilon, 1 - self.__endpoint_epsilon)
+            ) < 0
+          )
         else:
           lower_bound = scipy.optimize.brentq(
             objective_function,
@@ -554,6 +573,15 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           )
         if objective_function(1 - self.__endpoint_epsilon) < 0:
           upper_bound = 1
+        elif patient_wise_only and False: #pylint: disable=condition-evals-to-constant
+          #I thought this would be faster, but it's not.
+          assert possible_probabilities is not None
+          upper_bound = max(
+            p for p in possible_probabilities
+            if objective_function(
+              np.clip(p, self.__endpoint_epsilon, 1 - self.__endpoint_epsilon)
+            ) < 0
+          )
         else:
           upper_bound = scipy.optimize.brentq(
             objective_function,
@@ -564,12 +592,13 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         survival_probabilities_time_point.append((lower_bound, upper_bound))
     return np.array(best_probabilities), np.array(survival_probabilities)
 
-  def plot( # pylint: disable=too-many-arguments
+  def plot( # pylint: disable=too-many-arguments, too-many-branches, too-many-statements
     self,
     *,
     times_for_plot=None,
     include_binomial_only=False,
     include_patient_wise_only=False,
+    include_full_NLL=True,
     show=False,
     saveas=None,
   ): #pylint: disable=too-many-locals
@@ -578,6 +607,11 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     """
     if include_binomial_only and include_patient_wise_only:
       raise ValueError("include_binomial_only and include_patient_wise_only cannot both be True")
+    if not (include_binomial_only or include_patient_wise_only or include_full_NLL):
+      raise ValueError(
+        "At least one of include_binomial_only, include_patient_wise_only, "
+        "or include_full_NLL must be True"
+      )
     if times_for_plot is None:
       times_for_plot = self.times_for_plot
     plt.figure()
@@ -591,24 +625,43 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     )
 
     CLs = [0.68, 0.95]
-    best_probabilities, CL_probabilities = self.survival_probabilities_likelihood(
-      CLs=CLs,
-      times_for_plot=self.times_for_plot,
-    )
+    CL_probabilities_subset = None
+    best_probabilities = None
+    CL_probabilities = None
+    if include_full_NLL:
+      best_probabilities, CL_probabilities = self.survival_probabilities_likelihood(
+        CLs=CLs,
+        times_for_plot=self.times_for_plot,
+      )
     if include_binomial_only:
-      _, survival_probabilities_subset = self.survival_probabilities_likelihood(
+      (
+        best_probabilities_binomial, CL_probabilities_binomial
+      ) = self.survival_probabilities_likelihood(
         CLs=CLs,
         times_for_plot=self.times_for_plot,
         binomial_only=True,
       )
-    elif include_patient_wise_only:
-      _, survival_probabilities_subset = self.survival_probabilities_likelihood(
+      if include_full_NLL:
+        CL_probabilities_subset = CL_probabilities_binomial
+      else:
+        best_probabilities = best_probabilities_binomial
+        CL_probabilities = CL_probabilities_binomial
+    if include_patient_wise_only:
+      (
+        best_probabilities_patient_wise, CL_probabilities_patient_wise
+      ) = self.survival_probabilities_likelihood(
         CLs=CLs,
         times_for_plot=self.times_for_plot,
         patient_wise_only=True,
       )
-    else:
-      survival_probabilities_subset = None
+      if include_full_NLL:
+        CL_probabilities_subset = CL_probabilities_patient_wise
+      else:
+        best_probabilities = best_probabilities_patient_wise
+        CL_probabilities = CL_probabilities_patient_wise
+
+    assert best_probabilities is not None
+    assert CL_probabilities is not None
 
     best_x, best_y = self.get_points_for_plot(times_for_plot, best_probabilities)
     plt.plot(
@@ -619,7 +672,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       linestyle='--'
     )
 
-    print(CL_probabilities.shape)
     (p_m68, p_p68), (p_m95, p_p95) = CL_probabilities.transpose(1, 2, 0)
     x_m95, y_m95 = self.get_points_for_plot(times_for_plot, p_m95)
     x_m68, y_m68 = self.get_points_for_plot(times_for_plot, p_m68)
@@ -646,9 +698,9 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       label='95% CL',
     )
 
-    if survival_probabilities_subset is not None:
+    if CL_probabilities_subset is not None:
       (p_m68_subset, p_p68_subset), (p_m95_subset, p_p95_subset) = \
-        survival_probabilities_subset.transpose(1, 2, 0)
+        CL_probabilities_subset.transpose(1, 2, 0)
       x_m95_subset, y_m95_subset = self.get_points_for_plot(times_for_plot, p_m95_subset)
       x_m68_subset, y_m68_subset = self.get_points_for_plot(times_for_plot, p_m68_subset)
       x_p68_subset, y_p68_subset = self.get_points_for_plot(times_for_plot, p_p68_subset)
