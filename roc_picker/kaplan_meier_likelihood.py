@@ -170,12 +170,14 @@ class ILPForKM:
     """
     return self.__time_point
 
-  def run_ILP(self, expected_probability: float, verbose=False, binomial_only=False): # pylint: disable=too-many-locals, too-many-statements, too-many-branches
+  def run_ILP(self, expected_probability: float, verbose=False, binomial_only=False, patient_wise_only=False): # pylint: disable=too-many-locals, too-many-statements, too-many-branches
     """
     Run the ILP for the given time point.
     """
     if expected_probability <= 0 or expected_probability >= 1:
       raise ValueError("expected_probability must be in (0, 1)")
+    if binomial_only and patient_wise_only:
+      raise ValueError("binomial_only and patient_wise_only cannot both be True")
     n_patients = len(self.all_patients)
     patient_times = np.array([p.time for p in self.all_patients])
     patient_alive = patient_times > self.time_point
@@ -185,6 +187,9 @@ class ILPForKM:
       (observed_parameters >= self.parameter_min)
       & (observed_parameters < self.parameter_max)
     )
+    n_alive_obs = np.sum(patient_alive & parameter_in_range)
+    n_total_obs = np.sum(parameter_in_range)
+
     sgn_nll_penalty_for_patient_in_range = 2 * parameter_in_range - 1
     observed_nll = np.array([
       p.parameter(p.observed_parameter)
@@ -219,18 +224,24 @@ class ILPForKM:
     binomial_penalty_table = {}
     for n_total in range(n_patients + 1):
       for n_alive in range(n_total + 1):
-        penalty = -scipy.stats.binom.logpmf(n_alive, n_total, expected_probability)
-        binomial_penalty_table[(n_alive, n_total)] = penalty.item()
+        if not patient_wise_only:
+          penalty = -scipy.stats.binom.logpmf(n_alive, n_total, expected_probability)
+          binomial_penalty_table[(n_alive, n_total)] = penalty.item()
+        else:
+          binomial_penalty_table[(n_alive, n_total)] = 0
 
     if binomial_only or not any(np.isfinite(range_boundary_nll)):
-      n_alive = np.sum(patient_alive & parameter_in_range)
-      n_total = np.sum(parameter_in_range)
-      binomial_penalty_val = binomial_penalty_table[(n_alive, n_total)]
+      if patient_wise_only:
+        raise ValueError(
+          "patient_wise_only cannot be True when binomial_only is True "
+          "or when the parameter range is not finite"
+        )
+      binomial_penalty_val = binomial_penalty_table[(n_alive_obs, n_total_obs)]
       return scipy.optimize.OptimizeResult(
         x=2*binomial_penalty_val,
         success=True,
-        n_total=n_total,
-        n_alive=n_alive,
+        n_total=n_total_obs,
+        n_alive=n_alive_obs,
         binomial_2NLL=2*binomial_penalty_val,
         patient_2NLL=0,
         selected=parameter_in_range,
@@ -254,28 +265,46 @@ class ILPForKM:
     model.addConstr(n_total == gp.quicksum(x[i] for i in range(n_patients)))
     model.addConstr(n_alive == gp.quicksum(x[i] for i in range(n_patients) if patient_alive[i]))
 
-    # ---------------------------
-    # Indicator grid for binomial penalty
-    # ---------------------------
+    if not patient_wise_only:
+      # ---------------------------
+      # Indicator grid for binomial penalty
+      # ---------------------------
 
-    # Create binary indicators for each valid (n_alive, n_total)
-    indicator_vars = {}
-    for n_total_val in range(n_patients + 1):
-      for n_alive_val in range(n_total_val + 1):
-        ind = model.addVar(vtype=GRB.BINARY, name=f"ind_{n_alive_val}_{n_total_val}")
-        indicator_vars[(n_alive_val, n_total_val)] = ind
-        # Add indicator constraint: if active, enforce n_alive and n_total match
-        model.addGenConstrIndicator(ind, True, n_alive - n_alive_val, GRB.EQUAL, 0)
-        model.addGenConstrIndicator(ind, True, n_total - n_total_val, GRB.EQUAL, 0)
+      # Create binary indicators for each valid (n_alive, n_total)
+      indicator_vars = {}
+      for n_total_val in range(n_patients + 1):
+        for n_alive_val in range(n_total_val + 1):
+          ind = model.addVar(vtype=GRB.BINARY, name=f"ind_{n_alive_val}_{n_total_val}")
+          indicator_vars[(n_alive_val, n_total_val)] = ind
+          # Add indicator constraint: if active, enforce n_alive and n_total match
+          model.addGenConstrIndicator(ind, True, n_alive - n_alive_val, GRB.EQUAL, 0)
+          model.addGenConstrIndicator(ind, True, n_total - n_total_val, GRB.EQUAL, 0)
 
-    # Only one pair can be active
-    model.addConstr(gp.quicksum(indicator_vars.values()) == 1)
+      # Only one pair can be active
+      model.addConstr(gp.quicksum(indicator_vars.values()) == 1)
 
-    # Binomial penalty
-    binom_penalty = gp.quicksum(
-      binomial_penalty_table[(na, nt)] * ind
-      for (na, nt), ind in indicator_vars.items()
-    )
+      # Binomial penalty
+      binom_penalty = gp.quicksum(
+        binomial_penalty_table[(na, nt)] * ind
+        for (na, nt), ind in indicator_vars.items()
+      )
+    else:
+      #no binomial penalty means there's nothing to constrain the observed
+      #probability to the expected probability.  In that case, what does
+      #it mean to get an NLL for the expected probability?
+      #Instead, we constrain the observed probability to be at least as
+      #far from the nominal observed probability as the expected
+      #and find the minimum patient-wise NLL.
+      binom_penalty = 0
+
+      observed_probability = n_alive_obs / n_total_obs if n_total_obs > 0 else 0
+
+      if expected_probability >= observed_probability:
+        #n_alive / n_total >= expected_probability
+        model.addConstr(n_alive >= expected_probability * n_total)
+      else:
+        #n_alive / n_total <= expected_probability
+        model.addConstr(n_alive <= expected_probability * n_total)
 
     # Patient-wise penalties
     patient_penalty = gp.quicksum(
@@ -405,7 +434,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       for t in times_for_plot
     ]
 
-  def get_twoNLL_function(self, time_point: float, binomial_only=False):
+  def get_twoNLL_function(self, time_point: float, binomial_only=False, patient_wise_only=False) -> collections.abc.Callable[[float], float]:
     """
     Get the twoNLL function for the given time point.
     """
@@ -414,7 +443,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       """
       The negative log-likelihood function.
       """
-      result = ilp.run_ILP(expected_probability=expected_probability, binomial_only=binomial_only)
+      result = ilp.run_ILP(expected_probability=expected_probability, binomial_only=binomial_only, patient_wise_only=patient_wise_only)
       if not result.success:
         return np.inf
       return result.x
@@ -424,6 +453,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     self,
     time_point: float,
     binomial_only=False,
+    patient_wise_only=False,
   ) -> tuple[float, float]:
     """
     Find the probability that minimizes the negative log-likelihood
@@ -431,7 +461,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     """
     # Find the expected probability that minimizes the negative log-likelihood
     # for the given time point
-    twoNLL = self.get_twoNLL_function(time_point=time_point, binomial_only=binomial_only)
+    twoNLL = self.get_twoNLL_function(time_point=time_point, binomial_only=binomial_only, patient_wise_only=patient_wise_only)
     result = scipy.optimize.minimize_scalar(
       twoNLL,
       bounds=(self.__endpoint_epsilon, 1 - self.__endpoint_epsilon),
@@ -447,6 +477,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     CLs: list[float],
     times_for_plot: np.ndarray,
     binomial_only=False,
+    patient_wise_only=False,
   ) -> tuple[np.ndarray, np.ndarray]:
     """
     Get the survival probabilities for the given quantiles.
@@ -456,10 +487,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     for t in times_for_plot:
       survival_probabilities_time_point = []
       survival_probabilities.append(survival_probabilities_time_point)
-      twoNLL = self.get_twoNLL_function(time_point=t, binomial_only=binomial_only)
+      twoNLL = self.get_twoNLL_function(time_point=t, binomial_only=binomial_only, patient_wise_only=patient_wise_only)
       # Find the expected probability that minimizes the negative log-likelihood
       # for the given time point
-      best_prob, twoNLL_min = self.best_probability(time_point=t, binomial_only=binomial_only)
+      best_prob, twoNLL_min = self.best_probability(time_point=t, binomial_only=binomial_only, patient_wise_only=patient_wise_only)
       best_probabilities.append(best_prob)
 
       for CL in CLs:
@@ -498,12 +529,15 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     self,
     times_for_plot=None,
     include_binomial_only=False,
+    include_patient_wise_only=False,
     show=False,
     saveas=None,
   ): #pylint: disable=too-many-locals
     """
     Plots the Kaplan-Meier curves.
     """
+    if include_binomial_only and include_patient_wise_only:
+      raise ValueError("include_binomial_only and include_patient_wise_only cannot both be True")
     if times_for_plot is None:
       times_for_plot = self.times_for_plot
     plt.figure()
@@ -522,13 +556,19 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       times_for_plot=self.times_for_plot,
     )
     if include_binomial_only:
-      _, survival_probabilities_binomial = self.survival_probabilities_likelihood(
+      _, survival_probabilities_subset = self.survival_probabilities_likelihood(
         CLs=CLs,
         times_for_plot=self.times_for_plot,
         binomial_only=True,
       )
+    elif include_patient_wise_only:
+      _, survival_probabilities_subset = self.survival_probabilities_likelihood(
+        CLs=CLs,
+        times_for_plot=self.times_for_plot,
+        patient_wise_only=True,
+      )
     else:
-      survival_probabilities_binomial = None
+      survival_probabilities_subset = None
 
     best_x, best_y = self.get_points_for_plot(times_for_plot, best_probabilities)
     plt.plot(
@@ -566,36 +606,37 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       label='95% CL',
     )
 
-    if survival_probabilities_binomial is not None:
-      (p_m68_binomial, p_p68_binomial), (p_m95_binomial, p_p95_binomial) = \
-        survival_probabilities_binomial.transpose(1, 2, 0)
-      x_m95_binomial, y_m95_binomial = self.get_points_for_plot(times_for_plot, p_m95_binomial)
-      x_m68_binomial, y_m68_binomial = self.get_points_for_plot(times_for_plot, p_m68_binomial)
-      x_p68_binomial, y_p68_binomial = self.get_points_for_plot(times_for_plot, p_p68_binomial)
-      x_p95_binomial, y_p95_binomial = self.get_points_for_plot(times_for_plot, p_p95_binomial)
+    if survival_probabilities_subset is not None:
+      (p_m68_subset, p_p68_subset), (p_m95_subset, p_p95_subset) = \
+        survival_probabilities_subset.transpose(1, 2, 0)
+      x_m95_subset, y_m95_subset = self.get_points_for_plot(times_for_plot, p_m95_subset)
+      x_m68_subset, y_m68_subset = self.get_points_for_plot(times_for_plot, p_m68_subset)
+      x_p68_subset, y_p68_subset = self.get_points_for_plot(times_for_plot, p_p68_subset)
+      x_p95_subset, y_p95_subset = self.get_points_for_plot(times_for_plot, p_p95_subset)
 
-      np.testing.assert_array_equal(x_m95_binomial, x_p95_binomial)
-      np.testing.assert_array_equal(x_m68_binomial, x_p68_binomial)
+      np.testing.assert_array_equal(x_m95_subset, x_p95_subset)
+      np.testing.assert_array_equal(x_m68_subset, x_p68_subset)
 
+      subset_label = "Binomial only" if include_binomial_only else "Patient-wise only"
       plt.fill_between(
-        x_m68_binomial,
-        y_m68_binomial,
-        y_p68_binomial,
+        x_m68_subset,
+        y_m68_subset,
+        y_p68_subset,
         edgecolor='dodgerblue',
         facecolor='none',
         hatch='\\\\',
         alpha=0.5,
-        label='68% CL (Binomial only)',
+        label=f'68% CL ({subset_label})',
       )
       plt.fill_between(
-        x_m95_binomial,
-        y_m95_binomial,
-        y_p95_binomial,
+        x_m95_subset,
+        y_m95_subset,
+        y_p95_subset,
         edgecolor='skyblue',
         facecolor='none',
         hatch='//',
         alpha=0.5,
-        label='95% CL (Binomial only)',
+        label='95% CL ({subset_label})',
       )
 
     plt.xlabel("Time")
