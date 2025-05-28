@@ -524,6 +524,15 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       best_probabilities.append(best_prob)
 
       for CL in CLs:
+        if patient_wise_only and (t < min(self.patient_times) or t >= max(self.patient_times)):
+          # If the time point is outside the range of patient times, we cannot
+          # calculate a patient-wise survival probability.
+          if t < min(self.patient_times):
+            survival_probabilities_time_point.append((1, 1))
+          else:
+            survival_probabilities_time_point.append((0, 0))
+          continue
+
         d2NLLcut = scipy.stats.chi2.ppf(CL, 1).item()
         def objective_function(
           expected_probability: float,
