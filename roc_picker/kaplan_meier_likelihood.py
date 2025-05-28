@@ -667,7 +667,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         facecolor='none',
         hatch='//',
         alpha=0.5,
-        label='95% CL ({subset_label})',
+        label=f'95% CL ({subset_label})',
       )
 
     plt.xlabel("Time")
