@@ -599,6 +599,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     include_binomial_only=False,
     include_patient_wise_only=False,
     include_full_NLL=True,
+    include_best_fit=True,
     show=False,
     saveas=None,
   ): #pylint: disable=too-many-locals
@@ -664,13 +665,14 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     assert CL_probabilities is not None
 
     best_x, best_y = self.get_points_for_plot(times_for_plot, best_probabilities)
-    plt.plot(
-      best_x,
-      best_y,
-      label="Best Probability",
-      color='red',
-      linestyle='--'
-    )
+    if include_best_fit:
+      plt.plot(
+        best_x,
+        best_y,
+        label="Best Probability",
+        color='red',
+        linestyle='--'
+      )
 
     (p_m68, p_p68), (p_m95, p_p95) = CL_probabilities.transpose(1, 2, 0)
     x_m95, y_m95 = self.get_points_for_plot(times_for_plot, p_m95)
