@@ -568,6 +568,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     Get the twoNLL function for the given time point.
     """
     ilp = self.ilp_for_km(time_point=time_point)
+    @functools.cache
     def twoNLL(expected_probability: float) -> float:
       """
       The negative log-likelihood function.
