@@ -19,6 +19,38 @@ from .kaplan_meier import (
   KaplanMeierPatientBase
 )
 
+def binary_search_sign_change(
+  objective_function: collections.abc.Callable[[float], float],
+  probs: np.ndarray,
+  lo: int,
+  hi: int,
+) -> float:
+  """Binary search for first sign change across adjacent values."""
+  if objective_function(probs[lo]) * objective_function(probs[hi]) > 0:
+    raise ValueError(f"No sign change found between indices {lo} and {hi}")
+  v_hi = objective_function(probs[hi])
+  v_lo = objective_function(probs[lo])
+  while hi - lo > 1:
+    mid = (lo + hi) // 2
+    v_mid = objective_function(probs[mid])
+    if v_mid * v_hi <= 0:
+      lo = mid
+      v_lo = v_mid
+    elif v_mid * v_lo <= 0:
+      hi = mid
+      v_hi = v_mid
+    else:
+      raise ValueError(f"No sign change found between indices {lo} and {hi}")
+  assert (v_lo <= 0) + (v_hi <= 0) == 1, (
+    f"Expected one of v_lo or v_hi to be <= 0, got "
+    f"v_lo={v_lo}, v_hi={v_hi} for indices {lo} and {hi}"
+  )
+  if v_hi <= 0:
+    return probs[hi]
+  if v_lo <= 0:
+    return probs[lo]
+  raise ValueError(f"No sign change found between indices {lo} and {hi}")
+
 def minimize_discrete_single_minimum( #pylint: disable=too-many-locals
   objective_function: collections.abc.Callable[[float], float],
   possible_values: np.ndarray,
@@ -647,37 +679,16 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           probs = self.possible_probabilities
           i_best = int(np.searchsorted(probs, best_prob))
 
-          def binary_search_sign_change(
-            lo: int, hi: int,
-            objective_function=objective_function, probs=probs,
-          ) -> float:
-            """Binary search for first sign change across adjacent values."""
-            if objective_function(probs[lo]) * objective_function(probs[hi]) > 0:
-              raise ValueError(f"No sign change found between indices {lo} and {hi}")
-            v_hi = objective_function(probs[hi])
-            v_lo = objective_function(probs[lo])
-            while hi - lo > 1:
-              mid = (lo + hi) // 2
-              v_mid = objective_function(probs[mid])
-              if v_mid * v_hi <= 0:
-                lo = mid
-                v_lo = v_mid
-              elif v_mid * v_lo <= 0:
-                hi = mid
-                v_hi = v_mid
-              else:
-                raise ValueError(f"No sign change found between indices {lo} and {hi}")
-            if v_hi <= 0:
-              return probs[hi]
-            if v_lo <= 0:
-              return probs[lo]
-            raise ValueError(f"No sign change found between indices {lo} and {hi}")
-
           # Check edge case: upper bound
           if objective_function(probs[-1]) < 0:
             upper_bound = 1
           else:
-            upper = binary_search_sign_change(i_best, len(probs) - 1)
+            upper = binary_search_sign_change(
+              objective_function=objective_function,
+              probs=probs,
+              lo=i_best,
+              hi=len(probs) - 1,
+            )
             if upper is None:
               raise RuntimeError("No upper sign change found")
             upper_bound = upper
@@ -686,7 +697,12 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           if objective_function(probs[0]) < 0:
             lower_bound = 0
           else:
-            lower = binary_search_sign_change(0, i_best)
+            lower = binary_search_sign_change(
+              objective_function=objective_function,
+              probs=probs,
+              lo=0,
+              hi=i_best,
+            )
             if lower is None:
               raise RuntimeError("No lower sign change found")
             lower_bound = lower
