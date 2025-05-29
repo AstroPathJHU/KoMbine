@@ -291,15 +291,18 @@ class Patient:
     self,
     response: Response | None = None,
     survival_time: float | None = None,
+    censored: bool | None = None,
     observable: Observable | None = None,
-    systematics: list[tuple[Systematic, float]] | None = None
+    systematics: list[tuple[Systematic, float]] | None = None,
   ):
     self.__response = None
     self.__survival_time = None
+    self.__censored = None
     self.__observable = None
     self.__systematics = []
     self.response = response
     self.survival_time = survival_time
+    self.censored = censored
     self.observable = observable
     if systematics is None:
       systematics = []
@@ -347,6 +350,20 @@ class Patient:
     if self.__survival_time is not None:
       raise ValueError("Survival time already set")
     self.__survival_time = value
+
+  @property
+  def censored(self):
+    """
+    Get the censored status for the patient.
+    """
+    return self.__censored
+  @censored.setter
+  def censored(self, value):
+    if value is not None and not isinstance(value, bool):
+      raise ValueError(f"Invalid censored status: {value}")
+    if self.__censored is not None:
+      raise ValueError("Censored status already set")
+    self.__censored = value
 
   @property
   def observable(self):
@@ -492,6 +509,19 @@ class Datacard:
         patients = cls.process_response_line(
           split=split,
         )
+      elif split[0] == "censored":
+        if patients is None:
+          raise ValueError("No 'response' line found before 'censored' line")
+        if len(split) != len(patients) + 1:
+          raise ValueError(
+            f"Number of censored values ({len(split) - 1}) "
+            f"does not match number of patients ({len(patients)})"
+          )
+        for patient, censored in zip(patients, split[1:], strict=True):
+          patient.censored = {
+            0: False,
+            1: True,
+          }[int(censored)]
       elif split[0] in ["observable", "count", "num", "denom"]:
         if observable_type is None:
           raise ValueError(f"No 'observable_type' line found before '{split[0]}' line")

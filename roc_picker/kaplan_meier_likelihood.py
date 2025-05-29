@@ -168,10 +168,15 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
   def __init__(
     self,
     time: float,
+    censored: bool,
     parameter_nll: collections.abc.Callable[[float], float],
     observed_parameter: float,
   ):
-    super().__init__(time=time, parameter=parameter_nll)
+    super().__init__(
+      time=time,
+      censored=censored,
+      parameter=parameter_nll,
+    )
     self.__observed_parameter = observed_parameter
 
   @property
@@ -331,6 +336,7 @@ class ILPForKM:
     n_patients = len(self.all_patients)
     patient_times = np.array([p.time for p in self.all_patients])
     patient_alive = patient_times > self.time_point
+    patient_not_censored = patient_times <= self.time_point or not p.censored
     observed_parameters = np.array([p.observed_parameter for p in self.all_patients])
 
     parameter_in_range = (
