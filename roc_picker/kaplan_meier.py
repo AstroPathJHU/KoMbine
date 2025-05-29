@@ -4,6 +4,7 @@ Kaplan-Meier curves with systematic uncertainties, using the Monte Carlo method.
 
 import abc
 import functools
+import numbers
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,14 +12,14 @@ import scipy.special
 
 from .systematics_mc import DistributionBase, DummyDistribution
 
-class KaplanMeierPatient:
+class KaplanMeierPatientBase(abc.ABC):
   """
-  Class to represent a patient with their survival time and parameter.
+  Base class for Kaplan-Meier patients.
+  It contains the survival time and the parameter used to group the patients.
   """
-  def __init__(self, time: float, parameter : float):
+  def __init__(self, time: float, parameter):
     self.__time = time
     self.__parameter = parameter
-
   @property
   def time(self):
     """
@@ -32,31 +33,42 @@ class KaplanMeierPatient:
     """
     return self.__parameter
 
-class KaplanMeierPatientDistribution:
+class KaplanMeierPatient(KaplanMeierPatientBase):
+  """
+  Class to represent a patient with their survival time and parameter.
+  """
+  def __init__(self, time: float, parameter: float):
+    super().__init__(time=time, parameter=parameter)
+    if not isinstance(parameter, (numbers.Number)):
+      raise TypeError("Parameter must be a number")
+
+  @property
+  def parameter(self) -> float:
+    """
+    Returns the parameter used to group the patients.
+    """
+    return super().parameter
+
+
+
+class KaplanMeierPatientDistribution(KaplanMeierPatientBase):
   """
   Class to represent a patient with their survival time and parameter,
   but with a probability distribution for the parameter.
   """
   def __init__(self, time: float, parameter : DistributionBase | float):
-    self.__time = time
-    if not isinstance(parameter, DistributionBase):
+    if isinstance(parameter, (int, float)):
       parameter = DummyDistribution(parameter)
-    self.__parameter = parameter
+    if not isinstance(parameter, DistributionBase):
+      raise TypeError("Parameter must be a DistributionBase or a number")
+    super().__init__(time=time, parameter=parameter)
 
   @property
-  def time(self):
-    """
-    Returns the survival time of the patient.
-    """
-    return self.__time
-
-  @property
-  def parameter(self):
+  def parameter(self) -> DistributionBase:
     """
     Returns the parameter used to group the patients.
-    The parameter is a probability distribution.
     """
-    return self.__parameter
+    return super().parameter
 
   @property
   def nominal(self):
@@ -318,6 +330,7 @@ class KaplanMeierCollection(KaplanMeierBase):
 
     return np.nanquantile(survival_probabilities, quantiles, axis=0)
 
+  # pylint: disable=similarities
   def plot(self, times_for_plot=None, show=False, saveas=None): #pylint: disable=too-many-locals
     """
     Plots the Kaplan-Meier curves.
@@ -436,3 +449,116 @@ class KaplanMeierDistributions(KaplanMeierBase):
         self.all_patients_nominal, self.__parameter_min, self.__parameter_max
       )
     )
+
+class KaplanMeierDistributionsPlot(KaplanMeierBase):
+  """
+  Class to represent a plot of Kaplan-Meier curves with uncertainties.
+  It contains a list of patients with their survival times and parameters.
+  The patients are filtered based on a parameter range, and each patient
+  enters a different Kaplan-Meier curve.  The same patient will enter
+  different curves for each value of the random number.
+  """
+
+  def __init__(
+    self,
+    all_patients: list[KaplanMeierPatientDistribution],
+    thresholds: list[float],
+  ):
+    self.__all_patients = all_patients
+    self.__thresholds = [-np.inf] + sorted(thresholds) + [np.inf]
+    self.__curves: list[KaplanMeierDistributions] = []
+    for i in range(len(self.__thresholds) - 1):
+      self.__curves.append(
+        KaplanMeierDistributions(
+          all_patients,
+          self.__thresholds[i],
+          self.__thresholds[i + 1],
+        )
+      )
+
+  @property
+  def all_patients(self):
+    """
+    Returns the patients with their survival times and parameters.
+    The parameters are probability distributions.
+    """
+    return self.__all_patients
+
+  def plot(self, size=1000, random_state=None, show=False, saveas=None): #pylint: disable=too-many-locals
+    """
+    Plots the Kaplan-Meier curves.
+    """
+    colors = (
+      ('blue', 'dodgerblue', 'skyblue'),
+      ('red', 'orangered', 'salmon'),
+      ('green', 'limegreen', 'lightgreen'),
+      ('purple', 'mediumpurple', 'plum'),
+      ('orange', 'darkorange', 'peachpuff'),
+      ('brown', 'saddlebrown', 'tan'),
+      ('pink', 'deeppink', 'lightpink'),
+      ('gray', 'dimgray', 'lightgray'),
+    )
+    if len(self.__curves) > len(colors):
+      raise ValueError(
+        f"Too many curves ({len(self.__curves)}) for the available colors ({len(colors)})"
+      )
+    times_for_plot = self.times_for_plot
+    for i, (curve, (color_nominal, color_68, color_95)) in enumerate(zip(self.__curves, colors)):
+      kmc = curve.generate(size=size, random_state=random_state)
+      nominal_x, nominal_y = kmc.nominalkm.points_for_plot(times_for_plot=times_for_plot)
+      plt.plot(
+        nominal_x,
+        nominal_y,
+        label=f"Nominal {i + 1}: {self.__thresholds[i]} <= parameter < {self.__thresholds[i + 1]}",
+        color=color_nominal,
+        linestyle='--'
+      )
+      sigmas = [-2, -1, 0, 1, 2]
+      quantiles = [(1 + scipy.special.erf(nsigma/np.sqrt(2))) / 2 for nsigma in sigmas]
+      p_m95, p_m68, _, p_p68, p_p95 = kmc.survival_probabilities_quantiles(
+        times_for_plot=times_for_plot,
+        quantiles=quantiles,
+      )
+      x_m95, y_m95 = kmc.get_points_for_plot(times_for_plot, p_m95)
+      x_m68, y_m68 = kmc.get_points_for_plot(times_for_plot, p_m68)
+      x_p68, y_p68 = kmc.get_points_for_plot(times_for_plot, p_p68)
+      x_p95, y_p95 = kmc.get_points_for_plot(times_for_plot, p_p95)
+      np.testing.assert_array_equal(x_m95, x_p95)
+      np.testing.assert_array_equal(x_m68, x_p68)
+      plt.fill_between(
+        x_m68,
+        y_m68,
+        y_p68,
+        color=color_68,
+        alpha=0.5,
+        label=f'68% CL {i + 1}'
+      )
+      plt.fill_between(
+        x_m95,
+        y_m95,
+        y_p95,
+        color=color_95,
+        alpha=0.5,
+        label=f'95% CL {i + 1}'
+      )
+
+    plt.xlabel("Time")
+    plt.ylabel("Survival Probability")
+    plt.title("Kaplan-Meier Curves")
+    plt.legend()
+    plt.grid()
+    if saveas is not None:
+      plt.savefig(saveas)
+    if show:
+      plt.show()
+    plt.close()
+
+  @property
+  def patient_times(self):
+    """
+    Returns the survival times of the patients.
+    """
+    return frozenset.union(
+      *[kmd.patient_times for kmd in self.__curves]
+    )
+  #pylint: enable=similarities

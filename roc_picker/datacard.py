@@ -15,6 +15,7 @@ import scipy.stats
 from .delta_functions import DeltaFunctionsROC
 from .discrete import DiscreteROC
 from .kaplan_meier import KaplanMeierDistributions, KaplanMeierPatientDistribution
+from .kaplan_meier_likelihood import KaplanMeierLikelihood, KaplanMeierPatientNLL
 from .systematics_mc import DistributionBase, DummyDistribution, ROCDistributions, ScipyDistribution
 
 class Response:
@@ -49,6 +50,12 @@ class Observable(abc.ABC): # pylint: disable=too-few-public-methods
     """
     return self._create_observable_distribution()
 
+  @abc.abstractmethod
+  def patient_nll(self, time) -> KaplanMeierPatientNLL:
+    """
+    Get the patient NLL for the likelihood method.
+    """
+
 class FixedObservable(Observable):
   """
   A class to represent a fixed observable.
@@ -73,6 +80,9 @@ class FixedObservable(Observable):
   def __str__(self):
     return str(self.value)
 
+  def patient_nll(self, time) -> KaplanMeierPatientNLL:
+    raise NotImplementedError
+
 class PoissonObservable(Observable):
   """
   A class to represent a Poisson observable.
@@ -96,6 +106,15 @@ class PoissonObservable(Observable):
       nominal=self.count,
       scipydistribution=scipy.stats.poisson(mu=self.count),
       unique_id=self.unique_id,
+    )
+
+  def patient_nll(self, time) -> KaplanMeierPatientNLL:
+    """
+    Get the patient NLL for the likelihood method.
+    """
+    return KaplanMeierPatientNLL.from_count(
+      count=self.count,
+      time=time,
     )
 
 class PoissonRatioObservable(Observable):
@@ -183,6 +202,18 @@ class PoissonRatioObservable(Observable):
       nominal=self.denominator,
       scipydistribution=scipy.stats.poisson(mu=self.denominator),
       unique_id=self.unique_id_denominator,
+    )
+
+  def patient_nll(self, time) -> KaplanMeierPatientNLL:
+    """
+    Get the patient NLL for the likelihood method.
+    """
+    if self.numerator is None or self.denominator is None:
+      raise ValueError("Numerator and denominator must be set")
+    return KaplanMeierPatientNLL.from_poisson_ratio(
+      numerator_count=self.numerator,
+      denominator_count=self.denominator,
+      time=time,
     )
 
 
@@ -365,6 +396,22 @@ class Patient:
     for systematic, value in self.__systematics:
       if value is not None:
         result = systematic.apply(result, value)
+    return result
+
+  def get_nll(self) -> KaplanMeierPatientNLL:
+    """
+    Get the NLL for the patient.
+    """
+    if self.observable is None:
+      raise ValueError("Observable not set")
+    if self.survival_time is None:
+      raise ValueError("Survival time not set")
+    result = self.observable.patient_nll(self.survival_time)
+    for systematic, value in self.__systematics: # pylint: disable=unused-variable
+      raise NotImplementedError(
+        "Systematics for KaplanMeierPatientNLL not implemented yet"
+      )
+      # result = systematic.apply(result, value)
     return result
 
 class Datacard:
@@ -683,6 +730,24 @@ class Datacard:
         )
       )
     return KaplanMeierDistributions(
+      all_patients=patients,
+      parameter_min=parameter_min,
+      parameter_max=parameter_max,
+    )
+
+  def km_likelihood(self, parameter_min: float, parameter_max: float) -> KaplanMeierLikelihood:
+    """
+    Generate a KaplanMeierLikelihood object for generating Kaplan-Meier
+    error bands using the likelihood method.
+    """
+    patients = []
+    for p in self.patients:
+      survival_time = p.survival_time
+      if survival_time is None:
+        raise ValueError("Survival time not set")
+      nll = p.get_nll()
+      patients.append(nll)
+    return KaplanMeierLikelihood(
       all_patients=patients,
       parameter_min=parameter_min,
       parameter_max=parameter_max,

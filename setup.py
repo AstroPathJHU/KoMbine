@@ -12,6 +12,7 @@ setuptools.setup(
   author = "Heshy Roskes",
   author_email = "heshyr@gmail.com",
   install_requires = [
+    "gurobipy",
     "matplotlib",
     "numpy",
     "scipy",
