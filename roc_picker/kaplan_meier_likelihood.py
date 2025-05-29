@@ -87,7 +87,7 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals
     p_mid2 = possible_values[mid2]
     v_mid1 = objective_function(p_mid1)
     v_mid2 = objective_function(p_mid2)
-    while v_mid1 == v_mid2 and (mid1 > left + 1 or mid2 < right - 1):
+    while np.isclose(v_mid1, v_mid2) and (mid1 > left + 1 or mid2 < right - 1):
       if (mid1 - left) > (right - mid2):
         #mid1 is further from the end, so move it closer
         mid1 = (mid1 + left) // 2
@@ -152,6 +152,12 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals
   candidates = possible_values[left:right+1]
   values = [objective_function(p) for p in candidates]
   i_min = int(np.argmin(values))
+  if verbose:
+    print("Final candidates:")
+    for i, (p, v) in enumerate(zip(candidates, values)):
+      print(f"{i + left:3d} {p:6.3f} {v:9.5g}")
+    print("Winner:")
+    print(f"{i_min + left:3d} {candidates[i_min]:6.3f} {values[i_min]:9.5g}")
   return candidates[i_min], values[i_min]
 
 class KaplanMeierPatientNLL(KaplanMeierPatientBase):
