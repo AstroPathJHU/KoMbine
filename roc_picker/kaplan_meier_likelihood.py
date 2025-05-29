@@ -309,12 +309,14 @@ class ILPForKM:
       observed_probability = n_alive_obs / n_total_obs if n_total_obs > 0 else 0
       epsilon = 1 / (2 * len(self.all_patients))  # Small epsilon to avoid boundary issues
 
-      if expected_probability >= observed_probability:
+      if expected_probability > observed_probability:
         #n_alive / n_total >= expected_probability
         model.addConstr(n_alive >= expected_probability * n_total - epsilon)
-      else:
+      elif expected_probability < observed_probability:
         #n_alive / n_total <= expected_probability
         model.addConstr(n_alive <= expected_probability * n_total + epsilon)
+      else:
+        assert expected_probability == observed_probability
 
     # Patient-wise penalties
     patient_penalty = gp.quicksum(
@@ -514,7 +516,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         p_mid2 = possible_probabilities[mid2]
         v_mid1 = twoNLL(p_mid1)
         v_mid2 = twoNLL(p_mid2)
-        if not (max(v_mid1, v_mid2) <= max(v_left, v_right)):
+        if not max(v_mid1, v_mid2) <= max(v_left, v_right):
           raise ValueError(
             "The probability doesn't have a single minimum:\n"
             f"p_left={p_left:6.3f}, p_mid1={p_mid1:6.3f}, "
@@ -561,7 +563,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               f"v_left={v_left:9.3g}, v_mid1={v_mid1:9.3g}, "
               f"v_mid2={v_mid2:9.3g}, v_right={v_right:9.3g}\n"
             )
-          
 
       # Evaluate final narrowed range to find the best
       candidates = possible_probabilities[left:right+1]
