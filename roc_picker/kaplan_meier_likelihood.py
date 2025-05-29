@@ -24,15 +24,22 @@ def binary_search_sign_change(
   probs: np.ndarray,
   lo: int,
   hi: int,
+  verbose: bool = False,
 ) -> float:
   """Binary search for first sign change across adjacent values."""
   if objective_function(probs[lo]) * objective_function(probs[hi]) > 0:
     raise ValueError(f"No sign change found between indices {lo} and {hi}")
   v_hi = objective_function(probs[hi])
   v_lo = objective_function(probs[lo])
+  if verbose:
+    print("=================")
+    print(lo, probs[lo], v_lo)
+    print(hi, probs[hi], v_hi)
   while hi - lo > 1:
     mid = (lo + hi) // 2
     v_mid = objective_function(probs[mid])
+    if verbose:
+      print(mid, probs[mid], v_mid)
     if v_mid * v_hi <= 0:
       lo = mid
       v_lo = v_mid
@@ -46,14 +53,19 @@ def binary_search_sign_change(
     f"v_lo={v_lo}, v_hi={v_hi} for indices {lo} and {hi}"
   )
   if v_hi <= 0:
+    if verbose:
+      print(f"Returning {probs[hi]} at index {hi} with v_hi={v_hi}")
     return probs[hi]
   if v_lo <= 0:
+    if verbose:
+      print(f"Returning {probs[lo]} at index {lo} with v_lo={v_lo}")
     return probs[lo]
   raise ValueError(f"No sign change found between indices {lo} and {hi}")
 
 def minimize_discrete_single_minimum( #pylint: disable=too-many-locals
   objective_function: collections.abc.Callable[[float], float],
   possible_values: np.ndarray,
+  verbose: bool = False,
 ):
   """
   Minimize a function that is only evaluated at discrete values
@@ -75,6 +87,23 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals
     p_mid2 = possible_values[mid2]
     v_mid1 = objective_function(p_mid1)
     v_mid2 = objective_function(p_mid2)
+    while v_mid1 == v_mid2 and (mid1 > left + 1 or mid2 < right - 1):
+      if (mid1 - left) > (right - mid2):
+        #mid1 is further from the end, so move it closer
+        mid1 = (mid1 + left) // 2
+      else:
+        #mid2 is further from the end, so move it closer
+        mid2 = (mid2 + right) // 2
+      p_mid1 = possible_values[mid1]
+      p_mid2 = possible_values[mid2]
+      v_mid1 = objective_function(p_mid1)
+      v_mid2 = objective_function(p_mid2)
+    if verbose:
+      print("--------------------")
+      print(f"{left:3d} {p_left:6.3f} {v_left:9.5g}")
+      print(f"{mid1:3d} {p_mid1:6.3f} {v_mid1:9.5g}")
+      print(f"{mid2:3d} {p_mid2:6.3f} {v_mid2:9.5g}")
+      print(f"{right:3d} {p_right:6.3f} {v_right:9.5g}")
     if not max(v_mid1, v_mid2) <= max(v_left, v_right):
       raise ValueError(
         "The probability doesn't have a single minimum:\n"
@@ -83,17 +112,6 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals
         f"v_left={v_left:9.3g}, v_mid1={v_mid1:9.3g}, "
         f"v_mid2={v_mid2:9.3g}, v_right={v_right:9.3g}\n"
       )
-    if v_left == v_right:
-      # If both ends are equal, we can return either or anything in between.
-      # If it's the endpoint, we want to return that endpoint
-      # (for nicer looking plots).
-      # Otherwise, we can return the midpoint
-      if left == 0:
-        return p_left, v_left
-      if right == len(possible_values) - 1:
-        return p_right, v_right
-      mid = (left + right) // 2
-      return possible_values[mid], objective_function(possible_values[mid])
     if v_mid1 < v_mid2:
       right = mid2
       p_right = p_mid2
@@ -103,13 +121,20 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals
       p_left = p_mid1
       v_left = v_mid1
     else:
-      # If they are equal, we can choose either side
-      # but we still want to return the endpoint if that's part of the minimum range
       if v_left > v_mid2 or v_mid2 > v_right:
         left = mid1
         p_left = p_mid1
         v_left = v_mid1
       elif v_mid1 < v_right or v_left < v_mid1:
+        right = mid2
+        p_right = p_mid2
+        v_right = v_mid2
+      elif v_left == v_right:
+        assert v_mid1 == v_mid2 == v_left == v_right
+        assert mid1 == left + 1 and mid2 == right - 1
+        left = mid1
+        p_left = p_mid1
+        v_left = v_mid1
         right = mid2
         p_right = p_mid2
         v_right = v_mid2
