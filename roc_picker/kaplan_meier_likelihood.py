@@ -62,7 +62,7 @@ def binary_search_sign_change(
     return probs[lo]
   raise ValueError(f"No sign change found between indices {lo} and {hi}")
 
-def minimize_discrete_single_minimum( #pylint: disable=too-many-locals
+def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many-branches, too-many-statements
   objective_function: collections.abc.Callable[[float], float],
   possible_values: np.ndarray,
   verbose: bool = False,
