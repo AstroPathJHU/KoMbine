@@ -770,14 +770,14 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     if include_full_NLL:
       best_probabilities, CL_probabilities = self.survival_probabilities_likelihood(
         CLs=CLs,
-        times_for_plot=self.times_for_plot,
+        times_for_plot=times_for_plot,
       )
     if include_binomial_only:
       (
         best_probabilities_binomial, CL_probabilities_binomial
       ) = self.survival_probabilities_likelihood(
         CLs=CLs,
-        times_for_plot=self.times_for_plot,
+        times_for_plot=times_for_plot,
         binomial_only=True,
       )
       if include_full_NLL:
@@ -790,7 +790,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         best_probabilities_patient_wise, CL_probabilities_patient_wise
       ) = self.survival_probabilities_likelihood(
         CLs=CLs,
-        times_for_plot=self.times_for_plot,
+        times_for_plot=times_for_plot,
         patient_wise_only=True,
       )
       if include_full_NLL:
