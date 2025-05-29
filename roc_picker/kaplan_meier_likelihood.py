@@ -19,6 +19,84 @@ from .kaplan_meier import (
   KaplanMeierPatientBase
 )
 
+def minimize_discrete_single_minimum( #pylint: disable=too-many-locals
+  objective_function: collections.abc.Callable[[float], float],
+  possible_values: np.ndarray,
+):
+  """
+  Minimize a function that is only evaluated at discrete values
+  The function should be piecewise constant, and should have
+  a single minimum range (several consecutive inputs can have
+  the same output, but there shouldn't be any other local minima)
+  """
+  left = 0
+  right = len(possible_values) - 1
+  p_left = possible_values[left]
+  p_right = possible_values[right]
+  v_left = objective_function(p_left)
+  v_right = objective_function(p_right)
+  while right - left > 3:
+    third = (right - left) // 3
+    mid1 = left + third
+    mid2 = right - third
+    p_mid1 = possible_values[mid1]
+    p_mid2 = possible_values[mid2]
+    v_mid1 = objective_function(p_mid1)
+    v_mid2 = objective_function(p_mid2)
+    if not max(v_mid1, v_mid2) <= max(v_left, v_right):
+      raise ValueError(
+        "The probability doesn't have a single minimum:\n"
+        f"p_left={p_left:6.3f}, p_mid1={p_mid1:6.3f}, "
+        f"p_mid2={p_mid2:6.3f}, p_right={p_right:6.3f}\n"
+        f"v_left={v_left:9.3g}, v_mid1={v_mid1:9.3g}, "
+        f"v_mid2={v_mid2:9.3g}, v_right={v_right:9.3g}\n"
+      )
+    if v_left == v_right:
+      # If both ends are equal, we can return either or anything in between.
+      # If it's the endpoint, we want to return that endpoint
+      # (for nicer looking plots).
+      # Otherwise, we can return the midpoint
+      if left == 0:
+        return p_left, v_left
+      if right == len(possible_values) - 1:
+        return p_right, v_right
+      mid = (left + right) // 2
+      return possible_values[mid], objective_function(possible_values[mid])
+    if v_mid1 < v_mid2:
+      right = mid2
+      p_right = p_mid2
+      v_right = v_mid2
+    elif v_mid2 < v_mid1:
+      left = mid1
+      p_left = p_mid1
+      v_left = v_mid1
+    else:
+      # If they are equal, we can choose either side
+      # but we still want to return the endpoint if that's part of the minimum range
+      if v_left > v_mid2 or v_mid2 > v_right:
+        left = mid1
+        p_left = p_mid1
+        v_left = v_mid1
+      elif v_mid1 < v_right or v_left < v_mid1:
+        right = mid2
+        p_right = p_mid2
+        v_right = v_mid2
+      else:
+        # This should not happen, as we already checked that v_left != v_right
+        raise AssertionError(
+          "Unexpected case where v_mid1 == v_mid2 and neither is less than the endpoints.\n"
+          f"p_left={p_left:6.3f}, p_mid1={p_mid1:6.3f}, "
+          f"p_mid2={p_mid2:6.3f}, p_right={p_right:6.3f}\n"
+          f"v_left={v_left:9.3g}, v_mid1={v_mid1:9.3g}, "
+          f"v_mid2={v_mid2:9.3g}, v_right={v_right:9.3g}\n"
+        )
+
+  # Evaluate final narrowed range to find the best
+  candidates = possible_values[left:right+1]
+  values = [objective_function(p) for p in candidates]
+  i_min = int(np.argmin(values))
+  return candidates[i_min], values[i_min]
+
 class KaplanMeierPatientNLL(KaplanMeierPatientBase):
   """
   A patient with a time and a parameter.
@@ -485,7 +563,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       if n_total > 0
     ])
 
-  def best_probability( #pylint: disable=too-many-locals
+  def best_probability(
     self,
     time_point: float,
     binomial_only=False,
@@ -501,75 +579,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       patient_wise_only=patient_wise_only
     )
     if patient_wise_only:
-      possible_probabilities = self.possible_probabilities
-      left = 0
-      right = len(possible_probabilities) - 1
-      p_left = possible_probabilities[left]
-      p_right = possible_probabilities[right]
-      v_left = twoNLL(p_left)
-      v_right = twoNLL(p_right)
-      while right - left > 3:
-        third = (right - left) // 3
-        mid1 = left + third
-        mid2 = right - third
-        p_mid1 = possible_probabilities[mid1]
-        p_mid2 = possible_probabilities[mid2]
-        v_mid1 = twoNLL(p_mid1)
-        v_mid2 = twoNLL(p_mid2)
-        if not max(v_mid1, v_mid2) <= max(v_left, v_right):
-          raise ValueError(
-            "The probability doesn't have a single minimum:\n"
-            f"p_left={p_left:6.3f}, p_mid1={p_mid1:6.3f}, "
-            f"p_mid2={p_mid2:6.3f}, p_right={p_right:6.3f}\n"
-            f"v_left={v_left:9.3g}, v_mid1={v_mid1:9.3g}, "
-            f"v_mid2={v_mid2:9.3g}, v_right={v_right:9.3g}\n"
-          )
-        if v_left == v_right:
-          # If both ends are equal, we can return either or anything in between.
-          # If it's the endpoint, we want to return that endpoint
-          # (for nicer looking plots).
-          # Otherwise, we can return the midpoint
-          if left == 0:
-            return p_left, v_left
-          if right == len(possible_probabilities) - 1:
-            return p_right, v_right
-          mid = (left + right) // 2
-          return possible_probabilities[mid], twoNLL(possible_probabilities[mid])
-        if v_mid1 < v_mid2:
-          right = mid2
-          p_right = p_mid2
-          v_right = v_mid2
-        elif v_mid2 < v_mid1:
-          left = mid1
-          p_left = p_mid1
-          v_left = v_mid1
-        else:
-          # If they are equal, we can choose either side
-          # but we still want to return the endpoint if that's part of the minimum range
-          if v_left > v_mid2 or v_mid2 > v_right:
-            left = mid1
-            p_left = p_mid1
-            v_left = v_mid1
-          elif v_mid1 < v_right or v_left < v_mid1:
-            right = mid2
-            p_right = p_mid2
-            v_right = v_mid2
-          else:
-            # This should not happen, as we already checked that v_left != v_right
-            raise AssertionError(
-              "Unexpected case where v_mid1 == v_mid2 and neither is less than the endpoints.\n"
-              f"p_left={p_left:6.3f}, p_mid1={p_mid1:6.3f}, "
-              f"p_mid2={p_mid2:6.3f}, p_right={p_right:6.3f}\n"
-              f"v_left={v_left:9.3g}, v_mid1={v_mid1:9.3g}, "
-              f"v_mid2={v_mid2:9.3g}, v_right={v_right:9.3g}\n"
-            )
-
-      # Evaluate final narrowed range to find the best
-      candidates = possible_probabilities[left:right+1]
-      values = [twoNLL(p) for p in candidates]
-      i_min = int(np.argmin(values))
-      return candidates[i_min], values[i_min]
-
+      return minimize_discrete_single_minimum(
+        objective_function=twoNLL,
+        possible_values=self.possible_probabilities,
+      )
     result = scipy.optimize.minimize_scalar(
       twoNLL,
       bounds=(self.__endpoint_epsilon, 1 - self.__endpoint_epsilon),
