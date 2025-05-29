@@ -307,13 +307,14 @@ class ILPForKM:
       binom_penalty = 0
 
       observed_probability = n_alive_obs / n_total_obs if n_total_obs > 0 else 0
+      epsilon = 1 / (2 * len(self.all_patients))  # Small epsilon to avoid boundary issues
 
       if expected_probability >= observed_probability:
         #n_alive / n_total >= expected_probability
-        model.addConstr(n_alive >= 0.99 * expected_probability * n_total)
+        model.addConstr(n_alive >= expected_probability * n_total - epsilon)
       else:
         #n_alive / n_total <= expected_probability
-        model.addConstr(n_alive <= 1.01 * expected_probability * n_total)
+        model.addConstr(n_alive <= expected_probability * n_total + epsilon)
 
     # Patient-wise penalties
     patient_penalty = gp.quicksum(
