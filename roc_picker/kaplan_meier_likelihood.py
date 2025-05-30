@@ -770,6 +770,9 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     include_patient_wise_only=False,
     include_full_NLL=True,
     include_best_fit=True,
+    CLs=None,
+    CL_colors=None,
+    CL_hatches=None,
     show=False,
     saveas=None,
   ): #pylint: disable=too-many-locals
@@ -795,7 +798,31 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       linestyle='--'
     )
 
-    CLs = [0.68, 0.95]
+    if CLs is None:
+      CLs = [0.68, 0.95]
+
+    if CL_colors is None:
+      CL_colors = ['dodgerblue', 'skyblue', 'lightblue', 'lightcyan']
+    if len(CLs) > len(CL_colors):
+      raise ValueError(
+        f"Not enough colors provided for {len(CLs)} CLs, "
+        f"got {len(CL_colors)} colors"
+      )
+    CL_colors = CL_colors[:len(CLs)]
+
+    if CL_hatches is None:
+      CL_hatches = ['//', '\\\\', 'xx', '++']
+    if (
+      len(CLs) > len(CL_hatches)
+      and include_full_NLL
+      and (include_binomial_only or include_patient_wise_only)
+    ):
+      raise ValueError(
+        f"Not enough hatches provided for {len(CLs)} CLs, "
+        f"got {len(CL_hatches)} hatches"
+      )
+    CL_hatches = CL_hatches[:len(CLs)]
+
     CL_probabilities_subset = None
     best_probabilities = None
     CL_probabilities = None
@@ -844,64 +871,48 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         linestyle='--'
       )
 
-    (p_m68, p_p68), (p_m95, p_p95) = CL_probabilities.transpose(1, 2, 0)
-    x_m95, y_m95 = self.get_points_for_plot(times_for_plot, p_m95)
-    x_m68, y_m68 = self.get_points_for_plot(times_for_plot, p_m68)
-    x_p68, y_p68 = self.get_points_for_plot(times_for_plot, p_p68)
-    x_p95, y_p95 = self.get_points_for_plot(times_for_plot, p_p95)
+    for CL, color, (p_minus, p_plus) in zip(
+      CLs,
+      CL_colors,
+      CL_probabilities.transpose(1, 2, 0),
+      strict=True,
+    ):
+      x_minus, y_minus = self.get_points_for_plot(times_for_plot, p_minus)
+      x_plus, y_plus = self.get_points_for_plot(times_for_plot, p_plus)
+      np.testing.assert_array_equal(x_minus, x_plus)
 
-    np.testing.assert_array_equal(x_m95, x_p95)
-    np.testing.assert_array_equal(x_m68, x_p68)
-
-    plt.fill_between(
-      x_m68,
-      y_m68,
-      y_p68,
-      color='dodgerblue',
-      alpha=0.5,
-      label='68% CL',
-    )
-    plt.fill_between(
-      x_m95,
-      y_m95,
-      y_p95,
-      color='skyblue',
-      alpha=0.5,
-      label='95% CL',
-    )
+      plt.fill_between(
+        x_minus,
+        y_minus,
+        y_plus,
+        color=color,
+        alpha=0.5,
+        label=f'{CL:.6%} CL' if CL > 0.9999 else f'{CL:.2%} CL' if CL > 0.99 else f'{CL:.0%}',
+      )
 
     if CL_probabilities_subset is not None:
-      (p_m68_subset, p_p68_subset), (p_m95_subset, p_p95_subset) = \
-        CL_probabilities_subset.transpose(1, 2, 0)
-      x_m95_subset, y_m95_subset = self.get_points_for_plot(times_for_plot, p_m95_subset)
-      x_m68_subset, y_m68_subset = self.get_points_for_plot(times_for_plot, p_m68_subset)
-      x_p68_subset, y_p68_subset = self.get_points_for_plot(times_for_plot, p_p68_subset)
-      x_p95_subset, y_p95_subset = self.get_points_for_plot(times_for_plot, p_p95_subset)
-
-      np.testing.assert_array_equal(x_m95_subset, x_p95_subset)
-      np.testing.assert_array_equal(x_m68_subset, x_p68_subset)
-
       subset_label = "Binomial only" if include_binomial_only else "Patient-wise only"
-      plt.fill_between(
-        x_m68_subset,
-        y_m68_subset,
-        y_p68_subset,
-        edgecolor='dodgerblue',
-        facecolor='none',
-        hatch='\\\\',
-        alpha=0.5,
-        label=f'68% CL ({subset_label})',
-      )
-      plt.fill_between(
-        x_m95_subset,
-        y_m95_subset,
-        y_p95_subset,
-        edgecolor='skyblue',
-        facecolor='none',
-        hatch='//',
-        alpha=0.5,
-        label=f'95% CL ({subset_label})',
-      )
+      for CL, color, hatch, (p_minus_subset, p_plus_subset) in zip(
+        CLs,
+        CL_colors,
+        CL_hatches,
+        CL_probabilities_subset.transpose(1, 2, 0),
+        strict=True,
+      ):
+        x_minus_subset, y_minus_subset = self.get_points_for_plot(times_for_plot, p_minus_subset)
+        x_plus_subset, y_plus_subset = self.get_points_for_plot(times_for_plot, p_plus_subset)
+        np.testing.assert_array_equal(x_minus_subset, x_plus_subset)
+
+        plt.fill_between(
+          x_minus_subset,
+          y_minus_subset,
+          y_plus_subset,
+          edgecolor=color,
+          facecolor='none',
+          hatch=hatch,
+          alpha=0.5,
+          label=f'{CL:%} CL ({subset_label})',
+        )
 
     plt.xlabel("Time")
     plt.ylabel("Survival Probability")
