@@ -197,6 +197,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
   def from_count(
     cls,
     time: float,
+    censored: bool,
     count: int,
   ):
     """
@@ -211,6 +212,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       return -scipy.stats.poisson.logpmf(count, x).item()
     return cls(
       time=time,
+      censored=censored,
       parameter_nll=parameter_nll,
       observed_parameter=count,
     )
@@ -219,6 +221,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
   def from_poisson_ratio(
     cls,
     time: float,
+    censored: bool,
     numerator_count: int,
     denominator_count: int,
   ):
@@ -257,6 +260,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
 
     return cls(
       time=time,
+      censored=censored,
       parameter_nll=parameter_nll,
       observed_parameter=observed_ratio,
     )
@@ -268,6 +272,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     """
     return KaplanMeierPatient(
       time=self.time,
+      censored=self.censored,
       parameter=self.observed_parameter,
     )
 
@@ -335,8 +340,9 @@ class ILPForKM:
       raise ValueError("binomial_only and patient_wise_only cannot both be True")
     n_patients = len(self.all_patients)
     patient_times = np.array([p.time for p in self.all_patients])
+    patient_censored = np.array([p.censored for p in self.all_patients])
     patient_alive = patient_times > self.time_point
-    patient_not_censored = patient_times <= self.time_point or not p.censored
+    patient_in_study = patient_alive | ~patient_censored
     observed_parameters = np.array([p.observed_parameter for p in self.all_patients])
 
     parameter_in_range = (
@@ -344,7 +350,7 @@ class ILPForKM:
       & (observed_parameters < self.parameter_max)
     )
     n_alive_obs = np.sum(patient_alive & parameter_in_range)
-    n_total_obs = np.sum(parameter_in_range)
+    n_total_obs = np.sum(patient_in_study & parameter_in_range)
 
     sgn_nll_penalty_for_patient_in_range = 2 * parameter_in_range - 1
     observed_nll = np.array([
@@ -418,7 +424,7 @@ class ILPForKM:
     n_alive = model.addVar(vtype=GRB.INTEGER, name="n_alive")
 
     # Constraints to link to totals
-    model.addConstr(n_total == gp.quicksum(x[i] for i in range(n_patients)))
+    model.addConstr(n_total == gp.quicksum(x[i] for i in range(n_patients) if patient_in_study[i]))
     model.addConstr(n_alive == gp.quicksum(x[i] for i in range(n_patients) if patient_alive[i]))
 
     if not patient_wise_only:

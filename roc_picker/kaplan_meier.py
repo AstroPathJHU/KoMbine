@@ -17,8 +17,9 @@ class KaplanMeierPatientBase(abc.ABC):
   Base class for Kaplan-Meier patients.
   It contains the survival time and the parameter used to group the patients.
   """
-  def __init__(self, time: float, parameter):
+  def __init__(self, time: float, censored: bool, parameter):
     self.__time = time
+    self.__censored = censored
     self.__parameter = parameter
   @property
   def time(self):
@@ -26,6 +27,12 @@ class KaplanMeierPatientBase(abc.ABC):
     Returns the survival time of the patient.
     """
     return self.__time
+  @property
+  def censored(self) -> bool:
+    """
+    Returns True if the patient is censored, False otherwise.
+    """
+    return self.__censored
   @property
   def parameter(self):
     """
@@ -37,8 +44,8 @@ class KaplanMeierPatient(KaplanMeierPatientBase):
   """
   Class to represent a patient with their survival time and parameter.
   """
-  def __init__(self, time: float, parameter: float):
-    super().__init__(time=time, parameter=parameter)
+  def __init__(self, time: float, censored: bool, parameter: float):
+    super().__init__(time=time, censored=censored, parameter=parameter)
     if not isinstance(parameter, (numbers.Number)):
       raise TypeError("Parameter must be a number")
 
@@ -56,12 +63,12 @@ class KaplanMeierPatientDistribution(KaplanMeierPatientBase):
   Class to represent a patient with their survival time and parameter,
   but with a probability distribution for the parameter.
   """
-  def __init__(self, time: float, parameter : DistributionBase | float):
+  def __init__(self, time: float, censored: bool, parameter : DistributionBase | float):
     if isinstance(parameter, (int, float)):
       parameter = DummyDistribution(parameter)
     if not isinstance(parameter, DistributionBase):
       raise TypeError("Parameter must be a DistributionBase or a number")
-    super().__init__(time=time, parameter=parameter)
+    super().__init__(time=time, censored=censored, parameter=parameter)
 
   @property
   def parameter(self) -> DistributionBase:
@@ -75,7 +82,11 @@ class KaplanMeierPatientDistribution(KaplanMeierPatientBase):
     """
     Returns the nominal patient.
     """
-    return KaplanMeierPatient(self.time, self.parameter.nominal)
+    return KaplanMeierPatient(
+      time=self.time,
+      censored=self.censored,
+      parameter=self.parameter.nominal
+    )
 
   def rvs(self, size, random_state):
     """
@@ -183,12 +194,13 @@ class KaplanMeierInstance(KaplanMeierBase):
     """
     patients = self.patients
     patient_times = np.array([p.time for p in patients])
+    patient_censored = np.array([p.censored for p in patients])
     if times_for_plot is None:
       times_for_plot = self.times_for_plot
 
     survival_probabilities = np.zeros(len(times_for_plot))
     for i, t in enumerate(times_for_plot):
-      n_patients = len(patients)
+      n_patients = np.count_nonzero(patient_times > t | ~patient_censored)
       still_alive = np.count_nonzero(patient_times > t)
       survival_probabilities[i] = still_alive / n_patients
 

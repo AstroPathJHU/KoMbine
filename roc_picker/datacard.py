@@ -51,7 +51,7 @@ class Observable(abc.ABC): # pylint: disable=too-few-public-methods
     return self._create_observable_distribution()
 
   @abc.abstractmethod
-  def patient_nll(self, time) -> KaplanMeierPatientNLL:
+  def patient_nll(self, time, censored) -> KaplanMeierPatientNLL:
     """
     Get the patient NLL for the likelihood method.
     """
@@ -80,7 +80,7 @@ class FixedObservable(Observable):
   def __str__(self):
     return str(self.value)
 
-  def patient_nll(self, time) -> KaplanMeierPatientNLL:
+  def patient_nll(self, time, censored) -> KaplanMeierPatientNLL:
     raise NotImplementedError
 
 class PoissonObservable(Observable):
@@ -108,12 +108,13 @@ class PoissonObservable(Observable):
       unique_id=self.unique_id,
     )
 
-  def patient_nll(self, time) -> KaplanMeierPatientNLL:
+  def patient_nll(self, time, censored) -> KaplanMeierPatientNLL:
     """
     Get the patient NLL for the likelihood method.
     """
     return KaplanMeierPatientNLL.from_count(
       count=self.count,
+      censored=censored,
       time=time,
     )
 
@@ -204,7 +205,7 @@ class PoissonRatioObservable(Observable):
       unique_id=self.unique_id_denominator,
     )
 
-  def patient_nll(self, time) -> KaplanMeierPatientNLL:
+  def patient_nll(self, time, censored) -> KaplanMeierPatientNLL:
     """
     Get the patient NLL for the likelihood method.
     """
@@ -214,6 +215,7 @@ class PoissonRatioObservable(Observable):
       numerator_count=self.numerator,
       denominator_count=self.denominator,
       time=time,
+      censored=censored,
     )
 
 
@@ -283,12 +285,13 @@ class Systematic:
       return True
     return False
 
-class Patient:
+class Patient: # pylint: disable=too-many-instance-attributes
   """
   A class to represent a patient.
   """
-  def __init__(
+  def __init__( # pylint: disable=too-many-arguments
     self,
+    *,
     response: Response | None = None,
     survival_time: float | None = None,
     censored: bool | None = None,
@@ -423,7 +426,7 @@ class Patient:
       raise ValueError("Observable not set")
     if self.survival_time is None:
       raise ValueError("Survival time not set")
-    result = self.observable.patient_nll(self.survival_time)
+    result = self.observable.patient_nll(self.survival_time, self.censored)
     for systematic, value in self.__systematics: # pylint: disable=unused-variable
       raise NotImplementedError(
         "Systematics for KaplanMeierPatientNLL not implemented yet"
@@ -475,7 +478,7 @@ class Datacard:
     return systematics
 
   @classmethod
-  def parse_datacard(cls, file_path): # pylint: disable=too-many-branches, too-many-statements
+  def parse_datacard(cls, file_path): # pylint: disable=too-many-branches, too-many-statements, too-many-locals
     #disable warnings because this function is just parsing a file and is not too complex
     """
     Parse a datacard file and return a Datacard object.
@@ -750,13 +753,17 @@ class Datacard:
     patients = []
     for p in self.patients:
       survival_time = p.survival_time
+      censored = p.censored
       if survival_time is None:
         raise ValueError("Survival time not set")
       parameter = p.get_distribution()
+      if censored is None:
+        raise ValueError("Censored status not set")
       patients.append(
         KaplanMeierPatientDistribution(
           parameter=parameter,
           time=survival_time,
+          censored=censored,
         )
       )
     return KaplanMeierDistributions(
