@@ -156,8 +156,9 @@ class KaplanMeierInstance(KaplanMeierBase):
 
     survival_probabilities = np.zeros(len(times_for_plot))
     for i, t in enumerate(times_for_plot):
-      n_patients = np.count_nonzero(patient_times > t | ~patient_censored)
-      still_alive = np.count_nonzero(patient_times > t)
+      patient_alive = patient_times > t
+      n_patients = np.count_nonzero(patient_alive | ~patient_censored)
+      still_alive = np.count_nonzero(patient_alive)
       survival_probabilities[i] = still_alive / n_patients
 
     return survival_probabilities

@@ -424,6 +424,8 @@ class Patient: # pylint: disable=too-many-instance-attributes
       raise ValueError("Observable not set")
     if self.survival_time is None:
       raise ValueError("Survival time not set")
+    if self.censored is None:
+      raise ValueError("Censored status not set")
     result = self.observable.patient_nll(self.survival_time, self.censored)
     for systematic, value in self.__systematics: # pylint: disable=unused-variable
       raise NotImplementedError(
@@ -750,9 +752,6 @@ class Datacard:
     """
     patients = []
     for p in self.patients:
-      survival_time = p.survival_time
-      if survival_time is None:
-        raise ValueError("Survival time not set")
       nll = p.get_nll()
       patients.append(nll)
     return KaplanMeierLikelihood(
