@@ -812,7 +812,11 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
     if CL_hatches is None:
       CL_hatches = ['//', '\\\\', 'xx', '++']
-    if len(CLs) > len(CL_hatches) and include_full_NLL and (include_binomial_only or include_patient_wise_only):
+    if (
+      len(CLs) > len(CL_hatches)
+      and include_full_NLL
+      and (include_binomial_only or include_patient_wise_only)
+    ):
       raise ValueError(
         f"Not enough hatches provided for {len(CLs)} CLs, "
         f"got {len(CL_hatches)} hatches"
