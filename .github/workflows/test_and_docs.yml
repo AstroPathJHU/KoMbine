@@ -72,9 +72,6 @@ jobs:
       - name: systematics MC unit test
         run: |
           python -m test.test_systematics_mc
-      - name: KM systematics unit test
-        run: |
-          python -m test.test_km_systematics_mc
       - name: KM likelihood unit test
         run: |
           python -m test.test_km_likelihood

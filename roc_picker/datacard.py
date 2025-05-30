@@ -9,12 +9,10 @@ import functools
 import itertools
 import pathlib
 
-import numpy as np
 import scipy.stats
 
 from .delta_functions import DeltaFunctionsROC
 from .discrete import DiscreteROC
-from .kaplan_meier import KaplanMeierDistributions, KaplanMeierPatientDistribution
 from .kaplan_meier_likelihood import KaplanMeierLikelihood, KaplanMeierPatientNLL
 from .systematics_mc import DistributionBase, DummyDistribution, ROCDistributions, ScipyDistribution
 
@@ -744,33 +742,6 @@ class Datacard:
       dct[p.is_responder].append(distribution.nominal)
 
     return DeltaFunctionsROC(responders=responders, nonresponders=nonresponders, **kwargs)
-
-  def systematics_mc_km(self, parameter_min=-np.inf, parameter_max=np.inf):
-    """
-    Generate a KaplanMeierDistributions object for generating Kaplan-Meier
-    error bands using the MC method.
-    """
-    patients = []
-    for p in self.patients:
-      survival_time = p.survival_time
-      censored = p.censored
-      if survival_time is None:
-        raise ValueError("Survival time not set")
-      parameter = p.get_distribution()
-      if censored is None:
-        raise ValueError("Censored status not set")
-      patients.append(
-        KaplanMeierPatientDistribution(
-          parameter=parameter,
-          time=survival_time,
-          censored=censored,
-        )
-      )
-    return KaplanMeierDistributions(
-      all_patients=patients,
-      parameter_min=parameter_min,
-      parameter_max=parameter_max,
-    )
 
   def km_likelihood(self, parameter_min: float, parameter_max: float) -> KaplanMeierLikelihood:
     """
