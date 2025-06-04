@@ -502,22 +502,22 @@ class ILPForKM:
 
     model.optimize()
 
-    if model.status == GRB.INFEASIBLE and patient_wise_only:
-      # If the model is infeasible, it means that no patients can be selected
-      # while satisfying the constraints. This can happen if the expected
-      # probability is too far from the observed probability and there are
-      # some patients with infinite NLL penalties.
-      return scipy.optimize.OptimizeResult(
-        x=np.inf,
-        success=False,
-        n_total=0,
-        n_alive=0,
-        binomial_2NLL=np.inf,
-        patient_2NLL=np.inf,
-        selected=[],
-        model=model,
-      )
-    elif model.status != GRB.OPTIMAL:
+    if model.status != GRB.OPTIMAL:
+      if model.status == GRB.INFEASIBLE and patient_wise_only:
+        # If the model is infeasible, it means that no patients can be selected
+        # while satisfying the constraints. This can happen if the expected
+        # probability is too far from the observed probability and there are
+        # some patients with infinite NLL penalties.
+        return scipy.optimize.OptimizeResult(
+          x=np.inf,
+          success=False,
+          n_total=0,
+          n_alive=0,
+          binomial_2NLL=np.inf,
+          patient_2NLL=np.inf,
+          selected=[],
+          model=model,
+        )
       raise RuntimeError(
         f"Model optimization failed with status {model.status}. "
         "This may indicate an issue with the ILP formulation or the input data."
