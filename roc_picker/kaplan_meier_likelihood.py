@@ -107,8 +107,10 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
     if not max(v_mid1, v_mid2) <= max(v_left, v_right):
       raise ValueError(
         "The probability doesn't have a single minimum:\n"
-        f"p_left={p_left:6.3f}, p_mid1={p_mid1:6.3f}, "
-        f"p_mid2={p_mid2:6.3f}, p_right={p_right:6.3f}\n"
+        f"left  = {left:9d}, mid1   = {mid1:9d}, "
+        f"mid2  = {mid2:9d}, right   = {right:9d}\n"
+        f"p_left={p_left:9.3f}, p_mid1={p_mid1:9.3f}, "
+        f"p_mid2={p_mid2:9.3f}, p_right={p_right:9.3f}\n"
         f"v_left={v_left:9.3g}, v_mid1={v_mid1:9.3g}, "
         f"v_mid2={v_mid2:9.3g}, v_right={v_right:9.3g}\n"
       )
@@ -726,11 +728,16 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       )
       # Find the expected probability that minimizes the negative log-likelihood
       # for the given time point
-      best_prob, twoNLL_min = self.best_probability(
-        time_point=t,
-        binomial_only=binomial_only,
-        patient_wise_only=patient_wise_only
-      )
+      try:
+        best_prob, twoNLL_min = self.best_probability(
+          time_point=t,
+          binomial_only=binomial_only,
+          patient_wise_only=patient_wise_only
+        )
+      except Exception as e:
+        raise RuntimeError(
+          f"Failed to find the best probability for time point {t}"
+        ) from e
       best_probabilities.append(best_prob)
 
       for CL in CLs:
