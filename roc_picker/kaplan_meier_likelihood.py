@@ -100,19 +100,19 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
       v_mid2 = objective_function(p_mid2)
     if verbose:
       print("--------------------")
-      print(f"{left:3d} {p_left:6.3f} {v_left:9.5g}")
-      print(f"{mid1:3d} {p_mid1:6.3f} {v_mid1:9.5g}")
-      print(f"{mid2:3d} {p_mid2:6.3f} {v_mid2:9.5g}")
-      print(f"{right:3d} {p_right:6.3f} {v_right:9.5g}")
+      print(f"{left:3d} {p_left:6.3f} {v_left:15.9g}")
+      print(f"{mid1:3d} {p_mid1:6.3f} {v_mid1:15.9g}")
+      print(f"{mid2:3d} {p_mid2:6.3f} {v_mid2:15.9g}")
+      print(f"{right:3d} {p_right:6.3f} {v_right:15.9g}")
     if not max(v_mid1, v_mid2) <= max(v_left, v_right):
       raise ValueError(
         "The probability doesn't have a single minimum:\n"
-        f"left  = {left:9d}, mid1   = {mid1:9d}, "
-        f"mid2  = {mid2:9d}, right   = {right:9d}\n"
-        f"p_left={p_left:9.3f}, p_mid1={p_mid1:9.3f}, "
-        f"p_mid2={p_mid2:9.3f}, p_right={p_right:9.3f}\n"
-        f"v_left={v_left:9.3g}, v_mid1={v_mid1:9.3g}, "
-        f"v_mid2={v_mid2:9.3g}, v_right={v_right:9.3g}\n"
+        f"left  ={left:12d}, mid1  ={mid1:12d}, "
+        f"mid2  ={mid2:12d}, right  ={right:12d}\n"
+        f"p_left={p_left:12.3f}, p_mid1={p_mid1:12.3f}, "
+        f"p_mid2={p_mid2:12.3f}, p_right={p_right:12.3f}\n"
+        f"v_left={v_left:12.6g}, v_mid1={v_mid1:12.6g}, "
+        f"v_mid2={v_mid2:12.6g}, v_right={v_right:12.6g}\n"
       )
     if v_mid1 < v_mid2:
       right = mid2
