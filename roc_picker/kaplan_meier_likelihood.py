@@ -162,6 +162,19 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
     print(f"{i_min + left:3d} {candidates[i_min]:6.3f} {values[i_min]:9.5g}")
   return candidates[i_min], values[i_min]
 
+@functools.cache
+def possible_probabilities(n_patients) -> np.ndarray:
+  """
+  Get the possible probabilities for the given patients.
+  This is used to speed up the calculation of survival probabilities.
+  """
+  return np.unique([
+    n_alive / n_total
+    for n_total in range(n_patients + 1)
+    for n_alive in range(n_total + 1)
+    if n_total > 0
+  ])
+
 class KaplanMeierPatientNLL(KaplanMeierPatientBase):
   """
   A patient with a time and a parameter.
@@ -462,7 +475,7 @@ class ILPForKM:
       binom_penalty = 0
 
       observed_probability = n_alive_obs / n_total_obs if n_total_obs > 0 else 0
-      epsilon = 1 / (2 * len(self.all_patients))  # Small epsilon to avoid boundary issues
+      epsilon = np.min(np.diff(possible_probabilities(n_patients))) / 2
 
       if expected_probability > observed_probability:
         #n_alive / n_total >= expected_probability
@@ -665,18 +678,11 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       return result.x
     return twoNLL
 
-  @functools.cached_property
+  @property
   def possible_probabilities(self) -> np.ndarray:
-    """
-    Get the possible probabilities for the given patients.
-    This is used to speed up the calculation of survival probabilities.
-    """
-    return np.unique([
-      n_alive / n_total
-      for n_total in range(len(self.all_patients) + 1)
-      for n_alive in range(n_total + 1)
-      if n_total > 0
-    ])
+    return possible_probabilities(
+      n_patients=len(self.all_patients)
+    )
 
   def best_probability(
     self,
