@@ -345,6 +345,15 @@ class ILPForKM:
     patient_in_study = patient_alive | ~patient_censored
     observed_parameters = np.array([p.observed_parameter for p in self.all_patients])
 
+    binomial_penalty_table = {}
+    for n_total in range(n_patients + 1):
+      for n_alive in range(n_total + 1):
+        if not patient_wise_only:
+          penalty = -scipy.stats.binom.logpmf(n_alive, n_total, expected_probability)
+          binomial_penalty_table[(n_alive, n_total)] = penalty.item()
+        else:
+          binomial_penalty_table[(n_alive, n_total)] = 0
+
     parameter_in_range = (
       (observed_parameters >= self.parameter_min)
       & (observed_parameters < self.parameter_max)
@@ -382,15 +391,6 @@ class ILPForKM:
       sgn_nll_penalty_for_patient_in_range
       * abs_nll_penalty_for_patient_in_range
     )
-
-    binomial_penalty_table = {}
-    for n_total in range(n_patients + 1):
-      for n_alive in range(n_total + 1):
-        if not patient_wise_only:
-          penalty = -scipy.stats.binom.logpmf(n_alive, n_total, expected_probability)
-          binomial_penalty_table[(n_alive, n_total)] = penalty.item()
-        else:
-          binomial_penalty_table[(n_alive, n_total)] = 0
 
     if binomial_only or not any(np.isfinite(range_boundary_nll)):
       if patient_wise_only:
@@ -472,9 +472,23 @@ class ILPForKM:
         assert expected_probability == observed_probability
 
     # Patient-wise penalties
-    patient_penalty = gp.quicksum(
-      nll_penalty_for_patient_in_range[i] * x[i] for i in range(n_patients)
-    )
+    patient_penalties = []
+    for i in range(n_patients):
+      if np.isfinite(nll_penalty_for_patient_in_range[i]):
+        patient_penalties.append(nll_penalty_for_patient_in_range[i] * x[i])
+      elif np.isposinf(nll_penalty_for_patient_in_range[i]):
+        #the patient must be selected, so we add a constraint
+        model.addConstr(x[i] == 1)
+      elif np.isneginf(nll_penalty_for_patient_in_range[i]):
+        #the patient must not be selected, so we add a constraint
+        model.addConstr(x[i] == 0)
+      else:
+        raise ValueError(
+          f"Unexpected NLL penalty for patient {i}: "
+          f"{nll_penalty_for_patient_in_range[i]}"
+        )
+
+    patient_penalty = gp.quicksum(patient_penalties)
 
     # Objective: minimize total penalty
     model.setObjective(
@@ -488,23 +502,44 @@ class ILPForKM:
 
     model.optimize()
 
+    if model.status == GRB.INFEASIBLE and patient_wise_only:
+      # If the model is infeasible, it means that no patients can be selected
+      # while satisfying the constraints. This can happen if the expected
+      # probability is too far from the observed probability and there are
+      # some patients with infinite NLL penalties.
+      return scipy.optimize.OptimizeResult(
+        x=np.inf,
+        success=False,
+        n_total=0,
+        n_alive=0,
+        binomial_2NLL=np.inf,
+        patient_2NLL=np.inf,
+        selected=[],
+        model=model,
+      )
+    elif model.status != GRB.OPTIMAL:
+      raise RuntimeError(
+        f"Model optimization failed with status {model.status}. "
+        "This may indicate an issue with the ILP formulation or the input data."
+      )
+
     selected = [i for i in range(n_patients) if x[i].X > 0.5]
     n_alive_val = np.rint(n_alive.X)
     n_total_val = np.rint(n_total.X)
     binomial_penalty_val = binomial_penalty_table[(n_alive_val, n_total_val)]
+
     patient_penalty_val = sum(
-      nll_penalty_for_patient_in_range[i] * x[i].X for i in range(n_patients)
+      nll_penalty_for_patient_in_range[i] * x[i].X
+      for i in range(n_patients)
+      if np.isfinite(nll_penalty_for_patient_in_range[i])
     )
     if verbose:
-      if model.status == GRB.OPTIMAL:
-        print("Selected patients:", selected)
-        print("n_total:          ", int(n_total_val))
-        print("n_alive:          ", int(n_alive_val))
-        print("Binomial penalty: ", binomial_penalty_val)
-        print("Patient penalty:  ", patient_penalty_val)
-        print("Total penalty:    ", model.ObjVal)
-      else:
-        print("No optimal solution found.")
+      print("Selected patients:", selected)
+      print("n_total:          ", int(n_total_val))
+      print("n_alive:          ", int(n_alive_val))
+      print("Binomial penalty: ", binomial_penalty_val)
+      print("Patient penalty:  ", patient_penalty_val)
+      print("Total penalty:    ", model.ObjVal)
 
     return scipy.optimize.OptimizeResult(
       x=model.ObjVal,
