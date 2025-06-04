@@ -517,6 +517,7 @@ class ILPForKM:
           n_alive=0,
           binomial_2NLL=np.inf,
           patient_2NLL=np.inf,
+          patient_penalties=nll_penalty_for_patient_in_range,
           selected=[],
           model=model,
         )
@@ -550,6 +551,7 @@ class ILPForKM:
       n_alive=n_alive_val,
       binomial_2NLL=2*binomial_penalty_val,
       patient_2NLL=2*patient_penalty_val,
+      patient_penalties=nll_penalty_for_patient_in_range,
       selected=selected,
       model=model,
     )
