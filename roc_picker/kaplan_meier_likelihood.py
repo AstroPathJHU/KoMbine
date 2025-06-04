@@ -525,7 +525,7 @@ class ILPForKM:
         "This may indicate an issue with the ILP formulation or the input data."
       )
 
-    selected = [i for i in range(n_patients) if x[i].X > 0.5]
+    selected = [i for i in range(n_patients) if x[i].X > 0.5 and patient_in_study[i]]
     n_alive_val = np.rint(n_alive.X)
     n_total_val = np.rint(n_total.X)
     binomial_penalty_val = binomial_penalty_table[(n_alive_val, n_total_val)]
@@ -681,6 +681,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     time_point: float,
     binomial_only=False,
     patient_wise_only=False,
+    verbose=False,
   ) -> tuple[float, float]:
     """
     Find the expected probability that minimizes the negative log-likelihood
@@ -695,6 +696,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       return minimize_discrete_single_minimum(
         objective_function=twoNLL,
         possible_values=self.possible_probabilities,
+        verbose=verbose,
       )
     result = scipy.optimize.minimize_scalar(
       twoNLL,
