@@ -237,7 +237,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     numerator and denominator counts given the denominator mean.
     """
     def parameter_nll(ratio: float) -> float:
-      if ratio <= 0:
+      if ratio < 0:
         return float('inf')  # Ratio must be positive
 
       # Define the NLL as a function of the (latent) denominator mean
