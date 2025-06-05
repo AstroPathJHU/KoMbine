@@ -92,6 +92,34 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       parameter_nll=parameter_nll,
       observed_parameter=count,
     )
+  
+  @classmethod
+  def from_poisson_density(
+    cls,
+    time: float,
+    censored: bool,
+    numerator_count: int,
+    denominator_area: float,
+  ):
+    """
+    Create a KaplanMeierPatientNLL from a Poisson count
+    divided by an area that is known precisely.
+    """
+    def parameter_nll(density: float) -> float:
+      """
+      The parameter is a log-likelihood function.
+      """
+      return -scipy.stats.poisson.logpmf(
+        numerator_count,
+        density * denominator_area,
+      ).item()
+    return cls(
+      time=time,
+      censored=censored,
+      parameter_nll=parameter_nll,
+      observed_parameter=numerator_count / denominator_area,
+    )
+
 
   @classmethod
   def from_poisson_ratio(
