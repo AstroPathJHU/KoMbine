@@ -711,9 +711,12 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     include_patient_wise_only=False,
     include_full_NLL=True,
     include_best_fit=True,
+    nominal_color='blue',
     CLs=None,
     CL_colors=None,
     CL_hatches=None,
+    create_figure=True,
+    close_figure=None,
     show=False,
     saveas=None,
   ): #pylint: disable=too-many-locals
@@ -729,13 +732,14 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       )
     if times_for_plot is None:
       times_for_plot = self.times_for_plot
-    plt.figure()
+    if create_figure:
+      plt.figure()
     nominal_x, nominal_y = self.nominalkm.points_for_plot(times_for_plot=times_for_plot)
     plt.plot(
       nominal_x,
       nominal_y,
       label="Nominal",
-      color='black',
+      color=nominal_color,
       linestyle='--'
     )
 
@@ -855,13 +859,15 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           label=f'{CL:%} CL ({subset_label})',
         )
 
-    plt.xlabel("Time")
-    plt.ylabel("Survival Probability")
-    plt.legend()
-    plt.title("Kaplan-Meier Curves")
-    plt.grid()
-    if saveas is not None:
-      plt.savefig(saveas)
-    if show:
-      plt.show()
-    plt.close()
+    if create_figure:
+      plt.xlabel("Time")
+      plt.ylabel("Survival Probability")
+      plt.legend()
+      plt.title("Kaplan-Meier Curves")
+      plt.grid()
+      if saveas is not None:
+        plt.savefig(saveas)
+      if show:
+        plt.show()
+      if close_figure:
+        plt.close()
