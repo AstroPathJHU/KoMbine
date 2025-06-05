@@ -680,6 +680,9 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
   @property
   def possible_probabilities(self) -> np.ndarray:
+    """
+    Get the possible probabilities for the given patients.
+    """
     return possible_probabilities(
       n_patients=len(self.all_patients)
     )
