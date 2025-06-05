@@ -342,7 +342,8 @@ class ILPForKM:
     *,
     verbose=False,
     binomial_only=False,
-    patient_wise_only=False
+    patient_wise_only=False,
+    gurobi_rtol=1e-6,
   ):
     """
     Run the ILP for the given time point.
@@ -514,6 +515,7 @@ class ILPForKM:
     if not verbose:
       # Suppress Gurobi output
       model.setParam('OutputFlag', 0)
+    model.setParam("MIPGap", gurobi_rtol)
 
     model.optimize()
 
