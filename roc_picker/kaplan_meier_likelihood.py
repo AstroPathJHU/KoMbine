@@ -336,7 +336,7 @@ class ILPForKM:
     """
     return self.__time_point
 
-  def run_ILP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches
+  def run_ILP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
     self,
     expected_probability: float,
     *,
@@ -659,7 +659,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     self,
     time_point: float,
     binomial_only=False,
-    patient_wise_only=False
+    patient_wise_only=False,
+    verbose=False,
   ) -> collections.abc.Callable[[float], float]:
     """
     Get the twoNLL function for the given time point.
@@ -673,7 +674,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       result = ilp.run_ILP(
         expected_probability=expected_probability,
         binomial_only=binomial_only,
-        patient_wise_only=patient_wise_only
+        patient_wise_only=patient_wise_only,
+        verbose=verbose,
       )
       if not result.success:
         return np.inf
@@ -689,12 +691,14 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       n_patients=len(self.all_patients)
     )
 
-  def best_probability(
+  def best_probability( #pylint: disable=too-many-arguments
     self,
     time_point: float,
+    *,
     binomial_only=False,
     patient_wise_only=False,
-    verbose=False,
+    gurobi_verbose=False,
+    optimize_verbose=False,
   ) -> tuple[float, float]:
     """
     Find the expected probability that minimizes the negative log-likelihood
@@ -703,13 +707,14 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     twoNLL = self.get_twoNLL_function(
       time_point=time_point,
       binomial_only=binomial_only,
-      patient_wise_only=patient_wise_only
+      patient_wise_only=patient_wise_only,
+      verbose=gurobi_verbose,
     )
     if patient_wise_only:
       return minimize_discrete_single_minimum(
         objective_function=twoNLL,
         possible_values=self.possible_probabilities,
-        verbose=verbose,
+        verbose=optimize_verbose,
       )
     result = scipy.optimize.minimize_scalar(
       twoNLL,
@@ -721,12 +726,15 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       raise RuntimeError("Failed to find the best probability")
     return result.x, result.fun
 
-  def survival_probabilities_likelihood( # pylint: disable=too-many-locals, too-many-branches, too-many-statements
+  def survival_probabilities_likelihood( # pylint: disable=too-many-locals, too-many-branches, too-many-statements, too-many-arguments
     self,
     CLs: list[float],
     times_for_plot: np.ndarray,
+    *,
     binomial_only=False,
     patient_wise_only=False,
+    gurobi_verbose=False,
+    optimize_verbose=False,
   ) -> tuple[np.ndarray, np.ndarray]:
     """
     Get the survival probabilities for the given quantiles.
@@ -739,7 +747,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       twoNLL = self.get_twoNLL_function(
         time_point=t,
         binomial_only=binomial_only,
-        patient_wise_only=patient_wise_only
+        patient_wise_only=patient_wise_only,
+        verbose=gurobi_verbose,
       )
       # Find the expected probability that minimizes the negative log-likelihood
       # for the given time point
@@ -747,7 +756,9 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         best_prob, twoNLL_min = self.best_probability(
           time_point=t,
           binomial_only=binomial_only,
-          patient_wise_only=patient_wise_only
+          patient_wise_only=patient_wise_only,
+          gurobi_verbose=gurobi_verbose,
+          optimize_verbose=optimize_verbose
         )
       except Exception as e:
         raise RuntimeError(
