@@ -9,12 +9,10 @@ import functools
 import itertools
 import pathlib
 
-import numpy as np
 import scipy.stats
 
 from .delta_functions import DeltaFunctionsROC
 from .discrete import DiscreteROC
-from .kaplan_meier import KaplanMeierDistributions, KaplanMeierPatientDistribution
 from .kaplan_meier_likelihood import KaplanMeierLikelihood, KaplanMeierPatientNLL
 from .systematics_mc import DistributionBase, DummyDistribution, ROCDistributions, ScipyDistribution
 
@@ -51,7 +49,7 @@ class Observable(abc.ABC): # pylint: disable=too-few-public-methods
     return self._create_observable_distribution()
 
   @abc.abstractmethod
-  def patient_nll(self, time) -> KaplanMeierPatientNLL:
+  def patient_nll(self, time, censored) -> KaplanMeierPatientNLL:
     """
     Get the patient NLL for the likelihood method.
     """
@@ -80,7 +78,7 @@ class FixedObservable(Observable):
   def __str__(self):
     return str(self.value)
 
-  def patient_nll(self, time) -> KaplanMeierPatientNLL:
+  def patient_nll(self, time, censored) -> KaplanMeierPatientNLL:
     raise NotImplementedError
 
 class PoissonObservable(Observable):
@@ -108,12 +106,13 @@ class PoissonObservable(Observable):
       unique_id=self.unique_id,
     )
 
-  def patient_nll(self, time) -> KaplanMeierPatientNLL:
+  def patient_nll(self, time, censored) -> KaplanMeierPatientNLL:
     """
     Get the patient NLL for the likelihood method.
     """
     return KaplanMeierPatientNLL.from_count(
       count=self.count,
+      censored=censored,
       time=time,
     )
 
@@ -204,7 +203,7 @@ class PoissonRatioObservable(Observable):
       unique_id=self.unique_id_denominator,
     )
 
-  def patient_nll(self, time) -> KaplanMeierPatientNLL:
+  def patient_nll(self, time, censored) -> KaplanMeierPatientNLL:
     """
     Get the patient NLL for the likelihood method.
     """
@@ -214,6 +213,7 @@ class PoissonRatioObservable(Observable):
       numerator_count=self.numerator,
       denominator_count=self.denominator,
       time=time,
+      censored=censored,
     )
 
 
@@ -283,23 +283,27 @@ class Systematic:
       return True
     return False
 
-class Patient:
+class Patient: # pylint: disable=too-many-instance-attributes
   """
   A class to represent a patient.
   """
-  def __init__(
+  def __init__( # pylint: disable=too-many-arguments
     self,
+    *,
     response: Response | None = None,
     survival_time: float | None = None,
+    censored: bool | None = None,
     observable: Observable | None = None,
-    systematics: list[tuple[Systematic, float]] | None = None
+    systematics: list[tuple[Systematic, float]] | None = None,
   ):
     self.__response = None
     self.__survival_time = None
+    self.__censored = None
     self.__observable = None
     self.__systematics = []
     self.response = response
     self.survival_time = survival_time
+    self.censored = censored
     self.observable = observable
     if systematics is None:
       systematics = []
@@ -347,6 +351,20 @@ class Patient:
     if self.__survival_time is not None:
       raise ValueError("Survival time already set")
     self.__survival_time = value
+
+  @property
+  def censored(self):
+    """
+    Get the censored status for the patient.
+    """
+    return self.__censored
+  @censored.setter
+  def censored(self, value):
+    if value is not None and not isinstance(value, bool):
+      raise ValueError(f"Invalid censored status: {value}")
+    if self.__censored is not None:
+      raise ValueError("Censored status already set")
+    self.__censored = value
 
   @property
   def observable(self):
@@ -406,7 +424,9 @@ class Patient:
       raise ValueError("Observable not set")
     if self.survival_time is None:
       raise ValueError("Survival time not set")
-    result = self.observable.patient_nll(self.survival_time)
+    if self.censored is None:
+      raise ValueError("Censored status not set")
+    result = self.observable.patient_nll(self.survival_time, self.censored)
     for systematic, value in self.__systematics: # pylint: disable=unused-variable
       raise NotImplementedError(
         "Systematics for KaplanMeierPatientNLL not implemented yet"
@@ -458,7 +478,7 @@ class Datacard:
     return systematics
 
   @classmethod
-  def parse_datacard(cls, file_path): # pylint: disable=too-many-branches, too-many-statements
+  def parse_datacard(cls, file_path): # pylint: disable=too-many-branches, too-many-statements, too-many-locals
     #disable warnings because this function is just parsing a file and is not too complex
     """
     Parse a datacard file and return a Datacard object.
@@ -492,6 +512,19 @@ class Datacard:
         patients = cls.process_response_line(
           split=split,
         )
+      elif split[0] == "censored":
+        if patients is None:
+          raise ValueError("No 'response' line found before 'censored' line")
+        if len(split) != len(patients) + 1:
+          raise ValueError(
+            f"Number of censored values ({len(split) - 1}) "
+            f"does not match number of patients ({len(patients)})"
+          )
+        for patient, censored in zip(patients, split[1:], strict=True):
+          patient.censored = {
+            0: False,
+            1: True,
+          }[int(censored)]
       elif split[0] in ["observable", "count", "num", "denom"]:
         if observable_type is None:
           raise ValueError(f"No 'observable_type' line found before '{split[0]}' line")
@@ -712,29 +745,6 @@ class Datacard:
 
     return DeltaFunctionsROC(responders=responders, nonresponders=nonresponders, **kwargs)
 
-  def systematics_mc_km(self, parameter_min=-np.inf, parameter_max=np.inf):
-    """
-    Generate a KaplanMeierDistributions object for generating Kaplan-Meier
-    error bands using the MC method.
-    """
-    patients = []
-    for p in self.patients:
-      survival_time = p.survival_time
-      if survival_time is None:
-        raise ValueError("Survival time not set")
-      parameter = p.get_distribution()
-      patients.append(
-        KaplanMeierPatientDistribution(
-          parameter=parameter,
-          time=survival_time,
-        )
-      )
-    return KaplanMeierDistributions(
-      all_patients=patients,
-      parameter_min=parameter_min,
-      parameter_max=parameter_max,
-    )
-
   def km_likelihood(self, parameter_min: float, parameter_max: float) -> KaplanMeierLikelihood:
     """
     Generate a KaplanMeierLikelihood object for generating Kaplan-Meier
@@ -742,9 +752,6 @@ class Datacard:
     """
     patients = []
     for p in self.patients:
-      survival_time = p.survival_time
-      if survival_time is None:
-        raise ValueError("Survival time not set")
       nll = p.get_nll()
       patients.append(nll)
     return KaplanMeierLikelihood(
