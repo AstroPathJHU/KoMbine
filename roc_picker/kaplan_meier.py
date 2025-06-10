@@ -164,7 +164,6 @@ class KaplanMeierInstance(KaplanMeierBase):
       except ZeroDivisionError:
         #after everyone is censored: keep the last survival probability
         survival_probabilities[i] = survival_probabilities[i - 1]
-      
 
     return survival_probabilities
 

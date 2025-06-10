@@ -92,7 +92,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       parameter_nll=parameter_nll,
       observed_parameter=count,
     )
-  
+
   @classmethod
   def from_poisson_density(
     cls,

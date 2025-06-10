@@ -143,10 +143,10 @@ class PoissonDensityObservable(Observable):
 
     if not isinstance(unique_id_numerator, int):
       raise ValueError(f"Invalid unique_id_numerator: {unique_id_numerator}")
-    
+
   def __repr__(self):
     return f"{type(self).__name__}(numerator={self.numerator}, area={self.denominator})"
-  
+
   @property
   def numerator(self):
     """
@@ -189,7 +189,7 @@ class PoissonDensityObservable(Observable):
       scipydistribution=scipy.stats.poisson(mu=self.numerator),
       unique_id=self.unique_id_numerator,
     ) / self.denominator
-  
+
   def patient_nll(self, time, censored) -> KaplanMeierPatientNLL:
     """
     Get the patient NLL for the likelihood method.
