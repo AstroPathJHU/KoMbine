@@ -739,6 +739,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     include_patient_wise_only=False,
     include_full_NLL=True,
     include_best_fit=True,
+    nominal_label='Nominal',
     nominal_color='blue',
     CLs=None,
     CL_colors=None,
@@ -766,7 +767,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     plt.plot(
       nominal_x,
       nominal_y,
-      label="Nominal",
+      label=nominal_label,
       color=nominal_color,
       linestyle='--'
     )
@@ -860,7 +861,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         y_plus,
         color=color,
         alpha=0.5,
-        label=f'{CL:.6%} CL' if CL > 0.9999 else f'{CL:.2%} CL' if CL > 0.99 else f'{CL:.0%}',
+        label=f'{CL:.6%} CL' if CL > 0.9999 else f'{CL:.2%} CL' if CL > 0.99 else f'{CL:.0%} CL',
       )
 
     if CL_probabilities_subset is not None:
@@ -884,7 +885,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           facecolor='none',
           hatch=hatch,
           alpha=0.5,
-          label=f'{CL:%} CL ({subset_label})',
+          label=(
+            (f'{CL:.6%} CL' if CL > 0.9999 else f'{CL:.2%} CL' if CL > 0.99 else f'{CL:.0%} CL')
+            + f'({subset_label})'
+          ),
         )
 
     if create_figure:
