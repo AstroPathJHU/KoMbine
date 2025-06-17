@@ -94,6 +94,34 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     )
 
   @classmethod
+  def from_poisson_density(
+    cls,
+    time: float,
+    censored: bool,
+    numerator_count: int,
+    denominator_area: float,
+  ):
+    """
+    Create a KaplanMeierPatientNLL from a Poisson count
+    divided by an area that is known precisely.
+    """
+    def parameter_nll(density: float) -> float:
+      """
+      The parameter is a log-likelihood function.
+      """
+      return -scipy.stats.poisson.logpmf(
+        numerator_count,
+        density * denominator_area,
+      ).item()
+    return cls(
+      time=time,
+      censored=censored,
+      parameter_nll=parameter_nll,
+      observed_parameter=numerator_count / denominator_area,
+    )
+
+
+  @classmethod
   def from_poisson_ratio(
     cls,
     time: float,
@@ -711,9 +739,13 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     include_patient_wise_only=False,
     include_full_NLL=True,
     include_best_fit=True,
+    nominal_label='Nominal',
+    nominal_color='blue',
     CLs=None,
     CL_colors=None,
     CL_hatches=None,
+    create_figure=True,
+    close_figure=None,
     show=False,
     saveas=None,
   ): #pylint: disable=too-many-locals
@@ -729,13 +761,14 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       )
     if times_for_plot is None:
       times_for_plot = self.times_for_plot
-    plt.figure()
+    if create_figure:
+      plt.figure()
     nominal_x, nominal_y = self.nominalkm.points_for_plot(times_for_plot=times_for_plot)
     plt.plot(
       nominal_x,
       nominal_y,
-      label="Nominal",
-      color='black',
+      label=nominal_label,
+      color=nominal_color,
       linestyle='--'
     )
 
@@ -828,7 +861,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         y_plus,
         color=color,
         alpha=0.5,
-        label=f'{CL:.6%} CL' if CL > 0.9999 else f'{CL:.2%} CL' if CL > 0.99 else f'{CL:.0%}',
+        label=f'{CL:.6%} CL' if CL > 0.9999 else f'{CL:.2%} CL' if CL > 0.99 else f'{CL:.0%} CL',
       )
 
     if CL_probabilities_subset is not None:
@@ -852,16 +885,21 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           facecolor='none',
           hatch=hatch,
           alpha=0.5,
-          label=f'{CL:%} CL ({subset_label})',
+          label=(
+            (f'{CL:.6%} CL' if CL > 0.9999 else f'{CL:.2%} CL' if CL > 0.99 else f'{CL:.0%} CL')
+            + f'({subset_label})'
+          ),
         )
 
-    plt.xlabel("Time")
-    plt.ylabel("Survival Probability")
-    plt.legend()
-    plt.title("Kaplan-Meier Curves")
-    plt.grid()
-    if saveas is not None:
-      plt.savefig(saveas)
-    if show:
-      plt.show()
-    plt.close()
+    if create_figure:
+      plt.xlabel("Time")
+      plt.ylabel("Survival Probability")
+      plt.legend()
+      plt.title("Kaplan-Meier Curves")
+      plt.grid()
+      if saveas is not None:
+        plt.savefig(saveas)
+      if show:
+        plt.show()
+      if close_figure:
+        plt.close()

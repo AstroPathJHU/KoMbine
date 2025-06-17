@@ -159,7 +159,11 @@ class KaplanMeierInstance(KaplanMeierBase):
       patient_alive = patient_times > t
       n_patients = np.count_nonzero(patient_alive | ~patient_censored)
       still_alive = np.count_nonzero(patient_alive)
-      survival_probabilities[i] = still_alive / n_patients
+      try:
+        survival_probabilities[i] = still_alive / n_patients
+      except ZeroDivisionError:
+        #after everyone is censored: keep the last survival probability
+        survival_probabilities[i] = survival_probabilities[i - 1]
 
     return survival_probabilities
 

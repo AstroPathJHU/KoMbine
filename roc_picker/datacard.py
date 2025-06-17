@@ -116,6 +116,93 @@ class PoissonObservable(Observable):
       time=time,
     )
 
+class PoissonDensityObservable(Observable):
+  """
+  A class to represent a Poisson density observable:
+  a count divided by a fixed area.
+
+  Parameters:
+  -----------
+  numerator (int): The count for the numerator.
+  area (float): The fixed area for the denominator.
+  unique_id_numerator (int): A unique ID for the numerator distribution.
+  """
+
+  def __init__(
+    self,
+    *,
+    numerator: int | None = None,
+    denominator: float | None = None,
+    unique_id_numerator: int
+  ):
+    self.__numerator = None
+    self.__denominator = None
+    self.numerator = numerator
+    self.denominator = denominator
+    self.unique_id_numerator = unique_id_numerator
+
+    if not isinstance(unique_id_numerator, int):
+      raise ValueError(f"Invalid unique_id_numerator: {unique_id_numerator}")
+
+  def __repr__(self):
+    return f"{type(self).__name__}(numerator={self.numerator}, area={self.denominator})"
+
+  @property
+  def numerator(self):
+    """
+    Get the count for the numerator.
+    """
+    return self.__numerator
+  @numerator.setter
+  def numerator(self, value):
+    if value is None:
+      return
+    if not isinstance(value, int) or value < 0:
+      raise ValueError(f"Invalid numerator: {value}")
+    if self.__numerator is not None and self.__numerator != value:
+      raise ValueError("Numerator already set")
+    self.__numerator = value
+
+  @property
+  def denominator(self):
+    """
+    Get the fixed area for the denominator.
+    """
+    return self.__denominator
+  @denominator.setter
+  def denominator(self, value):
+    if value is None:
+      return
+    if not isinstance(value, (int, float)) or value <= 0:
+      raise ValueError(f"Invalid denominator: {value}")
+    if self.__denominator is not None and self.__denominator != value:
+      raise ValueError("Denominator already set")
+    self.__denominator = value
+  def _create_observable_distribution(self):
+    """
+    Get the observable distribution for a Poisson density observable.
+    """
+    if self.numerator is None or self.denominator is None:
+      raise ValueError("Numerator and denominator must be set")
+    return ScipyDistribution(
+      nominal=self.numerator,
+      scipydistribution=scipy.stats.poisson(mu=self.numerator),
+      unique_id=self.unique_id_numerator,
+    ) / self.denominator
+
+  def patient_nll(self, time, censored) -> KaplanMeierPatientNLL:
+    """
+    Get the patient NLL for the likelihood method.
+    """
+    if self.numerator is None or self.denominator is None:
+      raise ValueError("Numerator and denominator must be set")
+    return KaplanMeierPatientNLL.from_poisson_density(
+      numerator_count=self.numerator,
+      denominator_area=self.denominator,
+      time=time,
+      censored=censored,
+    )
+
 class PoissonRatioObservable(Observable):
   """
   A class to represent a ratio of two Poisson observables.
@@ -383,6 +470,12 @@ class Patient: # pylint: disable=too-many-instance-attributes
       ):
         self.__observable.numerator = value.numerator
         self.__observable.denominator = value.denominator
+      elif (
+        isinstance(value, PoissonDensityObservable)
+        and isinstance(self.__observable, PoissonDensityObservable)
+      ):
+        self.__observable.numerator = value.numerator
+        self.__observable.denominator = value.denominator
       else:
         raise ValueError("Observable already set")
     else:
@@ -502,7 +595,7 @@ class Datacard:
       split = line.split()
       if split[0] == "observable_type":
         observable_type = split[1]
-        if observable_type not in ["fixed", "poisson", "poisson_ratio"]:
+        if observable_type not in ["fixed", "poisson", "poisson_density", "poisson_ratio"]:
           raise ValueError(f"Invalid observable_type: {observable_type}")
       elif split[0] == "bin":
         pass
@@ -525,7 +618,7 @@ class Datacard:
             0: False,
             1: True,
           }[int(censored)]
-      elif split[0] in ["observable", "count", "num", "denom"]:
+      elif split[0] in ["observable", "count", "num", "denom", "area"]:
         if observable_type is None:
           raise ValueError(f"No 'observable_type' line found before '{split[0]}' line")
         if patients is None:
@@ -610,6 +703,8 @@ class Datacard:
     if (observable_type, split[0]) not in (
       ("fixed", "observable"),
       ("poisson", "count"),
+      ("poisson_density", "num"),
+      ("poisson_density", "area"),
       ("poisson_ratio", "num"),
       ("poisson_ratio", "denom"),
     ):
@@ -617,10 +712,13 @@ class Datacard:
         f"Unexpected '{split[0]}' line for observable_type '{observable_type}'"
       )
     value_type = {
-      "fixed": float,
-      "poisson": int,
-      "poisson_ratio": int,
-    }[observable_type]
+      ("fixed", "observable"): float,
+      ("poisson", "count"): int,
+      ("poisson_density", "num"): int,
+      ("poisson_density", "area"): float,
+      ("poisson_ratio", "num"): int,
+      ("poisson_ratio", "denom"): int,
+    }[observable_type, split[0]]
     values = [value_type(_) for _ in split[1:]]
 
     if observable_type == "fixed":
@@ -631,6 +729,17 @@ class Datacard:
           value,
           unique_id=next(unique_id_generator)
         ) for value in values
+      ]
+    elif observable_type == "poisson_density":
+      kw = {"num": "numerator", "area": "denominator"}[split[0]]
+      observables = [
+        PoissonDensityObservable(
+          **{
+            kw: value,
+            "unique_id_numerator": next(unique_id_generator),
+          },
+        )
+        for value in values
       ]
     elif observable_type == "poisson_ratio":
       kw = {"num": "numerator", "denom": "denominator"}[split[0]]
