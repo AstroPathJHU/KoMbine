@@ -761,6 +761,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       )
     if times_for_plot is None:
       times_for_plot = self.times_for_plot
+    results = {}
     if create_figure:
       plt.figure()
     nominal_x, nominal_y = self.nominalkm.points_for_plot(times_for_plot=times_for_plot)
@@ -771,6 +772,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       color=nominal_color,
       linestyle='--'
     )
+    results["x"] = nominal_x
+    results["nominal"] = nominal_y
 
     if CLs is None:
       CLs = [0.68, 0.95]
@@ -844,6 +847,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         color='red',
         linestyle='--'
       )
+      np.testing.assert_array_equal(best_x, nominal_x)
+      results["best_fit"] = best_y
 
     for CL, color, (p_minus, p_plus) in zip(
       CLs,
@@ -854,6 +859,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       x_minus, y_minus = self.get_points_for_plot(times_for_plot, p_minus)
       x_plus, y_plus = self.get_points_for_plot(times_for_plot, p_plus)
       np.testing.assert_array_equal(x_minus, x_plus)
+      np.testing.assert_array_equal(x_minus, best_x)
+      results[f'CL_{CL}'] = (y_minus, y_plus)
 
       plt.fill_between(
         x_minus,
@@ -876,6 +883,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         x_minus_subset, y_minus_subset = self.get_points_for_plot(times_for_plot, p_minus_subset)
         x_plus_subset, y_plus_subset = self.get_points_for_plot(times_for_plot, p_plus_subset)
         np.testing.assert_array_equal(x_minus_subset, x_plus_subset)
+        np.testing.assert_array_equal(x_minus_subset, best_x)
+        results[f'CL_{CL}_subset'] = (y_minus_subset, y_plus_subset)
 
         plt.fill_between(
           x_minus_subset,
@@ -903,3 +912,5 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         plt.show()
       if close_figure:
         plt.close()
+
+    return results
