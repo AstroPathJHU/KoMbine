@@ -232,6 +232,7 @@ class ILPForKM:
     n_total_patients: int,
     n_censored_in_group: tuple[int, ...],
     n_died_in_group: tuple[int, ...],
+    verbose=False,
   ) -> list[tuple[int, tuple[int], tuple[int], float]]:
     """
     Generate valid trajectories - the total number of included patients and the numbers of patients
@@ -251,9 +252,16 @@ class ILPForKM:
     # For each group, possible number of censored and died patients included: 0..n_censored/died
     censored_ranges = [range(nc + 1) for nc in n_censored_in_group]
     died_ranges = [range(nd + 1) for nd in n_died_in_group]
+    n_trajectories = n_total_patients * np.prod(np.array(n_censored_in_group) + 1) * np.prod(np.array(n_died_in_group) + 1)
+    if verbose:
+      print(f"Generating {n_trajectories} trajectories for {n_total_patients} total patients in {n_groups} groups")
+    n_generated = 0
     for total_count in range(1, n_total_patients + 1): #pylint: disable=too-many-nested-blocks
       for censored_counts in itertools.product(*censored_ranges):
         for died_counts in itertools.product(*died_ranges):
+          n_generated += 1
+          if verbose and (n_generated % 1000 == 0 or n_generated == n_trajectories):
+            print(f"  {n_generated} / {n_trajectories}")
           if sum(censored_counts) + sum(died_counts) > total_count:
             continue
 
