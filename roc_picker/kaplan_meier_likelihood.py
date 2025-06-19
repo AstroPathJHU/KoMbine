@@ -1070,6 +1070,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     patient_wise_only=False,
     gurobi_verbose=False,
     optimize_verbose=False,
+    print_progress=False,
   ) -> tuple[float, float]:
     """
     Find the expected probability that minimizes the negative log-likelihood
@@ -1080,6 +1081,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       binomial_only=binomial_only,
       patient_wise_only=patient_wise_only,
       verbose=gurobi_verbose,
+      print_progress=print_progress,
     )
     if patient_wise_only:
       return minimize_discrete_single_minimum(
@@ -1133,7 +1135,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           binomial_only=binomial_only,
           patient_wise_only=patient_wise_only,
           gurobi_verbose=gurobi_verbose,
-          optimize_verbose=optimize_verbose
+          optimize_verbose=optimize_verbose,
+          print_progress=print_progress,
         )
       except Exception as e:
         raise RuntimeError(
