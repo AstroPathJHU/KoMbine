@@ -376,6 +376,25 @@ class ILPForKM:
     return result
   
   @functools.cached_property
+  def n_censored_in_group_total(self) -> npt.NDArray[np.int_]:
+    """
+    The total number of patients who were censored in each group.
+    """
+    return np.array([
+      np.count_nonzero(self.censored_in_group[i])
+      for i in range(self.n_groups)
+    ])
+  @functools.cached_property
+  def n_died_in_group_total(self) -> npt.NDArray[np.int_]:
+    """
+    The total number of patients who died in each group.
+    """
+    return np.array([
+      np.count_nonzero(self.died_in_group[i])
+      for i in range(self.n_groups)
+    ])
+
+  @functools.cached_property
   def n_censored_in_group_obs(self) -> npt.NDArray[np.int_]:
     """
     The number of patients who were censored in each group
@@ -530,8 +549,8 @@ class ILPForKM:
     """
     return self.calculate_valid_trajectories(
       n_total_patients=self.n_patients,
-      n_censored_in_group=tuple(self.n_censored_in_group_obs),
-      n_died_in_group=tuple(self.n_died_in_group_obs),
+      n_censored_in_group=tuple(self.n_censored_in_group_total),
+      n_died_in_group=tuple(self.n_died_in_group_total),
       verbose=False,
     )
   
