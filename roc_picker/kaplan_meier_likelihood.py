@@ -10,6 +10,7 @@ import gurobipy as gp
 from gurobipy import GRB
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
 import scipy.optimize
 import scipy.stats
 
@@ -208,6 +209,12 @@ class ILPForKM:
     """
     return self.__all_patients
   @property
+  def n_patients(self) -> int:
+    """
+    The number of patients.
+    """
+    return len(self.all_patients)
+  @property
   def parameter_min(self) -> float:
     """
     The minimum parameter value.
@@ -225,95 +232,58 @@ class ILPForKM:
     The time point for the Kaplan-Meier curve.
     """
     return self.__time_point
-
-  @staticmethod
-  @functools.cache
-  def valid_trajectories(
-    n_total_patients: int,
-    n_censored_in_group: tuple[int, ...],
-    n_died_in_group: tuple[int, ...],
-    verbose=False,
-  ) -> list[tuple[int, tuple[int], tuple[int], float]]:
+  @functools.cached_property
+  def patient_times(self) -> npt.NDArray[np.float64]:
     """
-    Generate valid trajectories - the total number of included patients and the numbers of patients
-    who were censored or died in each group - based on the total number of patients and the total number
-    who were censored or died in each group.
-
-    The minimum total count is 1 - we don't allow all patients to be excluded.
+    The times of all patients.
     """
-    if len(n_censored_in_group) != len(n_died_in_group):
-      raise ValueError("n_censored_in_group and n_died_in_group must have the same length")
-    n_groups = len(n_censored_in_group)
-    if sum(n_censored_in_group) + sum(n_died_in_group) > n_total_patients:
-      raise ValueError(
-        "The total number of patients who were censored or died exceeds the total number of patients"
-      )
-    result = []
-    # For each group, possible number of censored and died patients included: 0..n_censored/died
-    censored_ranges = [range(nc + 1) for nc in n_censored_in_group]
-    died_ranges = [range(nd + 1) for nd in n_died_in_group]
-    n_trajectories = n_total_patients * np.prod(np.array(n_censored_in_group) + 1) * np.prod(np.array(n_died_in_group) + 1)
-    if verbose:
-      print(f"Generating {n_trajectories} trajectories for {n_total_patients} total patients in {n_groups} groups")
-    n_generated = 0
-    for total_count in range(1, n_total_patients + 1): #pylint: disable=too-many-nested-blocks
-      for censored_counts in itertools.product(*censored_ranges):
-        for died_counts in itertools.product(*died_ranges):
-          n_generated += 1
-          if verbose and (n_generated % 1000 == 0 or n_generated == n_trajectories):
-            print(f"  {n_generated} / {n_trajectories}")
-          if sum(censored_counts) + sum(died_counts) > total_count:
-            continue
-
-          if not n_groups:
-            # If there are no groups, nobody died, so the probability is 1
-            expected_trajectory_probability = 1.0
-          else:
-            n_at_risk = [total_count - censored_counts[0]]
-            for i in range(1, n_groups):
-              n_at_risk.append(
-                n_at_risk[i - 1] - died_counts[i - 1] - censored_counts[i]
-              )
-            expected_trajectory_probability = 1.0
-            for i in range(n_groups):
-              if n_at_risk[i] > 0:
-                expected_trajectory_probability *= (
-                  n_at_risk[i] - died_counts[i]
-                ) / n_at_risk[i]
-              else:
-                expected_trajectory_probability = 0
-
-          result.append((total_count, tuple(censored_counts), tuple(died_counts), expected_trajectory_probability))
-    return result
-
-  def run_ILP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
-    self,
-    expected_probability: float,
-    *,
-    verbose=False,
-    binomial_only=False,
-    patient_wise_only=False,
-    gurobi_rtol=1e-6,
-  ):
+    return np.array([p.time for p in self.all_patients])
+  @functools.cached_property
+  def patient_censored(self) -> npt.NDArray[np.bool_]:
     """
-    Run the ILP for the given time point.
+    The censored status of all patients.
     """
-    if not patient_wise_only and (expected_probability <= 0 or expected_probability >= 1):
-      raise ValueError("expected_probability must be in (0, 1)")
-    if expected_probability < 0 or expected_probability > 1:
-      raise ValueError("expected_probability must be in [0, 1]")
-    if binomial_only and patient_wise_only:
-      raise ValueError("binomial_only and patient_wise_only cannot both be True")
-    if not patient_wise_only:
-      raise NotImplementedError("Censored patients are not supported except in patient-wise-only mode")
-    n_patients = len(self.all_patients)
-    patient_times = np.array([p.time for p in self.all_patients])
-    patient_censored = np.array([p.censored for p in self.all_patients])
-    patient_still_at_risk = (
-      (patient_times > self.time_point)
-       | ((patient_times == self.time_point) & patient_censored)
+    return np.array([p.censored for p in self.all_patients])
+  @functools.cached_property
+  def patient_still_at_risk(self) -> npt.NDArray[np.bool_]:
+    """
+    The status of all patients at risk at the time point.
+    A patient is still at risk if their time is greater than the time point
+    or if they are censored at the time point.
+    """
+    return (
+      (self.patient_times > self.time_point)
+      | ((self.patient_times == self.time_point) & self.patient_censored)
+    )
+  @functools.cached_property
+  def patient_alive(self) -> npt.NDArray[np.bool_]:
+    """
+    The status of all patients who are alive at the time point.
+    A patient is alive if their time is greater than the time point.
+    """
+    return self.patient_times > self.time_point
+  @functools.cached_property
+  def observed_parameters(self) -> npt.NDArray[np.float64]:
+    """
+    The observed parameters of all patients.
+    """
+    return np.array([p.observed_parameter for p in self.all_patients])
+  @functools.cached_property
+  def parameter_in_range(self) -> npt.NDArray[np.bool_]:
+    """
+    Whether each patient's observed parameter is within the specified range.
+    """
+    return (
+      (self.observed_parameters >= self.parameter_min)
+      & (self.observed_parameters < self.parameter_max)
     )
 
+  @staticmethod
+  def group_patients(
+    patient_times: npt.NDArray[np.float64],
+    patient_censored: npt.NDArray[np.bool_],
+    patient_still_at_risk: npt.NDArray[np.bool_],
+  ):
     #divide the patients into groups:
     #first the ones who were censored before anyone died
     #then the ones who died
@@ -377,14 +347,92 @@ class ILPForKM:
     # Final sanity check
     if len(censored_in_group) != len(died_in_group):
       raise ValueError("Mismatched lengths between censored and died groups.")
-    n_groups = len(censored_in_group)
 
-    patient_alive = patient_times > self.time_point
-
-    observed_parameters = np.array([p.observed_parameter for p in self.all_patients])
-
-    # Create a table for the binomial penalty term
-    # This needs to be fixed to account for censoring
+    return censored_in_group, died_in_group
+  
+  @functools.cached_property
+  def _patient_groups(self):
+    """
+    Group patients by their status at the time point.
+    Returns a tuple of (censored_in_group, died_in_group, n_groups).
+    """
+    return self.group_patients(
+      patient_times=self.patient_times,
+      patient_censored=self.patient_censored,
+      patient_still_at_risk=self.patient_still_at_risk,
+    )
+  @functools.cached_property
+  def censored_in_group(self) -> list[npt.NDArray[np.bool_]]:
+    """
+    The groups of patients who were censored before the time point.
+    """
+    return self._patient_groups[0]
+  @functools.cached_property
+  def died_in_group(self) -> list[npt.NDArray[np.bool_]]:
+    """
+    The groups of patients who died before the time point.
+    """
+    return self._patient_groups[1]
+  @functools.cached_property
+  def n_groups(self) -> int:
+    """
+    The number of groups of patients.
+    """
+    result = len(self.censored_in_group)
+    if result != len(self.died_in_group):
+      raise ValueError(
+        "The number of censored groups does not match the number of died groups."
+      )
+    return result
+  
+  @functools.cached_property
+  def n_censored_in_group_obs(self) -> npt.NDArray[np.int_]:
+    """
+    The number of patients who were censored in each group
+    using the observed parameters.
+    """
+    return np.array([
+      np.count_nonzero(self.censored_in_group[i] & self.parameter_in_range)
+      for i in range(self.n_groups)
+    ])
+  @functools.cached_property
+  def n_died_in_group_obs(self) -> npt.NDArray[np.int_]:
+    """
+    The number of patients who died in each group
+    using the observed parameters.
+    """
+    return np.array([
+      np.count_nonzero(self.died_in_group[i] & self.parameter_in_range)
+      for i in range(self.n_groups)
+    ])
+  @functools.cached_property
+  def n_total_obs(self) -> int:
+    """
+    The total number of patients who are alive at the time point
+    using the observed parameters.
+    """
+    return np.count_nonzero(self.parameter_in_range)
+  @functools.cached_property
+  def n_alive_obs(self) -> int:
+    """
+    The number of patients who are alive at the time point
+    using the observed parameters.
+    """
+    return np.count_nonzero(self.patient_alive & self.parameter_in_range)
+  
+  @classmethod
+  def create_binomial_penalty_table(
+    cls,
+    n_patients: int,
+    expected_probability: float,
+    patient_wise_only: bool = False,
+  ) -> dict[tuple[int, int], float]:
+    """
+    Create a table of binomial penalties for each (n_alive, n_total) pair.
+    The penalty is the negative log-likelihood of observing n_alive out of n_total
+    patients alive at the time point.
+    This needs to be fixed to account for censoring.
+    """
     binomial_penalty_table = {}
     for n_total in range(n_patients + 1):
       for n_alive in range(n_total + 1):
@@ -393,44 +441,109 @@ class ILPForKM:
           binomial_penalty_table[(n_alive, n_total)] = penalty.item()
         else:
           binomial_penalty_table[(n_alive, n_total)] = 0
+    return binomial_penalty_table
+  
+  @classmethod
+  def calculate_KM_probability(
+    cls,
+    total_count: int,
+    censored_counts: tuple[int, ...],
+    died_counts: tuple[int, ...],
+  ) -> float:
+    assert len(censored_counts) == len(died_counts), "Censored and died groups must have the same length"
+    n_groups = len(censored_counts)
 
-    # Number of patients who were censored or died in each group
-    parameter_in_range = (
-      (observed_parameters >= self.parameter_min)
-      & (observed_parameters < self.parameter_max)
-    )
-    n_censored_in_group_obs = np.array([
-      np.sum(censored_in_group[i] & parameter_in_range)
-      for i in range(n_groups)
-    ])
-    n_died_in_group_obs = np.array([
-      np.sum(died_in_group[i] & parameter_in_range)
-      for i in range(n_groups)
-    ])
-    n_total_obs = np.sum(parameter_in_range)
-
-    # Different possible numbers of included patients who were censored or died
-    # in each group
-    trajectories = self.valid_trajectories(
-      n_patients,
-      tuple(np.count_nonzero(censored) for censored in censored_in_group),
-      tuple(np.count_nonzero(died) for died in died_in_group),
-    )
-    n_trajectories = len(trajectories)
-    assert n_trajectories > 0
-
-    if n_groups == 0:
-      n_at_risk_obs = []
-      n_alive_obs = n_total_obs
+    if not n_groups:
+      # If there are no groups, nobody died, so the probability is 1
+      probability = 1.0
     else:
-      n_at_risk_obs = [n_total_obs - n_censored_in_group_obs[0]]
+      n_at_risk = [total_count - censored_counts[0]]
       for i in range(1, n_groups):
-        n_at_risk_obs.append(
-          n_at_risk_obs[i - 1] - n_died_in_group_obs[i - 1] - n_censored_in_group_obs[i]
+        n_at_risk.append(
+          n_at_risk[i - 1] - died_counts[i - 1] - censored_counts[i]
         )
-      n_alive_obs = n_at_risk_obs[-1] - n_died_in_group_obs[-1]
+      probability = 1.0
+      for i in range(n_groups):
+        if n_at_risk[i] > 0:
+          probability *= (
+            n_at_risk[i] - died_counts[i]
+          ) / n_at_risk[i]
+        else:
+          probability = 0
 
-    sgn_nll_penalty_for_patient_in_range = 2 * parameter_in_range - 1
+    return probability
+
+  @classmethod
+  @functools.cache
+  def calculate_valid_trajectories(
+    cls,
+    n_total_patients: int,
+    n_censored_in_group: tuple[int, ...],
+    n_died_in_group: tuple[int, ...],
+    verbose=False,
+  ) -> list[tuple[int, tuple[int], tuple[int], float]]:
+    """
+    Generate valid trajectories - the total number of included patients and the numbers of patients
+    who were censored or died in each group - based on the total number of patients and the total number
+    who were censored or died in each group.
+
+    The minimum total count is 1 - we don't allow all patients to be excluded.
+    """
+    if len(n_censored_in_group) != len(n_died_in_group):
+      raise ValueError("n_censored_in_group and n_died_in_group must have the same length")
+    n_groups = len(n_censored_in_group)
+    if sum(n_censored_in_group) + sum(n_died_in_group) > n_total_patients:
+      raise ValueError(
+        "The total number of patients who were censored or died exceeds the total number of patients"
+      )
+    result = []
+    # For each group, possible number of censored and died patients included: 0..n_censored/died
+    censored_ranges = [range(nc + 1) for nc in n_censored_in_group]
+    died_ranges = [range(nd + 1) for nd in n_died_in_group]
+    n_trajectories = n_total_patients * np.prod(np.array(n_censored_in_group) + 1) * np.prod(np.array(n_died_in_group) + 1)
+    if verbose:
+      print(f"Generating {n_trajectories} trajectories for {n_total_patients} total patients in {n_groups} groups")
+    n_generated = 0
+    for total_count in range(1, n_total_patients + 1): #pylint: disable=too-many-nested-blocks
+      for censored_counts in itertools.product(*censored_ranges):
+        for died_counts in itertools.product(*died_ranges):
+          n_generated += 1
+          if verbose and (n_generated % 1000 == 0 or n_generated == n_trajectories):
+            print(f"  {n_generated} / {n_trajectories}")
+          if sum(censored_counts) + sum(died_counts) > total_count:
+            continue
+
+          expected_trajectory_probability = cls.calculate_KM_probability(
+            total_count=total_count,
+            censored_counts=censored_counts,
+            died_counts=died_counts,
+          )
+          result.append((total_count, tuple(censored_counts), tuple(died_counts), expected_trajectory_probability))
+    return result
+  
+  @functools.cached_property
+  def valid_trajectories(self) -> list[tuple[int, tuple[int], tuple[int], float]]:
+    """
+    Get the valid trajectories for the current set of patients.
+    This is a list of tuples (total_count, censored_counts, died_counts, expected_probability).
+    """
+    return self.calculate_valid_trajectories(
+      n_total_patients=self.n_patients,
+      n_censored_in_group=tuple(self.n_censored_in_group_obs),
+      n_died_in_group=tuple(self.n_died_in_group_obs),
+      verbose=False,
+    )
+
+  def calculate_nll_penalty_for_patient_in_range(
+    self,
+  ) -> npt.NDArray[np.float64]:
+    """
+    Calculate the negative log-likelihood penalty for each patient
+    if that patient is within the parameter range.
+    This is negative if the patient's observed parameter is within the range
+    and positive if it is outside the range.
+    """
+    sgn_nll_penalty_for_patient_in_range = 2 * self.parameter_in_range - 1
     observed_nll = np.array([
       p.parameter(p.observed_parameter)
       for p in self.all_patients
@@ -441,14 +554,14 @@ class ILPForKM:
         for p in self.all_patients
       ])
     else:
-      parameter_min_nll = np.full(n_patients, np.inf)
+      parameter_min_nll = np.full(self.n_patients, np.inf)
     if np.isfinite(self.parameter_max):
       parameter_max_nll = np.array([
         p.parameter(self.parameter_max)
         for p in self.all_patients
       ])
     else:
-      parameter_max_nll = np.full(n_patients, np.inf)
+      parameter_max_nll = np.full(self.n_patients, np.inf)
 
     range_boundary_nll = np.min(
       np.array([parameter_min_nll, parameter_max_nll]),
@@ -461,21 +574,66 @@ class ILPForKM:
       * abs_nll_penalty_for_patient_in_range
     )
 
-    if binomial_only or not any(np.isfinite(range_boundary_nll)):
+    return nll_penalty_for_patient_in_range
+
+
+  def run_ILP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
+    self,
+    expected_probability: float,
+    *,
+    verbose=False,
+    binomial_only=False,
+    patient_wise_only=False,
+    gurobi_rtol=1e-6,
+  ):
+    """
+    Run the ILP for the given time point.
+    """
+    if not patient_wise_only and (expected_probability <= 0 or expected_probability >= 1):
+      raise ValueError("expected_probability must be in (0, 1)")
+    if expected_probability < 0 or expected_probability > 1:
+      raise ValueError("expected_probability must be in [0, 1]")
+    if binomial_only and patient_wise_only:
+      raise ValueError("binomial_only and patient_wise_only cannot both be True")
+    if not patient_wise_only:
+      raise NotImplementedError("Censored patients are not supported except in patient-wise-only mode")
+
+    binomial_penalty_table = self.create_binomial_penalty_table(
+      n_patients=self.n_patients,
+      expected_probability=expected_probability,
+      patient_wise_only=patient_wise_only,
+    )
+
+    # Different possible numbers of included patients who were censored or died
+    # in each group
+    trajectories = self.valid_trajectories
+
+    n_trajectories = len(trajectories)
+    assert n_trajectories > 0
+
+    observed_probability = self.calculate_KM_probability(
+      total_count=self.n_total_obs,
+      censored_counts=tuple(self.n_censored_in_group_obs),
+      died_counts=tuple(self.n_died_in_group_obs),
+    )
+
+    nll_penalty_for_patient_in_range = self.calculate_nll_penalty_for_patient_in_range()
+
+    if binomial_only or not any(np.isfinite(nll_penalty_for_patient_in_range)):
       if patient_wise_only:
         raise ValueError(
           "patient_wise_only cannot be True when binomial_only is True "
           "or when the parameter range is not finite"
         )
-      binomial_penalty_val = binomial_penalty_table[(n_alive_obs, n_total_obs)]
+      binomial_penalty_val = binomial_penalty_table[(self.n_alive_obs, self.n_total_obs)]
       return scipy.optimize.OptimizeResult(
         x=2*binomial_penalty_val,
         success=True,
-        n_total=n_total_obs,
-        n_alive=n_alive_obs,
+        n_total=self.n_total_obs,
+        n_alive=self.n_alive_obs,
         binomial_2NLL=2*binomial_penalty_val,
         patient_2NLL=0,
-        selected=parameter_in_range,
+        selected=self.parameter_in_range,
         model=None,
       )
 
@@ -486,34 +644,34 @@ class ILPForKM:
     model = gp.Model("Kaplan-Meier ILP")
 
     # Binary decision variables: x[i] = 1 if patient i is within the parameter range
-    x = model.addVars(n_patients, vtype=GRB.BINARY, name="x")
+    x = model.addVars(self.n_patients, vtype=GRB.BINARY, name="x")
     n_total = model.addVar(vtype=GRB.INTEGER, name="n_total")
-    model.addConstr(n_total == gp.quicksum(x[i] for i in range(n_patients)))
+    model.addConstr(n_total == gp.quicksum(x[i] for i in range(self.n_patients)))
 
     # Integer vars to count totals
     n_censored_in_group = model.addVars(
-      n_groups,
+      self.n_groups,
       vtype=GRB.INTEGER,
       name="n_censored_in_group"
     )
     n_died_in_group = model.addVars(
-      n_groups,
+      self.n_groups,
       vtype=GRB.INTEGER,
       name="n_died_in_group"
     )
     n_at_risk = model.addVars(
-      n_groups,
+      self.n_groups,
       vtype=GRB.INTEGER,
       name="n_at_risk"
     )
 
     # Constraints to link to totals
-    for idx in range(n_groups):
+    for idx in range(self.n_groups):
       model.addConstr(
-        n_censored_in_group[idx] == gp.quicksum(x[i] for i in range(n_patients) if censored_in_group[idx][i])
+        n_censored_in_group[idx] == gp.quicksum(x[i] for i in range(self.n_patients) if self.censored_in_group[idx][i])
       )
       model.addConstr(
-        n_died_in_group[idx] == gp.quicksum(x[i] for i in range(n_patients) if died_in_group[idx][i])
+        n_died_in_group[idx] == gp.quicksum(x[i] for i in range(self.n_patients) if self.died_in_group[idx][i])
       )
       if idx == 0:
         model.addConstr(
@@ -524,7 +682,7 @@ class ILPForKM:
           n_at_risk[idx] == n_at_risk[idx - 1] - n_died_in_group[idx - 1] - n_censored_in_group[idx]
         )
     n_alive = model.addVar(vtype=GRB.INTEGER, name="n_alive")
-    model.addConstr(n_alive == gp.quicksum(x[i] for i in range(n_patients) if patient_alive[i]))
+    model.addConstr(n_alive == gp.quicksum(x[i] for i in range(self.n_patients) if self.patient_alive[i]))
 
     # indicator variables for each trajectory
     traj_indicator_vars = model.addVars(
@@ -542,18 +700,18 @@ class ILPForKM:
         GRB.EQUAL,
         total_count,
       )
-      for group_idx in range(n_groups):
+      for group_idx in range(self.n_groups):
         model.addGenConstrIndicator(
           traj_indicator_vars[traj_idx],
           True,
-          gp.quicksum(x[i] for i in range(n_patients) if censored_in_group[group_idx][i]),
+          gp.quicksum(x[i] for i in range(self.n_patients) if self.censored_in_group[group_idx][i]),
           GRB.EQUAL,
           censored_counts[group_idx]
         )
         model.addGenConstrIndicator(
           traj_indicator_vars[traj_idx],
           True,
-          gp.quicksum(x[i] for i in range(n_patients) if died_in_group[group_idx][i]),
+          gp.quicksum(x[i] for i in range(self.n_patients) if self.died_in_group[group_idx][i]),
           GRB.EQUAL,
           died_counts[group_idx]
         )
@@ -567,7 +725,7 @@ class ILPForKM:
 
       # Create binary indicators for each valid (n_alive, n_total)
       binom_indicator_vars = {}
-      for n_total_val in range(n_patients + 1):
+      for n_total_val in range(self.n_patients + 1):
         for n_alive_val in range(n_total_val + 1):
           ind = model.addVar(vtype=GRB.BINARY, name=f"ind_{n_alive_val}_{n_total_val}")
           binom_indicator_vars[(n_alive_val, n_total_val)] = ind
@@ -592,15 +750,6 @@ class ILPForKM:
       #and find the minimum patient-wise NLL.
       binom_penalty = 0
 
-      observed_probability = 1
-      for i in range(n_groups):
-        if n_at_risk_obs[i] > 0:
-          observed_probability *= (
-            n_at_risk_obs[i] - n_died_in_group_obs[i]
-          ) / n_at_risk_obs[i]
-        else:
-          observed_probability = 0
-
       if expected_probability > observed_probability:
         model.addConstr(
           gp.quicksum(
@@ -620,7 +769,7 @@ class ILPForKM:
 
     # Patient-wise penalties
     patient_penalties = []
-    for i in range(n_patients):
+    for i in range(self.n_patients):
       if np.isfinite(nll_penalty_for_patient_in_range[i]):
         patient_penalties.append(nll_penalty_for_patient_in_range[i] * x[i])
       elif np.isposinf(nll_penalty_for_patient_in_range[i]):
@@ -675,14 +824,14 @@ class ILPForKM:
         "This may indicate an issue with the ILP formulation or the input data."
       )
 
-    selected = [i for i in range(n_patients) if x[i].X > 0.5]
+    selected = [i for i in range(self.n_patients) if x[i].X > 0.5]
     n_alive_val = np.rint(n_alive.X)
     n_total_val = np.rint(n_total.X)
     binomial_penalty_val = binomial_penalty_table[(n_alive_val, n_total_val)]
 
     patient_penalty_val = sum(
       nll_penalty_for_patient_in_range[i] * x[i].X
-      for i in range(n_patients)
+      for i in range(self.n_patients)
       if np.isfinite(nll_penalty_for_patient_in_range[i])
     )
     if verbose:
