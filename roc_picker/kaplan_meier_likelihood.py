@@ -197,6 +197,8 @@ class ILPForKM:
     self.__parameter_min = parameter_min
     self.__parameter_max = parameter_max
     self.__time_point = time_point
+    self.__expected_probability_constraint = None
+    self.__binomial_penalty_constraint = None
     if not np.isfinite(self.__parameter_min and self.__parameter_min != -np.inf):
       raise ValueError("parameter_min must be finite or -inf")
     if not np.isfinite(self.__parameter_max and self.__parameter_max != np.inf):
@@ -420,12 +422,11 @@ class ILPForKM:
     """
     return np.count_nonzero(self.patient_alive & self.parameter_in_range)
   
-  @classmethod
+  @staticmethod
+  @functools.cache
   def create_binomial_penalty_table(
-    cls,
     n_patients: int,
     expected_probability: float,
-    patient_wise_only: bool = False,
   ) -> dict[tuple[int, int], float]:
     """
     Create a table of binomial penalties for each (n_alive, n_total) pair.
@@ -436,11 +437,8 @@ class ILPForKM:
     binomial_penalty_table = {}
     for n_total in range(n_patients + 1):
       for n_alive in range(n_total + 1):
-        if not patient_wise_only:
-          penalty = -scipy.stats.binom.logpmf(n_alive, n_total, expected_probability)
-          binomial_penalty_table[(n_alive, n_total)] = penalty.item()
-        else:
-          binomial_penalty_table[(n_alive, n_total)] = 0
+        penalty = -scipy.stats.binom.logpmf(n_alive, n_total, expected_probability)
+        binomial_penalty_table[(n_alive, n_total)] = penalty.item()
     return binomial_penalty_table
   
   @classmethod
@@ -450,6 +448,9 @@ class ILPForKM:
     censored_counts: tuple[int, ...],
     died_counts: tuple[int, ...],
   ) -> float:
+    """
+    Calculate the Kaplan-Meier probability at the time point.
+    """
     assert len(censored_counts) == len(died_counts), "Censored and died groups must have the same length"
     n_groups = len(censored_counts)
 
@@ -472,6 +473,18 @@ class ILPForKM:
           probability = 0
 
     return probability
+  
+  @functools.cached_property
+  def observed_KM_probability(self) -> float:
+    """
+    The observed Kaplan-Meier probability at the time point.
+    This is calculated using the observed counts of patients who were censored or died.
+    """
+    return self.calculate_KM_probability(
+      total_count=self.n_total_obs,
+      censored_counts=tuple(self.n_censored_in_group_obs),
+      died_counts=tuple(self.n_died_in_group_obs),
+    )
 
   @classmethod
   @functools.cache
@@ -533,10 +546,16 @@ class ILPForKM:
       n_died_in_group=tuple(self.n_died_in_group_obs),
       verbose=False,
     )
+  
+  @functools.cached_property
+  def n_trajectories(self) -> int:
+    """
+    The number of valid trajectories.
+    """
+    return len(self.valid_trajectories)
 
-  def calculate_nll_penalty_for_patient_in_range(
-    self,
-  ) -> npt.NDArray[np.float64]:
+  @functools.cached_property
+  def nll_penalty_for_patient_in_range(self) -> npt.NDArray[np.float64]:
     """
     Calculate the negative log-likelihood penalty for each patient
     if that patient is within the parameter range.
@@ -576,71 +595,7 @@ class ILPForKM:
 
     return nll_penalty_for_patient_in_range
 
-
-  def run_ILP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
-    self,
-    expected_probability: float,
-    *,
-    verbose=False,
-    binomial_only=False,
-    patient_wise_only=False,
-    gurobi_rtol=1e-6,
-  ):
-    """
-    Run the ILP for the given time point.
-    """
-    if not patient_wise_only and (expected_probability <= 0 or expected_probability >= 1):
-      raise ValueError("expected_probability must be in (0, 1)")
-    if expected_probability < 0 or expected_probability > 1:
-      raise ValueError("expected_probability must be in [0, 1]")
-    if binomial_only and patient_wise_only:
-      raise ValueError("binomial_only and patient_wise_only cannot both be True")
-    if not patient_wise_only:
-      raise NotImplementedError("Censored patients are not supported except in patient-wise-only mode")
-
-    binomial_penalty_table = self.create_binomial_penalty_table(
-      n_patients=self.n_patients,
-      expected_probability=expected_probability,
-      patient_wise_only=patient_wise_only,
-    )
-
-    # Different possible numbers of included patients who were censored or died
-    # in each group
-    trajectories = self.valid_trajectories
-
-    n_trajectories = len(trajectories)
-    assert n_trajectories > 0
-
-    observed_probability = self.calculate_KM_probability(
-      total_count=self.n_total_obs,
-      censored_counts=tuple(self.n_censored_in_group_obs),
-      died_counts=tuple(self.n_died_in_group_obs),
-    )
-
-    nll_penalty_for_patient_in_range = self.calculate_nll_penalty_for_patient_in_range()
-
-    if binomial_only or not any(np.isfinite(nll_penalty_for_patient_in_range)):
-      if patient_wise_only:
-        raise ValueError(
-          "patient_wise_only cannot be True when binomial_only is True "
-          "or when the parameter range is not finite"
-        )
-      binomial_penalty_val = binomial_penalty_table[(self.n_alive_obs, self.n_total_obs)]
-      return scipy.optimize.OptimizeResult(
-        x=2*binomial_penalty_val,
-        success=True,
-        n_total=self.n_total_obs,
-        n_alive=self.n_alive_obs,
-        binomial_2NLL=2*binomial_penalty_val,
-        patient_2NLL=0,
-        selected=self.parameter_in_range,
-        model=None,
-      )
-
-    # ---------------------------
-    # Gurobi model
-    # ---------------------------
-
+  def _make_gurobi_model(self):
     model = gp.Model("Kaplan-Meier ILP")
 
     # Binary decision variables: x[i] = 1 if patient i is within the parameter range
@@ -684,14 +639,29 @@ class ILPForKM:
     n_alive = model.addVar(vtype=GRB.INTEGER, name="n_alive")
     model.addConstr(n_alive == gp.quicksum(x[i] for i in range(self.n_patients) if self.patient_alive[i]))
 
+    #indicator variables for binomial penalty
+    #this only works with no censoring
+    #they'll be removed soon
+    binom_indicator_vars = {}
+    for n_total_val in range(self.n_patients + 1):
+      for n_alive_val in range(n_total_val + 1):
+        ind = model.addVar(vtype=GRB.BINARY, name=f"ind_{n_alive_val}_{n_total_val}")
+        binom_indicator_vars[(n_alive_val, n_total_val)] = ind
+        # Add indicator constraint: if active, enforce n_alive and n_total match
+        model.addGenConstrIndicator(ind, True, n_alive - n_alive_val, GRB.EQUAL, 0)
+        model.addGenConstrIndicator(ind, True, n_total - n_total_val, GRB.EQUAL, 0)
+
+    # Only one pair can be active
+    model.addConstr(gp.quicksum(binom_indicator_vars.values()) == 1)
+
     # indicator variables for each trajectory
     traj_indicator_vars = model.addVars(
-      n_trajectories,
+      self.n_trajectories,
       vtype=GRB.BINARY,
       name="indicator"
     )
     # Constraints to enforce trajectory selection
-    for traj_idx, (total_count, censored_counts, died_counts, _) in enumerate(trajectories):
+    for traj_idx, (total_count, censored_counts, died_counts, _) in enumerate(self.valid_trajectories):
       # Sum of selected patients must match trajectory counts
       model.addGenConstrIndicator(
         traj_indicator_vars[traj_idx],
@@ -718,25 +688,71 @@ class ILPForKM:
     #Only one trajectory can be selected
     model.addConstr(gp.quicksum(traj_indicator_vars) == 1)
 
+    # Patient-wise penalties
+    patient_penalties = []
+    for i in range(self.n_patients):
+      if np.isfinite(self.nll_penalty_for_patient_in_range[i]):
+        patient_penalties.append(self.nll_penalty_for_patient_in_range[i] * x[i])
+      elif np.isposinf(self.nll_penalty_for_patient_in_range[i]):
+        #the patient must be selected, so we add a constraint
+        model.addConstr(x[i] == 1)
+      elif np.isneginf(self.nll_penalty_for_patient_in_range[i]):
+        #the patient must not be selected, so we add a constraint
+        model.addConstr(x[i] == 0)
+      else:
+        raise ValueError(
+          f"Unexpected NLL penalty for patient {i}: "
+          f"{self.nll_penalty_for_patient_in_range[i]}"
+        )
+
+    patient_penalty = gp.quicksum(patient_penalties)
+    binom_penalty = model.addVar(vtype=GRB.CONTINUOUS, name="binom_penalty")
+
+    # Objective: minimize total penalty
+    binom_penalty = 0
+    model.setObjective(
+      2 * (binom_penalty + patient_penalty),
+      GRB.MINIMIZE,
+    )
+    model.update()
+
+    return model, traj_indicator_vars, binom_indicator_vars
+  
+  @functools.cached_property
+  def gurobi_model(self):
+    """
+    Create the Gurobi model for the ILP.
+    This is a cached property to avoid recreating the model multiple times.
+    """
+    return self._make_gurobi_model()
+  
+  def update_model_with_expected_probability(
+    self,
+    *,
+    model: gp.Model,
+    expected_probability: float,
+    patient_wise_only: bool,
+    traj_indicator_vars: gp.tupledict[int, gp.Var],
+    binom_indicator_vars: dict[tuple[int, int], gp.Var],
+  ):
+    #drop the previous constraints if they exist
+    if self.__expected_probability_constraint is not None:
+      model.remove(self.__expected_probability_constraint)
+      self.__expected_probability_constraint = None
+    if self.__binomial_penalty_constraint is not None:
+      model.remove(self.__binomial_penalty_constraint)
+      self.__binomial_penalty_constraint = None
+
     if not patient_wise_only:
       # ---------------------------
       # Indicator grid for binomial penalty
       # ---------------------------
 
-      # Create binary indicators for each valid (n_alive, n_total)
-      binom_indicator_vars = {}
-      for n_total_val in range(self.n_patients + 1):
-        for n_alive_val in range(n_total_val + 1):
-          ind = model.addVar(vtype=GRB.BINARY, name=f"ind_{n_alive_val}_{n_total_val}")
-          binom_indicator_vars[(n_alive_val, n_total_val)] = ind
-          # Add indicator constraint: if active, enforce n_alive and n_total match
-          model.addGenConstrIndicator(ind, True, n_alive - n_alive_val, GRB.EQUAL, 0)
-          model.addGenConstrIndicator(ind, True, n_total - n_total_val, GRB.EQUAL, 0)
-
-      # Only one pair can be active
-      model.addConstr(gp.quicksum(binom_indicator_vars.values()) == 1)
-
       # Binomial penalty
+      binomial_penalty_table = self.create_binomial_penalty_table(
+        n_patients=self.n_patients,
+        expected_probability=expected_probability,
+      )
       binom_penalty = gp.quicksum(
         binomial_penalty_table[(na, nt)] * ind
         for (na, nt), ind in binom_indicator_vars.items()
@@ -750,46 +766,83 @@ class ILPForKM:
       #and find the minimum patient-wise NLL.
       binom_penalty = 0
 
-      if expected_probability > observed_probability:
-        model.addConstr(
+      if expected_probability > self.observed_KM_probability:
+        self.__expected_probability_constraint = model.addConstr(
           gp.quicksum(
-            traj_indicator_vars[i] for i in range(n_trajectories)
-            if trajectories[i][3] >= expected_probability
+            traj_indicator_vars[i] for i in range(self.n_trajectories)
+            if self.valid_trajectories[i][3] >= expected_probability
           ) == 1
         )
-      elif expected_probability < observed_probability:
-        model.addConstr(
+      elif expected_probability < self.observed_KM_probability:
+        self.__expected_probability_constraint = model.addConstr(
           gp.quicksum(
-            traj_indicator_vars[i] for i in range(n_trajectories)
-            if trajectories[i][3] <= expected_probability
+            traj_indicator_vars[i] for i in range(self.n_trajectories)
+            if self.valid_trajectories[i][3] <= expected_probability
           ) == 1
         )
       else:
-        assert expected_probability == observed_probability
+        assert expected_probability == self.observed_KM_probability
+    
+    binom_penalty_var = model.getVarByName("binom_penalty")
+    self.__binomial_penalty_constraint = model.addConstr(
+      binom_penalty_var == binom_penalty,
+      name="binomial_penalty"
+    )
+    model.update()
 
-    # Patient-wise penalties
-    patient_penalties = []
-    for i in range(self.n_patients):
-      if np.isfinite(nll_penalty_for_patient_in_range[i]):
-        patient_penalties.append(nll_penalty_for_patient_in_range[i] * x[i])
-      elif np.isposinf(nll_penalty_for_patient_in_range[i]):
-        #the patient must be selected, so we add a constraint
-        model.addConstr(x[i] == 1)
-      elif np.isneginf(nll_penalty_for_patient_in_range[i]):
-        #the patient must not be selected, so we add a constraint
-        model.addConstr(x[i] == 0)
-      else:
+  def run_ILP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
+    self,
+    expected_probability: float,
+    *,
+    verbose=False,
+    binomial_only=False,
+    patient_wise_only=False,
+    gurobi_rtol=1e-6,
+  ):
+    """
+    Run the ILP for the given time point.
+    """
+    if not patient_wise_only and (expected_probability <= 0 or expected_probability >= 1):
+      raise ValueError("expected_probability must be in (0, 1)")
+    if expected_probability < 0 or expected_probability > 1:
+      raise ValueError("expected_probability must be in [0, 1]")
+    if binomial_only and patient_wise_only:
+      raise ValueError("binomial_only and patient_wise_only cannot both be True")
+    if not patient_wise_only:
+      raise NotImplementedError("Censored patients are not supported except in patient-wise-only mode")
+
+    binomial_penalty_table = self.create_binomial_penalty_table(
+      n_patients=self.n_patients,
+      expected_probability=expected_probability,
+    )
+
+    nll_penalty_for_patient_in_range = self.nll_penalty_for_patient_in_range
+
+    if binomial_only or not any(np.isfinite(nll_penalty_for_patient_in_range)):
+      if patient_wise_only:
         raise ValueError(
-          f"Unexpected NLL penalty for patient {i}: "
-          f"{nll_penalty_for_patient_in_range[i]}"
+          "patient_wise_only cannot be True when binomial_only is True "
+          "or when the parameter range is not finite"
         )
+      binomial_penalty_val = binomial_penalty_table[(self.n_alive_obs, self.n_total_obs)]
+      return scipy.optimize.OptimizeResult(
+        x=2*binomial_penalty_val,
+        success=True,
+        n_total=self.n_total_obs,
+        n_alive=self.n_alive_obs,
+        binomial_2NLL=2*binomial_penalty_val,
+        patient_2NLL=0,
+        selected=self.parameter_in_range,
+        model=None,
+      )
 
-    patient_penalty = gp.quicksum(patient_penalties)
-
-    # Objective: minimize total penalty
-    model.setObjective(
-      2 * (binom_penalty + patient_penalty),
-      GRB.MINIMIZE,
+    model, traj_indicator_vars, binomial_indicator_vars = self.gurobi_model
+    self.update_model_with_expected_probability(
+      model=model,
+      traj_indicator_vars=traj_indicator_vars,
+      expected_probability=expected_probability,
+      patient_wise_only=patient_wise_only,
+      binom_indicator_vars=binomial_indicator_vars,
     )
 
     if verbose:
@@ -824,6 +877,15 @@ class ILPForKM:
         "This may indicate an issue with the ILP formulation or the input data."
       )
 
+    x: list[gp.Var] = []
+    for i in range(self.n_patients):
+      var = model.getVarByName(f"x[{i}]")
+      assert var is not None
+      x.append(var)
+    n_total = model.getVarByName("n_total")
+    n_alive = model.getVarByName("n_alive")
+    assert n_total is not None
+    assert n_alive is not None
     selected = [i for i in range(self.n_patients) if x[i].X > 0.5]
     n_alive_val = np.rint(n_alive.X)
     n_total_val = np.rint(n_total.X)
