@@ -643,7 +643,10 @@ class ILPForKM:
       GRB.MINIMIZE,
     )
 
-    if not verbose:
+    if verbose:
+      model.setParam('OutputFlag', 1)
+      model.setParam('DisplayInterval', 1)
+    else:
       # Suppress Gurobi output
       model.setParam('OutputFlag', 0)
     model.setParam("MIPGap", gurobi_rtol)
