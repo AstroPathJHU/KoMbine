@@ -227,11 +227,12 @@ class ILPForKM:
     return self.__time_point
 
   @staticmethod
+  @functools.cache
   def valid_trajectories(
     n_total_patients: int,
-    n_censored_in_group: list[int],
-    n_died_in_group: list[int],
-  ) -> list[tuple[int, list[int], list[int]]]:
+    n_censored_in_group: tuple[int, ...],
+    n_died_in_group: tuple[int, ...],
+  ) -> list[tuple[int, tuple[int], tuple[int], float]]:
     """
     Generate valid trajectories - the total number of included patients and the numbers of patients
     who were censored or died in each group - based on the total number of patients and the total number
@@ -241,6 +242,7 @@ class ILPForKM:
     """
     if len(n_censored_in_group) != len(n_died_in_group):
       raise ValueError("n_censored_in_group and n_died_in_group must have the same length")
+    n_groups = len(n_censored_in_group)
     if sum(n_censored_in_group) + sum(n_died_in_group) > n_total_patients:
       raise ValueError(
         "The total number of patients who were censored or died exceeds the total number of patients"
@@ -249,12 +251,31 @@ class ILPForKM:
     # For each group, possible number of censored and died patients included: 0..n_censored/died
     censored_ranges = [range(nc + 1) for nc in n_censored_in_group]
     died_ranges = [range(nd + 1) for nd in n_died_in_group]
-    for total_count in range(1, n_total_patients + 1):
+    for total_count in range(1, n_total_patients + 1): #pylint: disable=too-many-nested-blocks
       for censored_counts in itertools.product(*censored_ranges):
         for died_counts in itertools.product(*died_ranges):
           if sum(censored_counts) + sum(died_counts) > total_count:
             continue
-          result.append((total_count, list(censored_counts), list(died_counts)))
+
+          if not n_groups:
+            # If there are no groups, nobody died, so the probability is 1
+            expected_trajectory_probability = 1.0
+          else:
+            n_at_risk = [total_count - censored_counts[0]]
+            for i in range(1, n_groups):
+              n_at_risk.append(
+                n_at_risk[i - 1] - died_counts[i - 1] - censored_counts[i]
+              )
+            expected_trajectory_probability = 1.0
+            for i in range(n_groups):
+              if n_at_risk[i] > 0:
+                expected_trajectory_probability *= (
+                  n_at_risk[i] - died_counts[i]
+                ) / n_at_risk[i]
+              else:
+                expected_trajectory_probability = 0
+
+          result.append((total_count, tuple(censored_counts), tuple(died_counts), expected_trajectory_probability))
     return result
 
   def run_ILP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
@@ -384,37 +405,11 @@ class ILPForKM:
     # in each group
     trajectories = self.valid_trajectories(
       n_patients,
-      [np.count_nonzero(censored) for censored in censored_in_group],
-      [np.count_nonzero(died) for died in died_in_group],
+      tuple(np.count_nonzero(censored) for censored in censored_in_group),
+      tuple(np.count_nonzero(died) for died in died_in_group),
     )
     n_trajectories = len(trajectories)
     assert n_trajectories > 0
-
-    # Calculate the KM probability for each trajectory
-    expected_trajectory_probabilities = []
-    print(len(trajectories))
-    for n_total, censored_counts, died_counts in trajectories:
-      if n_total == 0:
-        assert False
-      if not n_groups:
-        # If there are no groups, nobody died, so the probability is 1
-        expected_trajectory_probabilities.append(1.0)
-        continue
-      n_at_risk = [n_total - censored_counts[0]]
-      for i in range(1, n_groups):
-        n_at_risk.append(
-          n_at_risk[i - 1] - died_counts[i - 1] - censored_counts[i]
-        )
-      expected_trajectory_probability = 1.0
-      for i in range(n_groups):
-        if n_at_risk[i] > 0:
-          expected_trajectory_probability *= (
-            n_at_risk[i] - died_counts[i]
-          ) / n_at_risk[i]
-        else:
-          expected_trajectory_probability = 0
-      expected_trajectory_probabilities.append(expected_trajectory_probability)
-    expected_trajectory_probabilities = np.array(expected_trajectory_probabilities)
 
     if n_groups == 0:
       n_at_risk_obs = []
@@ -530,7 +525,7 @@ class ILPForKM:
       name="indicator"
     )
     # Constraints to enforce trajectory selection
-    for traj_idx, (total_count, censored_counts, died_counts) in enumerate(trajectories):
+    for traj_idx, (total_count, censored_counts, died_counts, _) in enumerate(trajectories):
       # Sum of selected patients must match trajectory counts
       model.addGenConstrIndicator(
         traj_indicator_vars[traj_idx],
@@ -602,14 +597,14 @@ class ILPForKM:
         model.addConstr(
           gp.quicksum(
             traj_indicator_vars[i] for i in range(n_trajectories)
-            if expected_trajectory_probabilities[i] >= expected_probability
+            if trajectories[i][3] >= expected_probability
           ) == 1
         )
       elif expected_probability < observed_probability:
         model.addConstr(
           gp.quicksum(
             traj_indicator_vars[i] for i in range(n_trajectories)
-            if expected_trajectory_probabilities[i] <= expected_probability
+            if trajectories[i][3] <= expected_probability
           ) == 1
         )
       else:
