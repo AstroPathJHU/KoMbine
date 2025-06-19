@@ -3,6 +3,7 @@ Kaplan-Meier curve with error bars calculated using the log-likelihood method.
 """
 
 import collections.abc
+import datetime
 import functools
 import itertools
 
@@ -24,19 +25,6 @@ from .kaplan_meier import (
   KaplanMeierPatient,
   KaplanMeierPatientBase,
 )
-
-@functools.cache
-def possible_probabilities(n_patients) -> np.ndarray:
-  """
-  Get the possible probabilities for the given patients.
-  This is used to speed up the calculation of survival probabilities.
-  """
-  return np.unique([
-    n_alive / n_total
-    for n_total in range(n_patients + 1)
-    for n_alive in range(n_total + 1)
-    if n_total > 0
-  ])
 
 class KaplanMeierPatientNLL(KaplanMeierPatientBase):
   """
@@ -795,6 +783,7 @@ class ILPForKM:
     expected_probability: float,
     *,
     verbose=False,
+    print_progress=False,
     binomial_only=False,
     patient_wise_only=False,
     gurobi_rtol=1e-6,
@@ -802,6 +791,8 @@ class ILPForKM:
     """
     Run the ILP for the given time point.
     """
+    if print_progress or verbose:
+      print("Running ILP for expected probability ", expected_probability, " at time point ", self.time_point, " at time ", datetime.datetime.now())
     if not patient_wise_only and (expected_probability <= 0 or expected_probability >= 1):
       raise ValueError("expected_probability must be in (0, 1)")
     if expected_probability < 0 or expected_probability > 1:
@@ -1006,6 +997,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     binomial_only=False,
     patient_wise_only=False,
     verbose=False,
+    print_progress=False,
   ) -> collections.abc.Callable[[float], float]:
     """
     Get the twoNLL function for the given time point.
@@ -1021,20 +1013,35 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         binomial_only=binomial_only,
         patient_wise_only=patient_wise_only,
         verbose=verbose,
+        print_progress=print_progress,
       )
       if not result.success:
         return np.inf
       return result.x
     return twoNLL
 
-  @property
-  def possible_probabilities(self) -> np.ndarray:
+  def calculate_possible_probabilities(self, time_point: float) -> np.ndarray:
     """
     Get the possible probabilities for the given patients.
     """
-    return possible_probabilities(
-      n_patients=len(self.all_patients)
-    )
+    return np.unique([
+      probability
+      for _, _, _, probability
+      in self.ilp_for_km(time_point=time_point).valid_trajectories
+    ])
+
+  @functools.cached_property
+  def __possible_probabilities(self) -> dict[float, np.ndarray]:
+    return {}
+
+  def possible_probabilities(self, time_point: float) -> np.ndarray:
+    """
+    Get the possible probabilities for the given time point.
+    This is a cached property to avoid recalculating the probabilities multiple times.
+    """
+    if time_point not in self.__possible_probabilities:
+      self.__possible_probabilities[time_point] = self.calculate_possible_probabilities(time_point)
+    return self.__possible_probabilities[time_point]
 
   def best_probability( #pylint: disable=too-many-arguments
     self,
@@ -1058,7 +1065,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     if patient_wise_only:
       return minimize_discrete_single_minimum(
         objective_function=twoNLL,
-        possible_values=self.possible_probabilities,
+        possible_values=self.possible_probabilities(time_point),
         verbose=optimize_verbose,
       )
     result = scipy.optimize.minimize_scalar(
@@ -1080,13 +1087,16 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     patient_wise_only=False,
     gurobi_verbose=False,
     optimize_verbose=False,
+    print_progress=False,
   ) -> tuple[np.ndarray, np.ndarray]:
     """
     Get the survival probabilities for the given quantiles.
     """
     best_probabilities = []
     survival_probabilities = []
-    for t in times_for_plot:
+    for i, t in enumerate(times_for_plot, start=1):
+      if print_progress:
+        print(f"Calculating survival probabilities for time point {t:.2f} ({i} / {len(times_for_plot)}) at time {datetime.datetime.now()}")
       survival_probabilities_time_point = []
       survival_probabilities.append(survival_probabilities_time_point)
       twoNLL = self.get_twoNLL_function(
@@ -1094,6 +1104,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         binomial_only=binomial_only,
         patient_wise_only=patient_wise_only,
         verbose=gurobi_verbose,
+        print_progress=print_progress,
       )
       # Find the expected probability that minimizes the negative log-likelihood
       # for the given time point
@@ -1133,7 +1144,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         )
 
         if patient_wise_only:
-          probs = self.possible_probabilities
+          probs = self.possible_probabilities(time_point=t)
           i_best = int(np.searchsorted(probs, best_prob))
 
           # Check edge case: upper bound
@@ -1204,6 +1215,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     close_figure=None,
     show=False,
     saveas=None,
+    print_progress=False,
   ): #pylint: disable=too-many-locals
     """
     Plots the Kaplan-Meier curves.
@@ -1263,6 +1275,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       best_probabilities, CL_probabilities = self.survival_probabilities_likelihood(
         CLs=CLs,
         times_for_plot=times_for_plot,
+        print_progress=print_progress,
       )
     if include_binomial_only:
       (
@@ -1271,6 +1284,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         CLs=CLs,
         times_for_plot=times_for_plot,
         binomial_only=True,
+        print_progress=print_progress,
       )
       if include_full_NLL:
         CL_probabilities_subset = CL_probabilities_binomial
@@ -1284,6 +1298,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         CLs=CLs,
         times_for_plot=times_for_plot,
         patient_wise_only=True,
+        print_progress=print_progress,
       )
       if include_full_NLL:
         CL_probabilities_subset = CL_probabilities_patient_wise
