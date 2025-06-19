@@ -144,7 +144,7 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
   i_min = int(np.argmin(values))
   if verbose:
     print("Final candidates:")
-    for i, (p, v) in enumerate(zip(candidates, values)):
+    for i, (p, v) in enumerate(zip(candidates, values, strict=True)):
       print(f"{i + left:3d} {p:6.3f} {v:9.5g}")
     print("Winner:")
     print(f"{i_min + left:3d} {candidates[i_min]:6.3f} {values[i_min]:9.5g}")
