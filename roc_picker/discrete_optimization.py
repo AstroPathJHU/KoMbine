@@ -102,7 +102,7 @@ def binary_search_sign_change(
   probs: np.ndarray,
   lo: int,
   hi: int,
-  verbose: bool,
+  verbose: bool = False,
 ) -> float:
   """Binary search for first sign change across adjacent values."""
   evaluated = extract_inspectable_cache_values(objective_function, probs)
