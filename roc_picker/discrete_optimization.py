@@ -75,6 +75,19 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
     p_mid2 = possible_values[mid2]
     v_mid1 = objective_function(p_mid1)
     v_mid2 = objective_function(p_mid2)
+    if v_left < v_mid1:
+      #the minimum is to the left of mid1
+      right = mid1
+      p_right = p_mid1
+      v_right = v_mid1
+      continue
+    if v_right < v_mid2:
+      #the minimum is to the right of mid2
+      left = mid2
+      p_left = p_mid2
+      v_left = v_mid2
+      continue
+
     while np.isclose(v_mid1, v_mid2) and (mid1 > left + 1 or mid2 < right - 1):
       if (mid1 - left) > (right - mid2):
         #mid1 is further from the end, so move it closer
