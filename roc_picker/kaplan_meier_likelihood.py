@@ -171,7 +171,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       parameter=self.observed_parameter,
     )
 
-class ILPForKM:
+class ILPForKM:  # pylint: disable=too-many-public-methods
   """
   Integer Linear Programming for a point on the Kaplan-Meier curve.
   """
@@ -270,7 +270,7 @@ class ILPForKM:
     )
 
   @staticmethod
-  def group_patients(
+  def group_patients(  # pylint: disable=too-many-locals
     patient_times: npt.NDArray[np.float64],
     patient_censored: npt.NDArray[np.bool_],
     patient_still_at_risk: npt.NDArray[np.bool_],
@@ -461,7 +461,8 @@ class ILPForKM:
     """
     Calculate the Kaplan-Meier probability at the time point.
     """
-    assert len(censored_counts) == len(died_counts), "Censored and died groups must have the same length"
+    if len(censored_counts) != len(died_counts):
+      raise ValueError("Censored and died counts must have the same length")
     n_groups = len(censored_counts)
 
     if not n_groups:
@@ -507,8 +508,8 @@ class ILPForKM:
   ) -> list[tuple[int, tuple[int], tuple[int], float]]:
     """
     Generate valid trajectories - the total number of included patients and the numbers of patients
-    who were censored or died in each group - based on the total number of patients and the total number
-    who were censored or died in each group.
+    who were censored or died in each group - based on the total number of patients and the
+    total number who were censored or died in each group.
 
     The minimum total count is 1 - we don't allow all patients to be excluded.
     """
@@ -517,15 +518,23 @@ class ILPForKM:
     n_groups = len(n_censored_in_group)
     if sum(n_censored_in_group) + sum(n_died_in_group) > n_total_patients:
       raise ValueError(
-        "The total number of patients who were censored or died exceeds the total number of patients"
+        "The total number of patients who were censored or died "
+        "exceeds the total number of patients"
       )
     result = []
     # For each group, possible number of censored and died patients included: 0..n_censored/died
     censored_ranges = [range(nc + 1) for nc in n_censored_in_group]
     died_ranges = [range(nd + 1) for nd in n_died_in_group]
-    n_trajectories = n_total_patients * np.prod(np.array(n_censored_in_group) + 1) * np.prod(np.array(n_died_in_group) + 1)
+    n_trajectories = (
+      n_total_patients
+        * np.prod(np.array(n_censored_in_group) + 1)
+        * np.prod(np.array(n_died_in_group) + 1)
+    )
     if verbose:
-      print(f"Generating {n_trajectories} trajectories for {n_total_patients} total patients in {n_groups} groups")
+      print(
+        f"Generating {n_trajectories} trajectories for "
+        f"{n_total_patients} total patients in {n_groups} groups"
+      )
     n_generated = 0
     for total_count in range(1, n_total_patients + 1): #pylint: disable=too-many-nested-blocks
       for censored_counts in itertools.product(*censored_ranges):
@@ -541,7 +550,12 @@ class ILPForKM:
             censored_counts=censored_counts,
             died_counts=died_counts,
           )
-          result.append((total_count, tuple(censored_counts), tuple(died_counts), expected_trajectory_probability))
+          result.append((
+            total_count,
+            tuple(censored_counts),
+            tuple(died_counts),
+            expected_trajectory_probability,
+          ))
     return result
 
   @functools.cached_property
@@ -605,7 +619,13 @@ class ILPForKM:
 
     return nll_penalty_for_patient_in_range
 
-  def _make_gurobi_model(self):
+  def _make_gurobi_model(self):  #pylint: disable=too-many-locals
+    """
+    Create the Gurobi model for the ILP.
+    This method constructs the model with decision variables, constraints,
+    and the objective function.  It does NOT include the constraint for the
+    expected probability, which is added in update_model_with_expected_probability.
+    """
     model = gp.Model("Kaplan-Meier ILP")
 
     # Binary decision variables: x[i] = 1 if patient i is within the parameter range
@@ -633,10 +653,14 @@ class ILPForKM:
     # Constraints to link to totals
     for idx in range(self.n_groups):
       model.addConstr(
-        n_censored_in_group[idx] == gp.quicksum(x[i] for i in range(self.n_patients) if self.censored_in_group[idx][i])
+        n_censored_in_group[idx] == gp.quicksum(
+          x[i] for i in range(self.n_patients) if self.censored_in_group[idx][i]
+        )
       )
       model.addConstr(
-        n_died_in_group[idx] == gp.quicksum(x[i] for i in range(self.n_patients) if self.died_in_group[idx][i])
+        n_died_in_group[idx] == gp.quicksum(
+          x[i] for i in range(self.n_patients) if self.died_in_group[idx][i]
+        )
       )
       if idx == 0:
         model.addConstr(
@@ -647,7 +671,11 @@ class ILPForKM:
           n_at_risk[idx] == n_at_risk[idx - 1] - n_died_in_group[idx - 1] - n_censored_in_group[idx]
         )
     n_alive = model.addVar(vtype=GRB.INTEGER, name="n_alive")
-    model.addConstr(n_alive == gp.quicksum(x[i] for i in range(self.n_patients) if self.patient_alive[i]))
+    model.addConstr(
+      n_alive == gp.quicksum(
+        x[i] for i in range(self.n_patients) if self.patient_alive[i]
+      )
+    )
 
     #indicator variables for binomial penalty
     #this only works with no censoring
@@ -671,7 +699,9 @@ class ILPForKM:
       name="indicator"
     )
     # Constraints to enforce trajectory selection
-    for traj_idx, (total_count, censored_counts, died_counts, _) in enumerate(self.valid_trajectories):
+    for (
+      traj_idx, (total_count, censored_counts, died_counts, _)
+    ) in enumerate(self.valid_trajectories):
       # Sum of selected patients must match trajectory counts
       model.addGenConstrIndicator(
         traj_indicator_vars[traj_idx],
@@ -736,7 +766,7 @@ class ILPForKM:
     """
     return self._make_gurobi_model()
 
-  def update_model_with_expected_probability(
+  def update_model_with_expected_probability( # pylint: disable=too-many-arguments
     self,
     *,
     model: gp.Model,
@@ -745,6 +775,10 @@ class ILPForKM:
     traj_indicator_vars: gp.tupledict[int, gp.Var],
     binom_indicator_vars: dict[tuple[int, int], gp.Var],
   ):
+    """
+    Update the Gurobi model with the expected probability constraint.
+    This is the only thing that changes between runs of the ILP.
+    """
     #drop the previous constraints if they exist
     if self.__expected_probability_constraint is not None:
       model.remove(self.__expected_probability_constraint)
@@ -825,7 +859,9 @@ class ILPForKM:
     if binomial_only and patient_wise_only:
       raise ValueError("binomial_only and patient_wise_only cannot both be True")
     if not patient_wise_only:
-      raise NotImplementedError("Censored patients are not supported except in patient-wise-only mode")
+      raise NotImplementedError(
+        "Censored patients are not supported except in patient-wise-only mode"
+      )
 
     binomial_penalty_table = self.create_binomial_penalty_table(
       n_patients=self.n_patients,
@@ -1016,9 +1052,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       for t in times_for_plot
     ]
 
-  def get_twoNLL_function(
+  def get_twoNLL_function( # pylint: disable=too-many-arguments
     self,
     time_point: float,
+    *,
     binomial_only=False,
     patient_wise_only=False,
     verbose=False,
