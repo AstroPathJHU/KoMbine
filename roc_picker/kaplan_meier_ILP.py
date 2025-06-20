@@ -1,3 +1,7 @@
+"""
+Integer Linear Programming implementation for the Kaplan-Meier likelihood method.
+"""
+
 import collections.abc
 import datetime
 import functools
