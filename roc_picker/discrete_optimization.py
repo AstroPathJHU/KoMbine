@@ -20,6 +20,34 @@ def smart_bisect(start, end, evaluated):
     return target
   return min(candidates, key=lambda i: abs(i - target))
 
+def smart_double_bisect(left, mid1, mid2, right, evaluated):
+  """
+  Bisect either [left, mid1] or [mid2, right] to find the closest value
+  to the midpoints that has been evaluated in the `evaluated` list.
+  If no such value exists, bisect the smaller of the two ranges.
+  Returns the new mid1 and mid2 (one of which will be unchanged).
+  """
+  if not (left < mid1 < mid2 < right) or (left == mid1-1 and mid2 == right-1):
+    raise ValueError(f"Invalid range: left={left}, mid1={mid1}, mid2={mid2}, right={right}")
+  cand1 = (left + mid1) // 2
+  cand2 = (mid2 + right) // 2
+
+  choices = []
+  for i in evaluated:
+    if left < i < mid1:
+      choices.append((abs(i - cand1), 'mid1', i))
+    elif mid2 < i < right:
+      choices.append((abs(i - cand2), 'mid2', i))
+
+  if choices:
+    _, which, idx = min(choices)
+    return (idx, mid2) if which == 'mid1' else (mid1, idx)
+
+  if (mid1 - left) > (right - mid2):
+    return ((left + mid1) // 2, mid2)
+  return (mid1, (mid2 + right) // 2)
+
+
 def smart_trisect(left, right, evaluated):
   """
   Trisect the range [left, right] to find two points that are closest
@@ -137,21 +165,16 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
     while np.isclose(v_mid1, v_mid2, atol=atol, rtol=rtol) and (mid1 > left + 1 or mid2 < right - 1):
       if verbose:
         print("  --------")
-        print ("  Adjusting mid1 and mid2 due to equal values")
+        print("  Adjusting mid1 and mid2 due to equal values")
         print(f"  {left:3d} {p_left:6.3f} {v_left:15.9g}")
         print(f"  {mid1:3d} {p_mid1:6.3f} {v_mid1:15.9g}")
         print(f"  {mid2:3d} {p_mid2:6.3f} {v_mid2:15.9g}")
         print(f"  {right:3d} {p_right:6.3f} {v_right:15.9g}")
-      if (mid1 - left) > (right - mid2):
-        new_mid1 = smart_bisect(left, mid1, evaluated)
-        if new_mid1 == mid1:
-          break
-        mid1 = new_mid1
-      else:
-        new_mid2 = smart_bisect(mid2, right, evaluated)
-        if new_mid2 == mid2:
-          break
-        mid2 = new_mid2
+
+      new_mid1, new_mid2 = smart_double_bisect(left, mid1, mid2, right, evaluated)
+      if new_mid1 == mid1 and new_mid2 == mid2:
+        break
+      mid1, mid2 = new_mid1, new_mid2
 
       for mid in (mid1, mid2):
         if mid not in evaluated:
