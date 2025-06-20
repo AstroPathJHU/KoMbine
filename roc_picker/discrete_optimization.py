@@ -201,7 +201,10 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
       v_left = v_mid2
       continue
 
-    while np.isclose(v_mid1, v_mid2, atol=atol, rtol=rtol) and (mid1 > left + 1 or mid2 < right - 1):
+    while (
+      np.isclose(v_mid1, v_mid2, atol=atol, rtol=rtol)
+        and (mid1 > left + 1 or mid2 < right - 1)
+    ):
       if verbose:
         print("  --------")
         print("  Adjusting mid1 and mid2 due to equal values")

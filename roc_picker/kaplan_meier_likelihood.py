@@ -274,13 +274,15 @@ class ILPForKM:
     patient_times: npt.NDArray[np.float64],
     patient_censored: npt.NDArray[np.bool_],
     patient_still_at_risk: npt.NDArray[np.bool_],
-  ):
-    #divide the patients into groups:
-    #first the ones who were censored before anyone died
-    #then the ones who died
-    #then the next ones who were censored
-    #then the next ones who died
-    #etc.
+  ) -> tuple[list[npt.NDArray[np.bool_]], list[npt.NDArray[np.bool_]]]:
+    """
+    divide the patients into groups:
+    first the ones who were censored before anyone died
+    then the ones who died
+    then the next ones who were censored
+    then the next ones who died
+    etc.
+    """
     censored_in_group = []
     died_in_group = []
 
@@ -340,7 +342,7 @@ class ILPForKM:
       raise ValueError("Mismatched lengths between censored and died groups.")
 
     return censored_in_group, died_in_group
-  
+
   @functools.cached_property
   def _patient_groups(self):
     """
@@ -375,7 +377,7 @@ class ILPForKM:
         "The number of censored groups does not match the number of died groups."
       )
     return result
-  
+
   @functools.cached_property
   def n_censored_in_group_total(self) -> npt.NDArray[np.int_]:
     """
@@ -429,7 +431,7 @@ class ILPForKM:
     using the observed parameters.
     """
     return np.count_nonzero(self.patient_alive & self.parameter_in_range)
-  
+
   @staticmethod
   @functools.cache
   def create_binomial_penalty_table(
@@ -448,7 +450,7 @@ class ILPForKM:
         penalty = -scipy.stats.binom.logpmf(n_alive, n_total, expected_probability)
         binomial_penalty_table[(n_alive, n_total)] = penalty.item()
     return binomial_penalty_table
-  
+
   @classmethod
   def calculate_KM_probability(
     cls,
@@ -481,7 +483,7 @@ class ILPForKM:
           probability = 0
 
     return probability
-  
+
   @functools.cached_property
   def observed_KM_probability(self) -> float:
     """
@@ -541,7 +543,7 @@ class ILPForKM:
           )
           result.append((total_count, tuple(censored_counts), tuple(died_counts), expected_trajectory_probability))
     return result
-  
+
   @functools.cached_property
   def valid_trajectories(self) -> list[tuple[int, tuple[int], tuple[int], float]]:
     """
@@ -554,7 +556,7 @@ class ILPForKM:
       n_died_in_group=tuple(self.n_died_in_group_total),
       verbose=False,
     )
-  
+
   @functools.cached_property
   def n_trajectories(self) -> int:
     """
@@ -725,7 +727,7 @@ class ILPForKM:
     model.update()
 
     return model, traj_indicator_vars, binom_indicator_vars
-  
+
   @functools.cached_property
   def gurobi_model(self):
     """
@@ -733,7 +735,7 @@ class ILPForKM:
     This is a cached property to avoid recreating the model multiple times.
     """
     return self._make_gurobi_model()
-  
+
   def update_model_with_expected_probability(
     self,
     *,
@@ -790,7 +792,7 @@ class ILPForKM:
         )
       else:
         assert expected_probability == self.observed_KM_probability
-    
+
     binom_penalty_var = model.getVarByName("binom_penalty")
     self.__binomial_penalty_constraint = model.addConstr(
       binom_penalty_var == binom_penalty,
@@ -812,7 +814,10 @@ class ILPForKM:
     Run the ILP for the given time point.
     """
     if print_progress or verbose:
-      print("Running ILP for expected probability ", expected_probability, " at time point ", self.time_point, " at time ", datetime.datetime.now())
+      print(
+        "Running ILP for expected probability ", expected_probability,
+        " at time point ", self.time_point, " at time ", datetime.datetime.now()
+      )
     if not patient_wise_only and (expected_probability <= 0 or expected_probability >= 1):
       raise ValueError("expected_probability must be in (0, 1)")
     if expected_probability < 0 or expected_probability > 1:
@@ -1109,7 +1114,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     survival_probabilities = []
     for i, t in enumerate(times_for_plot, start=1):
       if print_progress:
-        print(f"Calculating survival probabilities for time point {t:.2f} ({i} / {len(times_for_plot)}) at time {datetime.datetime.now()}")
+        print(
+          f"Calculating survival probabilities for time point {t:.2f} "
+          f"({i} / {len(times_for_plot)}) at time {datetime.datetime.now()}"
+        )
       survival_probabilities_time_point = []
       survival_probabilities.append(survival_probabilities_time_point)
       twoNLL = self.get_twoNLL_function(
