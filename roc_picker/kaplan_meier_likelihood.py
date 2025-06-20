@@ -1065,25 +1065,16 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
   def best_probability( #pylint: disable=too-many-arguments
     self,
+    twoNLL: collections.abc.Callable[[float], float],
     time_point: float,
     *,
-    binomial_only=False,
     patient_wise_only=False,
-    gurobi_verbose=False,
     optimize_verbose=False,
-    print_progress=False,
   ) -> tuple[float, float]:
     """
     Find the expected probability that minimizes the negative log-likelihood
     for the given time point.
     """
-    twoNLL = self.get_twoNLL_function(
-      time_point=time_point,
-      binomial_only=binomial_only,
-      patient_wise_only=patient_wise_only,
-      verbose=gurobi_verbose,
-      print_progress=print_progress,
-    )
     if patient_wise_only:
       return minimize_discrete_single_minimum(
         objective_function=twoNLL,
@@ -1132,12 +1123,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       # for the given time point
       try:
         best_prob, twoNLL_min = self.best_probability(
+          twoNLL=twoNLL,
           time_point=t,
-          binomial_only=binomial_only,
           patient_wise_only=patient_wise_only,
-          gurobi_verbose=gurobi_verbose,
           optimize_verbose=optimize_verbose,
-          print_progress=print_progress,
         )
       except Exception as e:
         raise RuntimeError(
