@@ -4,8 +4,31 @@ that are only evaluated at discrete values.
 """
 
 import collections.abc
+import typing
 
 import numpy as np
+
+from .utilities import InspectableCache
+
+def extract_inspectable_cache_values(
+  func: typing.Callable,
+  possible_values: np.ndarray
+) -> dict[int, float]:
+  """Return a dict mapping index → cached value from an InspectableCache-decorated function."""
+  if not isinstance(func, InspectableCache):
+    return {}
+  cache = func.cache  # Safe if you followed earlier protocol + cast
+
+  output = {}
+  for args, value in cache.items():
+    if not isinstance(args, tuple) or len(args) != 1:
+      continue
+    (x,) = args
+    matches = np.nonzero(possible_values == x)[0]
+    if len(matches) == 1:
+      output[int(matches[0])] = value
+  return output
+
 
 def smart_bisect(start, end, evaluated):
   """
@@ -79,22 +102,34 @@ def binary_search_sign_change(
   probs: np.ndarray,
   lo: int,
   hi: int,
-  verbose: bool = False,
+  verbose: bool = True,
 ) -> float:
   """Binary search for first sign change across adjacent values."""
-  if objective_function(probs[lo]) * objective_function(probs[hi]) > 0:
+  evaluated = extract_inspectable_cache_values(objective_function, probs)
+
+  def eval_or_get(i: int) -> float:
+    if i not in evaluated:
+      evaluated[i] = objective_function(probs[i])
+    return evaluated[i]
+
+  v_lo = eval_or_get(lo)
+  v_hi = eval_or_get(hi)
+
+  if v_lo * v_hi > 0:
     raise ValueError(f"No sign change found between indices {lo} and {hi}")
-  v_hi = objective_function(probs[hi])
-  v_lo = objective_function(probs[lo])
+
   if verbose:
     print("=================")
     print(lo, probs[lo], v_lo)
     print(hi, probs[hi], v_hi)
+
   while hi - lo > 1:
-    mid = (lo + hi) // 2
-    v_mid = objective_function(probs[mid])
+    mid = smart_bisect(lo, hi, evaluated)
+    v_mid = eval_or_get(mid)
+
     if verbose:
       print(mid, probs[mid], v_mid)
+
     if v_mid * v_hi <= 0:
       lo = mid
       v_lo = v_mid
@@ -103,10 +138,12 @@ def binary_search_sign_change(
       v_hi = v_mid
     else:
       raise ValueError(f"No sign change found between indices {lo} and {hi}")
+
   assert (v_lo <= 0) + (v_hi <= 0) == 1, (
     f"Expected one of v_lo or v_hi to be <= 0, got "
     f"v_lo={v_lo}, v_hi={v_hi} for indices {lo} and {hi}"
   )
+
   if v_hi <= 0:
     if verbose:
       print(f"Returning {probs[hi]} at index {hi} with v_hi={v_hi}")
@@ -115,6 +152,7 @@ def binary_search_sign_change(
     if verbose:
       print(f"Returning {probs[lo]} at index {lo} with v_lo={v_lo}")
     return probs[lo]
+
   raise ValueError(f"No sign change found between indices {lo} and {hi}")
 
 def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many-branches, too-many-statements
@@ -137,7 +175,8 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
   v_left = objective_function(p_left)
   v_right = objective_function(p_right)
 
-  evaluated = {left: v_left, right: v_right}
+  evaluated = extract_inspectable_cache_values(objective_function, possible_values)
+  evaluated.update({left: v_left, right: v_right})
 
   while right - left > 3:
     mid1, mid2 = smart_trisect(left, right, evaluated)
