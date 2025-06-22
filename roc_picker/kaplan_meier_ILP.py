@@ -718,7 +718,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
           died_counts[group_idx]
         )
     #Only one trajectory can be selected
-    model.addConstr(gp.quicksum(traj_indicator_vars) == 1)
+    model.addConstr(traj_indicator_vars.sum() == 1)
 
     # Patient-wise penalties
     patient_penalties = []
@@ -850,7 +850,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
       raise ValueError("expected_probability must be in [0, 1]")
     if binomial_only and patient_wise_only:
       raise ValueError("binomial_only and patient_wise_only cannot both be True")
-    if not patient_wise_only:
+    if not patient_wise_only and np.any(self.patient_censored):
       raise NotImplementedError(
         "Censored patients are not supported except in patient-wise-only mode"
       )
