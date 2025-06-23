@@ -415,14 +415,14 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     The total number of patients who are alive at the time point
     using the observed parameters.
     """
-    return np.count_nonzero(self.parameter_in_range)
+    return int(np.count_nonzero(self.parameter_in_range))
   @functools.cached_property
   def n_alive_obs(self) -> int:
     """
     The number of patients who are alive at the time point
     using the observed parameters.
     """
-    return np.count_nonzero(self.patient_alive & self.parameter_in_range)
+    return int(np.count_nonzero(self.patient_alive & self.parameter_in_range))
 
   @staticmethod
   @functools.cache
