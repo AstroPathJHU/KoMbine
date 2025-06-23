@@ -1,6 +1,7 @@
 [MASTER]
 ignore = build
 extension-pkg-allow-list = scipy.special
+extension-pkg-whitelist = scipy.special
 
 [FORMAT]
 indent-string = '  '
