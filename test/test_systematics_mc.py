@@ -30,7 +30,10 @@ def main(): #pylint: disable=too-many-locals
   )
 
   sigmas = [-2, -1, 0, 1, 2]
-  quantiles = [(1 + scipy.special.erf(nsigma/np.sqrt(2))) / 2 for nsigma in sigmas]
+  quantiles = [
+    (1 + scipy.special.erf(nsigma/np.sqrt(2))) / 2 # pylint: disable=no-member
+    for nsigma in sigmas
+  ]
 
   x_quantiles = {}
   y_quantiles = {}
