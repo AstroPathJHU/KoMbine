@@ -741,7 +741,6 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     binom_penalty = model.addVar(vtype=GRB.CONTINUOUS, name="binom_penalty")
 
     # Objective: minimize total penalty
-    binom_penalty = 0
     model.setObjective(
       2 * (binom_penalty + patient_penalty),
       GRB.MINIMIZE,
@@ -933,13 +932,15 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     selected = [i for i in range(self.n_patients) if x[i].X > 0.5]
     n_alive_val = np.rint(n_alive.X)
     n_total_val = np.rint(n_total.X)
-    binomial_penalty_val = binomial_penalty_table[(n_alive_val, n_total_val)]
 
     patient_penalty_val = sum(
       nll_penalty_for_patient_in_range[i] * x[i].X
       for i in range(self.n_patients)
       if np.isfinite(nll_penalty_for_patient_in_range[i])
     )
+    binom_penalty_var = model.getVarByName("binom_penalty")
+    assert binom_penalty_var is not None
+    binomial_penalty_val = binom_penalty_var.X
     if verbose:
       print("Selected patients:", selected)
       print("n_total:          ", int(n_total_val))
