@@ -66,6 +66,9 @@ jobs:
         run: |
           jupyter nbconvert --execute --to html -- docs/*.ipynb
 
+      - name: test discrete optimization module
+        run: |
+          python -m test.test_discrete_optimization
       - name: discrete unit test
         run: |
           python -m test.test_discrete

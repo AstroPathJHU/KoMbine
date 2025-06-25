@@ -1,12 +1,14 @@
 [MASTER]
-ignore=build
+ignore = build
+extension-pkg-allow-list = scipy.special
+extension-pkg-whitelist = scipy.special
 
 [FORMAT]
-indent-string='  '
+indent-string = '  '
 
 [MESSAGES CONTROL]
 #C0103: invalid variable names - we have math parameters with capitalizations etc.
 disable = C0103
 
 [SIMILARITIES]
-min-similarity-lines=6
+min-similarity-lines = 6

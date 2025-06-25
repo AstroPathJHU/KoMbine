@@ -150,22 +150,37 @@ class KaplanMeierInstance(KaplanMeierBase):
     """
     patients = self.patients
     patient_times = np.array([p.time for p in patients])
+    unique_patient_times = np.unique(patient_times)
     patient_censored = np.array([p.censored for p in patients])
-    if times_for_plot is None:
-      times_for_plot = self.times_for_plot
 
-    survival_probabilities = np.zeros(len(times_for_plot))
-    for i, t in enumerate(times_for_plot):
-      patient_alive = patient_times > t
-      n_patients = np.count_nonzero(patient_alive | ~patient_censored)
-      still_alive = np.count_nonzero(patient_alive)
+    survival_probabilities = np.zeros(len(unique_patient_times) + 1)
+    survival_probabilities[0] = 1.0  # at time 0, all patients are alive
+    for i, t in enumerate(unique_patient_times, start=1):
+      patient_alive = (patient_times > t) | ((patient_times == t) & patient_censored)
+      at_risk = patient_times >= t
       try:
-        survival_probabilities[i] = still_alive / n_patients
+        survival_probabilities[i] = (
+          survival_probabilities[i - 1]
+            * np.count_nonzero(patient_alive) / np.count_nonzero(at_risk)
+        )
       except ZeroDivisionError:
         #after everyone is censored: keep the last survival probability
         survival_probabilities[i] = survival_probabilities[i - 1]
 
-    return survival_probabilities
+    if times_for_plot is None:
+      times_for_plot = self.times_for_plot
+    survival_probabilities_for_plot = np.zeros(len(times_for_plot))
+    for i, t in enumerate(times_for_plot):
+      if t < unique_patient_times[0]:
+        survival_probabilities_for_plot[i] = 1.0
+      elif t > unique_patient_times[-1]:
+        survival_probabilities_for_plot[i] = survival_probabilities[-1]
+      else:
+        # find the index of the closest lower time
+        idx = np.searchsorted(unique_patient_times, t, side='right')
+        survival_probabilities_for_plot[i] = survival_probabilities[idx]
+
+    return survival_probabilities_for_plot
 
   def points_for_plot(self, times_for_plot=None):
     """

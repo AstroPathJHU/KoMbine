@@ -3,10 +3,9 @@ Kaplan-Meier curve with error bars calculated using the log-likelihood method.
 """
 
 import collections.abc
+import datetime
 import functools
 
-import gurobipy as gp
-from gurobipy import GRB
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.optimize
@@ -19,446 +18,9 @@ from .discrete_optimization import (
 from .kaplan_meier import (
   KaplanMeierBase,
   KaplanMeierInstance,
-  KaplanMeierPatient,
-  KaplanMeierPatientBase,
 )
-
-@functools.cache
-def possible_probabilities(n_patients) -> np.ndarray:
-  """
-  Get the possible probabilities for the given patients.
-  This is used to speed up the calculation of survival probabilities.
-  """
-  return np.unique([
-    n_alive / n_total
-    for n_total in range(n_patients + 1)
-    for n_alive in range(n_total + 1)
-    if n_total > 0
-  ])
-
-class KaplanMeierPatientNLL(KaplanMeierPatientBase):
-  """
-  A patient with a time and a parameter.
-  The parameter is a log-likelihood function.
-  """
-  def __init__(
-    self,
-    time: float,
-    censored: bool,
-    parameter_nll: collections.abc.Callable[[float], float],
-    observed_parameter: float,
-  ):
-    super().__init__(
-      time=time,
-      censored=censored,
-      parameter=parameter_nll,
-    )
-    self.__observed_parameter = observed_parameter
-
-  @property
-  def parameter(self) -> collections.abc.Callable[[float], float]:
-    """
-    The parameter is a log-likelihood function.
-    """
-    return super().parameter
-
-  @property
-  def observed_parameter(self) -> float:
-    """
-    The observed value of the parameter.
-    """
-    return self.__observed_parameter
-
-  @classmethod
-  def from_count(
-    cls,
-    time: float,
-    censored: bool,
-    count: int,
-  ):
-    """
-    Create a KaplanMeierPatientNLL from a count.
-    The parameter NLL gives the negative log-likelihood to observe the count
-    given the parameter, which is the mean of the Poisson distribution.
-    """
-    def parameter_nll(x: float) -> float:
-      """
-      The parameter is a log-likelihood function.
-      """
-      return -scipy.stats.poisson.logpmf(count, x).item()
-    return cls(
-      time=time,
-      censored=censored,
-      parameter_nll=parameter_nll,
-      observed_parameter=count,
-    )
-
-  @classmethod
-  def from_poisson_density(
-    cls,
-    time: float,
-    censored: bool,
-    numerator_count: int,
-    denominator_area: float,
-  ):
-    """
-    Create a KaplanMeierPatientNLL from a Poisson count
-    divided by an area that is known precisely.
-    """
-    def parameter_nll(density: float) -> float:
-      """
-      The parameter is a log-likelihood function.
-      """
-      return -scipy.stats.poisson.logpmf(
-        numerator_count,
-        density * denominator_area,
-      ).item()
-    return cls(
-      time=time,
-      censored=censored,
-      parameter_nll=parameter_nll,
-      observed_parameter=numerator_count / denominator_area,
-    )
-
-
-  @classmethod
-  def from_poisson_ratio(
-    cls,
-    time: float,
-    censored: bool,
-    numerator_count: int,
-    denominator_count: int,
-  ):
-    """
-    Create a KaplanMeierPatientNLL from a ratio of two counts.
-    The parameter NLL gives the negative log-likelihood to observe the
-    numberator and denominator counts given the parameter, which is the
-    ratio of the two Poisson distribution means.  We do this by floating
-    the denominator mean and fixing the numerator mean to the ratio
-    times the denominator mean.  We then minimize the NLL to observe the
-    numerator and denominator counts given the denominator mean.
-    """
-    def parameter_nll(ratio: float) -> float:
-      if ratio < 0:
-        return float('inf')  # Ratio must be positive
-
-      # Define the NLL as a function of the (latent) denominator mean
-      def nll_given_lambda_d(lambda_d: float) -> float:
-        lambda_n = ratio * lambda_d
-        # Poisson negative log-likelihoods
-        nll_numerator = -scipy.stats.poisson.logpmf(numerator_count, lambda_n)
-        nll_denominator = -scipy.stats.poisson.logpmf(denominator_count, lambda_d)
-        return (nll_numerator + nll_denominator).item()
-
-      # Optimize over lambda_d > 0
-      result = scipy.optimize.minimize_scalar(
-        nll_given_lambda_d,
-        bounds=(1e-8, 1e6),
-        method='bounded'
-      )
-      assert isinstance(result, scipy.optimize.OptimizeResult)
-      return result.fun if result.success else float('inf')
-
-    # Use the MLE ratio as the observed value
-    observed_ratio = numerator_count / denominator_count if denominator_count > 0 else float('inf')
-
-    return cls(
-      time=time,
-      censored=censored,
-      parameter_nll=parameter_nll,
-      observed_parameter=observed_ratio,
-    )
-
-  @property
-  def nominal(self) -> KaplanMeierPatient:
-    """
-    The nominal value of the parameter.
-    """
-    return KaplanMeierPatient(
-      time=self.time,
-      censored=self.censored,
-      parameter=self.observed_parameter,
-    )
-
-class ILPForKM:
-  """
-  Integer Linear Programming for a point on the Kaplan-Meier curve.
-  """
-  def __init__(
-    self,
-    all_patients: list[KaplanMeierPatientNLL],
-    parameter_min: float,
-    parameter_max: float,
-    time_point: float,
-  ):
-    self.__all_patients = all_patients
-    self.__parameter_min = parameter_min
-    self.__parameter_max = parameter_max
-    self.__time_point = time_point
-    if not np.isfinite(self.__parameter_min and self.__parameter_min != -np.inf):
-      raise ValueError("parameter_min must be finite or -inf")
-    if not np.isfinite(self.__parameter_max and self.__parameter_max != np.inf):
-      raise ValueError("parameter_max must be finite or inf")
-
-  @property
-  def all_patients(self) -> list[KaplanMeierPatientNLL]:
-    """
-    The list of all patients.
-    """
-    return self.__all_patients
-  @property
-  def parameter_min(self) -> float:
-    """
-    The minimum parameter value.
-    """
-    return self.__parameter_min
-  @property
-  def parameter_max(self) -> float:
-    """
-    The maximum parameter value.
-    """
-    return self.__parameter_max
-  @property
-  def time_point(self) -> float:
-    """
-    The time point for the Kaplan-Meier curve.
-    """
-    return self.__time_point
-
-  def run_ILP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
-    self,
-    expected_probability: float,
-    *,
-    verbose=False,
-    binomial_only=False,
-    patient_wise_only=False,
-    gurobi_rtol=1e-6,
-  ):
-    """
-    Run the ILP for the given time point.
-    """
-    if not patient_wise_only and (expected_probability <= 0 or expected_probability >= 1):
-      raise ValueError("expected_probability must be in (0, 1)")
-    if expected_probability < 0 or expected_probability > 1:
-      raise ValueError("expected_probability must be in [0, 1]")
-    if binomial_only and patient_wise_only:
-      raise ValueError("binomial_only and patient_wise_only cannot both be True")
-    n_patients = len(self.all_patients)
-    patient_times = np.array([p.time for p in self.all_patients])
-    patient_censored = np.array([p.censored for p in self.all_patients])
-    patient_alive = patient_times > self.time_point
-    patient_in_study = patient_alive | ~patient_censored
-    observed_parameters = np.array([p.observed_parameter for p in self.all_patients])
-
-    binomial_penalty_table = {}
-    for n_total in range(n_patients + 1):
-      for n_alive in range(n_total + 1):
-        if not patient_wise_only:
-          penalty = -scipy.stats.binom.logpmf(n_alive, n_total, expected_probability)
-          binomial_penalty_table[(n_alive, n_total)] = penalty.item()
-        else:
-          binomial_penalty_table[(n_alive, n_total)] = 0
-
-    parameter_in_range = (
-      (observed_parameters >= self.parameter_min)
-      & (observed_parameters < self.parameter_max)
-    )
-    n_alive_obs = np.sum(patient_alive & parameter_in_range)
-    n_total_obs = np.sum(patient_in_study & parameter_in_range)
-
-    sgn_nll_penalty_for_patient_in_range = 2 * parameter_in_range - 1
-    observed_nll = np.array([
-      p.parameter(p.observed_parameter)
-      for p in self.all_patients
-    ])
-    if np.isfinite(self.parameter_min):
-      parameter_min_nll = np.array([
-        p.parameter(self.parameter_min)
-        for p in self.all_patients
-      ])
-    else:
-      parameter_min_nll = np.full(n_patients, np.inf)
-    if np.isfinite(self.parameter_max):
-      parameter_max_nll = np.array([
-        p.parameter(self.parameter_max)
-        for p in self.all_patients
-      ])
-    else:
-      parameter_max_nll = np.full(n_patients, np.inf)
-
-    range_boundary_nll = np.min(
-      np.array([parameter_min_nll, parameter_max_nll]),
-      axis=0
-    )
-    abs_nll_penalty_for_patient_in_range = observed_nll - range_boundary_nll
-
-    nll_penalty_for_patient_in_range = (
-      sgn_nll_penalty_for_patient_in_range
-      * abs_nll_penalty_for_patient_in_range
-    )
-
-    if binomial_only or not any(np.isfinite(range_boundary_nll)):
-      if patient_wise_only:
-        raise ValueError(
-          "patient_wise_only cannot be True when binomial_only is True "
-          "or when the parameter range is not finite"
-        )
-      binomial_penalty_val = binomial_penalty_table[(n_alive_obs, n_total_obs)]
-      return scipy.optimize.OptimizeResult(
-        x=2*binomial_penalty_val,
-        success=True,
-        n_total=n_total_obs,
-        n_alive=n_alive_obs,
-        binomial_2NLL=2*binomial_penalty_val,
-        patient_2NLL=0,
-        selected=parameter_in_range,
-        model=None,
-      )
-
-    # ---------------------------
-    # Gurobi model
-    # ---------------------------
-
-    model = gp.Model("Kaplan-Meier ILP")
-
-    # Binary decision variables: x[i] = 1 if patient i is within the parameter range
-    x = model.addVars(n_patients, vtype=GRB.BINARY, name="x")
-
-    # Integer vars to count totals
-    n_total = model.addVar(vtype=GRB.INTEGER, name="n_total")
-    n_alive = model.addVar(vtype=GRB.INTEGER, name="n_alive")
-
-    # Constraints to link to totals
-    model.addConstr(n_total == gp.quicksum(x[i] for i in range(n_patients) if patient_in_study[i]))
-    model.addConstr(n_alive == gp.quicksum(x[i] for i in range(n_patients) if patient_alive[i]))
-
-    if not patient_wise_only:
-      # ---------------------------
-      # Indicator grid for binomial penalty
-      # ---------------------------
-
-      # Create binary indicators for each valid (n_alive, n_total)
-      indicator_vars = {}
-      for n_total_val in range(n_patients + 1):
-        for n_alive_val in range(n_total_val + 1):
-          ind = model.addVar(vtype=GRB.BINARY, name=f"ind_{n_alive_val}_{n_total_val}")
-          indicator_vars[(n_alive_val, n_total_val)] = ind
-          # Add indicator constraint: if active, enforce n_alive and n_total match
-          model.addGenConstrIndicator(ind, True, n_alive - n_alive_val, GRB.EQUAL, 0)
-          model.addGenConstrIndicator(ind, True, n_total - n_total_val, GRB.EQUAL, 0)
-
-      # Only one pair can be active
-      model.addConstr(gp.quicksum(indicator_vars.values()) == 1)
-
-      # Binomial penalty
-      binom_penalty = gp.quicksum(
-        binomial_penalty_table[(na, nt)] * ind
-        for (na, nt), ind in indicator_vars.items()
-      )
-    else:
-      #no binomial penalty means there's nothing to constrain the observed
-      #probability to the expected probability.  In that case, what does
-      #it mean to get an NLL for the expected probability?
-      #Instead, we constrain the observed probability to be at least as
-      #far from the nominal observed probability as the expected
-      #and find the minimum patient-wise NLL.
-      binom_penalty = 0
-
-      observed_probability = n_alive_obs / n_total_obs if n_total_obs > 0 else 0
-      epsilon = np.min(np.diff(possible_probabilities(n_patients))) / 2
-
-      if expected_probability > observed_probability:
-        #n_alive / n_total >= expected_probability
-        model.addConstr(n_alive >= expected_probability * n_total - epsilon)
-      elif expected_probability < observed_probability:
-        #n_alive / n_total <= expected_probability
-        model.addConstr(n_alive <= expected_probability * n_total + epsilon)
-      else:
-        assert expected_probability == observed_probability
-
-    # Patient-wise penalties
-    patient_penalties = []
-    for i in range(n_patients):
-      if np.isfinite(nll_penalty_for_patient_in_range[i]):
-        patient_penalties.append(nll_penalty_for_patient_in_range[i] * x[i])
-      elif np.isposinf(nll_penalty_for_patient_in_range[i]):
-        #the patient must be selected, so we add a constraint
-        model.addConstr(x[i] == 1)
-      elif np.isneginf(nll_penalty_for_patient_in_range[i]):
-        #the patient must not be selected, so we add a constraint
-        model.addConstr(x[i] == 0)
-      else:
-        raise ValueError(
-          f"Unexpected NLL penalty for patient {i}: "
-          f"{nll_penalty_for_patient_in_range[i]}"
-        )
-
-    patient_penalty = gp.quicksum(patient_penalties)
-
-    # Objective: minimize total penalty
-    model.setObjective(
-      2 * (binom_penalty + patient_penalty),
-      GRB.MINIMIZE,
-    )
-
-    if not verbose:
-      # Suppress Gurobi output
-      model.setParam('OutputFlag', 0)
-    model.setParam("MIPGap", gurobi_rtol)
-
-    model.optimize()
-
-    if model.status != GRB.OPTIMAL:
-      if model.status == GRB.INFEASIBLE and patient_wise_only:
-        # If the model is infeasible, it means that no patients can be selected
-        # while satisfying the constraints. This can happen if the expected
-        # probability is too far from the observed probability and there are
-        # some patients with infinite NLL penalties.
-        return scipy.optimize.OptimizeResult(
-          x=np.inf,
-          success=False,
-          n_total=0,
-          n_alive=0,
-          binomial_2NLL=np.inf,
-          patient_2NLL=np.inf,
-          patient_penalties=nll_penalty_for_patient_in_range,
-          selected=[],
-          model=model,
-        )
-      raise RuntimeError(
-        f"Model optimization failed with status {model.status}. "
-        "This may indicate an issue with the ILP formulation or the input data."
-      )
-
-    selected = [i for i in range(n_patients) if x[i].X > 0.5 and patient_in_study[i]]
-    n_alive_val = np.rint(n_alive.X)
-    n_total_val = np.rint(n_total.X)
-    binomial_penalty_val = binomial_penalty_table[(n_alive_val, n_total_val)]
-
-    patient_penalty_val = sum(
-      nll_penalty_for_patient_in_range[i] * x[i].X
-      for i in range(n_patients)
-      if np.isfinite(nll_penalty_for_patient_in_range[i])
-    )
-    if verbose:
-      print("Selected patients:", selected)
-      print("n_total:          ", int(n_total_val))
-      print("n_alive:          ", int(n_alive_val))
-      print("Binomial penalty: ", binomial_penalty_val)
-      print("Patient penalty:  ", patient_penalty_val)
-      print("Total penalty:    ", model.ObjVal)
-
-    return scipy.optimize.OptimizeResult(
-      x=model.ObjVal,
-      success=model.status == GRB.OPTIMAL,
-      n_total=n_total_val,
-      n_alive=n_alive_val,
-      binomial_2NLL=2*binomial_penalty_val,
-      patient_2NLL=2*patient_penalty_val,
-      patient_penalties=nll_penalty_for_patient_in_range,
-      selected=selected,
-      model=model,
-    )
+from .kaplan_meier_ILP import ILPForKM, KaplanMeierPatientNLL
+from .utilities import InspectableCache
 
 class KaplanMeierLikelihood(KaplanMeierBase):
   """
@@ -544,18 +106,20 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       for t in times_for_plot
     ]
 
-  def get_twoNLL_function(
+  def get_twoNLL_function( # pylint: disable=too-many-arguments
     self,
     time_point: float,
+    *,
     binomial_only=False,
     patient_wise_only=False,
     verbose=False,
+    print_progress=False,
   ) -> collections.abc.Callable[[float], float]:
     """
     Get the twoNLL function for the given time point.
     """
     ilp = self.ilp_for_km(time_point=time_point)
-    @functools.cache
+    @InspectableCache
     def twoNLL(expected_probability: float) -> float:
       """
       The negative log-likelihood function.
@@ -565,44 +129,52 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         binomial_only=binomial_only,
         patient_wise_only=patient_wise_only,
         verbose=verbose,
+        print_progress=print_progress,
       )
       if not result.success:
         return np.inf
       return result.x
     return twoNLL
 
-  @property
-  def possible_probabilities(self) -> np.ndarray:
+  def calculate_possible_probabilities(self, time_point: float) -> np.ndarray:
     """
     Get the possible probabilities for the given patients.
     """
-    return possible_probabilities(
-      n_patients=len(self.all_patients)
-    )
+    return np.unique([
+      probability
+      for _, _, _, probability
+      in self.ilp_for_km(time_point=time_point).valid_trajectories
+    ])
+
+  @functools.cached_property
+  def __possible_probabilities(self) -> dict[float, np.ndarray]:
+    return {}
+
+  def possible_probabilities(self, time_point: float) -> np.ndarray:
+    """
+    Get the possible probabilities for the given time point.
+    This is a cached property to avoid recalculating the probabilities multiple times.
+    """
+    if time_point not in self.__possible_probabilities:
+      self.__possible_probabilities[time_point] = self.calculate_possible_probabilities(time_point)
+    return self.__possible_probabilities[time_point]
 
   def best_probability( #pylint: disable=too-many-arguments
     self,
+    twoNLL: collections.abc.Callable[[float], float],
     time_point: float,
     *,
-    binomial_only=False,
     patient_wise_only=False,
-    gurobi_verbose=False,
     optimize_verbose=False,
   ) -> tuple[float, float]:
     """
     Find the expected probability that minimizes the negative log-likelihood
     for the given time point.
     """
-    twoNLL = self.get_twoNLL_function(
-      time_point=time_point,
-      binomial_only=binomial_only,
-      patient_wise_only=patient_wise_only,
-      verbose=gurobi_verbose,
-    )
     if patient_wise_only:
       return minimize_discrete_single_minimum(
         objective_function=twoNLL,
-        possible_values=self.possible_probabilities,
+        possible_values=self.possible_probabilities(time_point),
         verbose=optimize_verbose,
       )
     result = scipy.optimize.minimize_scalar(
@@ -624,13 +196,19 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     patient_wise_only=False,
     gurobi_verbose=False,
     optimize_verbose=False,
+    print_progress=False,
   ) -> tuple[np.ndarray, np.ndarray]:
     """
     Get the survival probabilities for the given quantiles.
     """
     best_probabilities = []
     survival_probabilities = []
-    for t in times_for_plot:
+    for i, t in enumerate(times_for_plot, start=1):
+      if print_progress:
+        print(
+          f"Calculating survival probabilities for time point {t:.2f} "
+          f"({i} / {len(times_for_plot)}) at time {datetime.datetime.now()}"
+        )
       survival_probabilities_time_point = []
       survival_probabilities.append(survival_probabilities_time_point)
       twoNLL = self.get_twoNLL_function(
@@ -638,16 +216,16 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         binomial_only=binomial_only,
         patient_wise_only=patient_wise_only,
         verbose=gurobi_verbose,
+        print_progress=print_progress,
       )
       # Find the expected probability that minimizes the negative log-likelihood
       # for the given time point
       try:
         best_prob, twoNLL_min = self.best_probability(
+          twoNLL=twoNLL,
           time_point=t,
-          binomial_only=binomial_only,
           patient_wise_only=patient_wise_only,
-          gurobi_verbose=gurobi_verbose,
-          optimize_verbose=optimize_verbose
+          optimize_verbose=optimize_verbose,
         )
       except Exception as e:
         raise RuntimeError(
@@ -677,7 +255,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         )
 
         if patient_wise_only:
-          probs = self.possible_probabilities
+          probs = self.possible_probabilities(time_point=t)
           i_best = int(np.searchsorted(probs, best_prob))
 
           # Check edge case: upper bound
@@ -748,6 +326,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     close_figure=None,
     show=False,
     saveas=None,
+    print_progress=False,
   ): #pylint: disable=too-many-locals
     """
     Plots the Kaplan-Meier curves.
@@ -761,6 +340,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       )
     if times_for_plot is None:
       times_for_plot = self.times_for_plot
+    results = {}
     if create_figure:
       plt.figure()
     nominal_x, nominal_y = self.nominalkm.points_for_plot(times_for_plot=times_for_plot)
@@ -771,6 +351,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       color=nominal_color,
       linestyle='--'
     )
+    results["x"] = nominal_x
+    results["nominal"] = nominal_y
 
     if CLs is None:
       CLs = [0.68, 0.95]
@@ -804,6 +386,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       best_probabilities, CL_probabilities = self.survival_probabilities_likelihood(
         CLs=CLs,
         times_for_plot=times_for_plot,
+        print_progress=print_progress,
       )
     if include_binomial_only:
       (
@@ -812,6 +395,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         CLs=CLs,
         times_for_plot=times_for_plot,
         binomial_only=True,
+        print_progress=print_progress,
       )
       if include_full_NLL:
         CL_probabilities_subset = CL_probabilities_binomial
@@ -825,6 +409,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         CLs=CLs,
         times_for_plot=times_for_plot,
         patient_wise_only=True,
+        print_progress=print_progress,
       )
       if include_full_NLL:
         CL_probabilities_subset = CL_probabilities_patient_wise
@@ -844,6 +429,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         color='red',
         linestyle='--'
       )
+      np.testing.assert_array_equal(best_x, nominal_x)
+      results["best_fit"] = best_y
 
     for CL, color, (p_minus, p_plus) in zip(
       CLs,
@@ -854,6 +441,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       x_minus, y_minus = self.get_points_for_plot(times_for_plot, p_minus)
       x_plus, y_plus = self.get_points_for_plot(times_for_plot, p_plus)
       np.testing.assert_array_equal(x_minus, x_plus)
+      np.testing.assert_array_equal(x_minus, best_x)
+      results[f'CL_{CL}'] = (y_minus, y_plus)
 
       plt.fill_between(
         x_minus,
@@ -876,6 +465,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         x_minus_subset, y_minus_subset = self.get_points_for_plot(times_for_plot, p_minus_subset)
         x_plus_subset, y_plus_subset = self.get_points_for_plot(times_for_plot, p_plus_subset)
         np.testing.assert_array_equal(x_minus_subset, x_plus_subset)
+        np.testing.assert_array_equal(x_minus_subset, best_x)
+        results[f'CL_{CL}_subset'] = (y_minus_subset, y_plus_subset)
 
         plt.fill_between(
           x_minus_subset,
@@ -903,3 +494,5 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         plt.show()
       if close_figure:
         plt.close()
+
+    return results

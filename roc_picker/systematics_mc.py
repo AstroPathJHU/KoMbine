@@ -487,7 +487,10 @@ class ROCCollection:
       Whether to show the plot.
     """
     sigmas = [-2, -1, 0, 1, 2]
-    quantiles = [(1 + scipy.special.erf(nsigma/np.sqrt(2))) / 2 for nsigma in sigmas]
+    quantiles = [
+      (1 + scipy.special.erf(nsigma/np.sqrt(2))) / 2 # pylint: disable=no-member
+      for nsigma in sigmas
+    ]
 
     (x_m95, x_m68, _, x_p68, x_p95), (y_m95, y_m68, _, y_p68, y_p95) = self.roc_quantiles(quantiles)
 
