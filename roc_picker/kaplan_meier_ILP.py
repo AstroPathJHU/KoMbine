@@ -897,7 +897,26 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
         )
 
     patient_penalty = gp.quicksum(patient_penalties)
-    binom_penalty = use_binomial_penalty_indicator * gp.quicksum(binomial_terms)
+    binom_penalty_expr = gp.quicksum(binomial_terms)
+    print(binom_penalty_expr)
+    binom_penalty = model.addVar(
+      vtype=GRB.CONTINUOUS,
+      name="binomial_penalty",
+    )
+    model.addGenConstrIndicator(
+      use_binomial_penalty_indicator,
+      True,
+      binom_penalty_expr,
+      GRB.EQUAL,
+      binom_penalty,
+    )
+    model.addGenConstrIndicator(
+      use_binomial_penalty_indicator,
+      False,
+      binom_penalty,
+      GRB.EQUAL,
+      0.0
+    )
 
     # Objective: minimize total penalty
     model.setObjective(
