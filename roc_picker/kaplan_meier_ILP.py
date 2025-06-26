@@ -639,28 +639,31 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     # Binary decision variables: x[i] = 1 if patient i is within the parameter range
     x = model.addVars(self.n_patients, vtype=GRB.BINARY, name="x")
     n_total = model.addVar(vtype=GRB.INTEGER, name="n_total")
-    model.addConstr(n_total == gp.quicksum(x[i] for i in range(self.n_patients)))
+    model.addConstr(
+      n_total == gp.quicksum(x[i] for i in range(self.n_patients)),
+      name="n_total_constraint",
+    )
 
     # Integer vars to count totals
     n_censored_in_group = model.addVars(
       self.n_groups,
       vtype=GRB.INTEGER,
-      name="n_censored_in_group"
+      name="n_censored_in_group",
     )
     n_died_in_group = model.addVars(
       self.n_groups,
       vtype=GRB.INTEGER,
-      name="n_died_in_group"
+      name="n_died_in_group",
     )
     n_at_risk = model.addVars(
       self.n_groups,
       vtype=GRB.INTEGER,
-      name="n_at_risk"
+      name="n_at_risk",
     )
     n_survived_in_group = model.addVars(
       self.n_groups,
       vtype=GRB.INTEGER,
-      name="n_survived_in_group"
+      name="n_survived_in_group",
     )
 
     # Constraints to link to totals
@@ -668,29 +671,35 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
       model.addConstr(
         n_censored_in_group[idx] == gp.quicksum(
           x[i] for i in range(self.n_patients) if self.censored_in_group[idx][i]
-        )
+        ),
+        name=f"n_censored_in_group_{idx}",
       )
       model.addConstr(
         n_died_in_group[idx] == gp.quicksum(
           x[i] for i in range(self.n_patients) if self.died_in_group[idx][i]
-        )
+        ),
+        name=f"n_died_in_group_{idx}",
       )
       if idx == 0:
         model.addConstr(
-          n_at_risk[idx] == n_total - n_censored_in_group[idx]
+          n_at_risk[idx] == n_total - n_censored_in_group[idx],
+          name=f"n_at_risk_{idx}"
         )
       else:
         model.addConstr(
-          n_at_risk[idx] == n_at_risk[idx - 1] - n_died_in_group[idx - 1] - n_censored_in_group[idx]
+          n_at_risk[idx] == n_at_risk[idx - 1] - n_died_in_group[idx - 1] - n_censored_in_group[idx],
+          name=f"n_at_risk_{idx}",
         )
       model.addConstr(
-        n_survived_in_group[idx] == n_at_risk[idx] - n_died_in_group[idx]
+        n_survived_in_group[idx] == n_at_risk[idx] - n_died_in_group[idx],
+        name=f"n_survived_in_group_{idx}",
       )
     n_alive = model.addVar(vtype=GRB.INTEGER, name="n_alive")
     model.addConstr(
       n_alive == gp.quicksum(
         x[i] for i in range(self.n_patients) if self.patient_alive[i]
-      )
+      ),
+      name="n_alive_constraint",
     )
 
     # indicator variables for each trajectory
@@ -710,6 +719,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
         n_total,
         GRB.EQUAL,
         total_count,
+        name=f"traj_indicator_constraint_{traj_idx}_total",
       )
       for group_idx in range(self.n_groups):
         model.addGenConstrIndicator(
@@ -717,17 +727,22 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
           True,
           gp.quicksum(x[i] for i in range(self.n_patients) if self.censored_in_group[group_idx][i]),
           GRB.EQUAL,
-          censored_counts[group_idx]
+          censored_counts[group_idx],
+          name=f"traj_indicator_constraint_{traj_idx}_censored_{group_idx}",
         )
         model.addGenConstrIndicator(
           traj_indicator_vars[traj_idx],
           True,
           gp.quicksum(x[i] for i in range(self.n_patients) if self.died_in_group[group_idx][i]),
           GRB.EQUAL,
-          died_counts[group_idx]
+          died_counts[group_idx],
+          name=f"traj_indicator_constraint_{traj_idx}_died_{group_idx}",
         )
     #Only one trajectory can be selected
-    model.addConstr(traj_indicator_vars.sum() == 1)
+    model.addConstr(
+      traj_indicator_vars.sum() == 1,
+      name="one_trajectory_constraint",
+    )
 
     #Setup for binomial penalty
     #There's a separate binomial term for each group
@@ -750,19 +765,20 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
       lb=0,
       ub=1,
     )
+    log_p_bounds = np.array([-20, -1e-6])
     log_p_died = model.addVars(
       self.n_groups,
       vtype=GRB.CONTINUOUS,
       name="log_p_died",
-      lb=-20,
-      ub=-1e-6,
+      lb=log_p_bounds[0],
+      ub=log_p_bounds[1],
     )
     log_p_survived = model.addVars(
       self.n_groups,
       vtype=GRB.CONTINUOUS,
       name="log_p_survived",
-      lb=-20,
-      ub=-1e-6,
+      lb=log_p_bounds[0],
+      ub=log_p_bounds[1],
     )
     for i in range(self.n_groups):
       model.addGenConstrExp(log_p_died[i], p_died[i], name=f"log_p_died_constr_{i}")
@@ -808,7 +824,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     n_choose_d_indicator_vars = model.addVars(
       self.n_groups * len(n_choose_d_term_table),
       vtype=GRB.BINARY,
-      name="n_choose_d_indicator"
+      name="n_choose_d_indicator",
     )
     binomial_terms = []
     for indicator_var_idx, (group_idx, ((n, d), penalty)) in enumerate(
@@ -825,14 +841,16 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
         True,
         n_at_risk[group_idx],
         GRB.EQUAL,
-        n
+        n,
+        name=f"n_choose_d_indicator_n_{group_idx}_{n}",
       )
       model.addGenConstrIndicator(
         n_choose_d_indicator_vars[indicator_var_idx],
         True,
         n_died_in_group[group_idx],
         GRB.EQUAL,
-        d
+        d,
+        name=f"n_choose_d_indicator_d_{group_idx}_{n}_{d}",
       )
     
     n_died_indicator_vars = model.addVars(
@@ -848,7 +866,8 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
           True,
           n_died_in_group[group_idx],
           GRB.EQUAL,
-          d
+          d,
+          name=f"n_died_indicator_{group_idx}_{d}",
         )
         binomial_terms.append(
           -d * log_p_died[group_idx] * n_died_indicator_vars[i]
@@ -871,7 +890,8 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
           True,
           n_survived_in_group[group_idx],
           GRB.EQUAL,
-          s
+          s,
+          name=f"n_survived_indicator_{group_idx}_{s}",
         )
         binomial_terms.append(
           -s * log_p_survived[group_idx] * n_survived_indicator_vars[i]
@@ -897,18 +917,11 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
         )
 
     patient_penalty = gp.quicksum(patient_penalties)
+
     binom_penalty_expr = gp.quicksum(binomial_terms)
-    print(binom_penalty_expr)
     binom_penalty = model.addVar(
       vtype=GRB.CONTINUOUS,
-      name="binomial_penalty",
-    )
-    model.addGenConstrIndicator(
-      use_binomial_penalty_indicator,
-      True,
-      binom_penalty_expr,
-      GRB.EQUAL,
-      binom_penalty,
+      name="binom_penalty",
     )
     model.addGenConstrIndicator(
       use_binomial_penalty_indicator,
@@ -916,6 +929,25 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
       binom_penalty,
       GRB.EQUAL,
       0.0
+    )
+    #big M constraint to ensure binomial penalty is only used when the indicator is set
+    max_penalty_term = max(abs(penalty) for penalty in self.n_choose_d_term_table.values())
+    max_d = max(self.n_died_in_group_total)
+    max_s = self.n_patients
+    max_log_p = max(np.abs(log_p_bounds))
+    safety_factor = 2
+    big_M = safety_factor * self.n_groups * (
+      max_penalty_term
+      + max_d * max_log_p
+      + max_s * max_log_p
+    )
+    model.addConstr(
+      binom_penalty <= binom_penalty_expr + big_M * (1 - use_binomial_penalty_indicator),
+      name="binomial_penalty_expr_upper_bound"
+    )
+    model.addConstr(
+      binom_penalty >= binom_penalty_expr - big_M * (1 - use_binomial_penalty_indicator),
+      name="binomial_penalty_expr_lower_bound"
     )
 
     # Objective: minimize total penalty
@@ -925,7 +957,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     )
     model.update()
 
-    return model, traj_indicator_vars, n_at_risk, n_died_in_group, expected_probability, use_binomial_penalty_indicator
+    return model, traj_indicator_vars, expected_probability, use_binomial_penalty_indicator, binom_penalty_expr
 
   @functools.cached_property
   def gurobi_model(self):
@@ -1056,7 +1088,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
         model=None,
       )
 
-    model, traj_indicator_vars, n_at_risk, n_died, expected_probability_var, use_binomial_penalty_indicator = self.gurobi_model
+    model, traj_indicator_vars, expected_probability_var, use_binomial_penalty_indicator, _ = self.gurobi_model
     self.update_model_with_expected_probability(
       model=model,
       traj_indicator_vars=traj_indicator_vars,
