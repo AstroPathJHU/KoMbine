@@ -827,12 +827,15 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
       name="n_choose_d_indicator",
     )
     binomial_terms = []
+    n_choose_d_indicator_vars_by_group = collections.defaultdict(list)
     for indicator_var_idx, (group_idx, ((n, d), penalty)) in enumerate(
       itertools.product(
         range(self.n_groups),
         n_choose_d_term_table.items(),
       )
     ):
+      indicator = n_choose_d_indicator_vars[indicator_var_idx]
+      n_choose_d_indicator_vars_by_group[group_idx].append(indicator)
       binomial_terms.append(
         -penalty * n_choose_d_indicator_vars[indicator_var_idx]
       )
@@ -852,15 +855,25 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
         d,
         name=f"n_choose_d_indicator_d_{group_idx}_{n}_{d}",
       )
+    for group_idx in range(self.n_groups):
+      # Ensure that exactly one n_choose_d_indicator is selected for each group
+      model.addConstr(
+        gp.quicksum(
+          n_choose_d_indicator_vars_by_group[group_idx]
+        ) == 1,
+        name=f"one_n_choose_d_indicator_per_group_{group_idx}",
+      )
     
     n_died_indicator_vars = model.addVars(
       int(sum(self.n_died_in_group_total + 1)),
       vtype=GRB.BINARY,
       name="n_died_indicator",
     )
+    n_died_indicator_vars_by_group = collections.defaultdict(list)
     i = 0
     for group_idx in range(self.n_groups):
       for d in range(self.n_died_in_group_total[group_idx] + 1):
+        n_died_indicator_vars_by_group[group_idx].append(n_died_indicator_vars[i])
         model.addGenConstrIndicator(
           n_died_indicator_vars[i],
           True,
@@ -874,6 +887,14 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
         )
         i += 1
     assert i == len(n_died_indicator_vars)
+    # Ensure that exactly one n_died_indicator is selected for each group
+    for group_idx in range(self.n_groups):
+      model.addConstr(
+        gp.quicksum(
+          n_died_indicator_vars_by_group[group_idx]
+        ) == 1,
+        name=f"one_n_died_indicator_per_group_{group_idx}",
+      )
 
     n_survived_indicator_vars = model.addVars(
       self.n_groups * (self.n_patients + 1),
@@ -882,9 +903,11 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
       vtype=GRB.BINARY,
       name="n_survived_indicator",
     )
+    n_survived_indicator_vars_by_group = collections.defaultdict(list)
     i = 0
     for group_idx in range(self.n_groups):
       for s in range(self.n_patients + 1):
+        n_survived_indicator_vars_by_group[group_idx].append(n_survived_indicator_vars[i])
         model.addGenConstrIndicator(
           n_survived_indicator_vars[i],
           True,
@@ -898,6 +921,14 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
         )
         i += 1
     assert i == len(n_survived_indicator_vars)
+    # Ensure that exactly one n_survived_indicator is selected for each group
+    for group_idx in range(self.n_groups):
+      model.addConstr(
+        gp.quicksum(
+          n_survived_indicator_vars_by_group[group_idx]
+        ) == 1,
+        name=f"one_n_survived_indicator_per_group_{group_idx}",
+      )
 
     # Patient-wise penalties
     patient_penalties = []
@@ -932,7 +963,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     )
     #big M constraint to ensure binomial penalty is only used when the indicator is set
     max_penalty_term = max(abs(penalty) for penalty in self.n_choose_d_term_table.values())
-    max_d = max(self.n_died_in_group_total)
+    max_d = max([*self.n_died_in_group_total, 1]) #avoid ValueError if n_died_in_group_total is empty
     max_s = self.n_patients
     max_log_p = max(np.abs(log_p_bounds))
     safety_factor = 2
