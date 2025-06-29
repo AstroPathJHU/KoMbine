@@ -635,17 +635,16 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
         )
     return n_choose_d_term_table
 
-  def _make_gurobi_model(self):  #pylint: disable=too-many-locals
+  def add_counter_variables_and_constraints(
+    self,
+    model: gp.Model,
+    x: gp.tupledict[int, gp.Var],
+  ):
     """
-    Create the Gurobi model for the ILP.
-    This method constructs the model with decision variables, constraints,
-    and the objective function.  It does NOT include the constraint for the
-    expected probability, which is added in update_model_with_expected_probability.
+    Add counter variables for the total number of patients,
+    the number of patients who were censored or died or were at risk
+    in each group, and the number of patients who are still alive.
     """
-    model = gp.Model("Kaplan-Meier ILP")
-
-    # Binary decision variables: x[i] = 1 if patient i is within the parameter range
-    x = model.addVars(self.n_patients, vtype=GRB.BINARY, name="x")
     n_total = model.addVar(vtype=GRB.INTEGER, name="n_total")
     model.addConstr(
       n_total == gp.quicksum(x[i] for i in range(self.n_patients)),
@@ -711,6 +710,27 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
       name="n_alive_constraint",
     )
 
+    return (
+      n_total,
+      n_censored_in_group,
+      n_died_in_group,
+      n_at_risk,
+      n_survived_in_group,
+    )
+
+  def add_trajectory_variables_and_constraints(
+    self,
+    model: gp.Model,
+    x: gp.tupledict[int, gp.Var],
+    n_total: gp.Var,
+  ):
+    """
+    Add trajectory indicator variables and constraints to the model.
+    Each trajectory corresponds to a specific combination of total patients
+    and the number of patients who were censored or died in each group.
+    The constraints tell the model which trajectory is selected
+    based on the counts of patients who were censored or died in each group.
+    """
     # indicator variables for each trajectory
     traj_indicator_vars = model.addVars(
       self.n_trajectories,
@@ -752,12 +772,25 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
       traj_indicator_vars.sum() == 1,
       name="one_trajectory_constraint",
     )
+    return traj_indicator_vars
 
-    #Setup for binomial penalty
-    #There's a separate binomial term for each group
-    #To complicate things, we only know the overall expected survival probability,
-    #not the probability of survival in each group.
-    #So we need to profile those.
+  def add_binomial_penalty(  # pylint: disable=too-many-locals, too-many-statements
+    self,
+    model: gp.Model,
+    n_at_risk: gp.tupledict[int, gp.Var],
+    n_died_in_group: gp.tupledict[int, gp.Var],
+    n_survived_in_group: gp.tupledict[int, gp.Var],
+  ):
+    """
+    Add the binomial penalty to the model.
+    This penalty is based on the expected survival probability
+    and the number of patients who were died and who were at risk in each group.
+
+    There's a separate binomial term for each group
+    To complicate things, we only know the overall expected survival probability,
+    not the probability of survival in each group.
+    So we need to profile those.
+    """
 
     #p_i = probability of dying in group i
     p_died = model.addVars(
@@ -799,7 +832,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
 
     #product of survival probabilities = the overall expected probability
     #we will set the expected probability via a constraint in update_model_with_expected_probability
-    expected_probability = model.addVar(
+    expected_probability_var = model.addVar(
       vtype=GRB.CONTINUOUS,
       name="expected_probability",
       lb=0,
@@ -813,7 +846,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     )
     model.addGenConstrExp(
       log_expected_probability,
-      expected_probability,
+      expected_probability_var,
       name="exp_log_expected_probability"
     )
     model.addConstr(
@@ -948,25 +981,6 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
         name=f"one_n_survived_indicator_per_group_{group_idx}",
       )
 
-    # Patient-wise penalties
-    patient_penalties = []
-    for i in range(self.n_patients):
-      if np.isfinite(self.nll_penalty_for_patient_in_range[i]):
-        patient_penalties.append(self.nll_penalty_for_patient_in_range[i] * x[i])
-      elif np.isposinf(self.nll_penalty_for_patient_in_range[i]):
-        #the patient must be selected, so we add a constraint
-        model.addConstr(x[i] == 1)
-      elif np.isneginf(self.nll_penalty_for_patient_in_range[i]):
-        #the patient must not be selected, so we add a constraint
-        model.addConstr(x[i] == 0)
-      else:
-        raise ValueError(
-          f"Unexpected NLL penalty for patient {i}: "
-          f"{self.nll_penalty_for_patient_in_range[i]}"
-        )
-
-    patient_penalty = gp.quicksum(patient_penalties)
-
     binom_penalty_expr = gp.quicksum(binomial_terms)
     binom_penalty = model.addVar(
       vtype=GRB.CONTINUOUS,
@@ -1001,6 +1015,83 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
       name="binomial_penalty_expr_lower_bound"
     )
 
+    return binom_penalty, expected_probability_var, use_binomial_penalty_indicator
+
+  def add_patient_wise_penalty(
+    self,
+    model: gp.Model,
+    x: gp.tupledict[int, gp.Var],
+  ):
+    """
+    Add the patient-wise penalty to the Gurobi model.
+    This penalty is based on the negative log-likelihood of the patient's observed parameter
+    being within the specified range.
+    """
+    # Patient-wise penalties
+    patient_penalties = []
+    for i in range(self.n_patients):
+      if np.isfinite(self.nll_penalty_for_patient_in_range[i]):
+        patient_penalties.append(self.nll_penalty_for_patient_in_range[i] * x[i])
+      elif np.isposinf(self.nll_penalty_for_patient_in_range[i]):
+        #the patient must be selected, so we add a constraint
+        model.addConstr(x[i] == 1)
+      elif np.isneginf(self.nll_penalty_for_patient_in_range[i]):
+        #the patient must not be selected, so we add a constraint
+        model.addConstr(x[i] == 0)
+      else:
+        raise ValueError(
+          f"Unexpected NLL penalty for patient {i}: "
+          f"{self.nll_penalty_for_patient_in_range[i]}"
+        )
+
+    patient_penalty = gp.quicksum(patient_penalties)
+    return patient_penalty
+
+  def _make_gurobi_model(self):  #pylint: disable=too-many-locals
+    """
+    Create the Gurobi model for the ILP.
+    This method constructs the model with decision variables, constraints,
+    and the objective function.  It does NOT include the constraint for the
+    expected probability, which is added in update_model_with_expected_probability.
+    """
+    model = gp.Model("Kaplan-Meier ILP")
+
+    # Binary decision variables: x[i] = 1 if patient i is within the parameter range
+    x = model.addVars(self.n_patients, vtype=GRB.BINARY, name="x")
+
+    (
+      n_total,
+      _,
+      n_died_in_group,
+      n_at_risk,
+      n_survived_in_group,
+    ) = self.add_counter_variables_and_constraints(
+      model=model,
+      x=x,
+    )
+
+    traj_indicator_vars = self.add_trajectory_variables_and_constraints(
+      model=model,
+      x=x,
+      n_total=n_total,
+    )
+
+    (
+      binom_penalty,
+      expected_probability_var,
+      use_binomial_penalty_indicator,
+    ) = self.add_binomial_penalty(
+      model=model,
+      n_at_risk=n_at_risk,
+      n_died_in_group=n_died_in_group,
+      n_survived_in_group=n_survived_in_group,
+    )
+
+    patient_penalty = self.add_patient_wise_penalty(
+      model=model,
+      x=x,
+    )
+
     # Objective: minimize total penalty
     model.setObjective(
       2 * (binom_penalty + patient_penalty),
@@ -1011,7 +1102,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     return (
       model,
       traj_indicator_vars,
-      expected_probability,
+      expected_probability_var,
       use_binomial_penalty_indicator,
     )
 
