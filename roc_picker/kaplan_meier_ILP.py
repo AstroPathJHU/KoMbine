@@ -330,6 +330,13 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     if group_event_types and group_event_types[-1]:
       del censored_in_group[-1]
 
+    # If there are no groups, we need to ensure at least one group exists
+    if not censored_in_group and not died_in_group:
+      # Create a dummy group with no patients
+      dummy_group = np.zeros_like(patient_times, dtype=bool)
+      censored_in_group.append(dummy_group)
+      died_in_group.append(dummy_group)
+
     # Final sanity check
     if len(censored_in_group) != len(died_in_group):
       raise ValueError("Mismatched lengths between censored and died groups.")
@@ -1145,32 +1152,6 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
         # while satisfying the constraints. This can happen if the expected
         # probability is too far from the observed probability and there are
         # some patients with infinite NLL penalties.
-        return scipy.optimize.OptimizeResult(
-          x=np.inf,
-          success=False,
-          n_total=0,
-          n_alive=0,
-          binomial_2NLL=np.inf,
-          patient_2NLL=np.inf,
-          patient_penalties=nll_penalty_for_patient_in_range,
-          selected=[],
-          model=model,
-        )
-      if model.status == GRB.INFEASIBLE and np.all(self.patient_still_at_risk):
-        # If the model is infeasible and all patients are still at risk,
-        # it means that nobody has died yet and the only possible probability is 1.
-        if expected_probability >= 1:
-          return scipy.optimize.OptimizeResult(
-            x=0,
-            success=True,
-            n_total=self.n_total_obs,
-            n_alive=self.n_alive_obs,
-            binomial_2NLL=0,
-            patient_2NLL=0,
-            patient_penalties=nll_penalty_for_patient_in_range,
-            selected=self.parameter_in_range,
-            model=model,
-          )
         return scipy.optimize.OptimizeResult(
           x=np.inf,
           success=False,
