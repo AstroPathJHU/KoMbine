@@ -1,3 +1,4 @@
+#pylint: disable=too-many-lines
 """
 Integer Linear Programming implementation for the Kaplan-Meier likelihood method.
 """
@@ -618,7 +619,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     )
 
     return nll_penalty_for_patient_in_range
-  
+
   @functools.cached_property
   def n_choose_d_term_table(self) -> dict[tuple[int, int], float]:
     """
@@ -694,7 +695,8 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
         )
       else:
         model.addConstr(
-          n_at_risk[idx] == n_at_risk[idx - 1] - n_died_in_group[idx - 1] - n_censored_in_group[idx],
+          n_at_risk[idx]
+            == n_at_risk[idx - 1] - n_died_in_group[idx - 1] - n_censored_in_group[idx],
           name=f"n_at_risk_{idx}",
         )
       model.addConstr(
@@ -814,12 +816,21 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
       expected_probability,
       name="exp_log_expected_probability"
     )
-    model.addConstr(log_expected_probability == log_p_survived.sum(), name="overall_expected_probability_constraint")
+    model.addConstr(
+      log_expected_probability == log_p_survived.sum(),
+      name="overall_expected_probability_constraint",
+    )
 
     #Binomial terms
-    #binomial probability = (n_at_risk choose n_died) * dying probability ^ n_died * surviving probability ^ n_survived
-    #  ==> log likelihood = log(n_at_risk choose n_died) + n_died * log(dying probability) + (n_at_risk - n_died) * log(surviving probability)
-    #                     = log(n_at_risk choose n_died) + n_died * log_p_died + (n_at_risk - n_died) * log_p_survived
+    #binomial probability = (n_at_risk choose n_died)
+    #                       * dying probability ^ n_died
+    #                       * surviving probability ^ n_survived
+    #  ==> log likelihood = log(n_at_risk choose n_died)
+    #                       + n_died * log(dying probability)
+    #                       + (n_at_risk - n_died) * log(surviving probability)
+    #                     = log(n_at_risk choose n_died)
+    #                       + n_died * log_p_died
+    #                       + (n_at_risk - n_died) * log_p_survived
 
     use_binomial_penalty_indicator = model.addVar(
       vtype=GRB.BINARY,
@@ -870,7 +881,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
         ) == 1,
         name=f"one_n_choose_d_indicator_per_group_{group_idx}",
       )
-    
+
     n_died_indicator_vars = model.addVars(
       int(sum(self.n_died_in_group_total + 1)),
       vtype=GRB.BINARY,
@@ -969,8 +980,10 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
       0.0
     )
     #big M constraint to ensure binomial penalty is only used when the indicator is set
-    max_penalty_term = max(abs(penalty) for penalty in self.n_choose_d_term_table.values())
-    max_d = max([*self.n_died_in_group_total, 1]) #avoid ValueError if n_died_in_group_total is empty
+    max_penalty_term = max(
+      abs(penalty) for penalty in self.n_choose_d_term_table.values()
+    )
+    max_d = max([*self.n_died_in_group_total, 1]) #avoid ValueError for empty n_died_in_group_total
     max_s = self.n_patients
     max_log_p = max(np.abs(log_p_bounds))
     safety_factor = 2
@@ -995,7 +1008,12 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     )
     model.update()
 
-    return model, traj_indicator_vars, expected_probability, use_binomial_penalty_indicator, binom_penalty_expr
+    return (
+      model,
+      traj_indicator_vars,
+      expected_probability,
+      use_binomial_penalty_indicator,
+    )
 
   @functools.cached_property
   def gurobi_model(self):
@@ -1126,7 +1144,12 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
         model=None,
       )
 
-    model, traj_indicator_vars, expected_probability_var, use_binomial_penalty_indicator, _ = self.gurobi_model
+    (
+      model,
+      traj_indicator_vars,
+      expected_probability_var,
+      use_binomial_penalty_indicator,
+    ) = self.gurobi_model
     self.update_model_with_expected_probability(
       model=model,
       traj_indicator_vars=traj_indicator_vars,
