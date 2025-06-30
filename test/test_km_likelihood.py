@@ -64,6 +64,8 @@ def runtest(
     CLs=CLs,
     times_for_plot=times_for_plot,
     binomial_only=True,
+    MIPGap=1e-6,
+    fallback_MIPGap=2e-5,
   )
   (
     best_probabilities_patient_wise, CL_probabilities_patient_wise
