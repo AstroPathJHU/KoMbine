@@ -61,11 +61,18 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     return self.__parameter_max
 
   @property
-  def patient_times(self) -> frozenset:
+  def patient_death_times(self) -> frozenset:
     """
-    The set of all patient times.
+    The survival times of the patients who died.
+    (excludes censored patients)
     """
-    return frozenset(p.time for p in self.all_patients)
+    return frozenset(p.time for p in self.all_patients if not p.censored)
+  @property
+  def patient_censored_times(self) -> frozenset:
+    """
+    The survival times of the patients who were censored.
+    """
+    return frozenset(p.time for p in self.all_patients if p.censored)
 
   @functools.cached_property
   def nominalkm(self) -> KaplanMeierInstance:
@@ -235,10 +242,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       best_probabilities.append(best_prob)
 
       for CL in CLs:
-        if patient_wise_only and (t < min(self.patient_times) or t >= max(self.patient_times)):
+        if patient_wise_only and (t < min(self.patient_death_times) or t >= max(self.patient_death_times)):
           # If the time point is outside the range of patient times, we cannot
           # calculate a patient-wise survival probability.
-          if t < min(self.patient_times):
+          if t < min(self.patient_death_times):
             survival_probabilities_time_point.append((1, 1))
           else:
             survival_probabilities_time_point.append((0, 0))

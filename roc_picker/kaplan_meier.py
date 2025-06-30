@@ -59,9 +59,16 @@ class KaplanMeierBase(abc.ABC):
   """
   @property
   @abc.abstractmethod
-  def patient_times(self) -> frozenset[float]:
+  def patient_death_times(self) -> frozenset[float]:
     """
-    Returns the survival times of the patients.
+    Returns the survival times of the patients who died.
+    (excludes censored patients)
+    """
+  @property
+  @abc.abstractmethod
+  def patient_censored_times(self) -> frozenset[float]:
+    """
+    Returns the survival times of the patients who were censored.
     """
   @functools.cached_property
   def times_for_plot(self):
@@ -70,7 +77,7 @@ class KaplanMeierBase(abc.ABC):
     The times are the unique survival times of the patients,
     plus a point at 0 and a point beyond the last time.
     """
-    times_for_plot = sorted(self.patient_times)
+    times_for_plot = sorted(self.patient_death_times)
     times_for_plot = np.array([0] + times_for_plot + [times_for_plot[-1] * 1.1])
     return times_for_plot
 
@@ -135,12 +142,21 @@ class KaplanMeierInstance(KaplanMeierBase):
     ]
 
   @property
-  def patient_times(self):
+  def patient_death_times(self):
     """
-    Returns the survival times of the patients.
+    Returns the survival times of the patients who died.
+    (excludes censored patients)
     """
     patients = self.patients
-    patient_times = frozenset({p.time for p in patients})
+    patient_times = frozenset({p.time for p in patients if not p.censored})
+    return patient_times
+  @property
+  def patient_censored_times(self):
+    """
+    Returns the survival times of the patients who were censored.
+    """
+    patients = self.patients
+    patient_times = frozenset({p.time for p in patients if p.censored})
     return patient_times
 
   def survival_probabilities(self, times_for_plot=None):
@@ -213,7 +229,7 @@ class KaplanMeierPlot(KaplanMeierBase):
   ):
     self.__all_patients = all_patients
     self.__thresholds = [-np.inf] + sorted(thresholds) + [np.inf]
-    self.__curves = []
+    self.__curves: list[KaplanMeierInstance] = []
     for i in range(len(self.__thresholds) - 1):
       self.__curves.append(
         KaplanMeierInstance(
@@ -237,7 +253,6 @@ class KaplanMeierPlot(KaplanMeierBase):
     plt.figure()
     for i, curve in enumerate(self.__curves):
       x, y = curve.points_for_plot(times_for_plot=self.times_for_plot)
-      print(x, y)
       plt.plot(
         x,
         y,
@@ -253,10 +268,19 @@ class KaplanMeierPlot(KaplanMeierBase):
     plt.show()
 
   @property
-  def patient_times(self):
+  def patient_death_times(self):
     """
-    Returns the survival times of the patients.
+    Returns the survival times of the patients who died.
+    (excludes censored patients)
     """
     return frozenset.union(
-      *[kmi.patient_times for kmi in self.__curves]
+      *[kmi.patient_death_times for kmi in self.__curves]
+    )
+  @property
+  def patient_censored_times(self):
+    """
+    Returns the survival times of the patients who were censored.
+    """
+    return frozenset.union(
+      *[kmi.patient_censored_times for kmi in self.__curves]
     )
