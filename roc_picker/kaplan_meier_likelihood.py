@@ -61,11 +61,18 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     return self.__parameter_max
 
   @property
-  def patient_times(self) -> frozenset:
+  def patient_death_times(self) -> frozenset:
     """
-    The set of all patient times.
+    The survival times of the patients who died.
+    (excludes censored patients)
     """
-    return frozenset(p.time for p in self.all_patients)
+    return frozenset(p.time for p in self.all_patients if not p.censored)
+  @property
+  def patient_censored_times(self) -> frozenset:
+    """
+    The survival times of the patients who were censored.
+    """
+    return frozenset(p.time for p in self.all_patients if p.censored)
 
   @functools.cached_property
   def nominalkm(self) -> KaplanMeierInstance:
@@ -90,6 +97,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       parameter_min=self.parameter_min,
       parameter_max=self.parameter_max,
       time_point=time_point,
+      endpoint_epsilon=self.__endpoint_epsilon,
     )
 
   def ilps_for_km(
@@ -114,6 +122,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     patient_wise_only=False,
     verbose=False,
     print_progress=False,
+    MIPGap=None,
+    fallback_MIPGap=None,
   ) -> collections.abc.Callable[[float], float]:
     """
     Get the twoNLL function for the given time point.
@@ -130,6 +140,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         patient_wise_only=patient_wise_only,
         verbose=verbose,
         print_progress=print_progress,
+        MIPGap=MIPGap,
+        fallback_MIPGap=fallback_MIPGap,
       )
       if not result.success:
         return np.inf
@@ -197,6 +209,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     gurobi_verbose=False,
     optimize_verbose=False,
     print_progress=False,
+    MIPGap=None,
+    fallback_MIPGap=None,
   ) -> tuple[np.ndarray, np.ndarray]:
     """
     Get the survival probabilities for the given quantiles.
@@ -217,6 +231,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         patient_wise_only=patient_wise_only,
         verbose=gurobi_verbose,
         print_progress=print_progress,
+        MIPGap=MIPGap,
+        fallback_MIPGap=fallback_MIPGap,
       )
       # Find the expected probability that minimizes the negative log-likelihood
       # for the given time point
@@ -234,10 +250,12 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       best_probabilities.append(best_prob)
 
       for CL in CLs:
-        if patient_wise_only and (t < min(self.patient_times) or t >= max(self.patient_times)):
+        if patient_wise_only and (
+          t < min(self.patient_death_times) or t >= max(self.patient_death_times)
+        ):
           # If the time point is outside the range of patient times, we cannot
           # calculate a patient-wise survival probability.
-          if t < min(self.patient_times):
+          if t < min(self.patient_death_times):
             survival_probabilities_time_point.append((1, 1))
           else:
             survival_probabilities_time_point.append((0, 0))
@@ -327,6 +345,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     show=False,
     saveas=None,
     print_progress=False,
+    MIPGap=None,
+    fallback_MIPGap=None,
   ): #pylint: disable=too-many-locals
     """
     Plots the Kaplan-Meier curves.
@@ -387,6 +407,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         CLs=CLs,
         times_for_plot=times_for_plot,
         print_progress=print_progress,
+        MIPGap=MIPGap,
+        fallback_MIPGap=fallback_MIPGap,
       )
     if include_binomial_only:
       (
@@ -396,6 +418,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         times_for_plot=times_for_plot,
         binomial_only=True,
         print_progress=print_progress,
+        MIPGap=MIPGap,
+        fallback_MIPGap=fallback_MIPGap,
       )
       if include_full_NLL:
         CL_probabilities_subset = CL_probabilities_binomial
@@ -410,6 +434,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         times_for_plot=times_for_plot,
         patient_wise_only=True,
         print_progress=print_progress,
+        MIPGap=MIPGap,
+        fallback_MIPGap=fallback_MIPGap,
       )
       if include_full_NLL:
         CL_probabilities_subset = CL_probabilities_patient_wise

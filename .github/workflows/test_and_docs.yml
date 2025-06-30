@@ -49,8 +49,7 @@ jobs:
       #GUROBI_WLSACCESSID, GUROBI_WLSSECRET, and GUROBI_LICENSEID
       - name: Configure Gurobi WLS license
         run: |
-          mkdir -p ~/.gurobi
-          cat <<EOF > ~/.gurobi/gurobi.lic
+          cat <<EOF > ~/gurobi.lic
           WLSACCESSID=${{ secrets.GUROBI_WLSACCESSID }}
           WLSSECRET=${{ secrets.GUROBI_WLSSECRET }}
           LICENSEID=${{ secrets.GUROBI_LICENSEID }}

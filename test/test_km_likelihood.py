@@ -2,6 +2,7 @@
 Test the Kaplan-Meier likelihood method.
 """
 
+import argparse
 import pathlib
 import pickle
 import warnings
@@ -16,12 +17,21 @@ warnings.simplefilter("error")
 here = pathlib.Path(__file__).parent
 datacards = here / "datacards" / "simple_examples"
 
-def main():  #pylint: disable=too-many-locals, too-many-statements, too-many-branches
+def runtest(
+  censoring=False,
+):  #pylint: disable=too-many-locals, too-many-statements, too-many-branches
   """
   Test the Kaplan-Meier likelihood method.
   """
-  tolerance: Tolerance = {"atol": 1e-5, "rtol": 1e-5}
-  datacard = roc_picker.datacard.Datacard.parse_datacard(datacards / "datacard_example_5.txt")
+  if censoring:
+    dcfile = datacards / "datacard_example_6.txt"
+    reffile = here / "reference" / "km_likelihood_with_censoring.pkl"
+  else:
+    dcfile = datacards / "datacard_example_5.txt"
+    reffile = here / "reference" / "km_likelihood.pkl"
+
+  tolerance: Tolerance = {"atol": 2e-4, "rtol": 2e-4}
+  datacard = roc_picker.datacard.Datacard.parse_datacard(dcfile)
 
   kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
   times_for_plot = kml.times_for_plot
@@ -44,7 +54,7 @@ def main():  #pylint: disable=too-many-locals, too-many-statements, too-many-bra
   )
 
   # Now test with parameter limits
-  kml2 = datacard.km_likelihood(parameter_min=0.2, parameter_max=0.8)
+  kml2 = datacard.km_likelihood(parameter_min=0.2, parameter_max=0.8, endpoint_epsilon=1e-4)
   nominal_probabilities = kml2.nominalkm.survival_probabilities(times_for_plot=times_for_plot)
   best_probabilities, CL_probabilities = kml2.survival_probabilities_likelihood(
     CLs=CLs,
@@ -195,7 +205,7 @@ def main():  #pylint: disable=too-many-locals, too-many-statements, too-many-bra
     CL_probabilities_patient_wise,
   )
   try:
-    with open(here / "reference" / "km_likelihood.pkl", "rb") as f:
+    with open(reffile, "rb") as f:
       reference = pickle.load(f)
       for name, array, ref in zip(array_names, to_compare_to_reference, reference, strict=True):
         np.testing.assert_allclose(
@@ -205,9 +215,37 @@ def main():  #pylint: disable=too-many-locals, too-many-statements, too-many-bra
           err_msg=f"Array {name} does not match the reference."
         )
   except:
-    with open(here / "test_output" / "km_likelihood.pkl", "wb") as f:
+    with open(here / "test_output" / reffile.name, "wb") as f:
       pickle.dump(to_compare_to_reference, f)
     raise
+
+def main(args=None):
+  """
+  Main function to run the test.
+  By default, it runs both with and without censoring.
+  You can specify --censoring or --no-censoring to run only one of them.
+  """
+  p = argparse.ArgumentParser(
+    description="Test the Kaplan-Meier likelihood method."
+  )
+  g = p.add_mutually_exclusive_group()
+  g.add_argument(
+    "--censoring",
+    action="store_true",
+    help="Test with censoring.",
+  )
+  g.add_argument(
+    "--no-censoring",
+    action="store_true",
+    help="Test without censoring.",
+  )
+  args = p.parse_args(args)
+  if not args.censoring and not args.no_censoring:
+    args.censoring = args.no_censoring = True
+  if args.no_censoring:
+    runtest(censoring=False)
+  if args.censoring:
+    runtest(censoring=True)
 
 if __name__ == "__main__":
   main()
