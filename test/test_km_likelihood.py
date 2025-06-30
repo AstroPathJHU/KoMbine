@@ -54,7 +54,7 @@ def runtest(
   )
 
   # Now test with parameter limits
-  kml2 = datacard.km_likelihood(parameter_min=0.2, parameter_max=0.8)
+  kml2 = datacard.km_likelihood(parameter_min=0.2, parameter_max=0.8, endpoint_epsilon=1e-4)
   nominal_probabilities = kml2.nominalkm.survival_probabilities(times_for_plot=times_for_plot)
   best_probabilities, CL_probabilities = kml2.survival_probabilities_likelihood(
     CLs=CLs,
@@ -64,8 +64,6 @@ def runtest(
     CLs=CLs,
     times_for_plot=times_for_plot,
     binomial_only=True,
-    MIPGap=1e-6,
-    fallback_MIPGap=2e-5,
   )
   (
     best_probabilities_patient_wise, CL_probabilities_patient_wise

@@ -854,7 +854,13 @@ class Datacard:
 
     return DeltaFunctionsROC(responders=responders, nonresponders=nonresponders, **kwargs)
 
-  def km_likelihood(self, parameter_min: float, parameter_max: float) -> KaplanMeierLikelihood:
+  def km_likelihood(
+    self,
+    parameter_min: float,
+    parameter_max: float,
+    *,
+    endpoint_epsilon: float = 1e-6,
+  ) -> KaplanMeierLikelihood:
     """
     Generate a KaplanMeierLikelihood object for generating Kaplan-Meier
     error bands using the likelihood method.
@@ -867,6 +873,7 @@ class Datacard:
       all_patients=patients,
       parameter_min=parameter_min,
       parameter_max=parameter_max,
+      endpoint_epsilon=endpoint_epsilon,
     )
 
   def clear_distributions(self):
