@@ -175,11 +175,13 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     parameter_min: float,
     parameter_max: float,
     time_point: float,
+    endpoint_epsilon: float = 1e-6,
   ):
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min
     self.__parameter_max = parameter_max
     self.__time_point = time_point
+    self.__endpoint_epsilon = endpoint_epsilon
     self.__expected_probability_constraint = None
     self.__binomial_penalty_constraint = None
     self.__patient_constraints_for_binomial_only = None
@@ -808,7 +810,10 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
       lb=0,
       ub=1,
     )
-    log_p_bounds = np.array([-20, -1e-6])
+    log_p_bounds = np.array([
+      np.log(self.__endpoint_epsilon / self.n_groups / 2),
+      np.log(1 - self.__endpoint_epsilon / self.n_groups / 2),
+    ])
     log_p_died = model.addVars(
       self.n_groups,
       vtype=GRB.CONTINUOUS,
@@ -842,8 +847,8 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     log_expected_probability = model.addVar(
       vtype=GRB.CONTINUOUS,
       name="log_expected_probability",
-      lb=-20,
-      ub=-1e-6,
+      lb=np.log(self.__endpoint_epsilon),
+      ub=np.log(1 - self.__endpoint_epsilon),
     )
     model.addGenConstrExp(
       log_expected_probability,

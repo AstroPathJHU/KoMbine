@@ -90,6 +90,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       parameter_min=self.parameter_min,
       parameter_max=self.parameter_max,
       time_point=time_point,
+      endpoint_epsilon=self.__endpoint_epsilon,
     )
 
   def ilps_for_km(
