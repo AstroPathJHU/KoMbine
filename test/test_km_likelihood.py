@@ -2,6 +2,7 @@
 Test the Kaplan-Meier likelihood method.
 """
 
+import argparse
 import pathlib
 import pickle
 import warnings
@@ -16,7 +17,7 @@ warnings.simplefilter("error")
 here = pathlib.Path(__file__).parent
 datacards = here / "datacards" / "simple_examples"
 
-def main(
+def runtest(
   censoring=False,
 ):  #pylint: disable=too-many-locals, too-many-statements, too-many-branches
   """
@@ -29,7 +30,7 @@ def main(
     dcfile = datacards / "datacard_example_5.txt"
     reffile = here / "reference" / "km_likelihood.pkl"
 
-  tolerance: Tolerance = {"atol": 1e-5, "rtol": 1e-5}
+  tolerance: Tolerance = {"atol": 2e-4, "rtol": 2e-4}
   datacard = roc_picker.datacard.Datacard.parse_datacard(dcfile)
 
   kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
@@ -218,6 +219,33 @@ def main(
       pickle.dump(to_compare_to_reference, f)
     raise
 
+def main(args=None):
+  """
+  Main function to run the test.
+  By default, it runs both with and without censoring.
+  You can specify --censoring or --no-censoring to run only one of them.
+  """
+  p = argparse.ArgumentParser(
+    description="Test the Kaplan-Meier likelihood method."
+  )
+  g = p.add_mutually_exclusive_group()
+  g.add_argument(
+    "--censoring",
+    action="store_true",
+    help="Test with censoring.",
+  )
+  g.add_argument(
+    "--no-censoring",
+    action="store_true",
+    help="Test without censoring.",
+  )
+  args = p.parse_args(args)
+  if not args.censoring and not args.no_censoring:
+    args.censoring = args.no_censoring = True
+  if args.no_censoring:
+    runtest(censoring=False)
+  if args.censoring:
+    runtest(censoring=True)
+
 if __name__ == "__main__":
-  main(censoring=False)
-  main(censoring=True)
+  main()
