@@ -16,12 +16,21 @@ warnings.simplefilter("error")
 here = pathlib.Path(__file__).parent
 datacards = here / "datacards" / "simple_examples"
 
-def main():  #pylint: disable=too-many-locals, too-many-statements, too-many-branches
+def main(
+  censoring=False,
+):  #pylint: disable=too-many-locals, too-many-statements, too-many-branches
   """
   Test the Kaplan-Meier likelihood method.
   """
+  if censoring:
+    dcfile = datacards / "datacard_example_6.txt"
+    reffile = here / "reference" / "km_likelihood_with_censoring.pkl"
+  else:
+    dcfile = datacards / "datacard_example_5.txt"
+    reffile = here / "reference" / "km_likelihood.pkl"
+
   tolerance: Tolerance = {"atol": 1e-5, "rtol": 1e-5}
-  datacard = roc_picker.datacard.Datacard.parse_datacard(datacards / "datacard_example_5.txt")
+  datacard = roc_picker.datacard.Datacard.parse_datacard(dcfile)
 
   kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
   times_for_plot = kml.times_for_plot
@@ -195,7 +204,7 @@ def main():  #pylint: disable=too-many-locals, too-many-statements, too-many-bra
     CL_probabilities_patient_wise,
   )
   try:
-    with open(here / "reference" / "km_likelihood.pkl", "rb") as f:
+    with open(reffile, "rb") as f:
       reference = pickle.load(f)
       for name, array, ref in zip(array_names, to_compare_to_reference, reference, strict=True):
         np.testing.assert_allclose(
@@ -205,9 +214,10 @@ def main():  #pylint: disable=too-many-locals, too-many-statements, too-many-bra
           err_msg=f"Array {name} does not match the reference."
         )
   except:
-    with open(here / "test_output" / "km_likelihood.pkl", "wb") as f:
+    with open(here / "test_output" / reffile.name, "wb") as f:
       pickle.dump(to_compare_to_reference, f)
     raise
 
 if __name__ == "__main__":
-  main()
+  main(censoring=False)
+  main(censoring=True)

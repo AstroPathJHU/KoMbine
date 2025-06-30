@@ -1241,10 +1241,6 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
       raise ValueError("expected_probability must be in [0, 1]")
     if binomial_only and patient_wise_only:
       raise ValueError("binomial_only and patient_wise_only cannot both be True")
-    if not patient_wise_only and np.any(self.patient_censored):
-      raise NotImplementedError(
-        "Censored patients are not supported except in patient-wise-only mode"
-      )
 
     nll_penalty_for_patient_in_range = self.nll_penalty_for_patient_in_range
 
