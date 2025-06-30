@@ -169,6 +169,11 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
   """
   Integer Linear Programming for a point on the Kaplan-Meier curve.
   """
+  __default_MIPGap = 1e-6
+  #if the minimization is suboptimal, we will use this fallback MIPGap.
+  #this is only used if MIPGap is not provided to run_ILP.
+  __default_fallback_MIPGap = 1e-5
+
   def __init__(  # pylint: disable=too-many-arguments
     self,
     all_patients: list[KaplanMeierPatientNLL],
@@ -1223,6 +1228,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
 
     model.update()
 
+  __not_provided = object()
   def run_ILP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
     self,
     expected_probability: float,
@@ -1231,7 +1237,8 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     print_progress=False,
     binomial_only=False,
     patient_wise_only=False,
-    gurobi_rtol=1e-6,
+    MIPGap: float | None = None,
+    fallback_MIPGap: float | None = None,
   ):
     """
     Run the ILP for the given time point.
@@ -1247,6 +1254,15 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
       raise ValueError("expected_probability must be in [0, 1]")
     if binomial_only and patient_wise_only:
       raise ValueError("binomial_only and patient_wise_only cannot both be True")
+
+    if MIPGap is None:
+      if fallback_MIPGap is not None:
+        raise ValueError(
+          "If fallback_MIPGap is provided, MIPGap must also be provided."
+       )
+      fallback_MIPGap = self.__default_fallback_MIPGap
+      MIPGap = self.__default_MIPGap
+
 
     nll_penalty_for_patient_in_range = self.nll_penalty_for_patient_in_range
 
@@ -1274,9 +1290,18 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     else:
       # Suppress Gurobi output
       model.setParam('OutputFlag', 0)
-    model.setParam("MIPGap", gurobi_rtol)
+    model.setParam("MIPGap", MIPGap)
 
     model.optimize()
+    if model.status == GRB.SUBOPTIMAL:
+      if fallback_MIPGap is not None:
+        if verbose:
+          print(
+            f"Model returned suboptimal solution with MIPGap {MIPGap}. "
+            f"Retrying with fallback MIPGap {fallback_MIPGap}."
+          )
+        model.setParam("MIPGap", fallback_MIPGap)
+        model.optimize()
 
     if model.status != GRB.OPTIMAL:
       if model.status == GRB.INFEASIBLE and patient_wise_only:
