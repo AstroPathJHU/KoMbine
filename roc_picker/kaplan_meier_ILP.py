@@ -182,6 +182,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     self.__time_point = time_point
     self.__expected_probability_constraint = None
     self.__binomial_penalty_constraint = None
+    self.__patient_constraints_for_binomial_only = None
     if not np.isfinite(self.__parameter_min and self.__parameter_min != -np.inf):
       raise ValueError("parameter_min must be finite or -inf")
     if not np.isfinite(self.__parameter_max and self.__parameter_max != np.inf):
@@ -1032,12 +1033,18 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     for i in range(self.n_patients):
       if np.isfinite(self.nll_penalty_for_patient_in_range[i]):
         patient_penalties.append(self.nll_penalty_for_patient_in_range[i] * x[i])
-      elif np.isposinf(self.nll_penalty_for_patient_in_range[i]):
-        #the patient must be selected, so we add a constraint
-        model.addConstr(x[i] == 1)
       elif np.isneginf(self.nll_penalty_for_patient_in_range[i]):
+        #the patient must be selected, so we add a constraint
+        model.addConstr(
+          x[i] == 1,
+          name=f"patient_{i}_must_be_selected",
+        )
+      elif np.isposinf(self.nll_penalty_for_patient_in_range[i]):
         #the patient must not be selected, so we add a constraint
-        model.addConstr(x[i] == 0)
+        model.addConstr(
+          x[i] == 0,
+          name=f"patient_{i}_must_not_be_selected",
+        )
       else:
         raise ValueError(
           f"Unexpected NLL penalty for patient {i}: "
@@ -1101,6 +1108,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
 
     return (
       model,
+      x,
       traj_indicator_vars,
       expected_probability_var,
       use_binomial_penalty_indicator,
@@ -1120,6 +1128,8 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     model: gp.Model,
     expected_probability: float,
     patient_wise_only: bool,
+    binomial_only: bool,
+    x: gp.tupledict[int, gp.Var],
     traj_indicator_vars: gp.tupledict[int, gp.Var],
     use_binomial_penalty_indicator: gp.Var,
     expected_probability_var: gp.Var,
@@ -1135,6 +1145,10 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     if self.__binomial_penalty_constraint is not None:
       model.remove(self.__binomial_penalty_constraint)
       self.__binomial_penalty_constraint = None
+    if self.__patient_constraints_for_binomial_only is not None:
+      for constr in self.__patient_constraints_for_binomial_only:
+        model.remove(constr)
+      self.__patient_constraints_for_binomial_only = None
 
     if not patient_wise_only:
       # ---------------------------
@@ -1179,6 +1193,28 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
       else:
         assert expected_probability == self.observed_KM_probability
 
+    if binomial_only:
+      self.__patient_constraints_for_binomial_only = []
+      for i in range(self.n_patients):
+        if self.parameter_in_range[i]:
+          assert self.nll_penalty_for_patient_in_range[i] <= 0
+          #the patient must be selected
+          self.__patient_constraints_for_binomial_only.append(
+            model.addConstr(
+              x[i] == 1,
+              name=f"patient_{i}_must_be_selected_binomial_only",
+            )
+          )
+        else:
+          assert self.nll_penalty_for_patient_in_range[i] >= 0
+          #the patient must not be selected
+          self.__patient_constraints_for_binomial_only.append(
+            model.addConstr(
+              x[i] == 0,
+              name=f"patient_{i}_must_not_be_selected_binomial_only",
+            )
+          )
+
     model.update()
 
   def run_ILP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
@@ -1210,42 +1246,22 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
         "Censored patients are not supported except in patient-wise-only mode"
       )
 
-    binomial_penalty_table = self.create_binomial_penalty_table(
-      n_patients=self.n_patients,
-      expected_probability=expected_probability,
-    )
-
     nll_penalty_for_patient_in_range = self.nll_penalty_for_patient_in_range
-
-    if binomial_only or not any(np.isfinite(nll_penalty_for_patient_in_range)):
-      if patient_wise_only:
-        raise ValueError(
-          "patient_wise_only cannot be True when binomial_only is True "
-          "or when the parameter range is not finite"
-        )
-      binomial_penalty_val = binomial_penalty_table[(self.n_alive_obs, self.n_total_obs)]
-      return scipy.optimize.OptimizeResult(
-        x=2*binomial_penalty_val,
-        success=True,
-        n_total=self.n_total_obs,
-        n_alive=self.n_alive_obs,
-        binomial_2NLL=2*binomial_penalty_val,
-        patient_2NLL=0,
-        selected=self.parameter_in_range,
-        model=None,
-      )
 
     (
       model,
+      x,
       traj_indicator_vars,
       expected_probability_var,
       use_binomial_penalty_indicator,
     ) = self.gurobi_model
     self.update_model_with_expected_probability(
       model=model,
+      x=x,
       traj_indicator_vars=traj_indicator_vars,
       expected_probability=expected_probability,
       patient_wise_only=patient_wise_only,
+      binomial_only=binomial_only,
       expected_probability_var=expected_probability_var,
       use_binomial_penalty_indicator=use_binomial_penalty_indicator,
     )
@@ -1282,11 +1298,6 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
         "This may indicate an issue with the ILP formulation or the input data."
       )
 
-    x: list[gp.Var] = []
-    for i in range(self.n_patients):
-      var = model.getVarByName(f"x[{i}]")
-      assert var is not None
-      x.append(var)
     n_total = model.getVarByName("n_total")
     n_alive = model.getVarByName("n_alive")
     assert n_total is not None
