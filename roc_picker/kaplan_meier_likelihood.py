@@ -242,7 +242,9 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       best_probabilities.append(best_prob)
 
       for CL in CLs:
-        if patient_wise_only and (t < min(self.patient_death_times) or t >= max(self.patient_death_times)):
+        if patient_wise_only and (
+          t < min(self.patient_death_times) or t >= max(self.patient_death_times)
+        ):
           # If the time point is outside the range of patient times, we cannot
           # calculate a patient-wise survival probability.
           if t < min(self.patient_death_times):

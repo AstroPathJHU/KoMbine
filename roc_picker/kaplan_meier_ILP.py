@@ -165,13 +165,14 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       parameter=self.observed_parameter,
     )
 
-class ILPForKM:  # pylint: disable=too-many-public-methods
+class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-attributes
   """
   Integer Linear Programming for a point on the Kaplan-Meier curve.
   """
-  def __init__(
+  def __init__(  # pylint: disable=too-many-arguments
     self,
     all_patients: list[KaplanMeierPatientNLL],
+    *,
     parameter_min: float,
     parameter_max: float,
     time_point: float,
@@ -1127,7 +1128,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods
     """
     return self._make_gurobi_model()
 
-  def update_model_with_expected_probability( # pylint: disable=too-many-arguments
+  def update_model_with_expected_probability( # pylint: disable=too-many-arguments, too-many-branches
     self,
     *,
     model: gp.Model,
