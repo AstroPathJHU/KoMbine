@@ -25,9 +25,13 @@ def runtest(
   """
   if censoring:
     dcfile = datacards / "datacard_example_6.txt"
+    dcfile_fixed = datacards / "datacard_example_7.txt"
+    # This is the same datacard as datacard_example_6, but with
+    # the observable type set to fixed instead of poisson_ratio.
     reffile = here / "reference" / "km_likelihood_with_censoring.pkl"
   else:
     dcfile = datacards / "datacard_example_5.txt"
+    dcfile_fixed = None
     reffile = here / "reference" / "km_likelihood.pkl"
 
   tolerance: Tolerance = {"atol": 2e-4, "rtol": 2e-4}
@@ -178,6 +182,55 @@ def runtest(
     raise AssertionError(
       "CL probabilities shouldn't be the same "
       "with only the binomial penalty and with the patient-wise penalty."
+    )
+
+  if dcfile_fixed is not None:
+    datacard_fixed = roc_picker.datacard.Datacard.parse_datacard(dcfile_fixed)
+    kml3 = datacard.km_likelihood(
+      parameter_min=0.25,
+      parameter_max=0.75,
+      endpoint_epsilon=1e-4
+    )
+    nominal_probabilities_noboundary = kml3.nominalkm.survival_probabilities(
+      times_for_plot=times_for_plot,
+    )
+    (
+      best_probabilities_noboundary_binomial,
+      CL_probabilities_noboundary_binomial,
+    ) = kml3.survival_probabilities_likelihood(
+      CLs=CLs,
+      times_for_plot=times_for_plot,
+      binomial_only=True,
+    )
+    kml3_fixed = datacard_fixed.km_likelihood(
+      parameter_min=0.25,
+      parameter_max=0.75,
+      endpoint_epsilon=1e-4
+    )
+    nominal_probabilities_noboundary_fixed = kml3_fixed.nominalkm.survival_probabilities(
+      times_for_plot=times_for_plot,
+    )
+    (
+      best_probabilities_noboundary_fixed,
+      CL_probabilities_noboundary_fixed,
+    ) = kml3_fixed.survival_probabilities_likelihood(
+      CLs=CLs,
+      times_for_plot=times_for_plot,
+    )
+    np.testing.assert_allclose(
+      nominal_probabilities_noboundary,
+      nominal_probabilities_noboundary_fixed,
+      **tolerance,
+    )
+    np.testing.assert_allclose(
+      best_probabilities_noboundary_fixed,
+      best_probabilities_noboundary_binomial,
+      **tolerance,
+    )
+    np.testing.assert_allclose(
+      CL_probabilities_noboundary_fixed,
+      CL_probabilities_noboundary_binomial,
+      **tolerance,
     )
 
   array_names = (

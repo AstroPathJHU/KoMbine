@@ -79,7 +79,14 @@ class FixedObservable(Observable):
     return str(self.value)
 
   def patient_nll(self, time, censored) -> KaplanMeierPatientNLL:
-    raise NotImplementedError
+    """
+    Get the patient NLL for the likelihood method.
+    """
+    return KaplanMeierPatientNLL.from_fixed_observable(
+      observable=self.value,
+      censored=censored,
+      time=time,
+    )
 
 class PoissonObservable(Observable):
   """
