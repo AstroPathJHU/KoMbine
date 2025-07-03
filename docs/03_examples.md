@@ -35,7 +35,7 @@ ROC Picker works using datacards.  The datacard format is inspired by the CMS Co
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"simple_examples"/"example_roc.txt"
+datacardfile = here.parent/"test"/"datacards"/"simple_examples"/"symmetric_roc.txt"
 ```
 
 ```python

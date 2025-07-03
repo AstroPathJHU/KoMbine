@@ -36,7 +36,7 @@ For this method, the only thing that matters is the ordering of the responders a
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"simple_examples"/"symmetric_roc.txt"
+datacardfile = here.parent/"test"/"datacards"/"simple_examples"/"example_roc.txt"
 datacard = Datacard.parse_datacard(datacardfile)
 ```
 
