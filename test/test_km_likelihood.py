@@ -24,13 +24,13 @@ def runtest(
   Test the Kaplan-Meier likelihood method.
   """
   if censoring:
-    dcfile = datacards / "datacard_example_6.txt"
-    dcfile_fixed = datacards / "datacard_example_7.txt"
-    # This is the same datacard as datacard_example_6, but with
+    dcfile = datacards / "poisson_ratio_km_censoring.txt"
+    dcfile_fixed = datacards / "fixed_km_censoring.txt"
+    # This is the same datacard as poisson_ratio_km_censoring, but with
     # the observable type set to fixed instead of poisson_ratio.
     reffile = here / "reference" / "km_likelihood_with_censoring.pkl"
   else:
-    dcfile = datacards / "datacard_example_5.txt"
+    dcfile = datacards / "poisson_ratio_km.txt"
     dcfile_fixed = None
     reffile = here / "reference" / "km_likelihood.pkl"
 

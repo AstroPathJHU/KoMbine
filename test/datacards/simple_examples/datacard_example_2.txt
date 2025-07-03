@@ -1,7 +1,0 @@
-observable_type  fixed         
-------------
-# List of patients
-------------
-bin inclusive inclusive inclusive inclusive inclusive inclusive
-response responder non-responder responder non-responder responder non-responder
-observable -10 -5 0 5 10 15

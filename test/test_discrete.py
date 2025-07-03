@@ -20,7 +20,7 @@ def main():
   """
   Test the discrete module.
   """
-  datacard = roc_picker.datacard.Datacard.parse_datacard(datacards/"datacard_example_1.txt")
+  datacard = roc_picker.datacard.Datacard.parse_datacard(datacards/"example_roc.txt")
   discrete = datacard.discrete_roc(flip_sign=False, check_validity=True)
   rocs = discrete.make_plots(
     npoints=100,
