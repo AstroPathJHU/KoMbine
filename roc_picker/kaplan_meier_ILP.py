@@ -55,6 +55,37 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     return self.__observed_parameter
 
   @classmethod
+  def from_fixed_observable( #pylint: disable=too-many-arguments
+    cls,
+    time: float,
+    censored: bool,
+    observable: float,
+    *,
+    rel_epsilon: float = 1e-6,
+    abs_epsilon: float = 1e-8,
+  ):
+    """
+    Create a KaplanMeierPatientNLL from a fixed parameter.
+    The parameter NLL gives the negative log-likelihood to observe the
+    parameter given the parameter, which is the fixed value.
+    """
+    def parameter_nll(x: float) -> float:
+      """
+      The parameter is a log-likelihood function.
+      It returns 0 if the parameter equals the observable value,
+      and infinity otherwise.
+      """
+      if np.isclose(x, observable, rtol=rel_epsilon, atol=abs_epsilon):
+        return 0.0
+      return float('inf')
+    return cls(
+      time=time,
+      censored=censored,
+      parameter_nll=parameter_nll,
+      observed_parameter=observable,
+    )
+
+  @classmethod
   def from_count(
     cls,
     time: float,
