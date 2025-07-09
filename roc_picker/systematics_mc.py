@@ -533,3 +533,35 @@ class ROCCollection:
     if show:
       plt.show()
     plt.close()
+
+    return {
+      "nominal": {
+        "x": self.nominalroc.x,
+        "y": self.nominalroc.y,
+        "AUC": AUC_nominal,
+      },
+      "68%": [
+        {
+          "x": x_m68,
+          "y": y_m68,
+          "AUC": AUC_m68
+        },
+        {
+          "x": x_p68,
+          "y": y_p68_interp_to_m68,
+          "AUC": AUC_p68
+        },
+      ],
+      "95%": [
+        {
+          "x": x_m95,
+          "y": y_m95,
+          "AUC": AUC_m95
+        },
+        {
+          "x": x_p95,
+          "y": y_p95_interp_to_m95,
+          "AUC": AUC_p95
+        },
+      ],
+    }
