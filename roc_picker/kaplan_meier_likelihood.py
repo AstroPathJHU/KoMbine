@@ -250,15 +250,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       best_probabilities.append(best_prob)
 
       for CL in CLs:
-        if patient_wise_only and (
-          t < min(self.patient_death_times) or t >= max(self.patient_death_times)
-        ):
+        if patient_wise_only and t < min(self.patient_death_times):
           # If the time point is outside the range of patient times, we cannot
           # calculate a patient-wise survival probability.
-          if t < min(self.patient_death_times):
-            survival_probabilities_time_point.append((1, 1))
-          else:
-            survival_probabilities_time_point.append((0, 0))
+          survival_probabilities_time_point.append((1, 1))
           continue
 
         d2NLLcut = scipy.stats.chi2.ppf(CL, 1).item()
@@ -285,6 +280,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               probs=probs,
               lo=i_best,
               hi=len(probs) - 1,
+              verbose=optimize_verbose,
             )
             if upper is None:
               raise RuntimeError("No upper sign change found")
@@ -299,6 +295,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               probs=probs,
               lo=0,
               hi=i_best,
+              verbose=optimize_verbose,
             )
             if lower is None:
               raise RuntimeError("No lower sign change found")
