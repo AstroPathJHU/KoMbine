@@ -344,6 +344,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     print_progress=False,
     MIPGap=None,
     fallback_MIPGap=None,
+    include_median_survival=False,
   ): #pylint: disable=too-many-locals
     """
     Plots the Kaplan-Meier curves.
@@ -361,10 +362,18 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     if create_figure:
       plt.figure()
     nominal_x, nominal_y = self.nominalkm.points_for_plot(times_for_plot=times_for_plot)
+    label = nominal_label
+    if include_median_survival:
+      label += " (MST={:.1f})".format(  #pylint: disable=consider-using-f-string
+        self.median_survival_time(
+          times_for_plot=nominal_x,
+          survival_probabilities=nominal_y,
+        )
+      )
     plt.plot(
       nominal_x,
       nominal_y,
-      label=nominal_label,
+      label=label,
       color=nominal_color,
       linestyle='--'
     )
@@ -445,10 +454,18 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
     best_x, best_y = self.get_points_for_plot(times_for_plot, best_probabilities)
     if include_best_fit:
+      label = "Best Probability"
+      if include_median_survival:
+        label += " (MST={:.1f})".format(  #pylint: disable=consider-using-f-string
+          self.nominalkm.median_survival_time(
+            times_for_plot=best_x,
+            survival_probabilities=best_y,
+          )
+        )
       plt.plot(
         best_x,
         best_y,
-        label="Best Probability",
+        label=label,
         color='red',
         linestyle='--'
       )
@@ -467,13 +484,30 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       np.testing.assert_array_equal(x_minus, best_x)
       results[f'CL_{CL}'] = (y_minus, y_plus)
 
+      if CL > 0.9999:
+        label = f'{CL:.6%} CL'
+      elif CL > 0.99:
+        label = f'{CL:.2%} CL'
+      else:
+        label = f'{CL:.0%} CL'
+      if include_median_survival:
+        label += " (MST$\\in$({:.1f}, {:.1f}))".format(  #pylint: disable=consider-using-f-string
+          self.nominalkm.median_survival_time(
+            times_for_plot=x_minus,
+            survival_probabilities=y_minus,
+          ),
+          self.nominalkm.median_survival_time(
+            times_for_plot=x_plus,
+            survival_probabilities=y_plus,
+          ),
+        ).replace("inf", r"$\infty$")
       plt.fill_between(
         x_minus,
         y_minus,
         y_plus,
         color=color,
         alpha=0.5,
-        label=f'{CL:.6%} CL' if CL > 0.9999 else f'{CL:.2%} CL' if CL > 0.99 else f'{CL:.0%} CL',
+        label=label,
       )
 
     if CL_probabilities_subset is not None:
@@ -491,6 +525,23 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         np.testing.assert_array_equal(x_minus_subset, best_x)
         results[f'CL_{CL}_subset'] = (y_minus_subset, y_plus_subset)
 
+        if CL > 0.9999:
+          label = f'{CL:.6%} CL ({subset_label})'
+        elif CL > 0.99:
+          label = f'{CL:.2%} CL ({subset_label})'
+        else:
+          label = f'{CL:.0%} CL ({subset_label})'
+        if include_median_survival:
+          label += r" (MST$\elem$({:.1f}, {:.1f}))".format(  #pylint: disable=consider-using-f-string
+            self.nominalkm.median_survival_time(
+              times_for_plot=x_minus_subset,
+              survival_probabilities=y_minus_subset,
+            ),
+            self.nominalkm.median_survival_time(
+              times_for_plot=x_plus_subset,
+              survival_probabilities=y_plus_subset,
+            ),
+          )
         plt.fill_between(
           x_minus_subset,
           y_minus_subset,
@@ -499,10 +550,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           facecolor='none',
           hatch=hatch,
           alpha=0.5,
-          label=(
-            (f'{CL:.6%} CL' if CL > 0.9999 else f'{CL:.2%} CL' if CL > 0.99 else f'{CL:.0%} CL')
-            + f'({subset_label})'
-          ),
+          label=label,
         )
 
     if create_figure:

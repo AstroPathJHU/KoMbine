@@ -102,6 +102,19 @@ class KaplanMeierBase(abc.ABC):
       y.append(prob)
     return np.array(x), np.array(y)
 
+  @staticmethod
+  def median_survival_time(*, times_for_plot, survival_probabilities):
+    """
+    Returns the median survival time.
+    The median survival time is the time at which the survival probability is 0.5.
+    """
+    median_time = np.inf
+    for t, p in zip(times_for_plot, survival_probabilities, strict=True):
+      if p <= 0.5:
+        median_time = t
+        break
+    return median_time
+
 class KaplanMeierInstance(KaplanMeierBase):
   """
   Class to represent a Kaplan-Meier curve.
