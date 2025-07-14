@@ -152,11 +152,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     """
     Get the possible probabilities for the given patients.
     """
-    return np.unique([
-      probability
-      for _, _, _, probability
-      in self.ilp_for_km(time_point=time_point).valid_trajectories
-    ])
+    return np.array(sorted(self.ilp_for_km(time_point).possible_probabilities))
 
   @functools.cached_property
   def __possible_probabilities(self) -> dict[float, np.ndarray]:

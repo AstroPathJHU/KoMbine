@@ -538,6 +538,76 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
       died_counts=tuple(self.n_died_in_group_obs),
     )
 
+  @classmethod
+  @functools.cache
+  def calculate_possible_probabilities(
+    cls,
+    n_total_patients: int,
+    n_censored_in_group: tuple[int, ...],
+    n_died_in_group: tuple[int, ...],
+    verbose=False,
+  ) -> set[float]:
+    """
+    Calculate possible probabilities based on the total number of patients and the
+    total number who were censored or died in each group.
+    The probabilities are calculated by iterating over all possible combinations
+    of patients to be included or excluded.
+
+    The minimum total count is 1 - we don't allow all patients to be excluded.
+    """
+    if len(n_censored_in_group) != len(n_died_in_group):
+      raise ValueError("n_censored_in_group and n_died_in_group must have the same length")
+    n_groups = len(n_censored_in_group)
+    if sum(n_censored_in_group) + sum(n_died_in_group) > n_total_patients:
+      raise ValueError(
+        "The total number of patients who were censored or died "
+        "exceeds the total number of patients"
+      )
+    result = set()
+    # For each group, possible number of censored and died patients included: 0..n_censored/died
+    censored_ranges = [range(nc + 1) for nc in n_censored_in_group]
+    died_ranges = [range(nd + 1) for nd in n_died_in_group]
+    n_trajectories = (
+      n_total_patients
+        * np.prod(np.array(n_censored_in_group) + 1)
+        * np.prod(np.array(n_died_in_group) + 1)
+    )
+    if verbose:
+      print(
+        f"Calculating probabilities for {n_trajectories} trajectories for "
+        f"{n_total_patients} total patients in {n_groups} groups"
+      )
+    n_generated = 0
+    for total_count in range(1, n_total_patients + 1): #pylint: disable=too-many-nested-blocks
+      for censored_counts in itertools.product(*censored_ranges):
+        for died_counts in itertools.product(*died_ranges):
+          n_generated += 1
+          if verbose and (n_generated % 1000 == 0 or n_generated == n_trajectories):
+            print(f"  {n_generated} / {n_trajectories}")
+          if sum(censored_counts) + sum(died_counts) > total_count:
+            continue
+
+          expected_trajectory_probability = cls.calculate_KM_probability(
+            total_count=total_count,
+            censored_counts=censored_counts,
+            died_counts=died_counts,
+          )
+          result.add(expected_trajectory_probability)
+    return result
+
+  @functools.cached_property
+  def possible_probabilities(self) -> set[float]:
+    """
+    Calculate the possible probabilities based on the total number of patients
+    and the total number who were censored or died in each group.
+    """
+    return self.calculate_possible_probabilities(
+      n_total_patients=self.n_patients,
+      n_censored_in_group=tuple(self.n_censored_in_group_total),
+      n_died_in_group=tuple(self.n_died_in_group_total),
+      verbose=False,
+    )
+
   @functools.cached_property
   def nll_penalty_for_patient_in_range(self) -> npt.NDArray[np.float64]:
     """
@@ -675,7 +745,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
       n_died_in_group,
       n_at_risk,
       n_survived_in_group,
-      n_alive, # Return n_alive for potential use
+      n_alive,
     )
 
   def add_kaplan_meier_probability_variables_and_constraints(
@@ -747,7 +817,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
       ub=0,
     )
     model.addConstr(
-      km_log_probability_total == gp.quicksum(km_log_probability_per_group),
+      km_log_probability_total == km_log_probability_per_group.sum(),
       name="km_log_probability_total_def"
     )
 
@@ -1062,12 +1132,12 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     x = model.addVars(self.n_patients, vtype=GRB.BINARY, name="x")
 
     (
-      n_total,
-      n_censored_in_group, # Keep for binomial penalty
+      _,
+      _,
       n_died_in_group,
       n_at_risk,
       n_survived_in_group,
-      n_alive, # Keep for binomial penalty
+      _,
     ) = self.add_counter_variables_and_constraints(
       model=model,
       x=x,
@@ -1160,9 +1230,12 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
         name="expected_probability_constraint",
       )
     else:
-      # ---------------------------
-      # Patient-wise only, constrain KM probability based on expected_probability
-      # ---------------------------
+      #no binomial penalty means there's nothing to constrain the observed
+      #probability to the expected probability.  In that case, what does
+      #it mean to get an NLL for the expected probability?
+      #Instead, we constrain the observed probability to be at least as
+      #far from the nominal observed probability as the expected
+      #and find the minimum patient-wise NLL.
       self.__binomial_penalty_constraint = model.addConstr(
         use_binomial_penalty_indicator == 0,
         name="use_binomial_penalty"
