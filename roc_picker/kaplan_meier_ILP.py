@@ -1270,6 +1270,9 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     patient_wise_only=False,
     MIPGap: float | None = None,
     fallback_MIPGap: float | None = None,
+    TimeLimit: float | None = None,
+    Threads: int | None = None,
+    MIPFocus: int | None = None,
   ):
     """
     Run the ILP for the given time point.
@@ -1321,7 +1324,35 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     else:
       # Suppress Gurobi output
       model.setParam('OutputFlag', 0)
+
+    # --- Gurobi Parameter Tuning ---
+    # Set the MIPGap for solution quality vs. speed.
     model.setParam("MIPGap", MIPGap)
+
+    # Set a time limit for the optimization (e.g., 300 seconds = 5 minutes)
+    if TimeLimit is not None:
+      model.setParam('TimeLimit', TimeLimit)
+    # Example: model.setParam('TimeLimit', 300.0)
+
+    # Set the number of threads to use (e.g., use all available CPU cores)
+    if Threads is not None:
+      model.setParam('Threads', Threads)
+    # Example: model.setParam('Threads', os.cpu_count())
+
+    # Set MIPFocus to guide the solver's strategy:
+    # 0: Balances feasibility and optimality (default)
+    # 1: Focuses on finding feasible solutions quickly
+    # 2: Focuses on proving optimality
+    # 3: Focuses on finding good bounds
+    if MIPFocus is not None:
+      model.setParam('MIPFocus', MIPFocus)
+    # Example: model.setParam('MIPFocus', 1) # For faster initial solutions
+
+    # Consider experimenting with other parameters like Cuts and Heuristics if needed.
+    # model.setParam('Cuts', 2) # Aggressive cut generation
+    # model.setParam('Heuristics', 0.5) # Less aggressive heuristics
+
+    # --- End Gurobi Parameter Tuning ---
 
     model.optimize()
     if model.status == GRB.SUBOPTIMAL:
