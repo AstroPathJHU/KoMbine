@@ -1379,7 +1379,14 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     model.setParam("MIPGap", MIPGap)
 
     # Crucial for non-convex problems to aim for global optimality
-    model.setParam("NonConvex", 2) # Spatial branch-and-bound
+    if patient_wise_only:
+      model.setParam("NonConvex", 2) # Spatial branch-and-bound
+      # Improve numerical stability for problems with functions like log/exp
+      model.setParam("NumericFocus", 3)
+    else:
+      model.setParam("NonConvex", 0)
+      model.setParam("NumericFocus", 0)
+
 
     # Set a fixed random seed for reproducibility
     model.setParam("Seed", 123456) # Use a fixed integer seed
@@ -1399,9 +1406,6 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     # 3: Focuses on finding good bounds
     if MIPFocus is not None:
       model.setParam('MIPFocus', MIPFocus)
-
-    # Improve numerical stability for problems with functions like log/exp
-    model.setParam("NumericFocus", 3)
 
     # Consider experimenting with other parameters like Cuts and Heuristics if needed.
     # model.setParam('Cuts', 2) # Aggressive cut generation
