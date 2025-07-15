@@ -807,7 +807,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
       )
 
     # Kaplan-Meier log probability for each group term
-    # This term will be -GRB.INFINITY if n_at_risk[i] is 0
+    # This term will be 0 if n_at_risk[i] is 0
     km_log_probability_per_group_terms = model.addVars(
       self.n_groups,
       vtype=GRB.CONTINUOUS,
@@ -831,7 +831,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
         is_n_at_risk_zero[i], True,
         km_log_probability_per_group_terms[i],
         GRB.EQUAL,
-        0, # This will make the total log probability -infinity
+        0.0,
         name=f"km_log_prob_group_zero_at_risk_{i}"
       )
 
@@ -1270,16 +1270,15 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
       # Constrain the KM probability based on the expected_probability
       # If expected_probability > observed, then KM_prob >= expected_probability
       # If expected_probability < observed, then KM_prob <= expected_probability
-      # If expected_probability == observed, then KM_prob == expected_probability
-      epsilon = 1e-6
+      # If expected_probability == observed, then KM_prob is unconstrained by expected_probability
       if expected_probability > self.observed_KM_probability:
         self.__expected_probability_constraint = model.addConstr(
-          km_probability_var >= expected_probability - epsilon,
+          km_probability_var >= expected_probability - self.__endpoint_epsilon,
           name="km_prob_ge_expected"
         )
       elif expected_probability < self.observed_KM_probability:
         self.__expected_probability_constraint = model.addConstr(
-          km_probability_var <= expected_probability + epsilon,
+          km_probability_var <= expected_probability + self.__endpoint_epsilon,
           name="km_prob_le_expected"
         )
       else: # expected_probability == self.observed_KM_probability
