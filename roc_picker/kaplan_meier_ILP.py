@@ -1352,14 +1352,14 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     (
       model,
       x,
-      km_probability_var, # New return value
+      km_probability_var,
       expected_probability_var,
       use_binomial_penalty_indicator,
     ) = self.gurobi_model
     self.update_model_with_expected_probability(
       model=model,
       x=x,
-      km_probability_var=km_probability_var, # New parameter
+      km_probability_var=km_probability_var,
       expected_probability=expected_probability,
       patient_wise_only=patient_wise_only,
       binomial_only=binomial_only,
@@ -1378,15 +1378,19 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     # Set the MIPGap for solution quality vs. speed.
     model.setParam("MIPGap", MIPGap)
 
+    # Crucial for non-convex problems to aim for global optimality
+    model.setParam("NonConvex", 2) # Spatial branch-and-bound
+
+    # Set a fixed random seed for reproducibility
+    model.setParam("Seed", 123456) # Use a fixed integer seed
+
     # Set a time limit for the optimization (e.g., 300 seconds = 5 minutes)
     if TimeLimit is not None:
       model.setParam('TimeLimit', TimeLimit)
-    # Example: model.setParam('TimeLimit', 300.0)
 
     # Set the number of threads to use (e.g., use all available CPU cores)
     if Threads is not None:
       model.setParam('Threads', Threads)
-    # Example: model.setParam('Threads', os.cpu_count())
 
     # Set MIPFocus to guide the solver's strategy:
     # 0: Balances feasibility and optimality (default)
@@ -1395,7 +1399,9 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     # 3: Focuses on finding good bounds
     if MIPFocus is not None:
       model.setParam('MIPFocus', MIPFocus)
-    # Example: model.setParam('MIPFocus', 1) # For faster initial solutions
+
+    # Improve numerical stability for problems with functions like log/exp
+    model.setParam("NumericFocus", 3)
 
     # Consider experimenting with other parameters like Cuts and Heuristics if needed.
     # model.setParam('Cuts', 2) # Aggressive cut generation
