@@ -757,12 +757,9 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     """
     Add variables and constraints to calculate the Kaplan-Meier probability
     directly within the Gurobi model using logarithmic transformations.
+    Handles the case where n_at_risk for a group is 0.
     """
     # Variables for log of counts
-    # Using a small epsilon for lower bound to avoid log(0) issues, though Gurobi's GenConstrLog
-    # is designed to handle x=0 by setting y=-GRB.INFINITY.
-    # We set lb=0 for the count variables (n_at_risk, n_survived_in_group)
-    # and then their log counterparts can go to -GRB.INFINITY if the count is 0.
     log_n_at_risk_vars = model.addVars(
       self.n_groups,
       vtype=GRB.CONTINUOUS,
@@ -793,20 +790,49 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
         name=f"log_n_survived_constr_{i}"
       )
 
-    # Kaplan-Meier log probability for each group: log((N_at_risk - N_died) / N_at_risk)
-    # This is equivalent to log(N_survived) - log(N_at_risk)
-    km_log_probability_per_group = model.addVars(
+    # Binary indicator for whether n_at_risk for a group is zero
+    is_n_at_risk_zero = model.addVars(
+        self.n_groups,
+        vtype=GRB.BINARY,
+        name="is_n_at_risk_zero"
+    )
+
+    # Link is_n_at_risk_zero to n_at_risk using indicator constraint
+    for i in range(self.n_groups):
+      # If n_at_risk[i] == 0, then is_n_at_risk_zero[i] must be 1
+      # If n_at_risk[i] > 0, then is_n_at_risk_zero[i] must be 0
+      model.addGenConstrIndicator(
+        is_n_at_risk_zero[i], True, n_at_risk[i], GRB.EQUAL, 0,
+        name=f"is_n_at_risk_zero_indicator_{i}"
+      )
+
+    # Kaplan-Meier log probability for each group term
+    # This term will be -GRB.INFINITY if n_at_risk[i] is 0
+    km_log_probability_per_group_terms = model.addVars(
       self.n_groups,
       vtype=GRB.CONTINUOUS,
-      name="km_log_prob_group",
+      name="km_log_prob_group_term",
       lb=-GRB.INFINITY,
       ub=0, # Log of a probability is always <= 0
     )
+
+    # Use indicator constraints to set km_log_probability_per_group_terms[i]
     for i in range(self.n_groups):
-      model.addConstr(
-        km_log_probability_per_group[i]
-        == log_n_survived_vars[i] - log_n_at_risk_vars[i],
-        name=f"km_log_prob_group_def_{i}"
+      # If is_n_at_risk_zero[i] is 0 (i.e., n_at_risk[i] > 0)
+      model.addGenConstrIndicator(
+        is_n_at_risk_zero[i], False,
+        km_log_probability_per_group_terms[i] - (log_n_survived_vars[i] - log_n_at_risk_vars[i]),
+        GRB.EQUAL,
+        0,
+        name=f"km_log_prob_group_active_{i}"
+      )
+      # If is_n_at_risk_zero[i] is 1 (i.e., n_at_risk[i] == 0)
+      model.addGenConstrIndicator(
+        is_n_at_risk_zero[i], True,
+        km_log_probability_per_group_terms[i],
+        GRB.EQUAL,
+        0, # This will make the total log probability -infinity
+        name=f"km_log_prob_group_zero_at_risk_{i}"
       )
 
     # Total Kaplan-Meier log probability: sum of log probabilities per group
@@ -817,7 +843,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
       ub=0,
     )
     model.addConstr(
-      km_log_probability_total == km_log_probability_per_group.sum(),
+      km_log_probability_total == km_log_probability_per_group_terms.sum(),
       name="km_log_probability_total_def"
     )
 
