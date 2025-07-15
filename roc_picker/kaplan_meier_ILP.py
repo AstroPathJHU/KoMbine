@@ -1466,8 +1466,8 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
       print("Selected patients:", selected)
       print("n_total:          ", int(n_total_val))
       print("n_alive:          ", int(n_alive_val))
-      print("Binomial penalty: ", binomial_penalty_val)
-      print("Patient penalty:  ", patient_penalty_val)
+      print("Binomial penalty: ", 2*binomial_penalty_val)
+      print("Patient penalty:  ", 2*patient_penalty_val)
       print("Total penalty:    ", model.ObjVal)
 
     return scipy.optimize.OptimizeResult(
