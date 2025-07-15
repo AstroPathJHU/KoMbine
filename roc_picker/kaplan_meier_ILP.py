@@ -1271,14 +1271,15 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
       # If expected_probability > observed, then KM_prob >= expected_probability
       # If expected_probability < observed, then KM_prob <= expected_probability
       # If expected_probability == observed, then KM_prob == expected_probability
+      epsilon = 1e-6
       if expected_probability > self.observed_KM_probability:
         self.__expected_probability_constraint = model.addConstr(
-          km_probability_var >= expected_probability,
+          km_probability_var >= expected_probability - epsilon,
           name="km_prob_ge_expected"
         )
       elif expected_probability < self.observed_KM_probability:
         self.__expected_probability_constraint = model.addConstr(
-          km_probability_var <= expected_probability,
+          km_probability_var <= expected_probability + epsilon,
           name="km_prob_le_expected"
         )
       else: # expected_probability == self.observed_KM_probability
