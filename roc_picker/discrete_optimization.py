@@ -190,6 +190,13 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
     v_mid1 = evaluated[mid1]
     v_mid2 = evaluated[mid2]
 
+    if verbose:
+      print("--------------------")
+      print(f"{left:3d} {p_left:6.3f} {v_left:15.9g}")
+      print(f"{mid1:3d} {p_mid1:6.3f} {v_mid1:15.9g}")
+      print(f"{mid2:3d} {p_mid2:6.3f} {v_mid2:15.9g}")
+      print(f"{right:3d} {p_right:6.3f} {v_right:15.9g}")
+
     if v_left < v_mid1:
       right = mid1
       p_right = p_mid1
@@ -226,13 +233,6 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
       p_mid2 = possible_values[mid2]
       v_mid1 = evaluated[mid1]
       v_mid2 = evaluated[mid2]
-
-    if verbose:
-      print("--------------------")
-      print(f"{left:3d} {p_left:6.3f} {v_left:15.9g}")
-      print(f"{mid1:3d} {p_mid1:6.3f} {v_mid1:15.9g}")
-      print(f"{mid2:3d} {p_mid2:6.3f} {v_mid2:15.9g}")
-      print(f"{right:3d} {p_right:6.3f} {v_right:15.9g}")
 
     if not max(v_mid1, v_mid2) <= max(v_left, v_right):
       raise ValueError(
