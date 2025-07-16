@@ -4,11 +4,9 @@ Test the Kaplan-Meier likelihood method.
 
 import argparse
 import pathlib
-import pickle
+import json
 import warnings
-
 import numpy as np
-
 import roc_picker.datacard
 from .utility_testing_functions import Tolerance
 
@@ -19,24 +17,25 @@ datacards = here / "datacards" / "simple_examples"
 
 def runtest(
   censoring=False,
-):  #pylint: disable=too-many-locals, too-many-statements, too-many-branches
+): #pylint: disable=too-many-locals, too-many-statements, too-many-branches
   """
   Test the Kaplan-Meier likelihood method.
   """
+
   if censoring:
     dcfile = datacards / "poisson_ratio_km_censoring.txt"
     dcfile_fixed = datacards / "fixed_km_censoring.txt"
     # This is the same datacard as poisson_ratio_km_censoring, but with
     # the observable type set to fixed instead of poisson_ratio.
-    reffile = here / "reference" / "km_likelihood_with_censoring.pkl"
+    reffile = here / "reference" / "km_likelihood_with_censoring.json"
   else:
     dcfile = datacards / "poisson_ratio_km.txt"
     dcfile_fixed = None
-    reffile = here / "reference" / "km_likelihood.pkl"
+    reffile = here / "reference" / "km_likelihood.json" # Changed to .json
 
   tolerance: Tolerance = {"atol": 2e-4, "rtol": 2e-4}
-  datacard = roc_picker.datacard.Datacard.parse_datacard(dcfile)
 
+  datacard = roc_picker.datacard.Datacard.parse_datacard(dcfile)
   kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
   times_for_plot = kml.times_for_plot
 
@@ -50,7 +49,6 @@ def runtest(
     CLs=CLs,
     times_for_plot=times_for_plot,
   )
-
   np.testing.assert_allclose(
     best_probabilities_fullrange,
     nominal_probabilities_fullrange,
@@ -202,6 +200,7 @@ def runtest(
       times_for_plot=times_for_plot,
       binomial_only=True,
     )
+
     kml3_fixed = datacard_fixed.km_likelihood(
       parameter_min=0.25,
       parameter_max=0.75,
@@ -217,6 +216,7 @@ def runtest(
       CLs=CLs,
       times_for_plot=times_for_plot,
     )
+
     np.testing.assert_allclose(
       nominal_probabilities_noboundary,
       nominal_probabilities_noboundary_fixed,
@@ -245,6 +245,7 @@ def runtest(
     "best_probabilities_patient_wise",
     "CL_probabilities_patient_wise",
   )
+
   to_compare_to_reference = (
     nominal_probabilities_fullrange,
     best_probabilities_fullrange,
@@ -257,19 +258,27 @@ def runtest(
     best_probabilities_patient_wise,
     CL_probabilities_patient_wise,
   )
+
   try:
-    with open(reffile, "rb") as f:
-      reference = pickle.load(f)
-      for name, array, ref in zip(array_names, to_compare_to_reference, reference, strict=True):
-        np.testing.assert_allclose(
-          array,
-          ref,
-          **tolerance,
-          err_msg=f"Array {name} does not match the reference."
-        )
-  except:
-    with open(here / "test_output" / reffile.name, "wb") as f:
-      pickle.dump(to_compare_to_reference, f)
+    with open(reffile, "r", encoding="utf-8") as f: # Open in text mode for JSON
+      # Load JSON and convert lists back to numpy arrays
+      loaded_data = json.load(f)
+      reference = [np.asarray(arr) for arr in loaded_data]
+
+    for name, array, ref in zip(array_names, to_compare_to_reference, reference, strict=True):
+      np.testing.assert_allclose(
+        array,
+        ref,
+        **tolerance,
+        err_msg=f"Array {name} does not match the reference."
+      )
+  except FileNotFoundError:
+    with open(here / "test_output" / reffile.name, "w", encoding="utf-8") as f:
+      json.dump([arr.tolist() for arr in to_compare_to_reference], f, indent=4)
+    raise
+  except Exception:
+    with open(here / "test_output" / reffile.name, "w", encoding="utf-8") as f:
+      json.dump([arr.tolist() for arr in to_compare_to_reference], f, indent=4)
     raise
 
 def main(args=None):
@@ -293,8 +302,10 @@ def main(args=None):
     help="Test without censoring.",
   )
   args = p.parse_args(args)
+
   if not args.censoring and not args.no_censoring:
     args.censoring = args.no_censoring = True
+
   if args.no_censoring:
     runtest(censoring=False)
   if args.censoring:
