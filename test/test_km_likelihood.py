@@ -11,24 +11,12 @@ import warnings
 import numpy as np
 
 import roc_picker.datacard
-from .utility_testing_functions import Tolerance
+from .utility_testing_functions import format_value_for_json, Tolerance
 
 warnings.simplefilter("error")
 
 here = pathlib.Path(__file__).parent
 datacards = here / "datacards" / "simple_examples"
-
-def _format_value_for_json(value, precision):
-  """
-  Recursively formats float values in lists/dictionaries to a specified precision.
-  """
-  if isinstance(value, float):
-    return round(value, precision)
-  if isinstance(value, list):
-    return [_format_value_for_json(item, precision) for item in value]
-  if isinstance(value, dict):
-    return {k: _format_value_for_json(v, precision) for k, v in value.items()}
-  return value
 
 def runtest(
   censoring=False,
@@ -301,7 +289,7 @@ def runtest(
       # Convert NumPy arrays to lists and format floats before dumping as a dictionary,
       # ensuring sorted keys and reduced indentation.
       formatted_data_for_json = {
-        k: _format_value_for_json(v.tolist(), json_precision)
+        k: format_value_for_json(v.tolist(), json_precision)
         for k, v in ordered_array_data.items()
       }
       json.dump(
