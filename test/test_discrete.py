@@ -35,14 +35,6 @@ def main():
     show=False,
   )
 
-  def hack_fix_roc(roc):
-    if roc.x[0] == roc.x[1] and roc.y[0] == roc.y[1]:
-      roc["x"] = roc.x[1:]
-      roc["y"] = roc.y[1:]
-    if roc.x[-1] == roc.x[-2] and roc.y[-1] == roc.y[-2]:
-      roc["x"] = roc.x[:-1]
-      roc["y"] = roc.y[:-1]
-
   tolerance: Tolerance = {"atol": 1e-6, "rtol": 1e-6}
 
   for k in set(rocs) | set(rocs_flip):
@@ -63,7 +55,6 @@ def main():
     for k in set(rocs) | set(refs):
       roc = rocs[k]
       ref = refs[k]
-      hack_fix_roc(ref)
       np.testing.assert_allclose(np.array([roc.x, roc.y]), np.array([ref.x, ref.y]), **tolerance)
       np.testing.assert_allclose(roc.AUC, ref.AUC, **tolerance)
       np.testing.assert_allclose(roc.NLL, ref.NLL, **tolerance)
