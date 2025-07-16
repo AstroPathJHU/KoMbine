@@ -196,13 +196,13 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       parameter=self.observed_parameter,
     )
 
-class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-attributes
+class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-attributes
   """
-  Integer Linear Programming for a point on the Kaplan-Meier curve.
+  Mixed Integer Nonlinear Programming for a point on the Kaplan-Meier curve.
   """
   __default_MIPGap = 1e-6
   #if the minimization is suboptimal, we will use this fallback MIPGap.
-  #this is only used if MIPGap is not provided to run_ILP.
+  #this is only used if MIPGap is not provided to run_MINLP.
   __default_fallback_MIPGap = 1e-5
 
   def __init__(  # pylint: disable=too-many-arguments
@@ -1145,12 +1145,12 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
 
   def _make_gurobi_model(self):  #pylint: disable=too-many-locals
     """
-    Create the Gurobi model for the ILP.
+    Create the Gurobi model for the MINLP.
     This method constructs the model with decision variables, constraints,
     and the objective function.  It does NOT include the constraint for the
     expected probability, which is added in update_model_with_expected_probability.
     """
-    model = gp.Model("Kaplan-Meier ILP")
+    model = gp.Model("Kaplan-Meier MINLP")
 
     # Binary decision variables: x[i] = 1 if patient i is within the parameter range
     x = model.addVars(self.n_patients, vtype=GRB.BINARY, name="x")
@@ -1208,7 +1208,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
   @functools.cached_property
   def gurobi_model(self):
     """
-    Create the Gurobi model for the ILP.
+    Create the Gurobi model for the MINLP.
     This is a cached property to avoid recreating the model multiple times.
     """
     return self._make_gurobi_model()
@@ -1227,7 +1227,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
   ):
     """
     Update the Gurobi model with the expected probability constraint.
-    This is the only thing that changes between runs of the ILP.
+    This is the only thing that changes between runs of the MINLP.
     """
     #drop the previous constraints if they exist
     if self.__expected_probability_constraint is not None:
@@ -1307,7 +1307,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     model.update()
 
   __not_provided = object()
-  def run_ILP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
+  def run_MINLP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
     self,
     expected_probability: float,
     *,
@@ -1322,11 +1322,11 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     MIPFocus: int | None = None,
   ):
     """
-    Run the ILP for the given time point.
+    Run the MINLP for the given time point.
     """
     if print_progress or verbose:
       print(
-        "Running ILP for expected probability ", expected_probability,
+        "Running MINLP for expected probability ", expected_probability,
         " at time point ", self.time_point, " at time ", datetime.datetime.now()
       )
     if not patient_wise_only and (expected_probability <= 0 or expected_probability >= 1):
@@ -1441,7 +1441,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
         )
       raise RuntimeError(
         f"Model optimization failed with status {model.status}. "
-        "This may indicate an issue with the ILP formulation or the input data."
+        "This may indicate an issue with the MINLP formulation or the input data."
       )
 
     n_total = model.getVarByName("n_total")

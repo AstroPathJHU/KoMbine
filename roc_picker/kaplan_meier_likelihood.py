@@ -20,7 +20,7 @@ from .kaplan_meier import (
   KaplanMeierBase,
   KaplanMeierInstance,
 )
-from .kaplan_meier_ILP import ILPForKM, KaplanMeierPatientNLL
+from .kaplan_meier_MINLP import MINLPForKM, KaplanMeierPatientNLL
 from .utilities import InspectableCache
 
 class KaplanMeierLikelihood(KaplanMeierBase):
@@ -86,34 +86,20 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       parameter_max=self.parameter_max,
     )
 
-  def ilp_for_km(
+  def minlp_for_km(
     self,
     time_point: float,
   ):
     """
-    Get the ILP for the given time point.
+    Get the MINLP for the given time point.
     """
-    return ILPForKM(
+    return MINLPForKM(
       all_patients=self.all_patients,
       parameter_min=self.parameter_min,
       parameter_max=self.parameter_max,
       time_point=time_point,
       endpoint_epsilon=self.__endpoint_epsilon,
     )
-
-  def ilps_for_km(
-    self,
-    times_for_plot: typing.Sequence[float] | None,
-  ):
-    """
-    Get the ILPs for the given time points.
-    """
-    if times_for_plot is None:
-      times_for_plot = self.times_for_plot
-    return [
-      self.ilp_for_km(time_point=t)
-      for t in times_for_plot
-    ]
 
   def get_twoNLL_function( # pylint: disable=too-many-arguments
     self,
@@ -129,13 +115,13 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     """
     Get the twoNLL function for the given time point.
     """
-    ilp = self.ilp_for_km(time_point=time_point)
+    minlp = self.minlp_for_km(time_point=time_point)
     @InspectableCache
     def twoNLL(expected_probability: float) -> float:
       """
       The negative log-likelihood function.
       """
-      result = ilp.run_ILP(
+      result = minlp.run_MINLP(
         expected_probability=expected_probability,
         binomial_only=binomial_only,
         patient_wise_only=patient_wise_only,
@@ -153,7 +139,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     """
     Get the possible probabilities for the given patients.
     """
-    return np.array(sorted(self.ilp_for_km(time_point).possible_probabilities))
+    return np.array(sorted(self.minlp_for_km(time_point).possible_probabilities))
 
   @functools.cached_property
   def __possible_probabilities(self) -> dict[float, np.ndarray]:
