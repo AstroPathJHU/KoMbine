@@ -35,3 +35,22 @@ class Tolerance(typing.TypedDict):
   "typed class for atol and rtol to pass to np.testing.assert_allclose"
   rtol: float
   atol: float
+
+def compare_dict_keys(
+    current: typing.Dict[str, typing.Any],
+    reference: typing.Dict[str, typing.Any],
+) -> None:
+  """
+  Compare the keys of two dictionaries.
+  Raises an AssertionError if there are missing or extra keys.
+  """
+  current_keys = set(current.keys())
+  reference_keys = set(reference.keys())
+
+  missing_keys = current_keys - reference_keys
+  extra_keys = reference_keys - current_keys
+
+  if missing_keys:
+    raise AssertionError(f"Keys missing in reference file: {', '.join(sorted(missing_keys))}")
+  if extra_keys:
+    raise AssertionError(f"Extra keys found in reference file: {', '.join(sorted(extra_keys))}")

@@ -10,7 +10,7 @@ import warnings
 import numpy as np
 
 import roc_picker.datacard
-from .utility_testing_functions import flip_sign_curve, format_value_for_json, Tolerance
+from .utility_testing_functions import compare_dict_keys, flip_sign_curve, format_value_for_json, Tolerance
 
 warnings.simplefilter("error")
 
@@ -71,16 +71,7 @@ def main(): #pylint: disable=too-many-locals
       # No need to create refs_data, use loaded_data directly
 
     # Check for missing or extra keys as per previous refactoring
-    testing_keys = set(current_rocs_data.keys())
-    reference_keys = set(loaded_data.keys()) # Use loaded_data keys directly
-
-    missing_keys = testing_keys - reference_keys
-    extra_keys = reference_keys - testing_keys
-
-    if missing_keys:
-      raise AssertionError(f"Keys missing in reference file: {', '.join(sorted(missing_keys))}")
-    if extra_keys:
-      raise AssertionError(f"Extra keys found in reference file: {', '.join(sorted(extra_keys))}")
+    compare_dict_keys(current_rocs_data, loaded_data)
 
     for k, roc in current_rocs_data.items():
       ref = loaded_data[k]

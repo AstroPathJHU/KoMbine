@@ -14,7 +14,12 @@ import scipy.special
 
 import roc_picker.datacard
 from roc_picker.systematics_mc import AUC
-from .utility_testing_functions import flip_sign_curve, format_value_for_json, Tolerance
+from .utility_testing_functions import (
+  compare_dict_keys,
+  flip_sign_curve,
+  format_value_for_json,
+  Tolerance,
+)
 
 warnings.simplefilter("error")
 
@@ -134,16 +139,7 @@ def test_systematics_mc(make_plots=False): #pylint: disable=too-many-locals, too
     with open(here/"reference"/"systematics_mc.json", "r", encoding="utf-8") as f:
       loaded_data = json.load(f)
 
-    testing_keys = set(current_quantiles_data.keys())
-    reference_keys = set(loaded_data.keys())
-
-    missing_keys = testing_keys - reference_keys
-    extra_keys = reference_keys - testing_keys
-
-    if missing_keys:
-      raise AssertionError(f"Keys missing in reference file: {', '.join(sorted(missing_keys))}")
-    if extra_keys:
-      raise AssertionError(f"Extra keys found in reference file: {', '.join(sorted(extra_keys))}")
+    compare_dict_keys(current_quantiles_data, loaded_data)
 
     for k, current_data in current_quantiles_data.items():
       ref_data = loaded_data[k]
