@@ -71,14 +71,18 @@ class KaplanMeierBase(abc.ABC):
     Returns the survival times of the patients who were censored.
     """
   @functools.cached_property
-  def times_for_plot(self):
+  def times_for_plot(self) -> list[float]:
     """
     Returns the survival times for the Kaplan-Meier curve.
     The times are the unique survival times of the patients,
     plus a point at 0 and a point beyond the last time.
     """
     times_for_plot = sorted(self.patient_death_times)
-    times_for_plot = np.array([0] + times_for_plot + [times_for_plot[-1] * 1.1])
+    times_for_plot = (
+      [0]
+      + times_for_plot
+      + [1.1 * max((times_for_plot[-1], *self.patient_censored_times))]
+    )
     return times_for_plot
 
   @staticmethod

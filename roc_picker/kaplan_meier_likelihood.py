@@ -5,6 +5,7 @@ Kaplan-Meier curve with error bars calculated using the log-likelihood method.
 import collections.abc
 import datetime
 import functools
+import typing
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -102,7 +103,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
   def ilps_for_km(
     self,
-    times_for_plot: np.ndarray | None,
+    times_for_plot: typing.Sequence[float] | None,
   ):
     """
     Get the ILPs for the given time points.
@@ -152,11 +153,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     """
     Get the possible probabilities for the given patients.
     """
-    return np.unique([
-      probability
-      for _, _, _, probability
-      in self.ilp_for_km(time_point=time_point).valid_trajectories
-    ])
+    return np.array(sorted(self.ilp_for_km(time_point).possible_probabilities))
 
   @functools.cached_property
   def __possible_probabilities(self) -> dict[float, np.ndarray]:
@@ -202,7 +199,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
   def survival_probabilities_likelihood( # pylint: disable=too-many-locals, too-many-branches, too-many-statements, too-many-arguments
     self,
     CLs: list[float],
-    times_for_plot: np.ndarray,
+    times_for_plot: typing.Sequence[float],
     *,
     binomial_only=False,
     patient_wise_only=False,
@@ -327,7 +324,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
   def plot( # pylint: disable=too-many-arguments, too-many-branches, too-many-statements
     self,
     *,
-    times_for_plot=None,
+    times_for_plot: typing.Sequence[float] | None = None,
     include_binomial_only=False,
     include_patient_wise_only=False,
     include_full_NLL=True,
@@ -369,7 +366,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           times_for_plot=nominal_x,
           survival_probabilities=nominal_y,
         )
-      )
+      ).replace("inf", r"$\infty$")
     plt.plot(
       nominal_x,
       nominal_y,

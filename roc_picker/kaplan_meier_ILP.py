@@ -521,8 +521,6 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
           probability *= (
             n_at_risk[i] - died_counts[i]
           ) / n_at_risk[i]
-        else:
-          probability = 0
 
     return probability
 
@@ -540,17 +538,18 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
 
   @classmethod
   @functools.cache
-  def calculate_valid_trajectories(
+  def calculate_possible_probabilities(
     cls,
     n_total_patients: int,
     n_censored_in_group: tuple[int, ...],
     n_died_in_group: tuple[int, ...],
     verbose=False,
-  ) -> list[tuple[int, tuple[int], tuple[int], float]]:
+  ) -> set[float]:
     """
-    Generate valid trajectories - the total number of included patients and the numbers of patients
-    who were censored or died in each group - based on the total number of patients and the
+    Calculate possible probabilities based on the total number of patients and the
     total number who were censored or died in each group.
+    The probabilities are calculated by iterating over all possible combinations
+    of patients to be included or excluded.
 
     The minimum total count is 1 - we don't allow all patients to be excluded.
     """
@@ -562,7 +561,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
         "The total number of patients who were censored or died "
         "exceeds the total number of patients"
       )
-    result = []
+    result = set()
     # For each group, possible number of censored and died patients included: 0..n_censored/died
     censored_ranges = [range(nc + 1) for nc in n_censored_in_group]
     died_ranges = [range(nd + 1) for nd in n_died_in_group]
@@ -573,7 +572,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     )
     if verbose:
       print(
-        f"Generating {n_trajectories} trajectories for "
+        f"Calculating probabilities for {n_trajectories} trajectories for "
         f"{n_total_patients} total patients in {n_groups} groups"
       )
     n_generated = 0
@@ -591,33 +590,21 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
             censored_counts=censored_counts,
             died_counts=died_counts,
           )
-          result.append((
-            total_count,
-            tuple(censored_counts),
-            tuple(died_counts),
-            expected_trajectory_probability,
-          ))
+          result.add(expected_trajectory_probability)
     return result
 
   @functools.cached_property
-  def valid_trajectories(self) -> list[tuple[int, tuple[int], tuple[int], float]]:
+  def possible_probabilities(self) -> set[float]:
     """
-    Get the valid trajectories for the current set of patients.
-    This is a list of tuples (total_count, censored_counts, died_counts, expected_probability).
+    Calculate the possible probabilities based on the total number of patients
+    and the total number who were censored or died in each group.
     """
-    return self.calculate_valid_trajectories(
+    return self.calculate_possible_probabilities(
       n_total_patients=self.n_patients,
       n_censored_in_group=tuple(self.n_censored_in_group_total),
       n_died_in_group=tuple(self.n_died_in_group_total),
       verbose=False,
     )
-
-  @functools.cached_property
-  def n_trajectories(self) -> int:
-    """
-    The number of valid trajectories.
-    """
-    return len(self.valid_trajectories)
 
   @functools.cached_property
   def nll_penalty_for_patient_in_range(self) -> npt.NDArray[np.float64]:
@@ -756,63 +743,123 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
       n_died_in_group,
       n_at_risk,
       n_survived_in_group,
+      n_alive,
     )
 
-  def add_trajectory_variables_and_constraints(
+  def add_kaplan_meier_probability_variables_and_constraints(
     self,
     model: gp.Model,
-    x: gp.tupledict[int, gp.Var],
-    n_total: gp.Var,
+    n_at_risk: gp.tupledict[int, gp.Var],
+    n_survived_in_group: gp.tupledict[int, gp.Var],
   ):
     """
-    Add trajectory indicator variables and constraints to the model.
-    Each trajectory corresponds to a specific combination of total patients
-    and the number of patients who were censored or died in each group.
-    The constraints tell the model which trajectory is selected
-    based on the counts of patients who were censored or died in each group.
+    Add variables and constraints to calculate the Kaplan-Meier probability
+    directly within the Gurobi model using logarithmic transformations.
+    Handles the case where n_at_risk for a group is 0.
     """
-    # indicator variables for each trajectory
-    traj_indicator_vars = model.addVars(
-      self.n_trajectories,
-      vtype=GRB.BINARY,
-      name="indicator"
+    # Variables for log of counts
+    log_n_at_risk_vars = model.addVars(
+      self.n_groups,
+      vtype=GRB.CONTINUOUS,
+      name="log_n_at_risk",
+      lb=-GRB.INFINITY,
+      ub=np.log(self.n_patients), # Max possible log(count)
     )
-    # Constraints to enforce trajectory selection
-    for (
-      traj_idx, (total_count, censored_counts, died_counts, _)
-    ) in enumerate(self.valid_trajectories):
-      # Sum of selected patients must match trajectory counts
-      model.addGenConstrIndicator(
-        traj_indicator_vars[traj_idx],
-        True,
-        n_total,
-        GRB.EQUAL,
-        total_count,
-        name=f"traj_indicator_constraint_{traj_idx}_total",
+    log_n_survived_vars = model.addVars(
+      self.n_groups,
+      vtype=GRB.CONTINUOUS,
+      name="log_n_survived",
+      lb=-GRB.INFINITY,
+      ub=np.log(self.n_patients), # Max possible log(count)
+    )
+
+    # Link count variables to their log counterparts using GenConstrLog
+    for i in range(self.n_groups):
+      # n_at_risk[i] can be 0, Gurobi handles log(0) as -infinity
+      model.addGenConstrLog(
+        n_at_risk[i],
+        log_n_at_risk_vars[i],
+        name=f"log_n_at_risk_constr_{i}"
       )
-      for group_idx in range(self.n_groups):
-        model.addGenConstrIndicator(
-          traj_indicator_vars[traj_idx],
-          True,
-          gp.quicksum(x[i] for i in range(self.n_patients) if self.censored_in_group[group_idx][i]),
-          GRB.EQUAL,
-          censored_counts[group_idx],
-          name=f"traj_indicator_constraint_{traj_idx}_censored_{group_idx}",
-        )
-        model.addGenConstrIndicator(
-          traj_indicator_vars[traj_idx],
-          True,
-          gp.quicksum(x[i] for i in range(self.n_patients) if self.died_in_group[group_idx][i]),
-          GRB.EQUAL,
-          died_counts[group_idx],
-          name=f"traj_indicator_constraint_{traj_idx}_died_{group_idx}",
-        )
-    #Only one trajectory can be selected
-    model.addConstr(
-      traj_indicator_vars.sum() == 1,
-      name="one_trajectory_constraint",
+      # n_survived_in_group[i] can be 0, Gurobi handles log(0) as -infinity
+      model.addGenConstrLog(
+        n_survived_in_group[i],
+        log_n_survived_vars[i],
+        name=f"log_n_survived_constr_{i}"
+      )
+
+    # Binary indicator for whether n_at_risk for a group is zero
+    is_n_at_risk_zero = model.addVars(
+        self.n_groups,
+        vtype=GRB.BINARY,
+        name="is_n_at_risk_zero"
     )
-    return traj_indicator_vars
+
+    # Link is_n_at_risk_zero to n_at_risk using indicator constraint
+    for i in range(self.n_groups):
+      # If n_at_risk[i] == 0, then is_n_at_risk_zero[i] must be 1
+      # If n_at_risk[i] > 0, then is_n_at_risk_zero[i] must be 0
+      model.addGenConstrIndicator(
+        is_n_at_risk_zero[i], True, n_at_risk[i], GRB.EQUAL, 0,
+        name=f"is_n_at_risk_zero_indicator_{i}"
+      )
+
+    # Kaplan-Meier log probability for each group term
+    # This term will be 0 if n_at_risk[i] is 0
+    km_log_probability_per_group_terms = model.addVars(
+      self.n_groups,
+      vtype=GRB.CONTINUOUS,
+      name="km_log_prob_group_term",
+      lb=-GRB.INFINITY,
+      ub=0, # Log of a probability is always <= 0
+    )
+
+    # Use indicator constraints to set km_log_probability_per_group_terms[i]
+    for i in range(self.n_groups):
+      # If is_n_at_risk_zero[i] is 0 (i.e., n_at_risk[i] > 0)
+      model.addGenConstrIndicator(
+        is_n_at_risk_zero[i], False,
+        km_log_probability_per_group_terms[i] - (log_n_survived_vars[i] - log_n_at_risk_vars[i]),
+        GRB.EQUAL,
+        0,
+        name=f"km_log_prob_group_active_{i}"
+      )
+      # If is_n_at_risk_zero[i] is 1 (i.e., n_at_risk[i] == 0)
+      model.addGenConstrIndicator(
+        is_n_at_risk_zero[i], True,
+        km_log_probability_per_group_terms[i],
+        GRB.EQUAL,
+        0.0,
+        name=f"km_log_prob_group_zero_at_risk_{i}"
+      )
+
+    # Total Kaplan-Meier log probability: sum of log probabilities per group
+    km_log_probability_total = model.addVar(
+      vtype=GRB.CONTINUOUS,
+      name="km_log_probability_total",
+      lb=-GRB.INFINITY,
+      ub=0,
+    )
+    model.addConstr(
+      km_log_probability_total == km_log_probability_per_group_terms.sum(),
+      name="km_log_probability_total_def"
+    )
+
+    # Kaplan-Meier probability variable (linear scale)
+    km_probability_var = model.addVar(
+      vtype=GRB.CONTINUOUS,
+      name="km_probability",
+      lb=0,
+      ub=1,
+    )
+    # Link log probability to linear probability using GenConstrExp
+    model.addGenConstrExp(
+      km_log_probability_total,
+      km_probability_var,
+      name="exp_km_probability"
+    )
+
+    return km_probability_var
 
   def add_binomial_penalty(  # pylint: disable=too-many-locals, too-many-statements
     self,
@@ -1109,20 +1156,22 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     x = model.addVars(self.n_patients, vtype=GRB.BINARY, name="x")
 
     (
-      n_total,
+      _,
       _,
       n_died_in_group,
       n_at_risk,
       n_survived_in_group,
+      _,
     ) = self.add_counter_variables_and_constraints(
       model=model,
       x=x,
     )
 
-    traj_indicator_vars = self.add_trajectory_variables_and_constraints(
+    # Add Kaplan-Meier probability variables and constraints (replaces trajectory logic)
+    km_probability_var = self.add_kaplan_meier_probability_variables_and_constraints(
       model=model,
-      x=x,
-      n_total=n_total,
+      n_at_risk=n_at_risk,
+      n_survived_in_group=n_survived_in_group,
     )
 
     (
@@ -1151,7 +1200,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     return (
       model,
       x,
-      traj_indicator_vars,
+      km_probability_var, # New return value
       expected_probability_var,
       use_binomial_penalty_indicator,
     )
@@ -1172,7 +1221,7 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     patient_wise_only: bool,
     binomial_only: bool,
     x: gp.tupledict[int, gp.Var],
-    traj_indicator_vars: gp.tupledict[int, gp.Var],
+    km_probability_var: gp.Var, # New parameter
     use_binomial_penalty_indicator: gp.Var,
     expected_probability_var: gp.Var,
   ):
@@ -1194,10 +1243,8 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
 
     if not patient_wise_only:
       # ---------------------------
-      # Indicator grid for binomial penalty
+      # Binomial penalty is active, constrain its expected probability
       # ---------------------------
-
-      # Binomial penalty
       self.__binomial_penalty_constraint = model.addConstr(
         use_binomial_penalty_indicator == 1,
         name="use_binomial_penalty"
@@ -1218,21 +1265,21 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
         name="use_binomial_penalty"
       )
 
+      # Constrain the KM probability based on the expected_probability
+      # If expected_probability > observed, then KM_prob >= expected_probability
+      # If expected_probability < observed, then KM_prob <= expected_probability
+      # If expected_probability == observed, then KM_prob is unconstrained by expected_probability
       if expected_probability > self.observed_KM_probability:
         self.__expected_probability_constraint = model.addConstr(
-          gp.quicksum(
-            traj_indicator_vars[i] for i in range(self.n_trajectories)
-            if self.valid_trajectories[i][3] >= expected_probability
-          ) == 1
+          km_probability_var >= expected_probability - self.__endpoint_epsilon,
+          name="km_prob_ge_expected"
         )
       elif expected_probability < self.observed_KM_probability:
         self.__expected_probability_constraint = model.addConstr(
-          gp.quicksum(
-            traj_indicator_vars[i] for i in range(self.n_trajectories)
-            if self.valid_trajectories[i][3] <= expected_probability
-          ) == 1
+          km_probability_var <= expected_probability + self.__endpoint_epsilon,
+          name="km_prob_le_expected"
         )
-      else:
+      else: # expected_probability == self.observed_KM_probability
         assert expected_probability == self.observed_KM_probability
 
     if binomial_only:
@@ -1270,6 +1317,9 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     patient_wise_only=False,
     MIPGap: float | None = None,
     fallback_MIPGap: float | None = None,
+    TimeLimit: float | None = None,
+    Threads: int | None = None,
+    MIPFocus: int | None = None,
   ):
     """
     Run the ILP for the given time point.
@@ -1300,14 +1350,14 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     (
       model,
       x,
-      traj_indicator_vars,
+      km_probability_var,
       expected_probability_var,
       use_binomial_penalty_indicator,
     ) = self.gurobi_model
     self.update_model_with_expected_probability(
       model=model,
       x=x,
-      traj_indicator_vars=traj_indicator_vars,
+      km_probability_var=km_probability_var,
       expected_probability=expected_probability,
       patient_wise_only=patient_wise_only,
       binomial_only=binomial_only,
@@ -1321,7 +1371,45 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
     else:
       # Suppress Gurobi output
       model.setParam('OutputFlag', 0)
+
+    # --- Gurobi Parameter Tuning ---
+    # Set the MIPGap for solution quality vs. speed.
     model.setParam("MIPGap", MIPGap)
+
+    # Crucial for non-convex problems to aim for global optimality
+    if patient_wise_only:
+      model.setParam("NonConvex", 2) # Spatial branch-and-bound
+      # Improve numerical stability for problems with functions like log/exp
+      model.setParam("NumericFocus", 3)
+    else:
+      model.setParam("NonConvex", 0)
+      model.setParam("NumericFocus", 0)
+
+
+    # Set a fixed random seed for reproducibility
+    model.setParam("Seed", 123456) # Use a fixed integer seed
+
+    # Set a time limit for the optimization (e.g., 300 seconds = 5 minutes)
+    if TimeLimit is not None:
+      model.setParam('TimeLimit', TimeLimit)
+
+    # Set the number of threads to use (e.g., use all available CPU cores)
+    if Threads is not None:
+      model.setParam('Threads', Threads)
+
+    # Set MIPFocus to guide the solver's strategy:
+    # 0: Balances feasibility and optimality (default)
+    # 1: Focuses on finding feasible solutions quickly
+    # 2: Focuses on proving optimality
+    # 3: Focuses on finding good bounds
+    if MIPFocus is not None:
+      model.setParam('MIPFocus', MIPFocus)
+
+    # Consider experimenting with other parameters like Cuts and Heuristics if needed.
+    # model.setParam('Cuts', 2) # Aggressive cut generation
+    # model.setParam('Heuristics', 0.5) # Less aggressive heuristics
+
+    # --- End Gurobi Parameter Tuning ---
 
     model.optimize()
     if model.status == GRB.SUBOPTIMAL:
@@ -1376,8 +1464,8 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
       print("Selected patients:", selected)
       print("n_total:          ", int(n_total_val))
       print("n_alive:          ", int(n_alive_val))
-      print("Binomial penalty: ", binomial_penalty_val)
-      print("Patient penalty:  ", patient_penalty_val)
+      print("Binomial penalty: ", 2*binomial_penalty_val)
+      print("Patient penalty:  ", 2*patient_penalty_val)
       print("Total penalty:    ", model.ObjVal)
 
     return scipy.optimize.OptimizeResult(
