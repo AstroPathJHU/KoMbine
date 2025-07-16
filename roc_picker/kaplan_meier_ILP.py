@@ -521,8 +521,6 @@ class ILPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-at
           probability *= (
             n_at_risk[i] - died_counts[i]
           ) / n_at_risk[i]
-        else:
-          probability = 0
 
     return probability
 
