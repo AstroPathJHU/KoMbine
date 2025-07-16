@@ -365,7 +365,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           times_for_plot=nominal_x,
           survival_probabilities=nominal_y,
         )
-      )
+      ).replace("inf", r"$\infty$")
     plt.plot(
       nominal_x,
       nominal_y,
