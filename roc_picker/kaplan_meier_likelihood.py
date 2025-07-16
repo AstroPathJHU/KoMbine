@@ -5,6 +5,7 @@ Kaplan-Meier curve with error bars calculated using the log-likelihood method.
 import collections.abc
 import datetime
 import functools
+import typing
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -198,7 +199,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
   def survival_probabilities_likelihood( # pylint: disable=too-many-locals, too-many-branches, too-many-statements, too-many-arguments
     self,
     CLs: list[float],
-    times_for_plot: np.ndarray,
+    times_for_plot: typing.Sequence[float] | np.ndarray,
     *,
     binomial_only=False,
     patient_wise_only=False,
