@@ -17,7 +17,7 @@ warnings.simplefilter("error")
 here = pathlib.Path(__file__).parent
 datacards = here/"datacards"/"simple_examples"
 
-def main():
+def main(): #pylint: disable=too-many-locals
   """
   Test the discrete module.
   """
