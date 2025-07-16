@@ -373,7 +373,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       marker='|',
       color=nominal_color,
       markersize=8,
-      markeredgewidth=1.5
+      markeredgewidth=1.5,
+      linestyle="",
     )
 
     if CLs is None:
