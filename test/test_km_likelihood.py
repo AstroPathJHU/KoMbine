@@ -31,7 +31,7 @@ def runtest(
   else:
     dcfile = datacards / "poisson_ratio_km.txt"
     dcfile_fixed = None
-    reffile = here / "reference" / "km_likelihood.json" # Changed to .json
+    reffile = here / "reference" / "km_likelihood.json"
 
   tolerance: Tolerance = {"atol": 2e-4, "rtol": 2e-4}
 
@@ -233,52 +233,55 @@ def runtest(
       **tolerance,
     )
 
-  array_names = (
-    "nominal_probabilities_fullrange",
-    "best_probabilities_fullrange",
-    "CL_probabilities_fullrange",
-    "nominal_probabilities",
-    "best_probabilities",
-    "CL_probabilities",
-    "best_probabilities_binomial",
-    "CL_probabilities_binomial",
-    "best_probabilities_patient_wise",
-    "CL_probabilities_patient_wise",
-  )
-
-  to_compare_to_reference = (
-    nominal_probabilities_fullrange,
-    best_probabilities_fullrange,
-    CL_probabilities_fullrange,
-    nominal_probabilities,
-    best_probabilities,
-    CL_probabilities,
-    best_probabilities_binomial,
-    CL_probabilities_binomial,
-    best_probabilities_patient_wise,
-    CL_probabilities_patient_wise,
-  )
+  # Define the arrays to be compared in the desired order
+  ordered_array_data = {
+    "nominal_probabilities_fullrange": nominal_probabilities_fullrange,
+    "best_probabilities_fullrange": best_probabilities_fullrange,
+    "CL_probabilities_fullrange": CL_probabilities_fullrange,
+    "nominal_probabilities": nominal_probabilities,
+    "best_probabilities": best_probabilities,
+    "CL_probabilities": CL_probabilities,
+    "best_probabilities_binomial": best_probabilities_binomial,
+    "CL_probabilities_binomial": CL_probabilities_binomial,
+    "best_probabilities_patient_wise": best_probabilities_patient_wise,
+    "CL_probabilities_patient_wise": CL_probabilities_patient_wise,
+  }
 
   try:
-    with open(reffile, "r", encoding="utf-8") as f: # Open in text mode for JSON
-      # Load JSON and convert lists back to numpy arrays
+    with open(reffile, "r", encoding="utf-8") as f:
       loaded_data = json.load(f)
-      reference = [np.asarray(arr) for arr in loaded_data]
+      reference_data = {k: np.asarray(v) for k, v in loaded_data.items()}
 
-    for name, array, ref in zip(array_names, to_compare_to_reference, reference, strict=True):
+    # Check for missing or extra keys
+    testing_keys = set(ordered_array_data.keys())
+    reference_keys = set(reference_data.keys())
+
+    missing_keys = testing_keys - reference_keys
+    extra_keys = reference_keys - testing_keys
+
+    if missing_keys:
+      raise AssertionError(f"Keys missing in reference file: {', '.join(sorted(missing_keys))}")
+    if extra_keys:
+      raise AssertionError(f"Extra keys found in reference file: {', '.join(sorted(extra_keys))}")
+
+    # Compare arrays in the defined order
+    for name, array in ordered_array_data.items():
+      ref = reference_data[name]
       np.testing.assert_allclose(
         array,
         ref,
         **tolerance,
-        err_msg=f"Array {name} does not match the reference."
+        err_msg=f"Array '{name}' does not match the reference."
       )
-  except FileNotFoundError:
-    with open(here / "test_output" / reffile.name, "w", encoding="utf-8") as f:
-      json.dump([arr.tolist() for arr in to_compare_to_reference], f, indent=4)
-    raise
   except Exception:
     with open(here / "test_output" / reffile.name, "w", encoding="utf-8") as f:
-      json.dump([arr.tolist() for arr in to_compare_to_reference], f, indent=4)
+      # Convert NumPy arrays to lists and dump as a dictionary, ensuring sorted keys
+      json.dump(
+        {k: v.tolist() for k, v in ordered_array_data.items()},
+        f,
+        indent=4,
+        sort_keys=True # Ensure deterministic output order
+      )
     raise
 
 def main(args=None):
