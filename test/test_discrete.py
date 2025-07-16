@@ -10,7 +10,12 @@ import warnings
 import numpy as np
 
 import roc_picker.datacard
-from .utility_testing_functions import compare_dict_keys, flip_sign_curve, format_value_for_json, Tolerance
+from .utility_testing_functions import (
+  compare_dict_keys,
+  flip_sign_curve,
+  format_value_for_json,
+  Tolerance,
+)
 
 warnings.simplefilter("error")
 
