@@ -81,7 +81,7 @@ class KaplanMeierBase(abc.ABC):
     times_for_plot = np.array(
       [0]
       + times_for_plot
-      + [1.1 * max(times_for_plot[-1], *self.patient_censored_times)]
+      + [1.1 * max((times_for_plot[-1], *self.patient_censored_times))]
     )
     return times_for_plot
 
