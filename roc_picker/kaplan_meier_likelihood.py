@@ -363,17 +363,18 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     results["x"] = nominal_x
     results["nominal"] = nominal_y
 
-    censored_times = self.nominalkm.patient_censored_times
-    for c_time in sorted(list(censored_times)):
-      c_survival_prob, = self.nominalkm.survival_probabilities([c_time])
-      plt.plot(
-        c_time,
-        c_survival_prob,
-        marker='|',
-        color=nominal_color,
-        markersize=8,
-        markeredgewidth=1.5
-      )
+    patient_censored_times = sorted(self.nominalkm.patient_censored_times)
+    censored_times_probabilities = self.nominalkm.survival_probabilities(
+      patient_censored_times,
+    )
+    plt.plot(
+      patient_censored_times,
+      censored_times_probabilities,
+      marker='|',
+      color=nominal_color,
+      markersize=8,
+      markeredgewidth=1.5
+    )
 
     if CLs is None:
       CLs = [0.68, 0.95]
