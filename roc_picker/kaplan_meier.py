@@ -78,7 +78,7 @@ class KaplanMeierBase(abc.ABC):
     plus a point at 0 and a point beyond the last time.
     """
     times_for_plot = sorted(self.patient_death_times)
-    times_for_plot = np.array([0] + times_for_plot + [times_for_plot[-1] * 1.1])
+    times_for_plot = np.array([0] + times_for_plot + [max(times_for_plot[-1], *self.patient_censored_times) * 1.1])
     return times_for_plot
 
   @staticmethod
