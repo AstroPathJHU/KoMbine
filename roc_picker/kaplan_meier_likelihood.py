@@ -103,7 +103,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
   def ilps_for_km(
     self,
-    times_for_plot: np.ndarray | None,
+    times_for_plot: typing.Sequence[float] | None,
   ):
     """
     Get the ILPs for the given time points.
@@ -199,7 +199,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
   def survival_probabilities_likelihood( # pylint: disable=too-many-locals, too-many-branches, too-many-statements, too-many-arguments
     self,
     CLs: list[float],
-    times_for_plot: typing.Sequence[float] | np.ndarray,
+    times_for_plot: typing.Sequence[float],
     *,
     binomial_only=False,
     patient_wise_only=False,
@@ -324,7 +324,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
   def plot( # pylint: disable=too-many-arguments, too-many-branches, too-many-statements
     self,
     *,
-    times_for_plot=None,
+    times_for_plot : typing.Sequence[float] | None = None,
     include_binomial_only=False,
     include_patient_wise_only=False,
     include_full_NLL=True,
