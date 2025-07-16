@@ -5,8 +5,11 @@ Test the Kaplan-Meier likelihood method.
 import argparse
 import pathlib
 import json
+import math
 import warnings
+
 import numpy as np
+
 import roc_picker.datacard
 from .utility_testing_functions import Tolerance
 
@@ -14,6 +17,18 @@ warnings.simplefilter("error")
 
 here = pathlib.Path(__file__).parent
 datacards = here / "datacards" / "simple_examples"
+
+def _format_value_for_json(value, precision):
+  """
+  Recursively formats float values in lists/dictionaries to a specified precision.
+  """
+  if isinstance(value, float):
+    return round(value, precision)
+  if isinstance(value, list):
+    return [_format_value_for_json(item, precision) for item in value]
+  if isinstance(value, dict):
+    return {k: _format_value_for_json(v, precision) for k, v in value.items()}
+  return value
 
 def runtest(
   censoring=False,
@@ -34,6 +49,14 @@ def runtest(
     reffile = here / "reference" / "km_likelihood.json"
 
   tolerance: Tolerance = {"atol": 2e-4, "rtol": 2e-4}
+
+  # Calculate precision for JSON output based on rtol
+  rtol_value = tolerance["rtol"]
+  # Handle case where rtol is 0 to avoid math domain error
+  if rtol_value > 0:
+    json_precision = int(abs(math.log10(rtol_value))) + 1
+  else:
+    json_precision = 4 # Default precision if rtol is 0 or undefined
 
   datacard = roc_picker.datacard.Datacard.parse_datacard(dcfile)
   kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
@@ -275,11 +298,16 @@ def runtest(
       )
   except Exception:
     with open(here / "test_output" / reffile.name, "w", encoding="utf-8") as f:
-      # Convert NumPy arrays to lists and dump as a dictionary, ensuring sorted keys
+      # Convert NumPy arrays to lists and format floats before dumping as a dictionary,
+      # ensuring sorted keys and reduced indentation.
+      formatted_data_for_json = {
+        k: _format_value_for_json(v.tolist(), json_precision)
+        for k, v in ordered_array_data.items()
+      }
       json.dump(
-        {k: v.tolist() for k, v in ordered_array_data.items()},
+        formatted_data_for_json,
         f,
-        indent=4,
+        indent=2, # Reduced indent to 2 spaces
         sort_keys=True # Ensure deterministic output order
       )
     raise
