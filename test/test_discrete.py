@@ -3,13 +3,14 @@ Test the discrete module, and generate the figures for that section of the docum
 """
 
 import pathlib
-import pickle
+import json
+import math
 import warnings
 
 import numpy as np
 
 import roc_picker.datacard
-from .utility_testing_functions import flip_sign_curve, Tolerance
+from .utility_testing_functions import flip_sign_curve, format_value_for_json, Tolerance
 
 warnings.simplefilter("error")
 
@@ -37,6 +38,10 @@ def main():
 
   tolerance: Tolerance = {"atol": 1e-6, "rtol": 1e-6}
 
+  # Calculate precision for JSON output based on rtol
+  rtol_value = tolerance["rtol"]
+  json_precision = int(abs(math.log10(rtol_value))) + 1 if rtol_value > 0 else 4
+
   for k in set(rocs) | set(rocs_flip):
     roc = rocs[k]
     flipk = flip_sign_curve(k)
@@ -49,18 +54,55 @@ def main():
     np.testing.assert_allclose(roc.AUC, 1-flip.AUC, **tolerance)
     np.testing.assert_allclose(roc.NLL, flip.NLL, **tolerance)
 
+  # Prepare current ROCs for comparison/saving
+  current_rocs_data = {}
+  for name, roc_obj in rocs.items():
+    current_rocs_data[name] = {
+      "x": roc_obj.x.tolist(),
+      "y": roc_obj.y.tolist(),
+      "AUC": roc_obj.AUC,
+      "NLL": roc_obj.NLL,
+    }
+
   try:
-    with open(here/"reference"/"discrete.pkl", "rb") as f:
-      refs = pickle.load(f)
-    for k in set(rocs) | set(refs):
-      roc = rocs[k]
-      ref = refs[k]
-      np.testing.assert_allclose(np.array([roc.x, roc.y]), np.array([ref.x, ref.y]), **tolerance)
-      np.testing.assert_allclose(roc.AUC, ref.AUC, **tolerance)
-      np.testing.assert_allclose(roc.NLL, ref.NLL, **tolerance)
-  except:
-    with open(here/"test_output"/"discrete.pkl", "wb") as f:
-      pickle.dump(rocs, f)
+    # Changed to .json reference file
+    with open(here/"reference"/"discrete.json", "r", encoding="utf-8") as f:
+      loaded_data = json.load(f)
+      # No need to create refs_data, use loaded_data directly
+
+    # Check for missing or extra keys as per previous refactoring
+    testing_keys = set(current_rocs_data.keys())
+    reference_keys = set(loaded_data.keys()) # Use loaded_data keys directly
+
+    missing_keys = testing_keys - reference_keys
+    extra_keys = reference_keys - testing_keys
+
+    if missing_keys:
+      raise AssertionError(f"Keys missing in reference file: {', '.join(sorted(missing_keys))}")
+    if extra_keys:
+      raise AssertionError(f"Extra keys found in reference file: {', '.join(sorted(extra_keys))}")
+
+    for k, roc in current_rocs_data.items():
+      ref = loaded_data[k]
+      np.testing.assert_allclose(
+        np.array([roc["x"], roc["y"]]),
+        np.array([ref["x"], ref["y"]]),
+        **tolerance
+      )
+      np.testing.assert_allclose(roc["AUC"], ref["AUC"], **tolerance)
+      np.testing.assert_allclose(roc["NLL"], ref["NLL"], **tolerance)
+  except Exception:
+    with open(here/"test_output"/"discrete.json", "w", encoding="utf-8") as f: # Changed to .json
+      formatted_rocs_data = {
+        name: format_value_for_json(data, json_precision)
+        for name, data in current_rocs_data.items()
+      }
+      json.dump(
+        formatted_rocs_data,
+        f,
+        indent=2, # Use 2-space indent
+        sort_keys=True # Ensure deterministic output order
+      )
     raise
 
 if __name__ == "__main__":
