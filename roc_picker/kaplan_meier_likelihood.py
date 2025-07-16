@@ -324,7 +324,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
   def plot( # pylint: disable=too-many-arguments, too-many-branches, too-many-statements
     self,
     *,
-    times_for_plot : typing.Sequence[float] | None = None,
+    times_for_plot: typing.Sequence[float] | None = None,
     include_binomial_only=False,
     include_patient_wise_only=False,
     include_full_NLL=True,
