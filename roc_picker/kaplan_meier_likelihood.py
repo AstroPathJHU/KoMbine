@@ -348,7 +348,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     label = nominal_label
     if include_median_survival:
       label += " (MST={:.1f})".format(  #pylint: disable=consider-using-f-string
-        self.median_survival_time(
+        self.nominalkm.median_survival_time( # Use self.nominalkm for MST
           times_for_plot=nominal_x,
           survival_probabilities=nominal_y,
         )
@@ -362,6 +362,20 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     )
     results["x"] = nominal_x
     results["nominal"] = nominal_y
+
+    patient_censored_times = sorted(self.nominalkm.patient_censored_times)
+    censored_times_probabilities = self.nominalkm.survival_probabilities(
+      patient_censored_times,
+    )
+    plt.plot(
+      patient_censored_times,
+      censored_times_probabilities,
+      marker='|',
+      color=nominal_color,
+      markersize=8,
+      markeredgewidth=1.5,
+      linestyle="",
+    )
 
     if CLs is None:
       CLs = [0.68, 0.95]
