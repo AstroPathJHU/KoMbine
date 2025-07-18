@@ -8,7 +8,7 @@ jupyter:
       format_version: '1.3'
       jupytext_version: 1.16.4
   kernelspec:
-    display_name: Python 3 (ipykernel)
+    display_name: rocpicker
     language: python
     name: python3
 ---
@@ -47,6 +47,7 @@ The first line gives the observable type.
 Options are:
 * `fixed`: The observable for each patient is a fixed number.  It may be modified by systematics in the systematics section, but has no internal uncertainty.
 * `poisson`: The observable for each patient is a count, which has an associated Poisson uncertainty.  It may have additional uncertainties defined in the systematics section.
+* `poisson_density`: The observable for each patient is a count, which has an associated Poisson uncertainty, divided by a fixed area, which is assumed to have no error.
 * `poisson_ratio`: The observable for each patient is a ratio of two counts.  Again, it may have additional uncertainties defined in the systematics section.
 
 Next is the list of patients.
@@ -55,7 +56,8 @@ Next is the list of patients.
 - The observables for each patient, which depends on the observable_type given above.
   - For `fixed`, the line should be labeled `observable`, as it is in the example here
   - For `poisson`, it should be labeled `count`
-  - For `poisson_ratio`, there should be two lines labeled `numerator` and `denominator`
+  - For `poisson_ratio`, there should be two lines labeled `num` and `denom`
+  - For `poisson_density`, there should be two lines labeled `num` and `area`
 
 Next is the systematics section, which will be described in more detail below.  This simple example datacard doesn't have any systematics.
 
