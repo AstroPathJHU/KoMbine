@@ -172,15 +172,18 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         possible_values=self.possible_probabilities(time_point),
         verbose=optimize_verbose,
       )
-    result = scipy.optimize.minimize_scalar(
-      twoNLL,
-      bounds=(self.__endpoint_epsilon, 1 - self.__endpoint_epsilon),
-      method='bounded',
+    def vectorized_twoNLL(expected_probability: float) -> float:
+      return twoNLL(float(expected_probability))
+    vectorized_twoNLL = np.vectorize(vectorized_twoNLL, otypes=[float])
+    result = scipy.optimize.differential_evolution(
+      vectorized_twoNLL,
+      bounds=np.array([[self.__endpoint_epsilon, 1 - self.__endpoint_epsilon]]),
     )
     assert isinstance(result, scipy.optimize.OptimizeResult)
     if not result.success:
       raise RuntimeError("Failed to find the best probability")
-    return result.x, result.fun
+    x, = result.x
+    return x, result.fun
 
   def survival_probabilities_likelihood( # pylint: disable=too-many-locals, too-many-branches, too-many-statements, too-many-arguments
     self,
