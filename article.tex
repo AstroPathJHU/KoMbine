@@ -19,35 +19,26 @@
 %% - \Plainauthor{} without affiliations
 %% - Separate authors by \And or \AND (in \author) or by comma (in \Plainauthor).
 %% - \AND starts a new line, \And does not.
-\author{Achim Zeileis~\orcidlink{0000-0003-0918-3766}\\Universit\"at Innsbruck
-   \And Second Author\\Plus Affiliation}
-\Plainauthor{Achim Zeileis, Second Author}
+\author{Jeffrey Roskes~\orcidlink{0000-0001-8761-0490}\\Johns Hopkins University}
+\Plainauthor{Jeffrey Roskes}
 
 %% - \title{} in title case
 %% - \Plaintitle{} without LaTeX markup (if any)
 %% - \Shorttitle{} with LaTeX markup (if any), used as running title
-\title{A Short Demo Article: Regression Models for Count Data in \proglang{R}}
-\Plaintitle{A Short Demo Article: Regression Models for Count Data in R}
-\Shorttitle{A Short Demo Article in \proglang{R}}
+\title{\pkg{KoMbine}: Propagating Statistical and Systematic Errors to Kaplan-Meier Curves}
+\Plaintitle{KoMbine: Propagating Statistical and Systematic Errors to Kaplan-Meier Curves}
+\Shorttitle{KoMbine: Propagating Errors to Kaplan-Meier Curves}
 
 %% - \Abstract{} almost as usual
 \Abstract{
-  This short article illustrates how to write a manuscript for the
-  \emph{Journal of Statistical Software} (JSS) using its {\LaTeX} style files.
-  Generally, we ask to follow JSS's style guide and FAQs precisely. Also,
-  it is recommended to keep the {\LaTeX} code as simple as possible,
-  i.e., avoid inclusion of packages/commands that are not necessary.
-  For outlining the typical structure of a JSS article some brief text snippets
-  are employed that have been inspired by \cite{Zeileis+Kleiber+Jackman:2008},
-  discussing count data regression in \proglang{R}. Editorial comments and
-  instructions are marked by vertical bars.
+  Kaplan--Meier curves are widely used in medical research to evaluate the performance of biomarkers and predict patient outcomes. These curves are often shown without error bands, and even when error bands are provided, they typically only account for the statistical uncertainty resulting from the finite number of patients in the study.  In reality, other sources of uncertainty affect the measurements as well.  As datasets grow, the patient-wise statistical uncertainty no longer dominates the overall uncertainty, and other uncertainties are increasingly important to model. The \pkg{KoMbine} package, developed based on procedures used in particle physics, provides the first method to propagate both statistical and systematic uncertainties through the Kaplan--Meier curve estimation processes.
 }
 
 %% - \Keywords{} with LaTeX markup, at least one required
 %% - \Plainkeywords{} without LaTeX markup (if necessary)
 %% - Should be comma-separated and in sentence case.
-\Keywords{JSS, style guide, comma-separated, not capitalized, \proglang{R}}
-\Plainkeywords{JSS, style guide, comma-separated, not capitalized, R}
+\Keywords{kaplan-meier curve, uncertainty}
+\Plainkeywords{kaplan-meier curve, uncertainty}
 
 %% - \Address{} of at least one author
 %% - May contain multiple affiliations for each author
@@ -55,16 +46,14 @@
 %% - May contain multiple authors for the same affiliation
 %%   (in the same first line, separated by comma).
 \Address{
-  Achim Zeileis\\
-  Journal of Statistical Software\\
+  Jeffrey Roskes\\
+  Institute for Data Intensive Engineering and Science\\
   \emph{and}\\
-  Department of Statistics\\
-  Faculty of Economics and Statistics\\
-  Universit\"at Innsbruck\\
-  Universit\"atsstr.~15\\
-  6020 Innsbruck, Austria\\
-  E-mail: \email{Achim.Zeileis@R-project.org}\\
-  URL: \url{https://www.zeileis.org/}
+  Department of Physics and Astronomy\\
+  Johns Hopkins University\\
+  3400 N. Charles St\\
+  Baltimore, MD 21218\\
+  E-mail: \email{jroskes1@jhu.edu}
 }
 
 \begin{document}
@@ -82,6 +71,30 @@
 %% - Unless the expansions of abbreviations are proper names (like "Journal
 %%   of Statistical Software" above) they should be in sentence case (like
 %%   "generalized linear models" below).
+
+\section{Introduction} \label{sec:intro}
+
+\subsection{Uncertainty in survival analysis}
+
+\subsection{Limitations of existing software}
+
+\subsection{Motivation for patient-wise error modeling}
+
+\section{Methodology}
+
+\section{Implementation}
+
+\section{Examples}
+
+\subsection{Synthetic data}
+
+\subsection{Real-world dataset}
+
+\subsection{Comparison with existing methods}
+
+\section{Discussion and Future Work}
+
+\section{Conclusion}
 
 \section[Introduction: Count data regression in R]{Introduction: Count data regression in \proglang{R}} \label{sec:intro}
 
