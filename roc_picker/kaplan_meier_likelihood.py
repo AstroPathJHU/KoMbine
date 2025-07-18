@@ -318,8 +318,11 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     include_patient_wise_only=False,
     include_full_NLL=True,
     include_best_fit=True,
+    include_nominal=True,
     nominal_label='Nominal',
     nominal_color='blue',
+    best_label='Best Fit',
+    best_color='red',
     CLs=None,
     CL_colors=None,
     CL_hatches=None,
@@ -356,13 +359,14 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           survival_probabilities=nominal_y,
         )
       ).replace("inf", r"$\infty$")
-    plt.plot(
-      nominal_x,
-      nominal_y,
-      label=label,
-      color=nominal_color,
-      linestyle='--'
-    )
+    if include_nominal:
+      plt.plot(
+        nominal_x,
+        nominal_y,
+        label=label,
+        color=nominal_color,
+        linestyle='--'
+      )
     results["x"] = nominal_x
     results["nominal"] = nominal_y
 
@@ -454,10 +458,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
     best_x, best_y = self.get_points_for_plot(times_for_plot, best_probabilities)
     if include_best_fit:
-      label = "Best Probability"
+      label = best_label
       if include_median_survival:
         label += " (MST={:.1f})".format(  #pylint: disable=consider-using-f-string
-          self.nominalkm.median_survival_time(
+          self.median_survival_time(
             times_for_plot=best_x,
             survival_probabilities=best_y,
           )
@@ -466,7 +470,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         best_x,
         best_y,
         label=label,
-        color='red',
+        color=best_color,
         linestyle='--'
       )
       np.testing.assert_array_equal(best_x, nominal_x)
@@ -492,11 +496,11 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         label = f'{CL:.0%} CL'
       if include_median_survival:
         label += " (MST$\\in$({:.1f}, {:.1f}))".format(  #pylint: disable=consider-using-f-string
-          self.nominalkm.median_survival_time(
+          self.median_survival_time(
             times_for_plot=x_minus,
             survival_probabilities=y_minus,
           ),
-          self.nominalkm.median_survival_time(
+          self.median_survival_time(
             times_for_plot=x_plus,
             survival_probabilities=y_plus,
           ),
@@ -532,12 +536,12 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         else:
           label = f'{CL:.0%} CL ({subset_label})'
         if include_median_survival:
-          label += r" (MST$\elem$({:.1f}, {:.1f}))".format(  #pylint: disable=consider-using-f-string
-            self.nominalkm.median_survival_time(
+          label += r" (MST$\in$({:.1f}, {:.1f}))".format(  #pylint: disable=consider-using-f-string
+            self.median_survival_time(
               times_for_plot=x_minus_subset,
               survival_probabilities=y_minus_subset,
             ),
-            self.nominalkm.median_survival_time(
+            self.median_survival_time(
               times_for_plot=x_plus_subset,
               survival_probabilities=y_plus_subset,
             ),
