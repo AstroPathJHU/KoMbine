@@ -214,12 +214,14 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     parameter_max: float,
     time_point: float,
     endpoint_epsilon: float = 1e-6,
+    log_zero_epsilon: float = 1e-10, # New parameter for log arguments
   ):
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min
     self.__parameter_max = parameter_max
     self.__time_point = time_point
     self.__endpoint_epsilon = endpoint_epsilon
+    self.__log_zero_epsilon = log_zero_epsilon # Store the epsilon
     self.__expected_probability_constraint = None
     self.__binomial_penalty_constraint = None
     self.__patient_constraints_for_binomial_only = None
@@ -764,27 +766,51 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       vtype=GRB.CONTINUOUS,
       name="log_n_at_risk",
       lb=-GRB.INFINITY,
-      ub=np.log(self.n_patients), # Max possible log(count)
+      ub=np.log(self.n_patients + self.__log_zero_epsilon), # Max possible log(count)
     )
     log_n_survived_vars = model.addVars(
       self.n_groups,
       vtype=GRB.CONTINUOUS,
       name="log_n_survived",
       lb=-GRB.INFINITY,
-      ub=np.log(self.n_patients), # Max possible log(count)
+      ub=np.log(self.n_patients + self.__log_zero_epsilon), # Max possible log(count)
     )
+
+    # Helper variables for log arguments (n_at_risk + epsilon, n_survived + epsilon)
+    n_at_risk_plus_epsilon = model.addVars(
+      self.n_groups,
+      vtype=GRB.CONTINUOUS,
+      name="n_at_risk_plus_epsilon",
+      lb=self.__log_zero_epsilon, # Ensure strictly positive
+    )
+    n_survived_plus_epsilon = model.addVars(
+      self.n_groups,
+      vtype=GRB.CONTINUOUS,
+      name="n_survived_plus_epsilon",
+      lb=self.__log_zero_epsilon, # Ensure strictly positive
+    )
+
+    # Constraints to link original counts to epsilon-added variables
+    for i in range(self.n_groups):
+      model.addConstr(
+        n_at_risk_plus_epsilon[i] == n_at_risk[i] + self.__log_zero_epsilon,
+        name=f"n_at_risk_plus_epsilon_constr_{i}"
+      )
+      model.addConstr(
+        n_survived_plus_epsilon[i] == n_survived_in_group[i] + self.__log_zero_epsilon,
+        name=f"n_survived_plus_epsilon_constr_{i}"
+      )
 
     # Link count variables to their log counterparts using GenConstrLog
     for i in range(self.n_groups):
-      # n_at_risk[i] can be 0, Gurobi handles log(0) as -infinity
+      # Use the new helper variables as arguments to GenConstrLog
       model.addGenConstrLog(
-        n_at_risk[i],
+        n_at_risk_plus_epsilon[i],
         log_n_at_risk_vars[i],
         name=f"log_n_at_risk_constr_{i}"
       )
-      # n_survived_in_group[i] can be 0, Gurobi handles log(0) as -infinity
       model.addGenConstrLog(
-        n_survived_in_group[i],
+        n_survived_plus_epsilon[i],
         log_n_survived_vars[i],
         name=f"log_n_survived_constr_{i}"
       )
