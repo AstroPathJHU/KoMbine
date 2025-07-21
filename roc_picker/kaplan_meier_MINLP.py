@@ -1306,7 +1306,57 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
     model.update()
 
-  __not_provided = object()
+  def _set_gurobi_params(self, model: gp.Model, params: dict):
+    """
+    Helper function to set multiple Gurobi parameters from a dictionary.
+    """
+    for param, value in params.items():
+      if value is not None:
+        model.setParam(param, value)
+
+  def _optimize_with_fallbacks(
+    self,
+    model: gp.Model,
+    initial_params: dict,
+    fallback_strategies: list[tuple[dict, str]],
+    verbose: bool,
+  ):
+    """
+    Attempts to optimize the Gurobi model, applying fallback strategies
+    if the initial optimization is suboptimal.
+
+    Args:
+        model: The Gurobi model to optimize.
+        initial_params: A dictionary of initial Gurobi parameters to apply.
+        fallback_strategies: A list of tuples, where each tuple contains:
+            - A dictionary of Gurobi parameters to apply for the fallback.
+            - A string description of the fallback strategy.
+        verbose: If True, print detailed optimization progress.
+
+    Returns:
+        The Gurobi model after optimization.
+    """
+    # Apply initial parameters
+    self._set_gurobi_params(model, initial_params)
+
+    if verbose:
+      print("Attempting initial optimization...")
+    model.optimize()
+
+    # Check for suboptimal status and apply fallbacks
+    if model.status == GRB.SUBOPTIMAL:
+      for i, (fallback_params, description) in enumerate(fallback_strategies):
+        if verbose:
+          print(f"Model returned suboptimal solution. Applying fallback {i+1}: {description}")
+          print(f"  New parameters: {fallback_params}")
+        self._set_gurobi_params(model, fallback_params)
+        model.optimize()
+        if model.status == GRB.OPTIMAL:
+          if verbose:
+            print(f"Fallback {i+1} successful. Model is now optimal.")
+          break
+    return model
+
   def run_MINLP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
     self,
     expected_probability: float,
@@ -1365,62 +1415,64 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       use_binomial_penalty_indicator=use_binomial_penalty_indicator,
     )
 
-    if verbose:
-      model.setParam('OutputFlag', 1)
-      model.setParam('DisplayInterval', 1)
-    else:
-      # Suppress Gurobi output
-      model.setParam('OutputFlag', 0)
+    # Initial Gurobi parameters
+    initial_gurobi_params = {
+        'OutputFlag': 1 if verbose else 0,
+        'DisplayInterval': 1 if verbose else 0,
+        'MIPGap': MIPGap,
+        'NonConvex': 2 if patient_wise_only else 0,
+        'NumericFocus': 3 if patient_wise_only else 0,
+        'Seed': 123456,
+        'TimeLimit': TimeLimit,
+        'Threads': Threads,
+        'MIPFocus': MIPFocus,
+    }
 
-    # --- Gurobi Parameter Tuning ---
-    # Set the MIPGap for solution quality vs. speed.
-    model.setParam("MIPGap", MIPGap)
+    # Define fallback strategies
+    fallback_strategies = []
 
-    # Crucial for non-convex problems to aim for global optimality
-    if patient_wise_only:
-      model.setParam("NonConvex", 2) # Spatial branch-and-bound
-      # Improve numerical stability for problems with functions like log/exp
-      model.setParam("NumericFocus", 3)
-    else:
-      model.setParam("NonConvex", 0)
-      model.setParam("NumericFocus", 0)
+    # Fallback 1: Try MIPFocus 2 if initial was suboptimal and not already 2
+    if MIPFocus != 2: # Only add this fallback if MIPFocus wasn't already 2
+        fallback_strategies.append(
+            ({'MIPFocus': 2}, "MIPFocus set to 2 (optimality focus)")
+        )
 
+    # Fallback 2: Try fallback MIPGap if provided
+    if fallback_MIPGap is not None and MIPGap != fallback_MIPGap:
+        fallback_strategies.append(
+            ({'MIPGap': fallback_MIPGap}, f"MIPGap increased to {fallback_MIPGap}")
+        )
 
-    # Set a fixed random seed for reproducibility
-    model.setParam("Seed", 123456) # Use a fixed integer seed
-
-    # Set a time limit for the optimization (e.g., 300 seconds = 5 minutes)
+    # Fallback 3: Increase TimeLimit if it was set and still suboptimal
     if TimeLimit is not None:
-      model.setParam('TimeLimit', TimeLimit)
+        fallback_strategies.append(
+            ({'TimeLimit': TimeLimit * 1.5}, "Increased TimeLimit by 50%")
+        )
 
-    # Set the number of threads to use (e.g., use all available CPU cores)
-    if Threads is not None:
-      model.setParam('Threads', Threads)
+    # Fallback 4: Try different NumericFocus if patient_wise_only
+    if patient_wise_only:
+         fallback_strategies.append(
+            ({'NumericFocus': 1}, "Changed NumericFocus to 1 (balanced)")
+        )
+    else:
+        fallback_strategies.append(
+            ({'NumericFocus': 2}, "Changed NumericFocus to 2 (accuracy)")
+        )
 
-    # Set MIPFocus to guide the solver's strategy:
-    # 0: Balances feasibility and optimality (default)
-    # 1: Focuses on finding feasible solutions quickly
-    # 2: Focuses on proving optimality
-    # 3: Focuses on finding good bounds
-    if MIPFocus is not None:
-      model.setParam('MIPFocus', MIPFocus)
+    # Fallback 5: Experiment with Cuts (more aggressive)
+    fallback_strategies.append(
+        ({'Cuts': 2}, "Aggressive cut generation")
+    )
 
-    # Consider experimenting with other parameters like Cuts and Heuristics if needed.
-    # model.setParam('Cuts', 2) # Aggressive cut generation
-    # model.setParam('Heuristics', 0.5) # Less aggressive heuristics
+    # Fallback 6: Experiment with Heuristics (less aggressive)
+    fallback_strategies.append(
+        ({'Heuristics': 0.5}, "Less aggressive heuristics")
+    )
 
-    # --- End Gurobi Parameter Tuning ---
-
-    model.optimize()
-    if model.status == GRB.SUBOPTIMAL:
-      if fallback_MIPGap is not None:
-        if verbose:
-          print(
-            f"Model returned suboptimal solution with MIPGap {MIPGap}. "
-            f"Retrying with fallback MIPGap {fallback_MIPGap}."
-          )
-        model.setParam("MIPGap", fallback_MIPGap)
-        model.optimize()
+    # Optimize with fallbacks
+    model = self._optimize_with_fallbacks(
+        model, initial_gurobi_params, fallback_strategies, verbose
+    )
 
     if model.status != GRB.OPTIMAL:
       if model.status == GRB.INFEASIBLE and patient_wise_only:
