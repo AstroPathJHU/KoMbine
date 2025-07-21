@@ -40,7 +40,7 @@ with open(datacardfile) as f:
     print(f.read())
 ```
 
-The `observable_type` and `observable` lines work the same was as in the ROC Picker datacards.  The `survival_time` and `censored` lines are specific to Kaplan-Meier curves.  The `survival_time` line contains the time when the patient was censored or died, and the `censored` line indicates whether the patient was censored (1) or not (0).
+The `observable_type` and `observable` lines work the same way as in the ROC Picker datacards.  The `survival_time` and `censored` lines are specific to Kaplan-Meier curves.  The `survival_time` line contains the time when the patient was censored or died, and the `censored` line indicates whether the patient was censored (1) or not (0).
 
 ```python
 datacard = Datacard.parse_datacard(datacardfile)
