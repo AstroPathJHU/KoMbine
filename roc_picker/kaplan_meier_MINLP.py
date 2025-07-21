@@ -8,6 +8,7 @@ import datetime
 import functools
 import itertools
 import math
+import os
 
 import gurobipy as gp
 from gurobipy import GRB
@@ -1370,6 +1371,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     TimeLimit: float | None = None,
     Threads: int | None = None,
     MIPFocus: int | None = None,
+    LogFile: os.PathLike | None = None,
   ):
     """
     Run the MINLP for the given time point.
@@ -1417,15 +1419,16 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
     # Initial Gurobi parameters
     initial_gurobi_params = {
-        'OutputFlag': 1 if verbose else 0,
-        'DisplayInterval': 1 if verbose else 0,
-        'MIPGap': MIPGap,
-        'NonConvex': 2 if patient_wise_only else 0,
-        'NumericFocus': 3 if patient_wise_only else 0,
-        'Seed': 123456,
-        'TimeLimit': TimeLimit,
-        'Threads': Threads,
-        'MIPFocus': MIPFocus,
+      'OutputFlag': 1 if verbose else 0,
+      'DisplayInterval': 1 if verbose else 0,
+      'MIPGap': MIPGap,
+      'NonConvex': 2 if patient_wise_only else 0,
+      'NumericFocus': 3 if patient_wise_only else 0,
+      'Seed': 123456,
+      'TimeLimit': TimeLimit,
+      'Threads': Threads,
+      'MIPFocus': MIPFocus,
+      'LogFile': LogFile,
     }
 
     # Define fallback strategies
@@ -1433,40 +1436,46 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
     # Fallback 1: Try MIPFocus 2 if initial was suboptimal and not already 2
     if MIPFocus != 2: # Only add this fallback if MIPFocus wasn't already 2
-        fallback_strategies.append(
-            ({'MIPFocus': 2}, "MIPFocus set to 2 (optimality focus)")
-        )
+      fallback_strategies.append(
+        ({'MIPFocus': 2}, "MIPFocus set to 2 (optimality focus)")
+      )
 
     # Fallback 2: Try fallback MIPGap if provided
     if fallback_MIPGap is not None and MIPGap != fallback_MIPGap:
-        fallback_strategies.append(
-            ({'MIPGap': fallback_MIPGap}, f"MIPGap increased to {fallback_MIPGap}")
-        )
+      fallback_strategies.append(
+        ({'MIPGap': fallback_MIPGap}, f"MIPGap increased to {fallback_MIPGap}")
+      )
 
-    # Fallback 3: Increase TimeLimit if it was set and still suboptimal
+    # Fallback 3: Set NonConvex to 2 if it wasn't already
+    if initial_gurobi_params["NonConvex"] != 2:
+      fallback_strategies.append(
+        ({'NonConvex': 2}, "Set NonConvex to 2")
+      )
+
+    # Fallback 4: Increase TimeLimit if it was set and still suboptimal
     if TimeLimit is not None:
-        fallback_strategies.append(
-            ({'TimeLimit': TimeLimit * 1.5}, "Increased TimeLimit by 50%")
-        )
+      fallback_strategies.append(
+        ({'TimeLimit': TimeLimit * 1.5}, "Increased TimeLimit by 50%")
+      )
 
-    # Fallback 4: Try different NumericFocus if patient_wise_only
+    # Fallback 5: Try different NumericFocus if patient_wise_only
     if patient_wise_only:
-         fallback_strategies.append(
-            ({'NumericFocus': 1}, "Changed NumericFocus to 1 (balanced)")
-        )
+      fallback_strategies.append(
+        ({'NumericFocus': 1}, "Changed NumericFocus to 1 (balanced)")
+      )
     else:
-        fallback_strategies.append(
-            ({'NumericFocus': 2}, "Changed NumericFocus to 2 (accuracy)")
-        )
+      fallback_strategies.append(
+        ({'NumericFocus': 2}, "Changed NumericFocus to 2 (accuracy)")
+      )
 
-    # Fallback 5: Experiment with Cuts (more aggressive)
+    # Fallback 6: Experiment with Cuts (more aggressive)
     fallback_strategies.append(
-        ({'Cuts': 2}, "Aggressive cut generation")
+      ({'Cuts': 2}, "Aggressive cut generation")
     )
 
-    # Fallback 6: Experiment with Heuristics (less aggressive)
+    # Fallback 7: Experiment with Heuristics (less aggressive)
     fallback_strategies.append(
-        ({'Heuristics': 0.5}, "Less aggressive heuristics")
+      ({'Heuristics': 0.5}, "Less aggressive heuristics")
     )
 
     # Optimize with fallbacks
