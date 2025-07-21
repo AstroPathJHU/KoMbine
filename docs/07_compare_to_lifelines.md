@@ -23,11 +23,15 @@ warnings.simplefilter("error")
 
 Our error estimation method is more general than the `lifelines` package, which only supports the statistical uncertainty from the number of patients and not patient-wise uncertainties.  (`lifelines` also contains lots of other functionality that this package does not.)  Here, we apply our method with a fixed observable, which should match what `lifelines` does, and compare the results to `lifelines`.
 
+Note that, to run this notebook, you will need to install the `lifelines` package.  You can do this with `pip install lifelines`.
+
 ```python
 import pathlib  #noqa: E402
+
 import lifelines  #noqa: E402
 import matplotlib.pyplot as plt  #noqa: E402
 import numpy as np  #noqa: E402
+
 from roc_picker.datacard import Datacard  #noqa: E402
 ```
 
