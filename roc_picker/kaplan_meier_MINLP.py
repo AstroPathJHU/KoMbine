@@ -1454,8 +1454,11 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       'TimeLimit': TimeLimit,
       'Threads': Threads,
       'MIPFocus': MIPFocus,
-      'LogFile': LogFile,
+      'FuncPieces': 1000,
+      'FuncPieceRatio': 0.5,
     }
+    if LogFile is not None:
+      initial_gurobi_params['LogFile'] = os.fspath(LogFile)
 
     # Define fallback strategies
     fallback_strategies = []
