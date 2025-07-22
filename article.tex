@@ -151,9 +151,17 @@ where \(c_j=1\) if the patient is censored and \(0\) otherwise.  The binomial pe
 
 We minimize the overall NLL \cref{eq:total-nll} over the \(p_i^\text{survived}\) and \(a_j\), again with the constraint \cref{eq:km-probability-constraint}.
 
+\subsection{Running with patient-wise uncertainties only}
+
+Although the total uncertainty on the Kaplan--Meier curve includes both the binomial and the patient-wise uncertainty, it is instructive to look at them separately.  Determining which uncertainty dominates can help to understand the next steps in the analysis: should we try to enroll more patients or should we improve the biomarker measurements?
+
+To examine the binomial uncertainty, we can fix \(a_j\) to the nominal values of the uncertainties.  These results are approximately equivalent to the Greenwood confidence intervals used in other packages (our code is somewhat more precise, but also slower), as will be illustrated in \cref{sec:compare-to-greenwood}.
+
+Isolating the patient-wise uncertainty is more nontrivial.  Without the binomial penalty term, minimizing \(-\log \mathcal{L}_{\text{patient}}\) over \(a_j\) will simply put each patient's parameter at its nominal value.
+
 \section{Implementation}
 
-\pkg{KoMbine} is implemented in \proglang{Python} and uses \pkg{Gurobi} to accomplish the optimization.
+\pkg{KoMbine} is implemented in \proglang{Python} and uses \pkg{Gurobi} to accomplish the optimization for each value of \(S(t)\).  \pkg{scipy} is then used to minimize \(-\log \mathcal{L}_{\text{total}}\) over \(S(t)\) to find the maximum likelihood estimate and to compute the confidence intervals, bounded by the points where the NLL equals a threshold value (1.0 for 68\% CL and 3.84 for 95\% CL).
 
 \section{Examples}
 
