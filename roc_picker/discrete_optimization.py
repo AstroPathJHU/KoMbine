@@ -10,6 +10,14 @@ import numpy as np
 
 from .utilities import InspectableCache
 
+def _is_strictly_less(a: float, b: float, atol: float, rtol: float) -> bool:
+  """Returns True if a is strictly less than b, considering tolerances."""
+  return b - a > atol + rtol * abs(b)
+
+def _is_strictly_greater(a: float, b: float, atol: float, rtol: float) -> bool:
+  """Returns True if a is strictly greater than b, considering tolerances."""
+  return a - b > atol + rtol * abs(a)
+
 def extract_inspectable_cache_values(
   func: typing.Callable,
   possible_values: np.ndarray
@@ -197,12 +205,12 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
       print(f"{mid2:3d} {p_mid2:6.3f} {v_mid2:15.9g}")
       print(f"{right:3d} {p_right:6.3f} {v_right:15.9g}")
 
-    if v_left < v_mid1:
+    if _is_strictly_less(v_left, v_mid1, atol, rtol):
       right = mid1
       p_right = p_mid1
       v_right = v_mid1
       continue
-    if v_right < v_mid2:
+    if _is_strictly_less(v_right, v_mid2, atol, rtol):
       left = mid2
       p_left = p_mid2
       v_left = v_mid2
@@ -234,7 +242,8 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
       v_mid1 = evaluated[mid1]
       v_mid2 = evaluated[mid2]
 
-    if not max(v_mid1, v_mid2) <= max(v_left, v_right):
+    # Use robust comparison
+    if _is_strictly_greater(max(v_mid1, v_mid2), max(v_left, v_right), atol, rtol):
       raise ValueError(
         "The probability doesn't have a single minimum:\n"
         f"left  ={left:12d}, mid1  ={mid1:12d}, "
@@ -245,25 +254,27 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
         f"v_mid2={v_mid2:12.6g}, v_right={v_right:12.6g}\n"
       )
 
-    if v_mid1 < v_mid2:
+    if _is_strictly_less(v_mid1, v_mid2, atol, rtol):
       right = mid2
       p_right = p_mid2
       v_right = v_mid2
-    elif v_mid2 < v_mid1:
+    elif _is_strictly_less(v_mid2, v_mid1, atol, rtol):
       left = mid1
       p_left = p_mid1
       v_left = v_mid1
-    else:
-      if v_left > v_mid2 or v_mid2 > v_right:
+    else: # v_mid1 isclose v_mid2
+      if _is_strictly_greater(v_left, v_mid2, atol, rtol) or _is_strictly_greater(v_mid2, v_right, atol, rtol):
         left = mid1
         p_left = p_mid1
         v_left = v_mid1
-      elif v_mid1 < v_right or v_left < v_mid1:
+      elif _is_strictly_less(v_mid1, v_right, atol, rtol) or _is_strictly_less(v_left, v_mid1, atol, rtol):
         right = mid2
         p_right = p_mid2
         v_right = v_mid2
-      elif v_left == v_right:
-        assert v_mid1 == v_mid2 == v_left == v_right
+      elif np.isclose(v_left, v_right, atol=atol, rtol=rtol): # Use np.isclose for final check of equality
+        assert np.isclose(v_mid1, v_mid2, atol=atol, rtol=rtol) and \
+               np.isclose(v_mid2, v_left, atol=atol, rtol=rtol) and \
+               np.isclose(v_left, v_right, atol=atol, rtol=rtol)
         assert mid1 == left + 1 and mid2 == right - 1
         left = mid1
         p_left = p_mid1

@@ -28,6 +28,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
   Kaplan-Meier curve with error bars calculated using the log-likelihood method.
   """
   __default_MIPGap = 1e-4
+  __default_MIPGapAbs = 1e-7
 
   def __init__( # pylint: disable=too-many-arguments
     self,
@@ -115,12 +116,16 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     verbose=False,
     print_progress=False,
     MIPGap=None,
+    MIPGapAbs=None,
   ) -> collections.abc.Callable[[float], float]:
     """
     Get the twoNLL function for the given time point.
     """
     if MIPGap is None:
       MIPGap = self.__default_MIPGap
+    if MIPGapAbs is None:
+      MIPGapAbs = self.__default_MIPGapAbs
+
     minlp = self.minlp_for_km(time_point=time_point)
     @InspectableCache
     def twoNLL(expected_probability: float) -> float:
@@ -134,6 +139,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         verbose=verbose,
         print_progress=print_progress,
         MIPGap=MIPGap,
+        MIPGapAbs=MIPGapAbs,
       )
       if not result.success:
         return np.inf
@@ -166,7 +172,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     *,
     patient_wise_only=False,
     optimize_verbose=False,
-    MIPGap: float | None = None, # Added to pass to discrete_single_minimum
+    MIPGap: float | None = None,
+    MIPGapAbs: float | None = None,
   ) -> tuple[float, float]:
     """
     Find the expected probability that minimizes the negative log-likelihood
@@ -175,10 +182,12 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     if patient_wise_only:
       if MIPGap is None:
         MIPGap = self.__default_MIPGap
+      if MIPGapAbs is None:
+        MIPGapAbs = self.__default_MIPGapAbs
 
-      # Set atol to be slightly larger than the MIPGap for safety
-      atol_for_discrete_min = MIPGap * 2 # Or some other factor like 5 or 10
-      rtol_for_discrete_min = 0 # Relative tolerance might not be as critical for discrete values
+      # Set atol using MIPGapAbs and rtol using MIPGap
+      atol_for_discrete_min = MIPGapAbs * 1.1 # Or some other factor for safety
+      rtol_for_discrete_min = MIPGap * 1.1 # Use relative MIPGap for rtol
 
       return minimize_discrete_single_minimum(
         objective_function=twoNLL,
@@ -212,6 +221,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     optimize_verbose=False,
     print_progress=False,
     MIPGap=None,
+    MIPGapAbs=None,
   ) -> tuple[np.ndarray, np.ndarray]:
     """
     Get the survival probabilities for the given quantiles.
@@ -233,6 +243,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         verbose=gurobi_verbose,
         print_progress=print_progress,
         MIPGap=MIPGap,
+        MIPGapAbs=MIPGapAbs,
       )
       # Find the expected probability that minimizes the negative log-likelihood
       # for the given time point
@@ -243,6 +254,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           patient_wise_only=patient_wise_only,
           optimize_verbose=optimize_verbose,
           MIPGap=MIPGap,
+          MIPGapAbs=MIPGapAbs,
         )
       except Exception as e:
         raise RuntimeError(
@@ -349,6 +361,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     saveas=None,
     print_progress=False,
     MIPGap=None,
+    MIPGapAbs=None,
     include_median_survival=False,
   ): #pylint: disable=too-many-locals
     """
@@ -434,6 +447,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         times_for_plot=times_for_plot,
         print_progress=print_progress,
         MIPGap=MIPGap,
+        MIPGapAbs=MIPGapAbs,
       )
     if include_binomial_only:
       (
@@ -444,6 +458,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         binomial_only=True,
         print_progress=print_progress,
         MIPGap=MIPGap,
+        MIPGapAbs=MIPGapAbs,
       )
       if include_full_NLL:
         CL_probabilities_subset = CL_probabilities_binomial
@@ -459,6 +474,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         patient_wise_only=True,
         print_progress=print_progress,
         MIPGap=MIPGap,
+        MIPGapAbs=MIPGapAbs,
       )
       if include_full_NLL:
         CL_probabilities_subset = CL_probabilities_patient_wise

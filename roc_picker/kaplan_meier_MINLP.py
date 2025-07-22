@@ -202,6 +202,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
   Mixed Integer Nonlinear Programming for a point on the Kaplan-Meier curve.
   """
   __default_MIPGap = 1e-4
+  __default_MIPGapAbs = 1e-7
 
   def __init__(  # pylint: disable=too-many-arguments
     self,
@@ -1390,6 +1391,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     binomial_only=False,
     patient_wise_only=False,
     MIPGap: float | None = None,
+    MIPGapAbs: float | None = None,
     TimeLimit: float | None = None,
     Threads: int | None = None,
     MIPFocus: int | None = None,
@@ -1412,7 +1414,8 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
     if MIPGap is None:
       MIPGap = self.__default_MIPGap
-
+    if MIPGapAbs is None:
+      MIPGapAbs = self.__default_MIPGapAbs
 
     nll_penalty_for_patient_in_range = self.nll_penalty_for_patient_in_range
 
@@ -1439,6 +1442,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       'OutputFlag': 1 if verbose else 0,
       'DisplayInterval': 1 if verbose else 0,
       'MIPGap': MIPGap,
+      'MIPGapAbs': MIPGapAbs,
       'NonConvex': 2,
       'NumericFocus': 3 if patient_wise_only else 0,
       'Seed': 123456,
