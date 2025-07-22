@@ -263,15 +263,23 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
       p_left = p_mid1
       v_left = v_mid1
     else: # v_mid1 isclose v_mid2
-      if _is_strictly_greater(v_left, v_mid2, atol, rtol) or _is_strictly_greater(v_mid2, v_right, atol, rtol):
+      if (
+        _is_strictly_greater(v_left, v_mid2, atol, rtol)
+        or _is_strictly_greater(v_mid2, v_right, atol, rtol)
+      ):
         left = mid1
         p_left = p_mid1
         v_left = v_mid1
-      elif _is_strictly_less(v_mid1, v_right, atol, rtol) or _is_strictly_less(v_left, v_mid1, atol, rtol):
+      elif (
+        _is_strictly_less(v_mid1, v_right, atol, rtol)
+        or _is_strictly_less(v_left, v_mid1, atol, rtol)
+      ):
         right = mid2
         p_right = p_mid2
         v_right = v_mid2
-      elif np.isclose(v_left, v_right, atol=atol, rtol=rtol): # Use np.isclose for final check of equality
+      elif (
+        np.isclose(v_left, v_right, atol=atol, rtol=rtol)
+      ): # Use np.isclose for final check of equality
         assert np.isclose(v_mid1, v_mid2, atol=atol, rtol=rtol) and \
                np.isclose(v_mid2, v_left, atol=atol, rtol=rtol) and \
                np.isclose(v_left, v_right, atol=atol, rtol=rtol)
