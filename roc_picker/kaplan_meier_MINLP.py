@@ -201,10 +201,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
   """
   Mixed Integer Nonlinear Programming for a point on the Kaplan-Meier curve.
   """
-  __default_MIPGap = 1e-6
-  #if the minimization is suboptimal, we will use this fallback MIPGap.
-  #this is only used if MIPGap is not provided to run_MINLP.
-  __default_fallback_MIPGap = 1e-5
+  __default_MIPGap = 1e-4
 
   def __init__(  # pylint: disable=too-many-arguments
     self,
@@ -1393,7 +1390,6 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     binomial_only=False,
     patient_wise_only=False,
     MIPGap: float | None = None,
-    fallback_MIPGap: float | None = None,
     TimeLimit: float | None = None,
     Threads: int | None = None,
     MIPFocus: int | None = None,
@@ -1415,11 +1411,6 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       raise ValueError("binomial_only and patient_wise_only cannot both be True")
 
     if MIPGap is None:
-      if fallback_MIPGap is not None:
-        raise ValueError(
-          "If fallback_MIPGap is provided, MIPGap must also be provided."
-       )
-      fallback_MIPGap = self.__default_fallback_MIPGap
       MIPGap = self.__default_MIPGap
 
 
@@ -1469,19 +1460,13 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
         ({'MIPFocus': 2}, "MIPFocus set to 2 (optimality focus)")
       )
 
-    # Fallback 2: Try fallback MIPGap if provided
-    if fallback_MIPGap is not None and MIPGap != fallback_MIPGap:
-      fallback_strategies.append(
-        ({'MIPGap': fallback_MIPGap}, f"MIPGap increased to {fallback_MIPGap}")
-      )
-
-    # Fallback 3: Increase TimeLimit if it was set and still suboptimal
+    # Fallback 2: Increase TimeLimit if it was set and still suboptimal
     if TimeLimit is not None:
       fallback_strategies.append(
         ({'TimeLimit': TimeLimit * 1.5}, "Increased TimeLimit by 50%")
       )
 
-    # Fallback 4: Increase FuncPieces
+    # Fallback 3: Increase FuncPieces
     current_func_pieces = initial_gurobi_params.get('FuncPieces', 0)
     if current_func_pieces < 2000: # Arbitrary upper limit to prevent excessive FuncPieces
         fallback_strategies.append(
@@ -1492,7 +1477,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
             ({'FuncPieces': max(5000, int(current_func_pieces * 2.5)), 'FuncPieceRatio': 0.75}, "Increased FuncPieces and adjusted FuncPieceRatio")
         )
 
-    # Fallback 5: Try different NumericFocus if patient_wise_only
+    # Fallback 4: Try different NumericFocus if patient_wise_only
     if patient_wise_only:
       fallback_strategies.append(
         ({'NumericFocus': 1}, "Changed NumericFocus to 1 (balanced)")
@@ -1502,12 +1487,12 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
         ({'NumericFocus': 2}, "Changed NumericFocus to 2 (accuracy)")
       )
 
-    # Fallback 6: Experiment with Cuts (more aggressive)
+    # Fallback 5: Experiment with Cuts (more aggressive)
     fallback_strategies.append(
       ({'Cuts': 2}, "Aggressive cut generation")
     )
 
-    # Fallback 7: Experiment with Heuristics (less aggressive)
+    # Fallback 6: Experiment with Heuristics (less aggressive)
     fallback_strategies.append(
       ({'Heuristics': 0.5}, "Less aggressive heuristics")
     )

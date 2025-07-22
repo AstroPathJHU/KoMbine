@@ -27,6 +27,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
   """
   Kaplan-Meier curve with error bars calculated using the log-likelihood method.
   """
+  __default_MIPGap = 1e-4
+
   def __init__(
     self,
     *,
@@ -34,11 +36,13 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     parameter_min: float,
     parameter_max: float,
     endpoint_epsilon: float = 1e-6,
+    log_zero_epsilon: float = 1e-10,
   ):
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min
     self.__parameter_max = parameter_max
     self.__endpoint_epsilon = endpoint_epsilon
+    self.__log_zero_epsilon = log_zero_epsilon
 
   @property
   def all_patients(self) -> list[KaplanMeierPatientNLL]:
@@ -99,6 +103,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       parameter_max=self.parameter_max,
       time_point=time_point,
       endpoint_epsilon=self.__endpoint_epsilon,
+      log_zero_epsilon=self.__log_zero_epsilon,
     )
 
   def get_twoNLL_function( # pylint: disable=too-many-arguments
@@ -110,11 +115,12 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     verbose=False,
     print_progress=False,
     MIPGap=None,
-    fallback_MIPGap=None,
   ) -> collections.abc.Callable[[float], float]:
     """
     Get the twoNLL function for the given time point.
     """
+    if MIPGap is None:
+      MIPGap = self.__default_MIPGap
     minlp = self.minlp_for_km(time_point=time_point)
     @InspectableCache
     def twoNLL(expected_probability: float) -> float:
@@ -128,7 +134,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         verbose=verbose,
         print_progress=print_progress,
         MIPGap=MIPGap,
-        fallback_MIPGap=fallback_MIPGap,
       )
       if not result.success:
         return np.inf
@@ -161,16 +166,26 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     *,
     patient_wise_only=False,
     optimize_verbose=False,
+    MIPGap: float | None = None, # Added to pass to discrete_single_minimum
   ) -> tuple[float, float]:
     """
     Find the expected probability that minimizes the negative log-likelihood
     for the given time point.
     """
     if patient_wise_only:
+      if MIPGap is None:
+        MIPGap = self.__default_MIPGap
+
+      # Set atol to be slightly larger than the MIPGap for safety
+      atol_for_discrete_min = MIPGap * 2 # Or some other factor like 5 or 10
+      rtol_for_discrete_min = 0 # Relative tolerance might not be as critical for discrete values
+
       return minimize_discrete_single_minimum(
         objective_function=twoNLL,
         possible_values=self.possible_probabilities(time_point),
         verbose=optimize_verbose,
+        atol=atol_for_discrete_min,
+        rtol=rtol_for_discrete_min,
       )
     def vectorized_twoNLL(expected_probability: float) -> float:
       return twoNLL(float(expected_probability))
@@ -197,7 +212,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     optimize_verbose=False,
     print_progress=False,
     MIPGap=None,
-    fallback_MIPGap=None,
   ) -> tuple[np.ndarray, np.ndarray]:
     """
     Get the survival probabilities for the given quantiles.
@@ -219,7 +233,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         verbose=gurobi_verbose,
         print_progress=print_progress,
         MIPGap=MIPGap,
-        fallback_MIPGap=fallback_MIPGap,
       )
       # Find the expected probability that minimizes the negative log-likelihood
       # for the given time point
@@ -229,6 +242,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           time_point=t,
           patient_wise_only=patient_wise_only,
           optimize_verbose=optimize_verbose,
+          MIPGap=MIPGap,
         )
       except Exception as e:
         raise RuntimeError(
@@ -268,6 +282,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               lo=i_best,
               hi=len(probs) - 1,
               verbose=optimize_verbose,
+              # No explicit atol/rtol for binary_search_sign_change, it relies on exact sign change
             )
             if upper is None:
               raise RuntimeError("No upper sign change found")
@@ -283,6 +298,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               lo=0,
               hi=i_best,
               verbose=optimize_verbose,
+              # No explicit atol/rtol for binary_search_sign_change, it relies on exact sign change
             )
             if lower is None:
               raise RuntimeError("No lower sign change found")
@@ -333,7 +349,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     saveas=None,
     print_progress=False,
     MIPGap=None,
-    fallback_MIPGap=None,
     include_median_survival=False,
   ): #pylint: disable=too-many-locals
     """
@@ -419,7 +434,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         times_for_plot=times_for_plot,
         print_progress=print_progress,
         MIPGap=MIPGap,
-        fallback_MIPGap=fallback_MIPGap,
       )
     if include_binomial_only:
       (
@@ -430,7 +444,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         binomial_only=True,
         print_progress=print_progress,
         MIPGap=MIPGap,
-        fallback_MIPGap=fallback_MIPGap,
       )
       if include_full_NLL:
         CL_probabilities_subset = CL_probabilities_binomial
@@ -446,7 +459,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         patient_wise_only=True,
         print_progress=print_progress,
         MIPGap=MIPGap,
-        fallback_MIPGap=fallback_MIPGap,
       )
       if include_full_NLL:
         CL_probabilities_subset = CL_probabilities_patient_wise
