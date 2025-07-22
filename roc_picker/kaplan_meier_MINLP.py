@@ -1440,7 +1440,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     # Initial Gurobi parameters
     initial_gurobi_params = {
       'OutputFlag': 1 if verbose else 0,
-      'DisplayInterval': 1 if verbose else 0,
+      'DisplayInterval': 1,
       'MIPGap': MIPGap,
       'MIPGapAbs': MIPGapAbs,
       'NonConvex': 2,
