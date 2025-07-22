@@ -1448,7 +1448,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       'OutputFlag': 1 if verbose else 0,
       'DisplayInterval': 1 if verbose else 0,
       'MIPGap': MIPGap,
-      'NonConvex': 2 if patient_wise_only else 0,
+      'NonConvex': 2,
       'NumericFocus': 3 if patient_wise_only else 0,
       'Seed': 123456,
       'TimeLimit': TimeLimit,
@@ -1475,17 +1475,22 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
         ({'MIPGap': fallback_MIPGap}, f"MIPGap increased to {fallback_MIPGap}")
       )
 
-    # Fallback 3: Set NonConvex to 2 if it wasn't already
-    if initial_gurobi_params["NonConvex"] != 2:
-      fallback_strategies.append(
-        ({'NonConvex': 2}, "Set NonConvex to 2")
-      )
-
-    # Fallback 4: Increase TimeLimit if it was set and still suboptimal
+    # Fallback 3: Increase TimeLimit if it was set and still suboptimal
     if TimeLimit is not None:
       fallback_strategies.append(
         ({'TimeLimit': TimeLimit * 1.5}, "Increased TimeLimit by 50%")
       )
+
+    # Fallback 4: Increase FuncPieces
+    current_func_pieces = initial_gurobi_params.get('FuncPieces', 0)
+    if current_func_pieces < 2000: # Arbitrary upper limit to prevent excessive FuncPieces
+        fallback_strategies.append(
+            ({'FuncPieces': max(2000, int(current_func_pieces * 2))}, "Increased FuncPieces (doubled)")
+        )
+    if current_func_pieces < 5000:
+        fallback_strategies.append(
+            ({'FuncPieces': max(5000, int(current_func_pieces * 2.5)), 'FuncPieceRatio': 0.75}, "Increased FuncPieces and adjusted FuncPieceRatio")
+        )
 
     # Fallback 5: Try different NumericFocus if patient_wise_only
     if patient_wise_only:
