@@ -212,29 +212,36 @@ class TestMinimizeDiscreteSingleMinimum(unittest.TestCase):
         expected_range_factory
     )
 
-  def test_robust_wavy_function_around_minimum(self):
+  def test_robust_multi_plateau_wavy_function(self):
     """
-    Tests a function with small wiggles around the global minimum,
-    ensuring it finds the true minimum despite fluctuations within tolerance.
+    Tests a function with a central, lowest plateau and higher side regions,
+    all with sine wave noise, to ensure it finds the correct minimum region.
+    The central plateau is off-center.
     """
     def func_factory(atol, rtol): # pylint: disable=unused-argument
       def f(x):
-        # Global minimum at x=5, value 0.
-        # Other points are slightly above 0, but within tolerance.
-        if np.isclose(x, 5, atol=1e-9): # Ensure exact global min at 5.0
-          return 0.0
-        # Create small wiggles that are within the tolerance of the global minimum
-        return 0.5 * atol + np.sin(x * 10) * 0.1 * atol
+        noise = np.sin(x * 10) * 0.1 * atol # Wavy noise, scaled by atol
+
+        if 4 <= x <= 6: # Central plateau: true minimum
+          return 0.0 + noise
+        if x < 4:
+          # Linearly increasing from 0.0 at x=4, plus noise
+          # Ensure it's always clearly above the central plateau.
+          return (4 - x) * (2.0 * atol) + noise
+        if x > 6:
+          # Linearly increasing from 0.0 at x=6, plus noise
+          return (x - 6) * (2.0 * atol) + noise
+        assert False, "Unexpected x value in function"
       return f
+
     def expected_range_factory(atol, rtol): # pylint: disable=unused-argument
-      # The expected range should effectively be the entire domain if all values
-      # are within tolerance of the lowest value.
-      # However, since we're looking for the *single* minimum, we expect it to
-      # converge to the region containing the exact 0.0.
-      # Let's define the expected range as where the function is exactly 0.
-      return (5.0, 5.0) # The true exact minimum point
+      # The algorithm should find any point within the central plateau [4.0, 6.0]
+      # because its values are the lowest (0.0 + noise within atol).
+      # The side regions are explicitly set to be higher.
+      return (4.0, 6.0)
+
     self._run_test_with_tolerances(
-        "test_robust_wavy_function_around_minimum",
+        "test_robust_multi_plateau_wavy_function",
         func_factory,
         expected_range_factory
     )
