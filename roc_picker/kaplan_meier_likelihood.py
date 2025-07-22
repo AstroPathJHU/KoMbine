@@ -27,18 +27,23 @@ class KaplanMeierLikelihood(KaplanMeierBase):
   """
   Kaplan-Meier curve with error bars calculated using the log-likelihood method.
   """
-  def __init__(
+  __default_MIPGap = 1e-4
+  __default_MIPGapAbs = 1e-7
+
+  def __init__( # pylint: disable=too-many-arguments
     self,
     *,
     all_patients: list[KaplanMeierPatientNLL],
     parameter_min: float,
     parameter_max: float,
     endpoint_epsilon: float = 1e-6,
+    log_zero_epsilon: float = 1e-10,
   ):
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min
     self.__parameter_max = parameter_max
     self.__endpoint_epsilon = endpoint_epsilon
+    self.__log_zero_epsilon = log_zero_epsilon
 
   @property
   def all_patients(self) -> list[KaplanMeierPatientNLL]:
@@ -99,6 +104,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       parameter_max=self.parameter_max,
       time_point=time_point,
       endpoint_epsilon=self.__endpoint_epsilon,
+      log_zero_epsilon=self.__log_zero_epsilon,
     )
 
   def get_twoNLL_function( # pylint: disable=too-many-arguments
@@ -110,11 +116,16 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     verbose=False,
     print_progress=False,
     MIPGap=None,
-    fallback_MIPGap=None,
+    MIPGapAbs=None,
   ) -> collections.abc.Callable[[float], float]:
     """
     Get the twoNLL function for the given time point.
     """
+    if MIPGap is None:
+      MIPGap = self.__default_MIPGap
+    if MIPGapAbs is None:
+      MIPGapAbs = self.__default_MIPGapAbs
+
     minlp = self.minlp_for_km(time_point=time_point)
     @InspectableCache
     def twoNLL(expected_probability: float) -> float:
@@ -128,7 +139,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         verbose=verbose,
         print_progress=print_progress,
         MIPGap=MIPGap,
-        fallback_MIPGap=fallback_MIPGap,
+        MIPGapAbs=MIPGapAbs,
       )
       if not result.success:
         return np.inf
@@ -161,26 +172,43 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     *,
     patient_wise_only=False,
     optimize_verbose=False,
+    MIPGap: float | None = None,
+    MIPGapAbs: float | None = None,
   ) -> tuple[float, float]:
     """
     Find the expected probability that minimizes the negative log-likelihood
     for the given time point.
     """
     if patient_wise_only:
+      if MIPGap is None:
+        MIPGap = self.__default_MIPGap
+      if MIPGapAbs is None:
+        MIPGapAbs = self.__default_MIPGapAbs
+
+      # Set atol using MIPGapAbs and rtol using MIPGap
+      atol_for_discrete_min = MIPGapAbs * 1.1 # Or some other factor for safety
+      rtol_for_discrete_min = MIPGap * 1.1 # Use relative MIPGap for rtol
+
       return minimize_discrete_single_minimum(
         objective_function=twoNLL,
         possible_values=self.possible_probabilities(time_point),
         verbose=optimize_verbose,
+        atol=atol_for_discrete_min,
+        rtol=rtol_for_discrete_min,
       )
-    result = scipy.optimize.minimize_scalar(
-      twoNLL,
-      bounds=(self.__endpoint_epsilon, 1 - self.__endpoint_epsilon),
-      method='bounded',
+    def vectorized_twoNLL(expected_probability: float) -> float:
+      return twoNLL(float(expected_probability))
+    vectorized_twoNLL = np.vectorize(vectorized_twoNLL, otypes=[float])
+    result = scipy.optimize.differential_evolution(
+      vectorized_twoNLL,
+      bounds=np.array([[self.__endpoint_epsilon, 1 - self.__endpoint_epsilon]]),
+      rng=123456,
     )
     assert isinstance(result, scipy.optimize.OptimizeResult)
     if not result.success:
       raise RuntimeError("Failed to find the best probability")
-    return result.x, result.fun
+    x, = result.x
+    return x, result.fun
 
   def survival_probabilities_likelihood( # pylint: disable=too-many-locals, too-many-branches, too-many-statements, too-many-arguments
     self,
@@ -193,7 +221,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     optimize_verbose=False,
     print_progress=False,
     MIPGap=None,
-    fallback_MIPGap=None,
+    MIPGapAbs=None,
   ) -> tuple[np.ndarray, np.ndarray]:
     """
     Get the survival probabilities for the given quantiles.
@@ -215,7 +243,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         verbose=gurobi_verbose,
         print_progress=print_progress,
         MIPGap=MIPGap,
-        fallback_MIPGap=fallback_MIPGap,
+        MIPGapAbs=MIPGapAbs,
       )
       # Find the expected probability that minimizes the negative log-likelihood
       # for the given time point
@@ -225,6 +253,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           time_point=t,
           patient_wise_only=patient_wise_only,
           optimize_verbose=optimize_verbose,
+          MIPGap=MIPGap,
+          MIPGapAbs=MIPGapAbs,
         )
       except Exception as e:
         raise RuntimeError(
@@ -264,6 +294,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               lo=i_best,
               hi=len(probs) - 1,
               verbose=optimize_verbose,
+              # No explicit atol/rtol for binary_search_sign_change, it relies on exact sign change
             )
             if upper is None:
               raise RuntimeError("No upper sign change found")
@@ -279,6 +310,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               lo=0,
               hi=i_best,
               verbose=optimize_verbose,
+              # No explicit atol/rtol for binary_search_sign_change, it relies on exact sign change
             )
             if lower is None:
               raise RuntimeError("No lower sign change found")
@@ -315,8 +347,11 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     include_patient_wise_only=False,
     include_full_NLL=True,
     include_best_fit=True,
+    include_nominal=True,
     nominal_label='Nominal',
     nominal_color='blue',
+    best_label='Best Fit',
+    best_color='red',
     CLs=None,
     CL_colors=None,
     CL_hatches=None,
@@ -326,7 +361,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     saveas=None,
     print_progress=False,
     MIPGap=None,
-    fallback_MIPGap=None,
+    MIPGapAbs=None,
     include_median_survival=False,
   ): #pylint: disable=too-many-locals
     """
@@ -353,13 +388,14 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           survival_probabilities=nominal_y,
         )
       ).replace("inf", r"$\infty$")
-    plt.plot(
-      nominal_x,
-      nominal_y,
-      label=label,
-      color=nominal_color,
-      linestyle='--'
-    )
+    if include_nominal:
+      plt.plot(
+        nominal_x,
+        nominal_y,
+        label=label,
+        color=nominal_color,
+        linestyle='--'
+      )
     results["x"] = nominal_x
     results["nominal"] = nominal_y
 
@@ -411,7 +447,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         times_for_plot=times_for_plot,
         print_progress=print_progress,
         MIPGap=MIPGap,
-        fallback_MIPGap=fallback_MIPGap,
+        MIPGapAbs=MIPGapAbs,
       )
     if include_binomial_only:
       (
@@ -422,7 +458,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         binomial_only=True,
         print_progress=print_progress,
         MIPGap=MIPGap,
-        fallback_MIPGap=fallback_MIPGap,
+        MIPGapAbs=MIPGapAbs,
       )
       if include_full_NLL:
         CL_probabilities_subset = CL_probabilities_binomial
@@ -438,7 +474,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         patient_wise_only=True,
         print_progress=print_progress,
         MIPGap=MIPGap,
-        fallback_MIPGap=fallback_MIPGap,
+        MIPGapAbs=MIPGapAbs,
       )
       if include_full_NLL:
         CL_probabilities_subset = CL_probabilities_patient_wise
@@ -451,10 +487,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
     best_x, best_y = self.get_points_for_plot(times_for_plot, best_probabilities)
     if include_best_fit:
-      label = "Best Probability"
+      label = best_label
       if include_median_survival:
         label += " (MST={:.1f})".format(  #pylint: disable=consider-using-f-string
-          self.nominalkm.median_survival_time(
+          self.median_survival_time(
             times_for_plot=best_x,
             survival_probabilities=best_y,
           )
@@ -463,7 +499,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         best_x,
         best_y,
         label=label,
-        color='red',
+        color=best_color,
         linestyle='--'
       )
       np.testing.assert_array_equal(best_x, nominal_x)
@@ -489,11 +525,11 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         label = f'{CL:.0%} CL'
       if include_median_survival:
         label += " (MST$\\in$({:.1f}, {:.1f}))".format(  #pylint: disable=consider-using-f-string
-          self.nominalkm.median_survival_time(
+          self.median_survival_time(
             times_for_plot=x_minus,
             survival_probabilities=y_minus,
           ),
-          self.nominalkm.median_survival_time(
+          self.median_survival_time(
             times_for_plot=x_plus,
             survival_probabilities=y_plus,
           ),
@@ -529,12 +565,12 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         else:
           label = f'{CL:.0%} CL ({subset_label})'
         if include_median_survival:
-          label += r" (MST$\elem$({:.1f}, {:.1f}))".format(  #pylint: disable=consider-using-f-string
-            self.nominalkm.median_survival_time(
+          label += r" (MST$\in$({:.1f}, {:.1f}))".format(  #pylint: disable=consider-using-f-string
+            self.median_survival_time(
               times_for_plot=x_minus_subset,
               survival_probabilities=y_minus_subset,
             ),
-            self.nominalkm.median_survival_time(
+            self.median_survival_time(
               times_for_plot=x_plus_subset,
               survival_probabilities=y_plus_subset,
             ),

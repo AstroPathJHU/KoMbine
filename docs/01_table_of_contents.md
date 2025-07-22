@@ -24,9 +24,13 @@ jupyter:
  - `04_small_perturbation.html`
    - an illustration of small perturbations to one of the
      observables and how that affects the results.
- - `05_lung_example.md`
+ - `05_lung_example.html`
    - an example analysis of statistical and systematic uncertainties
      using AstroPath lung cancer data
+ - `06_kaplan_meier_example.html`
+   - an example of how to use the likelihood method for uncertainties on Kaplan-Meier curves
+ - `07_compare_to_lifelines.html`
+   - a comparison of our Kaplan-Meier likelihood method to the `lifelines` package
 
 # Compilation instructions
 

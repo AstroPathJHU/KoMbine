@@ -8,6 +8,7 @@ import datetime
 import functools
 import itertools
 import math
+import os
 
 import gurobipy as gp
 from gurobipy import GRB
@@ -200,10 +201,8 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
   """
   Mixed Integer Nonlinear Programming for a point on the Kaplan-Meier curve.
   """
-  __default_MIPGap = 1e-6
-  #if the minimization is suboptimal, we will use this fallback MIPGap.
-  #this is only used if MIPGap is not provided to run_MINLP.
-  __default_fallback_MIPGap = 1e-5
+  __default_MIPGap = 1e-4
+  __default_MIPGapAbs = 1e-7
 
   def __init__(  # pylint: disable=too-many-arguments
     self,
@@ -213,12 +212,14 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     parameter_max: float,
     time_point: float,
     endpoint_epsilon: float = 1e-6,
+    log_zero_epsilon: float = 1e-10, # New parameter for log arguments
   ):
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min
     self.__parameter_max = parameter_max
     self.__time_point = time_point
     self.__endpoint_epsilon = endpoint_epsilon
+    self.__log_zero_epsilon = log_zero_epsilon # Store the epsilon
     self.__expected_probability_constraint = None
     self.__binomial_penalty_constraint = None
     self.__patient_constraints_for_binomial_only = None
@@ -763,27 +764,51 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       vtype=GRB.CONTINUOUS,
       name="log_n_at_risk",
       lb=-GRB.INFINITY,
-      ub=np.log(self.n_patients), # Max possible log(count)
+      ub=np.log(self.n_patients + self.__log_zero_epsilon), # Max possible log(count)
     )
     log_n_survived_vars = model.addVars(
       self.n_groups,
       vtype=GRB.CONTINUOUS,
       name="log_n_survived",
       lb=-GRB.INFINITY,
-      ub=np.log(self.n_patients), # Max possible log(count)
+      ub=np.log(self.n_patients + self.__log_zero_epsilon), # Max possible log(count)
     )
+
+    # Helper variables for log arguments (n_at_risk + epsilon, n_survived + epsilon)
+    n_at_risk_plus_epsilon = model.addVars(
+      self.n_groups,
+      vtype=GRB.CONTINUOUS,
+      name="n_at_risk_plus_epsilon",
+      lb=self.__log_zero_epsilon, # Ensure strictly positive
+    )
+    n_survived_plus_epsilon = model.addVars(
+      self.n_groups,
+      vtype=GRB.CONTINUOUS,
+      name="n_survived_plus_epsilon",
+      lb=self.__log_zero_epsilon, # Ensure strictly positive
+    )
+
+    # Constraints to link original counts to epsilon-added variables
+    for i in range(self.n_groups):
+      model.addConstr(
+        n_at_risk_plus_epsilon[i] == n_at_risk[i] + self.__log_zero_epsilon,
+        name=f"n_at_risk_plus_epsilon_constr_{i}"
+      )
+      model.addConstr(
+        n_survived_plus_epsilon[i] == n_survived_in_group[i] + self.__log_zero_epsilon,
+        name=f"n_survived_plus_epsilon_constr_{i}"
+      )
 
     # Link count variables to their log counterparts using GenConstrLog
     for i in range(self.n_groups):
-      # n_at_risk[i] can be 0, Gurobi handles log(0) as -infinity
+      # Use the new helper variables as arguments to GenConstrLog
       model.addGenConstrLog(
-        n_at_risk[i],
+        n_at_risk_plus_epsilon[i],
         log_n_at_risk_vars[i],
         name=f"log_n_at_risk_constr_{i}"
       )
-      # n_survived_in_group[i] can be 0, Gurobi handles log(0) as -infinity
       model.addGenConstrLog(
-        n_survived_in_group[i],
+        n_survived_plus_epsilon[i],
         log_n_survived_vars[i],
         name=f"log_n_survived_constr_{i}"
       )
@@ -1306,7 +1331,57 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
     model.update()
 
-  __not_provided = object()
+  def _set_gurobi_params(self, model: gp.Model, params: dict):
+    """
+    Helper function to set multiple Gurobi parameters from a dictionary.
+    """
+    for param, value in params.items():
+      if value is not None:
+        model.setParam(param, value)
+
+  def _optimize_with_fallbacks(
+    self,
+    model: gp.Model,
+    initial_params: dict,
+    fallback_strategies: list[tuple[dict, str]],
+    verbose: bool,
+  ):
+    """
+    Attempts to optimize the Gurobi model, applying fallback strategies
+    if the initial optimization is suboptimal.
+
+    Args:
+        model: The Gurobi model to optimize.
+        initial_params: A dictionary of initial Gurobi parameters to apply.
+        fallback_strategies: A list of tuples, where each tuple contains:
+            - A dictionary of Gurobi parameters to apply for the fallback.
+            - A string description of the fallback strategy.
+        verbose: If True, print detailed optimization progress.
+
+    Returns:
+        The Gurobi model after optimization.
+    """
+    # Apply initial parameters
+    self._set_gurobi_params(model, initial_params)
+
+    if verbose:
+      print("Attempting initial optimization...")
+    model.optimize()
+
+    # Check for suboptimal status and apply fallbacks
+    if model.status == GRB.SUBOPTIMAL:
+      for i, (fallback_params, description) in enumerate(fallback_strategies):
+        if verbose:
+          print(f"Model returned suboptimal solution. Applying fallback {i+1}: {description}")
+          print(f"  New parameters: {fallback_params}")
+        self._set_gurobi_params(model, fallback_params)
+        model.optimize()
+        if model.status == GRB.OPTIMAL:
+          if verbose:
+            print(f"Fallback {i+1} successful. Model is now optimal.")
+          break
+    return model
+
   def run_MINLP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
     self,
     expected_probability: float,
@@ -1316,10 +1391,11 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     binomial_only=False,
     patient_wise_only=False,
     MIPGap: float | None = None,
-    fallback_MIPGap: float | None = None,
+    MIPGapAbs: float | None = None,
     TimeLimit: float | None = None,
     Threads: int | None = None,
     MIPFocus: int | None = None,
+    LogFile: os.PathLike | None = None,
   ):
     """
     Run the MINLP for the given time point.
@@ -1337,13 +1413,9 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       raise ValueError("binomial_only and patient_wise_only cannot both be True")
 
     if MIPGap is None:
-      if fallback_MIPGap is not None:
-        raise ValueError(
-          "If fallback_MIPGap is provided, MIPGap must also be provided."
-       )
-      fallback_MIPGap = self.__default_fallback_MIPGap
       MIPGap = self.__default_MIPGap
-
+    if MIPGapAbs is None:
+      MIPGapAbs = self.__default_MIPGapAbs
 
     nll_penalty_for_patient_in_range = self.nll_penalty_for_patient_in_range
 
@@ -1365,62 +1437,77 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       use_binomial_penalty_indicator=use_binomial_penalty_indicator,
     )
 
-    if verbose:
-      model.setParam('OutputFlag', 1)
-      model.setParam('DisplayInterval', 1)
-    else:
-      # Suppress Gurobi output
-      model.setParam('OutputFlag', 0)
+    # Initial Gurobi parameters
+    initial_gurobi_params = {
+      'OutputFlag': 1 if verbose else 0,
+      'DisplayInterval': 1,
+      'MIPGap': MIPGap,
+      'MIPGapAbs': MIPGapAbs,
+      'NonConvex': 2,
+      'NumericFocus': 3 if patient_wise_only else 0,
+      'Seed': 123456,
+      'TimeLimit': TimeLimit,
+      'Threads': Threads,
+      'MIPFocus': MIPFocus,
+      'FuncPieces': 1000,
+      'FuncPieceRatio': 0.5,
+    }
+    if LogFile is not None:
+      initial_gurobi_params['LogFile'] = os.fspath(LogFile)
 
-    # --- Gurobi Parameter Tuning ---
-    # Set the MIPGap for solution quality vs. speed.
-    model.setParam("MIPGap", MIPGap)
+    # Define fallback strategies
+    fallback_strategies = []
 
-    # Crucial for non-convex problems to aim for global optimality
-    if patient_wise_only:
-      model.setParam("NonConvex", 2) # Spatial branch-and-bound
-      # Improve numerical stability for problems with functions like log/exp
-      model.setParam("NumericFocus", 3)
-    else:
-      model.setParam("NonConvex", 0)
-      model.setParam("NumericFocus", 0)
+    # Fallback 1: Try MIPFocus 2 if initial was suboptimal and not already 2
+    if MIPFocus != 2: # Only add this fallback if MIPFocus wasn't already 2
+      fallback_strategies.append(
+        ({'MIPFocus': 2}, "MIPFocus set to 2 (optimality focus)")
+      )
 
-
-    # Set a fixed random seed for reproducibility
-    model.setParam("Seed", 123456) # Use a fixed integer seed
-
-    # Set a time limit for the optimization (e.g., 300 seconds = 5 minutes)
+    # Fallback 2: Increase TimeLimit if it was set and still suboptimal
     if TimeLimit is not None:
-      model.setParam('TimeLimit', TimeLimit)
+      fallback_strategies.append(
+        ({'TimeLimit': TimeLimit * 1.5}, "Increased TimeLimit by 50%")
+      )
 
-    # Set the number of threads to use (e.g., use all available CPU cores)
-    if Threads is not None:
-      model.setParam('Threads', Threads)
+    # Fallback 3: Increase FuncPieces
+    current_func_pieces = initial_gurobi_params.get('FuncPieces', 0)
+    if current_func_pieces < 2000: # Arbitrary upper limit to prevent excessive FuncPieces
+      fallback_strategies.append(
+        ({'FuncPieces': max(2000, int(current_func_pieces * 2))}, "Increased FuncPieces (doubled)")
+      )
+    if current_func_pieces < 5000:
+      fallback_strategies.append(
+        (
+          {'FuncPieces': max(5000, int(current_func_pieces * 2.5)), 'FuncPieceRatio': 0.75},
+          "Increased FuncPieces and adjusted FuncPieceRatio"
+        )
+      )
 
-    # Set MIPFocus to guide the solver's strategy:
-    # 0: Balances feasibility and optimality (default)
-    # 1: Focuses on finding feasible solutions quickly
-    # 2: Focuses on proving optimality
-    # 3: Focuses on finding good bounds
-    if MIPFocus is not None:
-      model.setParam('MIPFocus', MIPFocus)
+    # Fallback 4: Try different NumericFocus if patient_wise_only
+    if patient_wise_only:
+      fallback_strategies.append(
+        ({'NumericFocus': 1}, "Changed NumericFocus to 1 (balanced)")
+      )
+    else:
+      fallback_strategies.append(
+        ({'NumericFocus': 2}, "Changed NumericFocus to 2 (accuracy)")
+      )
 
-    # Consider experimenting with other parameters like Cuts and Heuristics if needed.
-    # model.setParam('Cuts', 2) # Aggressive cut generation
-    # model.setParam('Heuristics', 0.5) # Less aggressive heuristics
+    # Fallback 5: Experiment with Cuts (more aggressive)
+    fallback_strategies.append(
+      ({'Cuts': 2}, "Aggressive cut generation")
+    )
 
-    # --- End Gurobi Parameter Tuning ---
+    # Fallback 6: Experiment with Heuristics (less aggressive)
+    fallback_strategies.append(
+      ({'Heuristics': 0.5}, "Less aggressive heuristics")
+    )
 
-    model.optimize()
-    if model.status == GRB.SUBOPTIMAL:
-      if fallback_MIPGap is not None:
-        if verbose:
-          print(
-            f"Model returned suboptimal solution with MIPGap {MIPGap}. "
-            f"Retrying with fallback MIPGap {fallback_MIPGap}."
-          )
-        model.setParam("MIPGap", fallback_MIPGap)
-        model.optimize()
+    # Optimize with fallbacks
+    model = self._optimize_with_fallbacks(
+        model, initial_gurobi_params, fallback_strategies, verbose
+    )
 
     if model.status != GRB.OPTIMAL:
       if model.status == GRB.INFEASIBLE and patient_wise_only:
