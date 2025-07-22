@@ -279,10 +279,7 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
         v_right = v_mid2
       elif (
         np.isclose(v_left, v_right, atol=atol, rtol=rtol)
-      ): # Use np.isclose for final check of equality
-        assert np.isclose(v_mid1, v_mid2, atol=atol, rtol=rtol) and \
-               np.isclose(v_mid2, v_left, atol=atol, rtol=rtol) and \
-               np.isclose(v_left, v_right, atol=atol, rtol=rtol)
+      ):
         assert mid1 == left + 1 and mid2 == right - 1
         left = mid1
         p_left = p_mid1
