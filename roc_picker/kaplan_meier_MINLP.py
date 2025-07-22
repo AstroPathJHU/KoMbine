@@ -1469,13 +1469,16 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     # Fallback 3: Increase FuncPieces
     current_func_pieces = initial_gurobi_params.get('FuncPieces', 0)
     if current_func_pieces < 2000: # Arbitrary upper limit to prevent excessive FuncPieces
-        fallback_strategies.append(
-            ({'FuncPieces': max(2000, int(current_func_pieces * 2))}, "Increased FuncPieces (doubled)")
-        )
+      fallback_strategies.append(
+        ({'FuncPieces': max(2000, int(current_func_pieces * 2))}, "Increased FuncPieces (doubled)")
+      )
     if current_func_pieces < 5000:
-        fallback_strategies.append(
-            ({'FuncPieces': max(5000, int(current_func_pieces * 2.5)), 'FuncPieceRatio': 0.75}, "Increased FuncPieces and adjusted FuncPieceRatio")
+      fallback_strategies.append(
+        (
+          {'FuncPieces': max(5000, int(current_func_pieces * 2.5)), 'FuncPieceRatio': 0.75},
+          "Increased FuncPieces and adjusted FuncPieceRatio"
         )
+      )
 
     # Fallback 4: Try different NumericFocus if patient_wise_only
     if patient_wise_only:

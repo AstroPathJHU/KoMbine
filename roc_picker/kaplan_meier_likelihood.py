@@ -29,7 +29,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
   """
   __default_MIPGap = 1e-4
 
-  def __init__(
+  def __init__( # pylint: disable=too-many-arguments
     self,
     *,
     all_patients: list[KaplanMeierPatientNLL],
