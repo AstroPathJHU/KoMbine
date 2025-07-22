@@ -15,7 +15,7 @@ setuptools.setup(
     "gurobipy",
     "matplotlib",
     "numpy",
-    "scipy",
+    "scipy>=1.15",
   ],
   entry_points = {
     "console_scripts": [

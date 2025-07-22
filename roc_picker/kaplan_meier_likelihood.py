@@ -202,7 +202,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     result = scipy.optimize.differential_evolution(
       vectorized_twoNLL,
       bounds=np.array([[self.__endpoint_epsilon, 1 - self.__endpoint_epsilon]]),
-      seed=123456,
+      rng=123456,
     )
     assert isinstance(result, scipy.optimize.OptimizeResult)
     if not result.success:
