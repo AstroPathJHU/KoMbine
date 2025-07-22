@@ -10,13 +10,17 @@ import numpy as np
 
 from .utilities import InspectableCache
 
+def _is_close(a: float, b: float, atol: float, rtol: float) -> bool:
+  """Returns True if a and b are close, considering symmetric tolerances."""
+  return abs(a - b) <= atol + rtol * max(abs(a), abs(b))
+
 def _is_strictly_less(a: float, b: float, atol: float, rtol: float) -> bool:
-  """Returns True if a is strictly less than b, considering tolerances."""
-  return b - a > atol + rtol * abs(b)
+  """Returns True if a is strictly less than b, beyond tolerance."""
+  return (a < b) and not _is_close(a, b, atol, rtol)
 
 def _is_strictly_greater(a: float, b: float, atol: float, rtol: float) -> bool:
-  """Returns True if a is strictly greater than b, considering tolerances."""
-  return a - b > atol + rtol * abs(a)
+  """Returns True if a is strictly greater than b, beyond tolerance."""
+  return (a > b) and not _is_close(a, b, atol, rtol)
 
 def extract_inspectable_cache_values(
   func: typing.Callable,
@@ -217,7 +221,7 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
       continue
 
     while (
-      np.isclose(v_mid1, v_mid2, atol=atol, rtol=rtol)
+      _is_close(v_mid1, v_mid2, atol=atol, rtol=rtol) # Use _is_close here
         and (mid1 > left + 1 or mid2 < right - 1)
     ):
       if verbose:
@@ -262,7 +266,8 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
       left = mid1
       p_left = p_mid1
       v_left = v_mid1
-    else: # v_mid1 isclose v_mid2
+    else: # v_mid1 is considered close to v_mid2
+      assert _is_close(v_mid1, v_mid2, atol=atol, rtol=rtol) # Keep this assertion
       if (
         _is_strictly_greater(v_left, v_mid2, atol, rtol)
         or _is_strictly_greater(v_mid2, v_right, atol, rtol)
@@ -278,7 +283,7 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
         p_right = p_mid2
         v_right = v_mid2
       elif (
-        np.isclose(v_left, v_right, atol=atol, rtol=rtol)
+        _is_close(v_left, v_right, atol=atol, rtol=rtol) # Use _is_close here
       ):
         assert mid1 == left + 1 and mid2 == right - 1
         left = mid1
