@@ -199,7 +199,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     def vectorized_twoNLL(expected_probability: float) -> float:
       return twoNLL(float(expected_probability))
     vectorized_twoNLL = np.vectorize(vectorized_twoNLL, otypes=[float])
-    result = scipy.optimize.differential_evolution(
+    result: scipy.optimize.OptimizeResult = scipy.optimize.differential_evolution(
       vectorized_twoNLL,
       bounds=np.array([[self.__endpoint_epsilon, 1 - self.__endpoint_epsilon]]),
       rng=123456,
