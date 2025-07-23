@@ -174,28 +174,35 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     optimize_verbose=False,
     MIPGap: float | None = None,
     MIPGapAbs: float | None = None,
+    _force_minimization: bool = False,
   ) -> tuple[float, float]:
     """
     Find the expected probability that minimizes the negative log-likelihood
     for the given time point.
     """
     if patient_wise_only:
-      if MIPGap is None:
-        MIPGap = self.__default_MIPGap
-      if MIPGapAbs is None:
-        MIPGapAbs = self.__default_MIPGapAbs
+      # if patient_wise_only is True, the best probability is the
+      # nominal probability, by construction
+      if _force_minimization:
+        #for debug purposes: actually minimize the twoNLL
+        if MIPGap is None:
+          MIPGap = self.__default_MIPGap
+        if MIPGapAbs is None:
+          MIPGapAbs = self.__default_MIPGapAbs
 
-      # Set atol using MIPGapAbs and rtol using MIPGap
-      atol_for_discrete_min = MIPGapAbs * 1.1 # Or some other factor for safety
-      rtol_for_discrete_min = MIPGap * 1.1 # Use relative MIPGap for rtol
+        # Set atol using MIPGapAbs and rtol using MIPGap
+        atol_for_discrete_min = MIPGapAbs * 1.1 # Or some other factor for safety
+        rtol_for_discrete_min = MIPGap * 1.1 # Use relative MIPGap for rtol
 
-      return minimize_discrete_single_minimum(
-        objective_function=twoNLL,
-        possible_values=self.possible_probabilities(time_point),
-        verbose=optimize_verbose,
-        atol=atol_for_discrete_min,
-        rtol=rtol_for_discrete_min,
-      )
+        return minimize_discrete_single_minimum(
+          objective_function=twoNLL,
+          possible_values=self.possible_probabilities(time_point),
+          verbose=optimize_verbose,
+          atol=atol_for_discrete_min,
+          rtol=rtol_for_discrete_min,
+        )
+      expected_probability = self.nominalkm.survival_probability(time_point)
+      return expected_probability, twoNLL(expected_probability)
     def vectorized_twoNLL(expected_probability: float) -> float:
       return twoNLL(float(expected_probability))
     vectorized_twoNLL = np.vectorize(vectorized_twoNLL, otypes=[float])
