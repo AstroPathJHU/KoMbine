@@ -1,3 +1,5 @@
+#pylint: disable=too-many-lines
+
 """
 A datacard class to specify the inputs to ROC Picker.
 This is heavily modeled after the datacard format used in the Higgs Combine Tool.
@@ -9,6 +11,8 @@ import functools
 import itertools
 import pathlib
 
+import matplotlib.pyplot as plt
+import numpy as np
 import scipy.stats
 
 from .delta_functions import DeltaFunctionsROC
@@ -972,5 +976,112 @@ def plot_delta_functions_roc():
     yupperlim=args.__dict__.pop("yupperlim"),
     npoints=args.__dict__.pop("npoints"),
   )
+  if args.__dict__:
+    raise ValueError(f"Unused arguments: {args.__dict__}")
+
+def plot_km_likelihood():
+  """
+  Run Kaplan-Meier likelihood method from a datacard.
+  """
+  # pylint: disable=C0301
+  parser = argparse.ArgumentParser(description="Run Kaplan-Meier likelihood method from a datacard.")
+  parser.add_argument("datacard", type=pathlib.Path, help="Path to the datacard file.")
+  parser.add_argument("output_file", type=pathlib.Path, help="Path to the output file for the plot.")
+  parser.add_argument("--parameter-min", type=float, help="Minimum parameter value for the likelihood scan.", dest="parameter_min", default=-np.inf)
+  parser.add_argument("--parameter-max", type=float, help="Maximum parameter value for the likelihood scan.", dest="parameter_max", default=np.inf)
+  group = parser.add_mutually_exclusive_group()
+  group.add_argument("--include-binomial-only", action="store_true", help="Include error bands for the binomial error alone.")
+  group.add_argument("--include-patient-wise-only", action="store_true", help="Include error bands for the patient-wise error alone.")
+  parser.add_argument("--exclude-full-nll", action="store_false", help="Exclude the full NLL from the plot.", dest="include_full_NLL", default=True)
+  parser.add_argument("--include-median-survival", action="store_true", help="Include the median survival line in the plot.", dest="include_median_survival", default=True)
+  # pylint: enable=C0301
+  args = parser.parse_args()
+  if (
+    not args.include_full_nll
+    and not args.include_binomial_only
+    and not args.include_patient_wise_only
+  ):
+    parser.error(
+      "If --exclude-full-nll is set, at least one of "
+      "--include-binomial-only or --include-patient-wise-only must be set."
+    )
+  datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
+  kml = datacard.km_likelihood(
+    parameter_min=args.__dict__.pop("parameter_min"),
+    parameter_max=args.__dict__.pop("parameter_max"),
+  )
+  kml.plot(
+    saveas=args.__dict__.pop("output_file"),
+    include_binomial_only=args.__dict__.pop("include_binomial_only"),
+    include_patient_wise_only=args.__dict__.pop("include_patient_wise_only"),
+    include_full_NLL=args.__dict__.pop("include_full_NLL"),
+    include_median_survival=args.__dict__.pop("include_median_survival"),
+  )
+  if args.__dict__:
+    raise ValueError(f"Unused arguments: {args.__dict__}")
+
+def plot_km_likelihood_two_groups():
+  """
+  Run Kaplan-Meier likelihood method from a datacard, and plot Kaplan-Meier
+  curves for two groups separated into high and low values of the parameter.
+  """
+  # pylint: disable=C0301
+  parser = argparse.ArgumentParser(description="Run Kaplan-Meier likelihood method from a datacard, and plot Kaplan-Meier curves for two groups separated into high and low values of the parameter.")
+  parser.add_argument("datacard", type=pathlib.Path, help="Path to the datacard file.")
+  parser.add_argument("output_file", type=pathlib.Path, help="Path to the output file for the plot.")
+  parser.add_argument("--parameter-threshold", type=float, help="Threshold value for the parameter to separate the two groups.", dest="parameter_threshold", required=True)
+  group = parser.add_mutually_exclusive_group()
+  group.add_argument("--include-binomial-only", action="store_true", help="Include error bands for the binomial error alone.")
+  group.add_argument("--include-patient-wise-only", action="store_true", help="Include error bands for the patient-wise error alone.")
+  parser.add_argument("--exclude-full-nll", action="store_false", help="Exclude the full NLL from the plot.", dest="include_full_NLL", default=True)
+  parser.add_argument("--include-median-survival", action="store_true", help="Include the median survival line in the plot.", dest="include_median_survival", default=True)
+  # pylint: enable=C0301
+  args = parser.parse_args()
+  if (
+    not args.include_full_nll
+    and not args.include_binomial_only
+    and not args.include_patient_wise_only
+  ):
+    parser.error(
+      "If --exclude-full-nll is set, at least one of "
+      "--include-binomial-only or --include-patient-wise-only must be set."
+    )
+  datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
+  threshold = args.__dict__.pop("parameter_threshold")
+  kml_low = datacard.km_likelihood(
+    parameter_min=-np.inf,
+    parameter_max=threshold,
+  )
+  kml_high = datacard.km_likelihood(
+    parameter_min=threshold,
+    parameter_max=np.inf,
+  )
+  common_kwargs = {
+    "include_patient_wise_only": args.__dict__.pop("include_patient_wise_only"),
+    "include_binomial_only": args.__dict__.pop("include_binomial_only"),
+    "include_full_NLL": args.__dict__.pop("include_full_NLL"),
+    "create_figure": False,
+    "include_best_fit": False,
+    "include_median_survival": args.__dict__.pop("include_median_survival"),
+  }
+  plt.figure()
+  kml_high.plot(
+    **common_kwargs,
+    nominal_label=f"High (n={len(kml_high.nominalkm.patients)})",
+    nominal_color="blue",
+    CL_colors=["dodgerblue", "skyblue"],
+  )
+  kml_low.plot(
+    **common_kwargs,
+    nominal_label=f"Low (n={len(kml_low.nominalkm.patients)})",
+    nominal_color="red",
+    CL_colors=["orangered", "lightcoral"],
+  )
+  plt.xlabel("Time")
+  plt.ylabel("Survival Probability")
+  plt.legend()
+  plt.title("Kaplan-Meier Curves")
+  plt.grid()
+  plt.savefig(args.__dict__.pop("output_file"))
   if args.__dict__:
     raise ValueError(f"Unused arguments: {args.__dict__}")
