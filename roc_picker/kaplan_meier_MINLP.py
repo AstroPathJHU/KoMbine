@@ -474,25 +474,6 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     """
     return int(np.count_nonzero(self.patient_alive & self.parameter_in_range))
 
-  @staticmethod
-  @functools.cache
-  def create_binomial_penalty_table(
-    n_patients: int,
-    expected_probability: float,
-  ) -> dict[tuple[int, int], float]:
-    """
-    Create a table of binomial penalties for each (n_alive, n_total) pair.
-    The penalty is the negative log-likelihood of observing n_alive out of n_total
-    patients alive at the time point.
-    This needs to be fixed to account for censoring.
-    """
-    binomial_penalty_table = {}
-    for n_total in range(n_patients + 1):
-      for n_alive in range(n_total + 1):
-        penalty = -scipy.stats.binom.logpmf(n_alive, n_total, expected_probability)
-        binomial_penalty_table[(n_alive, n_total)] = penalty.item()
-    return binomial_penalty_table
-
   @classmethod
   def calculate_KM_probability(
     cls,

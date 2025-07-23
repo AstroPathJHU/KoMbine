@@ -67,7 +67,7 @@ def runtest(
   )
 
   # Now test with parameter limits
-  kml2 = datacard.km_likelihood(parameter_min=0.2, parameter_max=0.8, endpoint_epsilon=1e-4)
+  kml2 = datacard.km_likelihood(parameter_min=0.19, parameter_max=0.79, endpoint_epsilon=1e-4)
   nominal_probabilities = kml2.nominalkm.survival_probabilities(times_for_plot=times_for_plot)
   best_probabilities, CL_probabilities = kml2.survival_probabilities_likelihood(
     CLs=CLs,
@@ -109,17 +109,18 @@ def runtest(
   try:
     np.testing.assert_allclose(
       best_probabilities,
-      best_probabilities_binomial,
+      nominal_probabilities,
       **tolerance
     )
   except AssertionError:
     pass
   else:
     raise AssertionError(
-      "Best probabilities don't have to be the same "
-      "with only the binomial penalty and with the full likelihood "
+      "Best probabilities with both penalties "
+      "don't have to be the same as the nominal probabilities. "
       "(and in this case they are not)."
     )
+
 
   try:
     np.testing.assert_allclose(
@@ -135,20 +136,11 @@ def runtest(
       "with only the binomial penalty and with the full likelihood."
     )
 
-  try:
-    np.testing.assert_allclose(
-      best_probabilities_patient_wise,
-      best_probabilities,
-      **tolerance
-    )
-  except AssertionError:
-    pass
-  else:
-    raise AssertionError(
-      "Best probabilities don't have to be the same "
-      "with only the patient-wise penalty and with the full likelihood "
-      "and in this case they are not."
-    )
+  np.testing.assert_allclose(
+    best_probabilities_patient_wise,
+    nominal_probabilities,
+    **tolerance
+  )
 
   try:
     np.testing.assert_allclose(
@@ -164,20 +156,11 @@ def runtest(
       "with only the patient-wise penalty and with the full likelihood."
     )
 
-  try:
-    np.testing.assert_allclose(
-      best_probabilities_patient_wise,
-      best_probabilities_binomial,
-      **tolerance
-    )
-  except AssertionError:
-    pass
-  else:
-    raise AssertionError(
-      "Best probabilities don't have to be the same "
-      "with only the binomial penalty and with the patient-wise penalty "
-      "and in this case they are not."
-    )
+  np.testing.assert_allclose(
+    best_probabilities_binomial,
+    nominal_probabilities,
+    **tolerance
+  )
 
   try:
     np.testing.assert_allclose(

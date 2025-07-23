@@ -215,6 +215,13 @@ class KaplanMeierInstance(KaplanMeierBase):
 
     return survival_probabilities_for_plot
 
+  def survival_probability(self, time: float) -> float:
+    """
+    Returns the survival probability at a specific time.
+    """
+    result, = self.survival_probabilities(times_for_plot=[time])
+    return result
+
   def points_for_plot(self, times_for_plot=None):
     """
     Returns the points for the Kaplan-Meier curve.
