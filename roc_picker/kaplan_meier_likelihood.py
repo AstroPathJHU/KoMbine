@@ -3,10 +3,15 @@ Kaplan-Meier curve with error bars calculated using the log-likelihood method.
 """
 
 import collections.abc
+import dataclasses
 import datetime
 import functools
+import os
 import typing
+import pathlib
 
+import matplotlib.axes
+import matplotlib.figure
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.optimize
@@ -22,6 +27,102 @@ from .kaplan_meier import (
 )
 from .kaplan_meier_MINLP import MINLPForKM, KaplanMeierPatientNLL
 from .utilities import InspectableCache
+
+@dataclasses.dataclass
+class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
+  """
+  Configuration for Kaplan-Meier likelihood plots.
+
+  Attributes:
+  times_for_plot: Sequence of time points for plotting the survival probabilities.
+  include_binomial_only: If True, include error bands for the binomial error alone.
+  include_patient_wise_only: If True, include error bands for the patient-wise error alone.
+  include_full_NLL: If True, include error bands for the full negative log-likelihood.
+  include_best_fit: If True, include the best fit curve in the plot.
+  include_nominal: If True, include the nominal Kaplan-Meier curve.
+  nominal_label: Label for the nominal curve.
+  nominal_color: Color for the nominal curve.
+  best_label: Label for the best fit curve.
+  best_color: Color for the best fit curve.
+  CLs: List of confidence levels for the error bands.
+  CL_colors: List of colors for the confidence levels.
+  CL_hatches: List of hatches for the confidence levels
+              for the binomial-only or patient-wise-only error bands.
+  create_figure: If True, create a new matplotlib figure for the plot.
+  close_figure: If True, close the figure after saving or showing.
+  show: If True, display the plot.
+  saveas: Path to save the plot image.
+  print_progress: If True, print progress messages during calculations.
+  MIPGap: Relative MIP gap for the optimization solver.
+  MIPGapAbs: Absolute MIP gap for the optimization solver.
+  include_median_survival: If True, include the median survival time in the legend.
+  title: Title for the plot.
+  xlabel: Label for the x-axis.
+  ylabel: Label for the y-axis.
+  show_grid: If True, display a grid on the plot.
+  figsize: Size of the figure as a tuple (width, height).
+  dpi: Dots per inch for the figure resolution.
+  """
+  times_for_plot: typing.Sequence[float] | None = None
+  include_binomial_only: bool = False
+  include_patient_wise_only: bool = False
+  include_full_NLL: bool = True
+  include_best_fit: bool = True
+  include_nominal: bool = True
+  nominal_label: str = 'Nominal'
+  nominal_color: str = 'blue'
+  best_label: str = 'Best Fit'
+  best_color: str = 'red'
+  CLs: list[float] = dataclasses.field(default_factory=lambda: [0.68, 0.95])
+  CL_colors: list[str] = dataclasses.field(
+    default_factory=lambda: ['dodgerblue', 'skyblue', 'lightblue', 'lightcyan']
+  )
+  CL_hatches: list[str] = dataclasses.field(
+    default_factory=lambda: ['//', '\\\\', 'xx', '++']
+  )
+  create_figure: bool = True
+  close_figure: bool | None = None
+  show: bool = False
+  saveas: os.PathLike | None = None
+  print_progress: bool = False
+  MIPGap: float | None = None
+  MIPGapAbs: float | None = None
+  include_median_survival: bool = False
+  title: str | None = "Kaplan-Meier Curves"
+  xlabel: str = "Time"
+  ylabel: str = "Survival Probability"
+  show_grid: bool = True
+  figsize: tuple[float, float] = (10, 7)
+  dpi: int = 100
+
+  def __post_init__(self):
+    """
+    Post-initialization validation and default adjustments.
+    """
+    if self.include_binomial_only and self.include_patient_wise_only:
+      raise ValueError("include_binomial_only and include_patient_wise_only cannot both be True")
+    if not (self.include_binomial_only or self.include_patient_wise_only or self.include_full_NLL):
+      raise ValueError(
+        "At least one of include_binomial_only, include_patient_wise_only, "
+        "or include_full_NLL must be True"
+      )
+    if len(self.CLs) > len(self.CL_colors):
+      raise ValueError(
+        f"Not enough colors provided for {len(self.CLs)} CLs, "
+        f"got {len(self.CL_colors)} colors"
+      )
+    self.CL_colors = self.CL_colors[:len(self.CLs)]
+
+    if (
+      len(self.CLs) > len(self.CL_hatches)
+      and self.include_full_NLL
+      and (self.include_binomial_only or self.include_patient_wise_only)
+    ):
+      raise ValueError(
+        f"Not enough hatches provided for {len(self.CLs)} CLs, "
+        f"got {len(self.CL_hatches)} hatches"
+      )
+    self.CL_hatches = self.CL_hatches[:len(self.CLs)]
 
 class KaplanMeierLikelihood(KaplanMeierBase):
   """
@@ -346,183 +447,112 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         survival_probabilities_time_point.append((lower_bound, upper_bound))
     return np.array(best_probabilities), np.array(survival_probabilities)
 
-  def plot( # pylint: disable=too-many-arguments, too-many-branches, too-many-statements
-    self,
-    *,
-    times_for_plot: typing.Sequence[float] | None = None,
-    include_binomial_only=False,
-    include_patient_wise_only=False,
-    include_full_NLL=True,
-    include_best_fit=True,
-    include_nominal=True,
-    nominal_label='Nominal',
-    nominal_color='blue',
-    best_label='Best Fit',
-    best_color='red',
-    CLs=None,
-    CL_colors=None,
-    CL_hatches=None,
-    create_figure=True,
-    close_figure=None,
-    show=False,
-    saveas=None,
-    print_progress=False,
-    MIPGap=None,
-    MIPGapAbs=None,
-    include_median_survival=False,
-  ): #pylint: disable=too-many-locals
+  def plot(self, config: KaplanMeierPlotConfig | None = None, **kwargs) -> dict:
     """
-    Plots the Kaplan-Meier curves.
+    Plots the Kaplan-Meier curves based on the provided configuration.
     """
-    if include_binomial_only and include_patient_wise_only:
-      raise ValueError("include_binomial_only and include_patient_wise_only cannot both be True")
-    if not (include_binomial_only or include_patient_wise_only or include_full_NLL):
-      raise ValueError(
-        "At least one of include_binomial_only, include_patient_wise_only, "
-        "or include_full_NLL must be True"
-      )
+    if config is None:
+      config = KaplanMeierPlotConfig(**kwargs)
+    elif kwargs:
+      # If config is provided and kwargs are also given, update config with kwargs
+      config = dataclasses.replace(config, **kwargs)
+    # Use config.times_for_plot, falling back to self.times_for_plot if None
+    times_for_plot = config.times_for_plot
     if times_for_plot is None:
       times_for_plot = self.times_for_plot
-    results = {}
-    if create_figure:
-      plt.figure()
+
+    fig, ax = self._prepare_figure(config)
+
+    # Plot nominal curve and censored points
+    results = self._plot_nominal_and_censored(ax, config, times_for_plot)
+
+    # Calculate and plot confidence bands and best fit curve
+    results.update(self._calculate_and_plot_confidence_bands(ax, config, times_for_plot))
+
+    # Finalize plot elements (legend, labels, grid, save/show/close)
+    self._finalize_plot(fig, ax, config)
+
+    # Return results for further inspection if needed
+    return results
+
+  def _prepare_figure(
+    self,
+    config: KaplanMeierPlotConfig,
+  ) -> tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]:
+    """Prepares the matplotlib figure and axes."""
+    if config.create_figure:
+      fig, ax = plt.subplots(figsize=config.figsize, dpi=config.dpi)
+    else:
+      fig = plt.gcf() # Get current figure
+      ax = plt.gca() # Get current axes if figure already exists
+    return fig, ax
+
+  def _plot_nominal_and_censored(
+    self,
+    ax: matplotlib.axes.Axes,
+    config: KaplanMeierPlotConfig,
+    times_for_plot: typing.Sequence[float],
+  ):
+    """Plots the nominal Kaplan-Meier curve and censored patient markers."""
     nominal_x, nominal_y = self.nominalkm.points_for_plot(times_for_plot=times_for_plot)
-    label = nominal_label
-    if include_median_survival:
-      label += " (MST={:.1f})".format(  #pylint: disable=consider-using-f-string
-        self.nominalkm.median_survival_time( # Use self.nominalkm for MST
-          times_for_plot=nominal_x,
-          survival_probabilities=nominal_y,
-        )
-      ).replace("inf", r"$\infty$")
-    if include_nominal:
-      plt.plot(
+    label = config.nominal_label
+    if config.include_median_survival:
+      MST = self.nominalkm.median_survival_time(
+        times_for_plot=nominal_x,
+        survival_probabilities=nominal_y,
+      )
+      label += f" (MST={MST:.1f})".replace("inf", r"$\infty$")
+    if config.include_nominal:
+      ax.plot(
         nominal_x,
         nominal_y,
         label=label,
-        color=nominal_color,
+        color=config.nominal_color,
         linestyle='--'
       )
-    results["x"] = nominal_x
-    results["nominal"] = nominal_y
 
     patient_censored_times = sorted(self.nominalkm.patient_censored_times)
     censored_times_probabilities = self.nominalkm.survival_probabilities(
       patient_censored_times,
     )
-    plt.plot(
+    ax.plot(
       patient_censored_times,
       censored_times_probabilities,
       marker='|',
-      color=nominal_color,
+      color=config.nominal_color,
       markersize=8,
       markeredgewidth=1.5,
       linestyle="",
     )
+    return {
+      "x": nominal_x,
+      "nominal": nominal_y,
+    }
 
-    if CLs is None:
-      CLs = [0.68, 0.95]
-
-    if CL_colors is None:
-      CL_colors = ['dodgerblue', 'skyblue', 'lightblue', 'lightcyan']
-    if len(CLs) > len(CL_colors):
-      raise ValueError(
-        f"Not enough colors provided for {len(CLs)} CLs, "
-        f"got {len(CL_colors)} colors"
-      )
-    CL_colors = CL_colors[:len(CLs)]
-
-    if CL_hatches is None:
-      CL_hatches = ['//', '\\\\', 'xx', '++']
-    if (
-      len(CLs) > len(CL_hatches)
-      and include_full_NLL
-      and (include_binomial_only or include_patient_wise_only)
-    ):
-      raise ValueError(
-        f"Not enough hatches provided for {len(CLs)} CLs, "
-        f"got {len(CL_hatches)} hatches"
-      )
-    CL_hatches = CL_hatches[:len(CLs)]
-
-    CL_probabilities_subset = None
-    best_probabilities = None
-    CL_probabilities = None
-    if include_full_NLL:
-      best_probabilities, CL_probabilities = self.survival_probabilities_likelihood(
-        CLs=CLs,
-        times_for_plot=times_for_plot,
-        print_progress=print_progress,
-        MIPGap=MIPGap,
-        MIPGapAbs=MIPGapAbs,
-      )
-    if include_binomial_only:
-      (
-        best_probabilities_binomial, CL_probabilities_binomial
-      ) = self.survival_probabilities_likelihood(
-        CLs=CLs,
-        times_for_plot=times_for_plot,
-        binomial_only=True,
-        print_progress=print_progress,
-        MIPGap=MIPGap,
-        MIPGapAbs=MIPGapAbs,
-      )
-      if include_full_NLL:
-        CL_probabilities_subset = CL_probabilities_binomial
-      else:
-        best_probabilities = best_probabilities_binomial
-        CL_probabilities = CL_probabilities_binomial
-    if include_patient_wise_only:
-      (
-        best_probabilities_patient_wise, CL_probabilities_patient_wise
-      ) = self.survival_probabilities_likelihood(
-        CLs=CLs,
-        times_for_plot=times_for_plot,
-        patient_wise_only=True,
-        print_progress=print_progress,
-        MIPGap=MIPGap,
-        MIPGapAbs=MIPGapAbs,
-      )
-      if include_full_NLL:
-        CL_probabilities_subset = CL_probabilities_patient_wise
-      else:
-        best_probabilities = best_probabilities_patient_wise
-        CL_probabilities = CL_probabilities_patient_wise
-
-    assert best_probabilities is not None
-    assert CL_probabilities is not None
-
-    best_x, best_y = self.get_points_for_plot(times_for_plot, best_probabilities)
-    if include_best_fit:
-      label = best_label
-      if include_median_survival:
-        label += " (MST={:.1f})".format(  #pylint: disable=consider-using-f-string
-          self.median_survival_time(
-            times_for_plot=best_x,
-            survival_probabilities=best_y,
-          )
-        )
-      plt.plot(
-        best_x,
-        best_y,
-        label=label,
-        color=best_color,
-        linestyle='--'
-      )
-      np.testing.assert_array_equal(best_x, nominal_x)
-      results["best_fit"] = best_y
-
-    for CL, color, (p_minus, p_plus) in zip(
-      CLs,
-      CL_colors,
-      CL_probabilities.transpose(1, 2, 0),
+  def _plot_confidence_band_fill( # pylint: disable=too-many-arguments, too-many-locals
+    self,
+    ax: matplotlib.axes.Axes,
+    config: KaplanMeierPlotConfig,
+    times_for_plot: typing.Sequence[float],
+    CL_probabilities_data: np.ndarray,
+    *,
+    label_suffix: str = "",
+    use_hatches: bool = False,
+  ):
+    """
+    Helper to plot confidence bands using fill_between.
+    """
+    results = {}
+    for CL, color, hatch, (p_minus, p_plus) in zip(
+      config.CLs,
+      config.CL_colors,
+      config.CL_hatches,
+      CL_probabilities_data.transpose(1, 2, 0),
       strict=True,
     ):
       x_minus, y_minus = self.get_points_for_plot(times_for_plot, p_minus)
       x_plus, y_plus = self.get_points_for_plot(times_for_plot, p_plus)
       np.testing.assert_array_equal(x_minus, x_plus)
-      np.testing.assert_array_equal(x_minus, best_x)
-      results[f'CL_{CL}'] = (y_minus, y_plus)
 
       if CL > 0.9999:
         label = f'{CL:.6%} CL'
@@ -530,80 +560,179 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         label = f'{CL:.2%} CL'
       else:
         label = f'{CL:.0%} CL'
-      if include_median_survival:
-        label += " (MST$\\in$({:.1f}, {:.1f}))".format(  #pylint: disable=consider-using-f-string
-          self.median_survival_time(
-            times_for_plot=x_minus,
-            survival_probabilities=y_minus,
-          ),
-          self.median_survival_time(
-            times_for_plot=x_plus,
-            survival_probabilities=y_plus,
-          ),
-        ).replace("inf", r"$\infty$")
-      plt.fill_between(
-        x_minus,
-        y_minus,
-        y_plus,
-        color=color,
-        alpha=0.5,
-        label=label,
-      )
 
-    if CL_probabilities_subset is not None:
-      subset_label = "Binomial only" if include_binomial_only else "Patient-wise only"
-      for CL, color, hatch, (p_minus_subset, p_plus_subset) in zip(
-        CLs,
-        CL_colors,
-        CL_hatches,
-        CL_probabilities_subset.transpose(1, 2, 0),
-        strict=True,
-      ):
-        x_minus_subset, y_minus_subset = self.get_points_for_plot(times_for_plot, p_minus_subset)
-        x_plus_subset, y_plus_subset = self.get_points_for_plot(times_for_plot, p_plus_subset)
-        np.testing.assert_array_equal(x_minus_subset, x_plus_subset)
-        np.testing.assert_array_equal(x_minus_subset, best_x)
-        results[f'CL_{CL}_subset'] = (y_minus_subset, y_plus_subset)
+      if label_suffix:
+        label += f' ({label_suffix})'
 
-        if CL > 0.9999:
-          label = f'{CL:.6%} CL ({subset_label})'
-        elif CL > 0.99:
-          label = f'{CL:.2%} CL ({subset_label})'
-        else:
-          label = f'{CL:.0%} CL ({subset_label})'
-        if include_median_survival:
-          label += r" (MST$\in$({:.1f}, {:.1f}))".format(  #pylint: disable=consider-using-f-string
-            self.median_survival_time(
-              times_for_plot=x_minus_subset,
-              survival_probabilities=y_minus_subset,
-            ),
-            self.median_survival_time(
-              times_for_plot=x_plus_subset,
-              survival_probabilities=y_plus_subset,
-            ),
-          )
-        plt.fill_between(
-          x_minus_subset,
-          y_minus_subset,
-          y_plus_subset,
+      if config.include_median_survival:
+        MST_low = self.median_survival_time(
+          times_for_plot=x_minus,
+          survival_probabilities=y_minus,
+        )
+        MST_high = self.median_survival_time(
+          times_for_plot=x_plus,
+          survival_probabilities=y_plus,
+        )
+        label += f" (MST$\\in$({MST_low:.1f}, {MST_high:.1f}))".replace("inf", r"$\infty$")
+
+      if use_hatches:
+        ax.fill_between(
+          x_minus,
+          y_minus,
+          y_plus,
           edgecolor=color,
           facecolor='none',
           hatch=hatch,
           alpha=0.5,
           label=label,
         )
+      else:
+        ax.fill_between(
+          x_minus,
+          y_minus,
+          y_plus,
+          color=color,
+          alpha=0.5,
+          label=label,
+        )
+      results[label] = (y_minus, y_plus)
+    return results
 
-    if create_figure:
-      plt.xlabel("Time")
-      plt.ylabel("Survival Probability")
-      plt.legend()
-      plt.title("Kaplan-Meier Curves")
-      plt.grid()
-      if saveas is not None:
-        plt.savefig(saveas)
-      if show:
-        plt.show()
-      if close_figure:
-        plt.close()
+  def _calculate_and_plot_confidence_bands( # pylint: disable=too-many-locals
+    self,
+    ax: matplotlib.axes.Axes,
+    config: KaplanMeierPlotConfig,
+    times_for_plot: typing.Sequence[float]
+  ):
+    """Calculates and plots the confidence bands and best-fit curve."""
+    best_probabilities = None
+    CL_probabilities = None
+    # For binomial_only or patient_wise_only if full NLL is also included
+    CL_probabilities_subset = None
+
+    results = {}
+
+    # Calculate and plot Full NLL
+    if config.include_full_NLL:
+      best_probabilities, CL_probabilities = self.survival_probabilities_likelihood(
+        CLs=config.CLs,
+        times_for_plot=times_for_plot,
+        print_progress=config.print_progress,
+        MIPGap=config.MIPGap,
+        MIPGapAbs=config.MIPGapAbs,
+      )
+      # Plot the full NLL confidence bands
+      CL_results = self._plot_confidence_band_fill(
+        ax, config, times_for_plot, CL_probabilities, use_hatches=False
+      )
+      results.update(CL_results)
+
+    # Calculate and plot Binomial Only
+    if config.include_binomial_only:
+      (
+        best_probabilities_binomial, CL_probabilities_binomial
+      ) = self.survival_probabilities_likelihood(
+        CLs=config.CLs,
+        times_for_plot=times_for_plot,
+        binomial_only=True,
+        print_progress=config.print_progress,
+        MIPGap=config.MIPGap,
+        MIPGapAbs=config.MIPGapAbs,
+      )
+      if config.include_full_NLL:
+        CL_probabilities_subset = CL_probabilities_binomial
+        CL_results = self._plot_confidence_band_fill(
+          ax, config, times_for_plot, CL_probabilities_subset,
+          label_suffix="Binomial only", use_hatches=True
+        )
+        results.update(CL_results)
+      else:
+        best_probabilities = best_probabilities_binomial
+        CL_probabilities = CL_probabilities_binomial
+        CL_results = self._plot_confidence_band_fill(
+          ax, config, times_for_plot, CL_probabilities,
+          label_suffix="Binomial only", use_hatches=False # No hatches if it's the primary CL
+        )
+        results.update(CL_results)
+
+    # Calculate and plot Patient-Wise Only
+    if config.include_patient_wise_only:
+      (
+        best_probabilities_patient_wise, CL_probabilities_patient_wise
+      ) = self.survival_probabilities_likelihood(
+        CLs=config.CLs,
+        times_for_plot=times_for_plot,
+        patient_wise_only=True,
+        print_progress=config.print_progress,
+        MIPGap=config.MIPGap,
+        MIPGapAbs=config.MIPGapAbs,
+      )
+      if config.include_full_NLL:
+        CL_probabilities_subset = CL_probabilities_patient_wise
+        CL_results = self._plot_confidence_band_fill(
+          ax, config, times_for_plot, CL_probabilities_subset,
+          label_suffix="Patient-wise only", use_hatches=True
+        )
+        results.update(CL_results)
+      else:
+        best_probabilities = best_probabilities_patient_wise
+        CL_probabilities = CL_probabilities_patient_wise
+        CL_results = self._plot_confidence_band_fill(
+          ax, config, times_for_plot, CL_probabilities,
+          label_suffix="Patient-wise only", use_hatches=False # No hatches if it's the primary CL
+        )
+        results.update(CL_results)
+
+    assert best_probabilities is not None
+    assert CL_probabilities is not None
+
+    # Plot best fit curve
+    if config.include_best_fit and best_probabilities is not None:
+      best_x, best_y = self.get_points_for_plot(times_for_plot, best_probabilities)
+      label = config.best_label
+      if config.include_median_survival:
+        MST = self.median_survival_time(
+          times_for_plot=best_x,
+          survival_probabilities=best_y,
+        )
+        label += f" (MST={MST:.1f})"
+      ax.plot(
+        best_x,
+        best_y,
+        label=label,
+        color=config.best_color,
+        linestyle='--'
+      )
+      results["best_fit"] = best_y
 
     return results
+
+  def _finalize_plot(
+    self,
+    fig: matplotlib.figure.Figure,
+    ax: matplotlib.axes.Axes,
+    config: KaplanMeierPlotConfig,
+  ):
+    """Adds final plot elements and handles saving/showing/closing."""
+    ax.set_xlabel(config.xlabel)
+    ax.set_ylabel(config.ylabel)
+    if config.title is not None:
+      ax.set_title(config.title)
+    ax.legend()
+    if config.show_grid:
+      ax.grid()
+    ax.set_ylim(0, 1.05) # Ensure y-axis is from 0 to 1.05 for survival probability
+
+    if config.saveas is not None:
+      save_path = pathlib.Path(config.saveas)
+      save_path.parent.mkdir(parents=True, exist_ok=True)
+      fig.savefig(save_path, bbox_inches='tight', dpi=config.dpi)
+
+    if config.show:
+      plt.show()
+
+    if config.close_figure is None: # Default behavior: close if saving, don't close if showing
+      if config.saveas is not None:
+        plt.close(fig)
+    elif config.close_figure:
+      plt.close(fig)
