@@ -442,10 +442,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     # Finalize plot elements (legend, labels, grid, save/show/close)
     self._finalize_plot(fig, ax, config)
 
-    # Return results if needed, similar to original plot method
-    # For now, we'll just return an empty dict as the original returned `results`
-    # was not explicitly used outside the method. If you need it, we can re-add.
-    return {} # Placeholder for results dictionary if needed later
+    # Return results for further inspection if needed
+    return results
 
   def _prepare_figure(
     self,
@@ -699,7 +697,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       save_path = pathlib.Path(config.saveas)
       save_path.parent.mkdir(parents=True, exist_ok=True)
       fig.savefig(save_path, bbox_inches='tight', dpi=config.dpi)
-      print(f"Plot saved to {save_path}")
 
     if config.show:
       plt.show()

@@ -996,7 +996,7 @@ def plot_km_likelihood():
   group.add_argument("--include-binomial-only", action="store_true", help="Include error bands for the binomial error alone.")
   group.add_argument("--include-patient-wise-only", action="store_true", help="Include error bands for the patient-wise error alone.")
   parser.add_argument("--exclude-full-nll", action="store_false", help="Exclude the full NLL from the plot.", dest="include_full_NLL", default=True)
-  parser.add_argument("--include-median-survival", action="store_true", help="Include the median survival line in the plot.", dest="include_median_survival", default=True)
+  parser.add_argument("--include-median-survival", action="store_true", help="Include the median survival line in the plot.", dest="include_median_survival")
   # pylint: enable=C0301
   args = parser.parse_args()
   if (
