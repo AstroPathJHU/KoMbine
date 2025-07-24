@@ -417,7 +417,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         survival_probabilities_time_point.append((lower_bound, upper_bound))
     return np.array(best_probabilities), np.array(survival_probabilities)
 
-  def plot(self, config: KaplanMeierPlotConfig = None, **kwargs) -> dict:
+  def plot(self, config: KaplanMeierPlotConfig | None = None, **kwargs) -> dict:
     """
     Plots the Kaplan-Meier curves based on the provided configuration.
     """
