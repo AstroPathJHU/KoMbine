@@ -11,13 +11,16 @@ import functools
 import itertools
 import pathlib
 
-import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats
 
 from .delta_functions import DeltaFunctionsROC
 from .discrete import DiscreteROC
-from .kaplan_meier_likelihood import KaplanMeierLikelihood, KaplanMeierPatientNLL
+from .kaplan_meier_likelihood import (
+  KaplanMeierLikelihood,
+  KaplanMeierPatientNLL,
+  KaplanMeierPlotConfig,
+)
 from .systematics_mc import DistributionBase, DummyDistribution, ROCDistributions, ScipyDistribution
 
 class Response:
@@ -1010,13 +1013,18 @@ def plot_km_likelihood():
     parameter_min=args.__dict__.pop("parameter_min"),
     parameter_max=args.__dict__.pop("parameter_max"),
   )
-  kml.plot(
-    saveas=args.__dict__.pop("output_file"),
+
+  # Create KaplanMeierPlotConfig object from parsed arguments
+  plot_config = KaplanMeierPlotConfig(
     include_binomial_only=args.__dict__.pop("include_binomial_only"),
     include_patient_wise_only=args.__dict__.pop("include_patient_wise_only"),
     include_full_NLL=args.__dict__.pop("include_full_NLL"),
     include_median_survival=args.__dict__.pop("include_median_survival"),
+    saveas=args.__dict__.pop("output_file"),
   )
+
+  kml.plot(config=plot_config)
+
   if args.__dict__:
     raise ValueError(f"Unused arguments: {args.__dict__}")
 
@@ -1056,32 +1064,50 @@ def plot_km_likelihood_two_groups():
     parameter_min=threshold,
     parameter_max=np.inf,
   )
-  common_kwargs = {
+
+  # Common plot configuration arguments
+  common_plot_kwargs = {
     "include_patient_wise_only": args.__dict__.pop("include_patient_wise_only"),
     "include_binomial_only": args.__dict__.pop("include_binomial_only"),
     "include_full_NLL": args.__dict__.pop("include_full_NLL"),
-    "create_figure": False,
-    "include_best_fit": False,
+    "include_best_fit": False, # Explicitly set to False as per original logic
     "include_median_survival": args.__dict__.pop("include_median_survival"),
   }
-  plt.figure()
-  kml_high.plot(
-    **common_kwargs,
+
+  # Configuration for the 'High' group plot (creates the figure)
+  config_high = KaplanMeierPlotConfig(
+    **common_plot_kwargs,
+    create_figure=True,
+    close_figure=False, # Do not close figure after first plot
+    show=False, # Do not show figure yet
+    saveas=None, # Do not save yet
     nominal_label=f"High (n={len(kml_high.nominalkm.patients)})",
     nominal_color="blue",
     CL_colors=["dodgerblue", "skyblue"],
+    title="Kaplan-Meier Curves", # Set title on the first plot config
+    xlabel="Time", # Set xlabel on the first plot config
+    ylabel="Survival Probability", # Set ylabel on the first plot config
+    show_grid=True, # Set show_grid on the first plot config
   )
-  kml_low.plot(
-    **common_kwargs,
+  kml_high.plot(config=config_high)
+
+  # Configuration for the 'Low' group plot (draws on existing figure)
+  config_low = KaplanMeierPlotConfig(
+    **common_plot_kwargs,
+    create_figure=False, # Do not create a new figure
+    show=False, # Do not show figure yet, handled by saveas
+    saveas=args.__dict__.pop("output_file"), # Save the combined plot here
     nominal_label=f"Low (n={len(kml_low.nominalkm.patients)})",
     nominal_color="red",
     CL_colors=["orangered", "lightcoral"],
+    # Title, labels, grid are already set by config_high, but can be overridden here if needed
+    # For a combined plot, it's better to set them once.
+    title="Kaplan-Meier Curves", # Re-setting for clarity, but already set by config_high
+    xlabel="Time",
+    ylabel="Survival Probability",
+    show_grid=True,
   )
-  plt.xlabel("Time")
-  plt.ylabel("Survival Probability")
-  plt.legend()
-  plt.title("Kaplan-Meier Curves")
-  plt.grid()
-  plt.savefig(args.__dict__.pop("output_file"))
+  kml_low.plot(config=config_low)
+
   if args.__dict__:
     raise ValueError(f"Unused arguments: {args.__dict__}")
