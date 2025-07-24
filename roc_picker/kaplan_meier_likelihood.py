@@ -434,10 +434,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     fig, ax = self._prepare_figure(config)
 
     # Plot nominal curve and censored points
-    self._plot_nominal_and_censored(ax, config, times_for_plot)
+    results = self._plot_nominal_and_censored(ax, config, times_for_plot)
 
     # Calculate and plot confidence bands and best fit curve
-    self._calculate_and_plot_confidence_bands(ax, config, times_for_plot)
+    results.update(self._calculate_and_plot_confidence_bands(ax, config, times_for_plot))
 
     # Finalize plot elements (legend, labels, grid, save/show/close)
     self._finalize_plot(fig, ax, config)
@@ -496,6 +496,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       markeredgewidth=1.5,
       linestyle="",
     )
+    return {
+      "x": nominal_x,
+      "nominal": nominal_y,
+    }
 
   def _plot_confidence_band_fill( # pylint: disable=too-many-arguments, too-many-locals
     self,
@@ -510,6 +514,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     """
     Helper to plot confidence bands using fill_between.
     """
+    results = {}
     for CL, color, hatch, (p_minus, p_plus) in zip(
       config.CLs,
       config.CL_colors,
@@ -562,6 +567,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           alpha=0.5,
           label=label,
         )
+      results[label] = (y_minus, y_plus)
+    return results
 
   def _calculate_and_plot_confidence_bands(
     self,
@@ -575,6 +582,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     # For binomial_only or patient_wise_only if full NLL is also included
     CL_probabilities_subset = None
 
+    results = {}
+
     # Calculate and plot Full NLL
     if config.include_full_NLL:
       best_probabilities, CL_probabilities = self.survival_probabilities_likelihood(
@@ -585,9 +594,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         MIPGapAbs=config.MIPGapAbs,
       )
       # Plot the full NLL confidence bands
-      self._plot_confidence_band_fill(
+      CL_results = self._plot_confidence_band_fill(
         ax, config, times_for_plot, CL_probabilities, use_hatches=False
       )
+      results.update(CL_results)
 
     # Calculate and plot Binomial Only
     if config.include_binomial_only:
@@ -603,17 +613,19 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       )
       if config.include_full_NLL:
         CL_probabilities_subset = CL_probabilities_binomial
-        self._plot_confidence_band_fill(
+        CL_results = self._plot_confidence_band_fill(
           ax, config, times_for_plot, CL_probabilities_subset,
           label_suffix="Binomial only", use_hatches=True
         )
+        results.update(CL_results)
       else:
         best_probabilities = best_probabilities_binomial
         CL_probabilities = CL_probabilities_binomial
-        self._plot_confidence_band_fill(
+        CL_results = self._plot_confidence_band_fill(
           ax, config, times_for_plot, CL_probabilities,
           label_suffix="Binomial only", use_hatches=False # No hatches if it's the primary CL
         )
+        results.update(CL_results)
 
     # Calculate and plot Patient-Wise Only
     if config.include_patient_wise_only:
@@ -629,21 +641,22 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       )
       if config.include_full_NLL:
         CL_probabilities_subset = CL_probabilities_patient_wise
-        self._plot_confidence_band_fill(
+        CL_results = self._plot_confidence_band_fill(
           ax, config, times_for_plot, CL_probabilities_subset,
           label_suffix="Patient-wise only", use_hatches=True
         )
+        results.update(CL_results)
       else:
         best_probabilities = best_probabilities_patient_wise
         CL_probabilities = CL_probabilities_patient_wise
-        self._plot_confidence_band_fill(
+        CL_results = self._plot_confidence_band_fill(
           ax, config, times_for_plot, CL_probabilities,
           label_suffix="Patient-wise only", use_hatches=False # No hatches if it's the primary CL
         )
+        results.update(CL_results)
 
     assert best_probabilities is not None
-    # This assertion might fail if only subset is plotted without full NLL
-    # assert CL_probabilities is not None
+    assert CL_probabilities is not None
 
     # Plot best fit curve
     if config.include_best_fit and best_probabilities is not None:
@@ -662,6 +675,9 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         color=config.best_color,
         linestyle='--'
       )
+      results["best_fit"] = best_y
+
+    return results
 
   def _finalize_plot(
     self,
