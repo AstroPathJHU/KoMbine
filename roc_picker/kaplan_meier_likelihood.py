@@ -32,6 +32,36 @@ from .utilities import InspectableCache
 class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   """
   Configuration for Kaplan-Meier likelihood plots.
+
+  Attributes:
+  times_for_plot: Sequence of time points for plotting the survival probabilities.
+  include_binomial_only: If True, include error bands for the binomial error alone.
+  include_patient_wise_only: If True, include error bands for the patient-wise error alone.
+  include_full_NLL: If True, include error bands for the full negative log-likelihood.
+  include_best_fit: If True, include the best fit curve in the plot.
+  include_nominal: If True, include the nominal Kaplan-Meier curve.
+  nominal_label: Label for the nominal curve.
+  nominal_color: Color for the nominal curve.
+  best_label: Label for the best fit curve.
+  best_color: Color for the best fit curve.
+  CLs: List of confidence levels for the error bands.
+  CL_colors: List of colors for the confidence levels.
+  CL_hatches: List of hatches for the confidence levels
+              for the binomial-only or patient-wise-only error bands.
+  create_figure: If True, create a new matplotlib figure for the plot.
+  close_figure: If True, close the figure after saving or showing.
+  show: If True, display the plot.
+  saveas: Path to save the plot image.
+  print_progress: If True, print progress messages during calculations.
+  MIPGap: Relative MIP gap for the optimization solver.
+  MIPGapAbs: Absolute MIP gap for the optimization solver.
+  include_median_survival: If True, include the median survival time in the legend.
+  title: Title for the plot.
+  xlabel: Label for the x-axis.
+  ylabel: Label for the y-axis.
+  show_grid: If True, display a grid on the plot.
+  figsize: Size of the figure as a tuple (width, height).
+  dpi: Dots per inch for the figure resolution.
   """
   times_for_plot: typing.Sequence[float] | None = None
   include_binomial_only: bool = False
@@ -422,7 +452,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     Plots the Kaplan-Meier curves based on the provided configuration.
     """
     if config is None:
-      config = KaplanMeierPlotConfig()
+      config = KaplanMeierPlotConfig(**kwargs)
     elif kwargs:
       # If config is provided and kwargs are also given, update config with kwargs
       config = dataclasses.replace(config, **kwargs)
