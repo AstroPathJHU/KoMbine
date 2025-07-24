@@ -570,7 +570,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       results[label] = (y_minus, y_plus)
     return results
 
-  def _calculate_and_plot_confidence_bands(
+  def _calculate_and_plot_confidence_bands( # pylint: disable=too-many-locals
     self,
     ax: matplotlib.axes.Axes,
     config: KaplanMeierPlotConfig,
