@@ -1000,7 +1000,7 @@ def plot_km_likelihood():
   # pylint: enable=C0301
   args = parser.parse_args()
   if (
-    not args.include_full_nll
+    not args.include_full_NLL
     and not args.include_binomial_only
     and not args.include_patient_wise_only
   ):
@@ -1046,7 +1046,7 @@ def plot_km_likelihood_two_groups():
   # pylint: enable=C0301
   args = parser.parse_args()
   if (
-    not args.include_full_nll
+    not args.include_full_NLL
     and not args.include_binomial_only
     and not args.include_patient_wise_only
   ):
