@@ -169,11 +169,25 @@ This gives an interpretable visualization of the patient-wise uncertainty.  By c
 
 For the patient-wise-only error, there is no need to minimize the NLL over \(S'\), as by construction it minimizes at \(S'=S_\text{nominal}\).  To find the confidence intervals, we use a binary search that only looks at the possible discrete values of \(S\): intermediate values of \(S'\) cannot return anything different.
 
-\section{Examples}
+\section{Examples and discussion}
 
-\subsection{Synthetic data}
+This section provides examples that illustrate interesting aspects of the Kaplan--Meier curve estimation.
 
-\subsection{Real-world dataset}
+\subsection{Best fit vs.\ nominal Kaplan--Meier curve}
+
+Counter-intuitively, the best fit Kaplan--Meier curve does not necessarily coincide with the nominal Kaplan--Meier curve.  An example is shown in \cref{fig:best-fit-vs-nominal}.
+
+If only the binomial penalty is included, the survival NLL always minimizes at the nominal survival probability.  Similarly, with only the patient-wise errors, the nominal survival probability is also always optimal.  However, when both are included, the two may differ.
+
+To understand this, imagine a case where a patient is excluded from the curve, but their parameter is arbitrarily close to the boundary.  Nominally, this patient is included in the curve, but they can be included with only a small NLL penalty.  Adjusting the survival probability can improve the binomial penalty term by more than this small penalty loss: for example, \code{scipy.stats.logpmf(4, 7, 4/7)=-1.225}, but \code{scipy.stats.logpmf(5, 8, 5/8)=-1.267}.  If the patient is close enough to the boundary, this difference in the binomial penalty may outweigh the small penalty for including the patient.
+
+Although this result is surprising, it serves to highlight the importance of the patient-wise uncertainties.  If the NLL penalty for including the patient really is that small, then we cannot, with any confidence, assign the patient to one Kaplan--Meier curve or the other.
+
+\subsection{Lung cancer dataset}
+
+This example is taken from \citep{AstroPathLung}, in which we analyzed pre-treatment biopsies from a cohort of patients with non-small-cell lung cancer (NSCLC) treated with anti-PD-1 immunotherapy.  We identified CD8+FoxP3+ cells, which are associated with good outcomes, but are extremely rare: a patient may have only one or two in their biopsy.  We also developed a probabilistic biomarker, called DONUTS, which resemble the niche of the CD8+FoxP3+ cells but are much more abundant.
+
+\Cref{fig:lung-dataset} shows Kaplan--Meier curves with the
 
 \subsection{Comparison with existing methods}
 
