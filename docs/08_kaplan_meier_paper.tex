@@ -183,6 +183,13 @@ To understand this, imagine a case where a patient is excluded from the curve, b
 
 This surprising result highlights the importance of the patient-wise uncertainties.  If the NLL penalty for including the patient really is that small, then we cannot, with any confidence, assign the patient to one Kaplan--Meier curve or the other.
 
+\begin{figure}
+  \centering
+  \includegraphics{km_example.pdf}
+  \caption{\label{fig:best-fit-vs-nominal} Caption goes here}
+  \label{fig:best-fit-vs-nominal}
+\end{figure}
+
 \subsection{Lung cancer dataset}
 
 This example is taken from \citep{AstroPathLung}, in which we analyzed pre-treatment biopsies from a cohort of patients with non-small-cell lung cancer (NSCLC) treated with anti-PD-1 immunotherapy.  We identified CD8+FoxP3+ cells, which are associated with good outcomes, but are extremely rare: a patient may have only one or two in their biopsy.  We also developed a probabilistic biomarker, called DONUTS, which resemble the niche of the CD8+FoxP3+ cells but are much more abundant.
