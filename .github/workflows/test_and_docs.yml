@@ -89,11 +89,17 @@ jobs:
           working_directory: docs
           root_file: 02_rocpicker.tex
           latexmk_use_xelatex: true
+      - name: Compile docs
+        uses: xu-cheng/latex-action@v3
+        with:
+          working_directory: docs
+          root_file: 08_kaplan_meier_paper.tex
       - uses: actions/upload-artifact@v4.3.3
         with:
           name: docs
           path: |
             docs/02_rocpicker.pdf
+            docs/08_kaplan_meier_paper.pdf
             docs/*.html
       - name: Check latex log
         run: |
