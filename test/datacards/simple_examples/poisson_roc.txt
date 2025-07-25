@@ -1,0 +1,6 @@
+observable_type  poisson
+------------
+# List of patients
+------------
+response	responder	responder	responder	responder	responder	responder	non-responder	non-responder	non-responder	non-responder	non-responder	non-responder
+count	10	20	30	40	50	60	30	40	50	60	70	80
