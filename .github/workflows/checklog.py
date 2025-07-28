@@ -67,7 +67,7 @@ def checklatex(filename, ignore_regexes=()):
 
   if message:
     raise RuntimeError(
-      f"Latex gave some {'errors' if errors else 'warnings'}:\n\n\n" + "\n\n\n".join(message)
+      f"Found {'errors' if errors else 'warnings'} in {filename}:\n\n\n" + "\n\n\n".join(message)
     )
 
 def main(args=None):
@@ -75,11 +75,13 @@ def main(args=None):
   Check the log from latex for warnings and errors.
   """
   p = argparse.ArgumentParser()
-  p.add_argument("filename")
+  p.add_argument("filename", nargs="+", help="Filenames of the log files to check")
   p.add_argument("--ignore-regex", action="append", help="Ignore regex",
                  type=re.compile, default=[])
   args = p.parse_args(args=args)
-  checklatex(args.filename, ignore_regexes=args.ignore_regex)
+  for filename in args.filename:
+    print(f"Checking {filename}...")
+    checklatex(filename, ignore_regexes=args.ignore_regex)
 
 if __name__ == "__main__":
   main()
