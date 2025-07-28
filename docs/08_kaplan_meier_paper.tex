@@ -77,17 +77,17 @@
 %%   of Statistical Software" above) they should be in sentence case (like
 %%   "generalized linear models" below).
 
-\section{Introduction} \label{sec:intro}
+\section{Introduction}\label{sec:intro}
 
 \KM{} curves are widely used in medical research to predict patient outcomes by giving the survival probability as a function of time.  Typically, a \KM{} curve starts with a survival probability of \(1.0\) at time \(0\), which represents, for example, the time of treatment.  The survival probability decreases as time progresses, representing patient deaths or other events of interest.
 
 Sometimes, a patient drops out of the study without experiencing the event of interest and is called ``censored''.  The patient is included in the \KM{} curve until the point of censoring.  After the patient is censored, they are no longer considered ``at risk'' for the event of interest, and the future survival probability is calculated based on the remaining patients.
 
-\KM{} curves are often shown without error bands.  Various popular packages, such as \pkg{survival} \citep{survival} in \proglang{R} \citep{R} or \pkg{lifelines} \citep{lifelines} in \proglang{Python}, provide error bands that account for the statistical uncertainty resulting from the finite number of patients in the study using Greenwood confidence intervals \citep{Greenwood}.  (To be more precise, \pkg{lifelines} uses the exponential Greenwood confidence intervals, while \citep{survival} allows several different methods, all variations of Greenwood's.)
+\KM{} curves are often shown without error bands.  Various popular packages, such as \pkg{survival} \citep{survival-package} in \proglang{R} \citep{R} or \pkg{lifelines} \citep{lifelines} in \proglang{Python}, provide error bands that account for the statistical uncertainty resulting from the finite number of patients in the study using Greenwood confidence intervals \citep{GreenwoodNotes,Greenwood}.  (To be more precise, \pkg{lifelines} uses the exponential Greenwood confidence intervals, while \pkg{survival} allows several different methods, all variations of Greenwood's.)
 
 Other uncertainties can also affect the \KM{} curve.  Other types of uncertainties will typically be patient-wise uncertainties, which \emph{move} the patient from one \KM{} curve to another.  For example, a biomarker study might classify patients based on the density of a particular cell type.  A \KM{} plot could be constructed with two curves, for patients with a high and low density of the cell type.  However, the cell type is subject to Poisson noise as well as systematic errors in the measurement.  Similar errors apply to \KM{} plots that stratify patients by gene expression levels or other continuous variables.
 
-The \pkg{KoMbine} package provides the first method to propagate these types of errors through the \KM{} curve estimation process.  The techniques are based on the \pkg{Combine} package \citep{combine}, developed by the CMS Collaboration in particle physics.  \pkg{Combine}, built on the \pkg{RooFit} framework \citep{RooFit}, is used for high-precision measurements of particle properties, which often account for tens or even hundreds of systematic uncertainties, and was used for such high profile measurements as the Higgs boson discovery \citep{HIG-12-028} and subsequent measurements of its properties.
+The \pkg{KoMbine} package provides the first method to propagate these types of errors through the \KM{} curve estimation process.  The techniques are based on the \pkg{Combine} package \citep{CAT-23-001}, developed by the CMS Collaboration in particle physics\@.  \pkg{Combine}, built on the \pkg{RooFit} framework \citep{RooFit}, is used for high-precision measurements of particle properties, which must account for tens or even hundreds of systematic uncertainties, and was used for such high profile measurements as the Higgs boson discovery \citep{HIG-12-028} and subsequent measurements of its properties.
 
 \pkg{KoMbine} provides a similar interface to propagate uncertainties to \KM{} curves.  It handles the statistical uncertainty on the number of patients in a more precise way than the Greenwood confidence intervals and incorporates patient-wise uncertainties into the calculation.  The statistical and patient-wise uncertainties can also be plotted separately, allowing the user to see which uncertainties dominate.
 
@@ -107,7 +107,7 @@ S = \prod_{i=1}^{n} \left(1 - \frac{d_i}{r_i}\right), \label{eq:km-probability}
 \end{equation}
 where \(d_i\) is the number of patients who died at time \(t_i\) and \(r_i\) is the number of patients at risk at time \(t_i\).  The binomial probability is
 \begin{equation}
-\mathcal{L}_{\text{binomial}}(p_i^\text{survived}) = \prod_{i=1}^{n} \binom{r_i}{d_i} \left(p_i^\text{died}\right)^{d_i} {\left(p_i^\text{survived}\right)}^{r_i-d_i},
+\mathcal{L}_{\text{binomial}}(p_i^\text{survived}) = \prod_{i=1}^{n} \binom{r_i}{d_i} {\left(p_i^\text{died}\right)}^{d_i} {\left(p_i^\text{survived}\right)}^{r_i-d_i},
 \end{equation}
 where \(p_i^\text{died} = 1 - p_i^\text{survived}\), and the negative log likelihood (NLL) is
 \begin{equation}
@@ -139,7 +139,7 @@ For the purpose of the math here, all that is important is that the penalty is a
 
 \subsection{Combining the uncertainties}
 
-The total NLL is the sum of the binomial NLL and the patient-wise NLL:
+The total NLL is the sum of the binomial NLL and the patient-wise NLL\@:
 \begin{equation}
 -\log \mathcal{L}_{\text{total}}(a_j, p_i^\text{survived}) = -\log \mathcal{L}_{\text{binomial}}(a_j, p_i^\text{survived}) - \log \mathcal{L}_{\text{patient}}(a_j). \label{eq:total-nll}
 \end{equation}
@@ -164,9 +164,9 @@ This gives an interpretable visualization of the patient-wise uncertainty.  By c
 
 \section{Implementation}
 
-\pkg{KoMbine} is implemented in \proglang{Python} and uses \pkg{Gurobi} \citep{gurobi} to minimize the NLL for each value of \(S\).
+\pkg{KoMbine} is implemented in \proglang{Python} and uses \pkg{Gurobi} \citep{gurobi} to minimize the NLL for a given value of \(S\).
 
-\code{scipy.optimize.differential_evolution} \citep{differential-evolution,scipy} is then used to minimize \(-\log \mathcal{L}_{\text{total}}\) over \(S\) to find the maximum likelihood estimate,  \code{scipy.optimize.brentq} \citep{brentq,scipy} is used to compute the confidence intervals, bounded by the points where the NLL equals a threshold value (1.0 for 68\% CL and 3.84 for 95\% CL).
+We use \code{scipy.optimize.differential_evolution} \citep{differential-evolution,scipy} to minimize \(-\log \mathcal{L}_{\text{total}}\) over \(S\) to find the maximum likelihood estimate\@.  \code{scipy.optimize.brentq} \citep{brentq,scipy} is then used to compute the confidence intervals, bounded by the points where the NLL equals a threshold value (1.0 for 68\% CL and 3.84 for 95\% CL).
 
 For the patient-wise-only error, there is no need to minimize the NLL over \(S'\), as by construction it minimizes at \(S'=S_\text{nominal}\).  To find the confidence intervals, we use a binary search that only looks at the possible discrete values of \(S\): intermediate values of \(S'\) cannot return anything different.
 
@@ -175,7 +175,7 @@ For the patient-wise-only error, there is no need to minimize the NLL over \(S'\
 This section provides examples that illustrate interesting aspects of the \KM{} curve estimation.
 
 \subsection%
-[Best fit vs. nominal \KM{} curve]%
+[Best fit vs. nominal \KM{} curve]% chktex 12
 {Best fit vs.\ nominal \KM{} curve}
 
 Counter-intuitively, the best fit \KM{} curve does not necessarily coincide with the nominal \KM{} curve.  An example is shown in \cref{fig:best-fit-vs-nominal}.
@@ -196,26 +196,32 @@ This surprising result highlights the importance of the patient-wise uncertainti
 
 \subsection{Lung cancer dataset}
 
-This example is taken from \citep{AstroPathLung}, in which we analyzed pre-treatment biopsies from a cohort of patients with non-small-cell lung cancer (NSCLC) treated with anti-PD-1 immunotherapy.  We identified CD8+FoxP3+ cells, which are associated with good outcomes, but are extremely rare: a patient may have only one or two in their biopsy.  We also developed a probabilistic biomarker, called DONUTS, which resemble the niche of the CD8+FoxP3+ cells but are much more abundant.
+This example is taken from \citet{AstroPathLung}, in which we analyzed pre-treatment biopsies from a cohort of patients with non-small-cell lung cancer (NSCLC) treated with anti-PD-1 immunotherapy.  We identified CD8+FoxP3+ cells, which are associated with good outcomes, but are extremely rare: a patient may have only one or two in their biopsy.  We also developed a probabilistic biomarker, called DONUTS, which resemble the niche of the CD8+FoxP3+ cells but are much more abundant.
 
 \Cref{fig:lung-dataset} shows \KM{} curves with the
 
-\subsection{Comparison with existing methods}
+\begin{figure}
+  \centering
+  %\includegraphics{km_example.pdf}
+  \caption{\label{fig:lung-dataset} Caption goes here}
+\end{figure}
+
+\subsection{Comparison with existing methods}\label{sec:compare-to-greenwood}
 
 \section{Discussion and Future Work}
 
 \section{Conclusion}
 
-\section[Introduction: Count data regression in R]{Introduction: Count data regression in \proglang{R}} \label{sec:example-intro}
+\section[Introduction: Count data regression in R]{Introduction: Count data regression in \proglang{R}}\label{sec:example-intro}
 
 \begin{leftbar}
 The introduction is in principle ``as usual''. However, it should usually embed
 both the implemented \emph{methods} and the \emph{software} into the respective
 relevant literature. For the latter both competing and complementary software
 should be discussed (within the same software environment and beyond), bringing
-out relative (dis)advantages. All software mentioned should be properly
+out relative (dis)advantages. All software mentioned should be properly  %chktex 36
 \verb|\cite{}|d. (See also Appendix~\ref{app:bibtex} for more details on
-\textsc{Bib}{\TeX}.) %chktex 36
+\textsc{Bib}{\TeX}.)
 
 For writing about software JSS requires authors to use the markup
 \verb|\proglang{}| (programming languages and large programmable systems),
@@ -239,8 +245,7 @@ typically can capture overdispersion rather well, they are in many applications
 not sufficient for  modeling excess zeros. Since~\cite{Mullahy:1986} there is
 increased interest in zero-augmented models that address this issue by a second
 model component capturing zero counts. An overview of count data models in
-econometrics, including  hurdle and zero-inflated models, is provided in
-\cite{Cameron+Trivedi:2013}.
+econometrics, including  hurdle and zero-inflated models, is provided in~\cite{Cameron+Trivedi:2013}.
 
 In \proglang{R} \citep{R}, GLMs are provided by the model fitting functions
 \fct{glm} in the \pkg{stats} package and \fct{glm.nb} in the \pkg{MASS} package
@@ -250,8 +255,8 @@ diagnostics and inference. The manuscript that this document is based on
 count models in the functions \fct{hurdle} and \fct{zeroinfl} in the \pkg{pscl}
 package \citep{Jackman:2015}. Of course, much more software could be discussed
 here, including (but not limited to) generalized additive models for count data
-as available in the \proglang{R} packages \pkg{mgcv} \cite{Wood:2006}, 
-\pkg{gamlss} \citep{Stasinopoulos+Rigby:2007}, or \pkg{VGAM} \citep{Yee:2009}.
+as available in the \proglang{R} packages \pkg{mgcv}~\cite{Wood:2006}, 
+\pkg{gamlss}~\citep{Stasinopoulos+Rigby:2007}, or \pkg{VGAM}~\citep{Yee:2009}.
 
 
 %% -- Manuscript ---------------------------------------------------------------
@@ -265,10 +270,10 @@ as available in the \proglang{R} packages \pkg{mgcv} \cite{Wood:2006},
 %%   is recommended. Alternatively, a plain {verbatim} can also be used.
 %%   (For executed code see the next section.)
 
-\section{Models and software} \label{sec:models}
+\section{Models and software}\label{sec:models}
 
 The basic Poisson regression model for count data is a special case of the GLM
-framework \cite{McCullagh+Nelder:1989}. It describes the dependence of a count
+framework~\cite{McCullagh+Nelder:1989}. It describes the dependence of a count
 response variable $y_i$ ($i = 1, \dots, n$) by assuming a Poisson distribution
 $y_i \sim \mathrm{Pois}(\mu_i)$. The dependence of the conditional mean
 $\E[y_i \, | \, x_i] = \mu_i$ on the regressors $x_i$ is then specified via a
@@ -291,13 +296,12 @@ not a new paragraph started.
 framework in the function \fct{glm} \citep{Chambers+Hastie:1992} in the
 \pkg{stats} package. Its most important arguments are
 \begin{Code}
-glm(formula, data, subset, na.action, weights, offset,
-  family = gaussian, start = NULL, control = glm.control(...),
-  model = TRUE, y = TRUE, x = FALSE, ...) %chktex 11
+glm(formula, data, subset, na.action, weights, offset, %chktex 36
+  family = gaussian, start = NULL, control = glm.control(...), %chktex 11 chktex 36
+  model = TRUE, y = TRUE, x = FALSE, ...) %chktex 11 chktex 26
 \end{Code}
 where \code{formula} plus \code{data} is the now standard way of specifying
-regression relationships in \proglang{R}/\proglang{S} introduced in
-\cite{Chambers+Hastie:1992}. The remaining arguments in the first line
+regression relationships in \proglang{R}/\proglang{S} introduced in~\cite{Chambers+Hastie:1992}. The remaining arguments in the first line
 (\code{subset}, \code{na.action}, \code{weights}, and \code{offset}) are also
 standard  for setting up formula-based regression models in
 \proglang{R}/\proglang{S}. The arguments in the second line control aspects
@@ -323,27 +327,27 @@ lines.
 \begin{table}[t!]
 \centering
 \begin{tabular}{lllp{7.4cm}}
-\hline
-Type           & Distribution & Method   & Description \\ \hline
-GLM            & Poisson      & ML       & Poisson regression: classical GLM,
-                                           estimated by maximum likelihood (ML) \\
-               &              & Quasi    & ``Quasi-Poisson regression'':
-                                           same mean function, estimated by
-                                           quasi-ML (QML) or equivalently
-                                           generalized estimating equations (GEE),
-                                           inference adjustment via estimated
-                                           dispersion parameter \\
-               &              & Adjusted & ``Adjusted Poisson regression'':
-                                           same mean function, estimated by
-                                           QML/GEE, inference adjustment via
-                                           sandwich covariances\\
+\hline  %chktex 44
+Type           & Distribution & Method   & Description \\ \hline  %chktex 44
+%GLM            & Poisson      & ML       & Poisson regression: classical GLM,
+%                                           estimated by maximum likelihood (ML) \\
+%               &              & Quasi    & ``Quasi-Poisson regression'':
+%                                           same mean function, estimated by
+%                                           quasi-ML (QML) or equivalently
+%                                           generalized estimating equations (GEE),
+%                                           inference adjustment via estimated
+%                                           dispersion parameter \\
+%               &              & Adjusted & ``Adjusted Poisson regression'':
+%                                           same mean function, estimated by
+%                                           QML/GEE, inference adjustment via
+%                                           sandwich covariances\\
                & NB           & ML       & NB regression: extended GLM,
                                            estimated by ML including additional
-                                           shape parameter \\ \hline
+                                           shape parameter \\ \hline %chktex 44
 Zero-augmented & Poisson      & ML       & Zero-inflated Poisson (ZIP),
                                            hurdle Poisson \\
                & NB           & ML       & Zero-inflated NB (ZINB),
-                                           hurdle NB \\ \hline
+                                           hurdle NB \\ \hline %chktex 44
 \end{tabular}
 \caption{\label{tab:overview} Overview of various count regression models. The
 table is usually placed at the top of the page (\texttt{[t!]}), centered
@@ -377,7 +381,7 @@ The data can be loaded by
 %
 \begin{CodeChunk}
 \begin{CodeInput}
-R> data("quine", package = "MASS") %chktex 36
+R> data("quine", package = "MASS") %chktex 36 chktex 18
 \end{CodeInput}
 \end{CodeChunk}
 %
@@ -388,13 +392,13 @@ Figure~\ref{fig:quine}.
 For code input and output, the style files provide dedicated environments.
 Either the ``agnostic'' \verb|{CodeInput}| and \verb|{CodeOutput}| can be used
 or, equivalently, the environments \verb|{Sinput}| and \verb|{Soutput}| as
-produced by \fct{Sweave} or \pkg{knitr} when using the \code{render_sweave()}
+produced by \fct{Sweave} or \pkg{knitr} when using the \code{render_sweave()} %chktex 36
 hook. Please make sure that all code is properly spaced, e.g., using
 \code{y = a + b * x} and \emph{not} \code{y=a+b*x}. Moreover, code input should
 use ``the usual'' command prompt in the respective software system. For
-\proglang{R} code, the prompt \code{"R> "} should be used with \code{"+  "} as
+\proglang{R} code, the prompt \code{"R> "} should be used with \code{"+  "} as %chktex 18
 the continuation prompt. Generally, comments within the code chunks should be
-avoided -- and made in the regular {\LaTeX} text instead. Finally, empty lines
+avoided---and made in the regular {\LaTeX} text instead. Finally, empty lines
 before and after code input/output should be avoided (see above). %chktex 18
 \end{leftbar}
 
@@ -411,18 +415,18 @@ spaces.)
 %
 \begin{CodeChunk}
 \begin{CodeInput}
-R> m_pois <- glm(Days ~ (Eth + Sex + Age + Lrn)^2, data = quine,
+R> m_pois <- glm(Days ~ (Eth + Sex + Age + Lrn)^2, data = quine, %chktex 39 chktex 36
 +    family = poisson)
 \end{CodeInput}
 \end{CodeChunk}
 %
 To account for potential overdispersion we also consider a negative binomial
-GLM.
+GLM\@.
 %
 \begin{CodeChunk}
 \begin{CodeInput}
-R> library("MASS")
-R> m_nbin <- glm.nb(Days ~ (Eth + Sex + Age + Lrn)^2, data = quine)
+R> library("MASS") %chktex 36 chktex 18
+R> m_nbin <- glm.nb(Days ~ (Eth + Sex + Age + Lrn)^2, data = quine) %chktex 39 chktex 36
 \end{CodeInput}
 \end{CodeChunk}
 %
@@ -430,7 +434,7 @@ In a comparison with the BIC the latter model is clearly preferred.
 %
 \begin{CodeChunk}
 \begin{CodeInput}
-R> BIC(m_pois, m_nbin)
+R> BIC(m_pois, m_nbin) %chktex 36
 \end{CodeInput}
 \begin{CodeOutput}
        df      BIC
@@ -443,11 +447,11 @@ Hence, the full summary of that model is shown below.
 %
 \begin{CodeChunk}
 \begin{CodeInput}
-R> summary(m_nbin)
+R> summary(m_nbin) %chktex 36
 \end{CodeInput}
 \begin{CodeOutput}
 Call:
-glm.nb(formula = Days ~ (Eth + Sex + Age + Lrn)^2, data = quine, 
+glm.nb(formula = Days ~ (Eth + Sex + Age + Lrn)^2, data = quine,  %chktex 39 chktex 36
     init.theta = 1.60364105, link = log)  %chktex 39
 
 Deviance Residuals: 
@@ -476,13 +480,13 @@ AgeF1:LrnSL -0.43101    0.47948  -0.899  0.36870
 AgeF2:LrnSL  0.52074    0.48567   1.072  0.28363    
 AgeF3:LrnSL       NA         NA      NA       NA    
 ---
-Signif.\ codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+Signif.\ codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1 %chktex 38
 
-(Dispersion parameter for Negative Binomial(1.6036) family taken to be 1)
+(Dispersion parameter for Negative Binomial(1.6036) family taken to be 1) %chktex 36
 
     Null deviance: 235.23  on 145  degrees of freedom
 Residual deviance: 167.53  on 128  degrees of freedom
-AIC: 1100.5
+AIC: 1100.5 %chktex 13
 
 Number of Fisher Scoring iterations: 1
 
@@ -498,7 +502,7 @@ Number of Fisher Scoring iterations: 1
 
 %% -- Summary/conclusions/discussion -------------------------------------------
 
-\section{Summary and discussion} \label{sec:summary}
+\section{Summary and discussion}\label{sec:summary}
 
 \begin{leftbar}
 As usual \dots
@@ -554,7 +558,7 @@ information such as relative contributions of the authors may be added here
 
 \begin{appendix}
 
-\section{More technical details} \label{app:technical}
+\section{More technical details}\label{app:technical}
 
 \begin{leftbar}
 Appendices can be included after the bibliography (with a page break). Each
@@ -575,7 +579,7 @@ which includes the following topics:
 \end{leftbar}
 
 
-\section[Using BibTeX]{Using \textsc{Bib}{\TeX}} \label{app:bibtex}
+\section[Using BibTeX]{Using Bib{\TeX}}\label{app:bibtex}
 
 \begin{leftbar}
 References need to be provided in a \textsc{Bib}{\TeX} file (\code{.bib}). All
@@ -585,7 +589,7 @@ formats of author-year citations and allow to include additional details (e.g.,
 pages, chapters, \dots) in brackets. In case you are not familiar with these
 commands see the JSS style FAQ for details.
 
-Cleaning up \textsc{Bib}{\TeX} files is a somewhat tedious task -- especially
+Cleaning up \textsc{Bib}{\TeX} files is a somewhat tedious task---especially
 when acquiring the entries automatically from mixed online sources. However,
 it is important that informations are complete and presented in a consistent
 style to avoid confusions. JSS requires the following format.
@@ -596,7 +600,7 @@ style to avoid confusions. JSS requires the following format.
   \item Journal titles should not be abbreviated and in title case.
   \item DOIs should be included where available.
   \item Software should be properly cited as well. For \proglang{R} packages
-    \code{citation("pkgname")} typically provides a good starting point.
+    \code{citation("pkgname")} typically provides a good starting point. %chktex 18 chktex 36
 \end{itemize}
 \end{leftbar}
 

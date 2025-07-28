@@ -3,6 +3,7 @@
 set -euxo pipefail
 
 export PYTHONWARNINGS=error
+export MPLBACKEND=Agg
 
 cd $(dirname $0)
 cp ../logo.png .
