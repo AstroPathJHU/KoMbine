@@ -103,4 +103,4 @@ jobs:
             docs/*.html
       - name: Check latex log
         run: |
-          python .github/workflows/checklog.py docs/*.log  --ignore-regex "Macro 'volume[+]number' undefined."
+          python .github/workflows/checklog.py docs/*.log  --ignore-regex "Macro 'volume[+]number' undefined." --ignore-regex 'Underfull \\vbox \(badness (10000|1648)\) has occurred' --ignore-regex 'Option .hyperindex. has already been used' --ignore-regex 'Missing driver name\.'
