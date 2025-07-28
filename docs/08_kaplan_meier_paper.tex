@@ -9,12 +9,13 @@
 \usepackage{framed}
 
 \usepackage{amsmath}
-\usepackage{hyperref}
 \usepackage{cleveref}
 
 %% new custom commands
 \newcommand{\class}[1]{`\code{#1}'}
 \newcommand{\fct}[1]{\code{#1()}}
+
+\newcommand{\KM}{Kaplan--Meier} %chktex 8
 
 
 %% -- Article metainformation (author, title, ...) -----------------------------
@@ -23,19 +24,19 @@
 %% - \Plainauthor{} without affiliations
 %% - Separate authors by \And or \AND (in \author) or by comma (in \Plainauthor).
 %% - \AND starts a new line, \And does not.
-\author{Jeffrey Roskes~\orcidlink{0000-0001-8761-0490}\\Johns Hopkins University}
+\author{Jeffrey Roskes~\orcidlink{0000-0001-8761-0490}\\Johns Hopkins University} % chktex 8
 \Plainauthor{Jeffrey Roskes}
 
 %% - \title{} in title case
 %% - \Plaintitle{} without LaTeX markup (if any)
 %% - \Shorttitle{} with LaTeX markup (if any), used as running title
-\title{\pkg{KoMbine}: Propagating Statistical and Systematic Errors to Kaplan-Meier Curves}
-\Plaintitle{KoMbine: Propagating Statistical and Systematic Errors to Kaplan-Meier Curves}
-\Shorttitle{KoMbine: Propagating Errors to Kaplan-Meier Curves}
+\title{\pkg{KoMbine}: Propagating Statistical and Systematic Errors to \KM{} Curves}
+\Plaintitle{KoMbine: Propagating Statistical and Systematic Errors to \KM{} Curves}
+\Shorttitle{KoMbine: Propagating Errors to \KM{} Curves}
 
 %% - \Abstract{} almost as usual
 \Abstract{
-  Kaplan--Meier curves are widely used in medical research to evaluate the performance of biomarkers and predict patient outcomes. These curves are often shown without error bands, and even when error bands are provided, they typically only account for the statistical uncertainty resulting from the finite number of patients in the study.  In reality, other sources of uncertainty affect the measurements as well.  As datasets grow, the patient-wise statistical uncertainty no longer dominates the overall uncertainty, and other uncertainties are increasingly important to model. The \pkg{KoMbine} package, developed based on procedures used in particle physics, provides the first method to propagate both statistical and systematic uncertainties through the Kaplan--Meier curve estimation processes.
+  \KM{} curves are widely used in medical research to evaluate the performance of biomarkers and predict patient outcomes. These curves are often shown without error bands, and even when error bands are provided, they typically only account for the statistical uncertainty resulting from the finite number of patients in the study.  In reality, other sources of uncertainty affect the measurements as well.  As datasets grow, the patient-wise statistical uncertainty no longer dominates the overall uncertainty, and other uncertainties are increasingly important to model. The \pkg{KoMbine} package, developed based on procedures used in particle physics, provides the first method to propagate both statistical and systematic uncertainties through the \KM{} curve estimation processes.
 }
 
 %% - \Keywords{} with LaTeX markup, at least one required
@@ -78,35 +79,35 @@
 
 \section{Introduction} \label{sec:intro}
 
-Kaplan--Meier curves are widely used in medical research to predict patient outcomes by giving the survival probability as a function of time.  Typically, a Kaplan--Meier curve starts with a survival probability of \(1.0\) at time \(0\), which represents, for example, the time of treatment.  The survival probability decreases as time progresses, representing patient deaths or other events of interest.
+\KM{} curves are widely used in medical research to predict patient outcomes by giving the survival probability as a function of time.  Typically, a \KM{} curve starts with a survival probability of \(1.0\) at time \(0\), which represents, for example, the time of treatment.  The survival probability decreases as time progresses, representing patient deaths or other events of interest.
 
-Sometimes, a patient drops out of the study without experiencing the event of interest and is called ``censored''.  The patient is included in the Kaplan--Meier curve until the point of censoring.  After the patient is censored, they are no longer considered ``at risk'' for the event of interest, and the future survival probability is calculated based on the remaining patients.
+Sometimes, a patient drops out of the study without experiencing the event of interest and is called ``censored''.  The patient is included in the \KM{} curve until the point of censoring.  After the patient is censored, they are no longer considered ``at risk'' for the event of interest, and the future survival probability is calculated based on the remaining patients.
 
-Kaplan--Meier curves are often shown without error bands.  Various popular packages, such as \pkg{survival} \citep{survival} in \proglang{R} \citep{R} or \pkg{lifelines} \citep{lifelines} in \proglang{Python}, provide error bands that account for the statistical uncertainty resulting from the finite number of patients in the study using Greenwood confidence intervals \citep{Greenwood}.  (To be more precise, \pkg{lifelines} uses the exponential Greenwood confidence intervals, while \citep{survival} allows several different methods, all variations of Greenwood's.)
+\KM{} curves are often shown without error bands.  Various popular packages, such as \pkg{survival} \citep{survival} in \proglang{R} \citep{R} or \pkg{lifelines} \citep{lifelines} in \proglang{Python}, provide error bands that account for the statistical uncertainty resulting from the finite number of patients in the study using Greenwood confidence intervals \citep{Greenwood}.  (To be more precise, \pkg{lifelines} uses the exponential Greenwood confidence intervals, while \citep{survival} allows several different methods, all variations of Greenwood's.)
 
-Other uncertainties can also affect the Kaplan--Meier curve.  Other types of uncertainties will typically be patient-wise uncertainties, which \emph{move} the patient from one Kaplan--Meier curve to another.  For example, a biomarker study might classify patients based on the density of a particular cell type.  A Kaplan--Meier plot could be constructed with two curves, for patients with a high and low density of the cell type.  However, the cell type is subject to Poisson noise as well as systematic errors in the measurement.  Similar errors apply to Kaplan--Meier plots that stratify patients by gene expression levels or other continuous variables.
+Other uncertainties can also affect the \KM{} curve.  Other types of uncertainties will typically be patient-wise uncertainties, which \emph{move} the patient from one \KM{} curve to another.  For example, a biomarker study might classify patients based on the density of a particular cell type.  A \KM{} plot could be constructed with two curves, for patients with a high and low density of the cell type.  However, the cell type is subject to Poisson noise as well as systematic errors in the measurement.  Similar errors apply to \KM{} plots that stratify patients by gene expression levels or other continuous variables.
 
-The \pkg{KoMbine} package provides the first method to propagate these types of errors through the Kaplan--Meier curve estimation process.  The techniques are based on the \pkg{Combine} package \citep{combine}, developed by the CMS Collaboration in particle physics.  \pkg{Combine}, built on the \pkg{RooFit} framework \citep{RooFit}, is used for high-precision measurements of particle properties, which often account for tens or even hundreds of systematic uncertainties, and was used for such high profile measurements as the Higgs boson discovery \citep{HIG-12-028} and subsequent measurements of its properties.
+The \pkg{KoMbine} package provides the first method to propagate these types of errors through the \KM{} curve estimation process.  The techniques are based on the \pkg{Combine} package \citep{combine}, developed by the CMS Collaboration in particle physics.  \pkg{Combine}, built on the \pkg{RooFit} framework \citep{RooFit}, is used for high-precision measurements of particle properties, which often account for tens or even hundreds of systematic uncertainties, and was used for such high profile measurements as the Higgs boson discovery \citep{HIG-12-028} and subsequent measurements of its properties.
 
-\pkg{KoMbine} provides a similar interface to propagate uncertainties to Kaplan--Meier curves.  It handles the statistical uncertainty on the number of patients in a more precise way than the Greenwood confidence intervals and incorporates patient-wise uncertainties into the calculation.  The statistical and patient-wise uncertainties can also be plotted separately, allowing the user to see which uncertainties dominate.
+\pkg{KoMbine} provides a similar interface to propagate uncertainties to \KM{} curves.  It handles the statistical uncertainty on the number of patients in a more precise way than the Greenwood confidence intervals and incorporates patient-wise uncertainties into the calculation.  The statistical and patient-wise uncertainties can also be plotted separately, allowing the user to see which uncertainties dominate.
 
 \section{Methodology}
 
-\pkg{KoMbine} uses a log-likelihood to compute the confidence interval for each point on the Kaplan--Meier curve.  The log likelihood is a function of the survival probability \(S\) as well as other parameters.  We maximize the likelihood over those other parameters to find the ``likelihood scan'' as a function of \(S\) alone.  The points of maximum likelihood form the Kaplan--Meier curve, and the confidence intervals are determined by the points where the log likelihood is below a threshold.
+\pkg{KoMbine} uses a log-likelihood to compute the confidence interval for each point on the \KM{} curve.  The log likelihood is a function of the survival probability \(S\) as well as other parameters.  We maximize the likelihood over those other parameters to find the ``likelihood scan'' as a function of \(S\) alone.  The points of maximum likelihood form the \KM{} curve, and the confidence intervals are determined by the points where the log likelihood is below a threshold.
 
 For clarity, we will distinguish the two types of uncertainty: the statistical uncertainty from the finite number of patients (which we will call the ``binomial uncertainty'') and the patient-wise uncertainty.
 
 \subsection{Binomial uncertainty}
 
-We will first consider the binomial uncertainty and assume that the patients included in the Kaplan--Meier curve are fixed.
+We will first consider the binomial uncertainty and assume that the patients included in the \KM{} curve are fixed.
 
-The binomial contribution to the Kaplan--Meier curve is computed from the number of patients at risk and the number of patients who died at each time point.  The nominal survival probability is given by the Kaplan--Meier formula
+The binomial contribution to the \KM{} curve is computed from the number of patients at risk and the number of patients who died at each time point.  The nominal survival probability is given by the \KM{} formula
 \begin{equation}
 S = \prod_{i=1}^{n} \left(1 - \frac{d_i}{r_i}\right), \label{eq:km-probability}
 \end{equation}
 where \(d_i\) is the number of patients who died at time \(t_i\) and \(r_i\) is the number of patients at risk at time \(t_i\).  The binomial probability is
 \begin{equation}
-\mathcal{L}_{\text{binomial}}(p_i^\text{survived}) = \prod_{i=1}^{n} \binom{r_i}{d_i} \left(p_i^\text{died}\right)^{d_i} \left(p_i^\text{survived}\right)^{r_i-d_i},
+\mathcal{L}_{\text{binomial}}(p_i^\text{survived}) = \prod_{i=1}^{n} \binom{r_i}{d_i} \left(p_i^\text{died}\right)^{d_i} {\left(p_i^\text{survived}\right)}^{r_i-d_i},
 \end{equation}
 where \(p_i^\text{died} = 1 - p_i^\text{survived}\), and the negative log likelihood (NLL) is
 \begin{equation}
@@ -122,14 +123,14 @@ We are not interested in the individual \(p_i^\text{survived}\) values, but rath
 
 \subsection{Patient-wise uncertainty}
 
-We now consider that some patients' parameters may be subject to uncertainty.  Some patients who were nominally included in the Kaplan--Meier curve may actually be excluded or vice versa.  In other words, \(d_i\) and \(r_i\) are no longer fixed numbers, but depend on which patients are included.  If we denote the inclusion of patient \(j\) by \(a_j\), then
+We now consider that some patients' parameters may be subject to uncertainty.  Some patients who were nominally included in the \KM{} curve may actually be excluded or vice versa.  In other words, \(d_i\) and \(r_i\) are no longer fixed numbers, but depend on which patients are included.  If we denote the inclusion of patient \(j\) by \(a_j\), then
 \begin{align}
 r_i &= \sum_{t_j \geq t_i} a_j \\
 d_i &= \sum_{\substack{t_j = t_i \\ \neg c_j}} a_j
 \end{align}
 where \(c_j=1\) if the patient is censored and \(0\) otherwise.
 
-We first precompute the NLL penalty for each patient to be included in the Kaplan--Meier curve.  This penalty is negative if the patient is nominally included and positive if the patient is nominally excluded.  The penalty depends on the functional form of the patient's parameter's probability density function.  It is calculated as the difference between the minimum NLL for the parameter to be within the range to be included in the curve and the minimum NLL for it to be outside the range.
+We first precompute the NLL penalty for each patient to be included in the \KM{} curve.  This penalty is negative if the patient is nominally included and positive if the patient is nominally excluded.  The penalty depends on the functional form of the patient's parameter's probability density function.  It is calculated as the difference between the minimum NLL for the parameter to be within the range to be included in the curve and the minimum NLL for it to be outside the range.
 
 For the purpose of the math here, all that is important is that the penalty is a fixed number per patient, which we call \(-\log \mathcal{L}_j^{\text{patient}}\).  We compute the NLL as
 \begin{equation}
@@ -148,7 +149,7 @@ We minimize the overall NLL \cref{eq:total-nll} over the \(p_i^\text{survived}\)
 
 \subsection{Running with patient-wise uncertainties only}
 
-Although the total uncertainty on the Kaplan--Meier curve includes both the binomial and the patient-wise uncertainty, it is instructive to look at them separately.  Determining which uncertainty dominates can help to understand the next steps in the analysis: should we try to enroll more patients or should we improve the biomarker measurements?
+Although the total uncertainty on the \KM{} curve includes both the binomial and the patient-wise uncertainty, it is instructive to look at them separately.  Determining which uncertainty dominates can help to understand the next steps in the analysis: should we try to enroll more patients or should we improve the biomarker measurements?
 
 To examine the binomial uncertainty, we can fix the parameters to their nominal values, fixing \(a_j=1\) for the patients who are nominally included and \(0\) for those who are nominally excluded.  These results are approximately equivalent to the Greenwood confidence intervals used in other packages (our code is somewhat more precise, but also slower), as will be illustrated in \cref{sec:compare-to-greenwood}.
 
@@ -171,30 +172,33 @@ For the patient-wise-only error, there is no need to minimize the NLL over \(S'\
 
 \section{Examples and discussion}
 
-This section provides examples that illustrate interesting aspects of the Kaplan--Meier curve estimation.
+This section provides examples that illustrate interesting aspects of the \KM{} curve estimation.
 
-\subsection[Best fit vs. nominal Kaplan--Meier curve]{Best fit vs.\ nominal Kaplan--Meier curve}
+\subsection%
+[Best fit vs. nominal \KM{} curve]%
+{Best fit vs.\ nominal \KM{} curve}
 
-Counter-intuitively, the best fit Kaplan--Meier curve does not necessarily coincide with the nominal Kaplan--Meier curve.  An example is shown in \cref{fig:best-fit-vs-nominal}.
+Counter-intuitively, the best fit \KM{} curve does not necessarily coincide with the nominal \KM{} curve.  An example is shown in \cref{fig:best-fit-vs-nominal}.
 
 If only the binomial penalty is included, the survival NLL always minimizes at the nominal survival probability.  Similarly, with only the patient-wise errors, the nominal survival probability is also always optimal.  However, when both are included, the two may differ.
 
-To understand this, imagine a case where a patient is excluded from the curve, but their parameter is arbitrarily close to the boundary.  Nominally, this patient is included in the curve, but they can be included with only a small NLL penalty.  Adjusting the survival probability can improve the binomial penalty term by more than this small penalty loss: for example, \code{scipy.stats.logpmf(4, 7, 4/7)=-1.225}, but \code{scipy.stats.logpmf(5, 8, 5/8)=-1.267}.  If the patient is close enough to the boundary, this difference in the binomial penalty may outweigh the small penalty for including the patient.
+To understand this, imagine a case where a patient is excluded from the curve, but their parameter is arbitrarily close to the boundary.  Nominally, this patient is included in the curve, but they can be included with only a small NLL penalty.  Adjusting the survival probability can improve the binomial penalty term by more than this small penalty loss:
+for example, \code{scipy.stats.logpmf(4, 7, 4/7)=-1.225}, but \code{scipy.stats.logpmf(5, 8, 5/8)=-1.267}. %chktex 36
+If the patient is close enough to the boundary, this difference in the binomial penalty may outweigh the small penalty for including the patient.
 
-This surprising result highlights the importance of the patient-wise uncertainties.  If the NLL penalty for including the patient really is that small, then we cannot, with any confidence, assign the patient to one Kaplan--Meier curve or the other.
+This surprising result highlights the importance of the patient-wise uncertainties.  If the NLL penalty for including the patient really is that small, then we cannot, with any confidence, assign the patient to one \KM{} curve or the other.
 
 \begin{figure}
   \centering
   \includegraphics{km_example.pdf}
   \caption{\label{fig:best-fit-vs-nominal} Caption goes here}
-  \label{fig:best-fit-vs-nominal}
 \end{figure}
 
 \subsection{Lung cancer dataset}
 
 This example is taken from \citep{AstroPathLung}, in which we analyzed pre-treatment biopsies from a cohort of patients with non-small-cell lung cancer (NSCLC) treated with anti-PD-1 immunotherapy.  We identified CD8+FoxP3+ cells, which are associated with good outcomes, but are extremely rare: a patient may have only one or two in their biopsy.  We also developed a probabilistic biomarker, called DONUTS, which resemble the niche of the CD8+FoxP3+ cells but are much more abundant.
 
-\Cref{fig:lung-dataset} shows Kaplan--Meier curves with the
+\Cref{fig:lung-dataset} shows \KM{} curves with the
 
 \subsection{Comparison with existing methods}
 
@@ -202,7 +206,7 @@ This example is taken from \citep{AstroPathLung}, in which we analyzed pre-treat
 
 \section{Conclusion}
 
-\section[Introduction: Count data regression in R]{Introduction: Count data regression in \proglang{R}} \label{sec:intro}
+\section[Introduction: Count data regression in R]{Introduction: Count data regression in \proglang{R}} \label{sec:example-intro}
 
 \begin{leftbar}
 The introduction is in principle ``as usual''. However, it should usually embed
@@ -211,12 +215,12 @@ relevant literature. For the latter both competing and complementary software
 should be discussed (within the same software environment and beyond), bringing
 out relative (dis)advantages. All software mentioned should be properly
 \verb|\cite{}|d. (See also Appendix~\ref{app:bibtex} for more details on
-\textsc{Bib}{\TeX}.)
+\textsc{Bib}{\TeX}.) %chktex 36
 
 For writing about software JSS requires authors to use the markup
 \verb|\proglang{}| (programming languages and large programmable systems),
 \verb|\pkg{}| (software packages), \verb|\code{}| (functions, commands,
-arguments, etc.). If there is such markup in (sub)section titles (as above), a
+arguments, etc.). If there is such markup in (sub)section titles (as above), a  %chktex 36
 plain text version has to be provided in the {\LaTeX} command as well. Below we
 also illustrate how abbrevations should be introduced and citation commands can
 be employed. See the {\LaTeX} code for more details.
@@ -232,7 +236,7 @@ dispersion parameter (in a so-called quasi-Poisson model). Another more formal
 way is to use a negative binomial (NB) regression. All of these models belong to
 the family of generalized linear models (GLMs). However, although these models
 typically can capture overdispersion rather well, they are in many applications
-not sufficient for  modeling excess zeros. Since \cite{Mullahy:1986} there is
+not sufficient for  modeling excess zeros. Since~\cite{Mullahy:1986} there is
 increased interest in zero-augmented models that address this issue by a second
 model component capturing zero counts. An overview of count data models in
 econometrics, including  hurdle and zero-inflated models, is provided in
@@ -279,7 +283,7 @@ where the regression coefficients $\beta$ are estimated by maximum likelihood
 
 \begin{leftbar}
 Note that around the \verb|{equation}| above there should be no spaces (avoided
-in the {\LaTeX} code by \verb|%| lines) so that ``normal'' spacing is used and
+in the {\LaTeX} code by \texttt{\%} lines) so that ``normal'' spacing is used and
 not a new paragraph started.
 \end{leftbar}
 
@@ -289,7 +293,7 @@ framework in the function \fct{glm} \citep{Chambers+Hastie:1992} in the
 \begin{Code}
 glm(formula, data, subset, na.action, weights, offset,
   family = gaussian, start = NULL, control = glm.control(...),
-  model = TRUE, y = TRUE, x = FALSE, ...)
+  model = TRUE, y = TRUE, x = FALSE, ...) %chktex 11
 \end{Code}
 where \code{formula} plus \code{data} is the now standard way of specifying
 regression relationships in \proglang{R}/\proglang{S} introduced in
@@ -363,7 +367,7 @@ are in sentence style, and if possible vertical lines should be avoided.}
 %% - Comments within the code chunks should be avoided - these should be made
 %%   within the regular LaTeX text.
 
-\section{Illustrations} \label{sec:illustrations}
+\section{Illustrations}\label{sec:illustrations}
 
 For a simple illustration of basic Poisson and NB count regression the
 \code{quine} data from the \pkg{MASS} package is used. This provides the number
@@ -373,7 +377,7 @@ The data can be loaded by
 %
 \begin{CodeChunk}
 \begin{CodeInput}
-R> data("quine", package = "MASS")
+R> data("quine", package = "MASS") %chktex 36
 \end{CodeInput}
 \end{CodeChunk}
 %
@@ -391,7 +395,7 @@ use ``the usual'' command prompt in the respective software system. For
 \proglang{R} code, the prompt \code{"R> "} should be used with \code{"+  "} as
 the continuation prompt. Generally, comments within the code chunks should be
 avoided -- and made in the regular {\LaTeX} text instead. Finally, empty lines
-before and after code input/output should be avoided (see above).
+before and after code input/output should be avoided (see above). %chktex 18
 \end{leftbar}
 
 \begin{figure}[t!]
@@ -444,14 +448,14 @@ R> summary(m_nbin)
 \begin{CodeOutput}
 Call:
 glm.nb(formula = Days ~ (Eth + Sex + Age + Lrn)^2, data = quine, 
-    init.theta = 1.60364105, link = log)
+    init.theta = 1.60364105, link = log)  %chktex 39
 
 Deviance Residuals: 
     Min       1Q   Median       3Q      Max  
 -3.0857  -0.8306  -0.2620   0.4282   2.0898  
 
 Coefficients: (1 not defined because of singularities)
-            Estimate Std. Error z value Pr(>|z|)    
+            Estimate Std. Error z value Pr(>|z|)  %chktex 36   
 (Intercept)  3.00155    0.33709   8.904  < 2e-16 ***
 EthN        -0.24591    0.39135  -0.628  0.52977    
 SexM        -0.77181    0.38021  -2.030  0.04236 *  
@@ -472,7 +476,7 @@ AgeF1:LrnSL -0.43101    0.47948  -0.899  0.36870
 AgeF2:LrnSL  0.52074    0.48567   1.072  0.28363    
 AgeF3:LrnSL       NA         NA      NA       NA    
 ---
-Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+Signif.\ codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
 (Dispersion parameter for Negative Binomial(1.6036) family taken to be 1)
 
@@ -514,7 +518,7 @@ maps, tables, \dots) that are not cited in the main text can be credited here.
 
 The results in this paper were obtained using
 \proglang{R}~3.4.1 with the
-\pkg{MASS}~7.3.47 package. \proglang{R} itself
+\pkg{MASS}~7.3.47 package\@. \proglang{R} itself
 and all packages used are available from the Comprehensive
 \proglang{R} Archive Network (CRAN) at
 \url{https://CRAN.R-project.org/}.
