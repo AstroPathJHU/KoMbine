@@ -18,7 +18,7 @@ class LatexMessage(collections.namedtuple("LatexMessage", ["type", "logmessage"]
     """
     Get the message from the log message.
     """
-    return self.logmessage.info["message"]
+    return self.logmessage.info.get("message", None)
   def __str__(self) -> str:
     return str(self.logmessage)
 
@@ -39,7 +39,7 @@ def checklatex(filename, ignore_regexes=()):
   ]
 
   messages = [
-    m for m in messages if not any(r.search(m.message) for r in ignore_regexes)
+    m for m in messages if not any(r.search(str(m.message)) for r in ignore_regexes)
   ]
 
   errors = [m for m in messages if m.type == "error"]
