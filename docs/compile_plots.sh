@@ -22,4 +22,4 @@ python ../test/test_continuous_distributions.py
 
 kombine ../test/datacards/simple_examples/poisson_ratio_km_censoring.txt km_example.pdf --parameter-min 0.45
 kombine_twogroups ../test/datacards/lung/datacard_cells_RFS.txt lung_cells_km.pdf --parameter-threshold 0.4 --include-patient-wise-only --print-progress
-kombine_twogroups ../test/datacards/lung/datacard_donuts_RFS.txt lung_donuts_km.pdf --parameter-threshold 1130 --include-patient-wise-only --print-progress
+kombine_twogroups ../test/datacards/lung/datacard_donuts_RFS.txt lung_donuts_km.pdf --parameter-threshold 1130 --include-patient-wise-only --print-progress --log-zero-epsilon 1e-9

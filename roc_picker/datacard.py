@@ -874,6 +874,7 @@ class Datacard:
     parameter_max: float,
     *,
     endpoint_epsilon: float = 1e-6,
+    log_zero_epsilon: float = 1e-10,
   ) -> KaplanMeierLikelihood:
     """
     Generate a KaplanMeierLikelihood object for generating Kaplan-Meier
@@ -888,6 +889,7 @@ class Datacard:
       parameter_min=parameter_min,
       parameter_max=parameter_max,
       endpoint_epsilon=endpoint_epsilon,
+      log_zero_epsilon=log_zero_epsilon,
     )
 
   def clear_distributions(self):
@@ -997,6 +999,7 @@ def plot_km_likelihood():
   group.add_argument("--include-patient-wise-only", action="store_true", help="Include error bands for the patient-wise error alone.")
   parser.add_argument("--exclude-full-nll", action="store_false", help="Exclude the full NLL from the plot.", dest="include_full_NLL", default=True)
   parser.add_argument("--include-median-survival", action="store_true", help="Include the median survival line in the plot.", dest="include_median_survival")
+  parser.add_argument("--log-zero-epsilon", type=float, help="Log zero epsilon for the likelihood calculation.", dest="log_zero_epsilon", default=1e-10)
   # pylint: enable=C0301
   args = parser.parse_args()
   if (
@@ -1012,6 +1015,7 @@ def plot_km_likelihood():
   kml = datacard.km_likelihood(
     parameter_min=args.__dict__.pop("parameter_min"),
     parameter_max=args.__dict__.pop("parameter_max"),
+    log_zero_epsilon=args.__dict__.pop("log_zero_epsilon"),
   )
 
   # Create KaplanMeierPlotConfig object from parsed arguments
@@ -1044,6 +1048,7 @@ def plot_km_likelihood_two_groups():
   parser.add_argument("--exclude-full-nll", action="store_false", help="Exclude the full NLL from the plot.", dest="include_full_NLL", default=True)
   parser.add_argument("--include-median-survival", action="store_true", help="Include the median survival line in the plot.", dest="include_median_survival")
   parser.add_argument("--print-progress", action="store_true", help="Print progress messages during the computation.", dest="print_progress")
+  parser.add_argument("--log-zero-epsilon", type=float, help="Epsilon value for log(0) handling in the likelihood computation.", dest="log_zero_epsilon", default=1e-10)
   # pylint: enable=C0301
   args = parser.parse_args()
   if (
@@ -1057,13 +1062,16 @@ def plot_km_likelihood_two_groups():
     )
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
   threshold = args.__dict__.pop("parameter_threshold")
+  log_zero_epsilon = args.__dict__.pop("log_zero_epsilon")
   kml_low = datacard.km_likelihood(
     parameter_min=-np.inf,
     parameter_max=threshold,
+    log_zero_epsilon=log_zero_epsilon,
   )
   kml_high = datacard.km_likelihood(
     parameter_min=threshold,
     parameter_max=np.inf,
+    log_zero_epsilon=log_zero_epsilon,
   )
 
   # Common plot configuration arguments
