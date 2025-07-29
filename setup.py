@@ -23,6 +23,7 @@ setuptools.setup(
       "rocpicker_discrete=roc_picker.datacard:plot_discrete_roc",
       "rocpicker_delta_functions=roc_picker.datacard:plot_delta_functions_roc",
       "kombine=roc_picker.datacard:plot_km_likelihood",
+      "kombine_twogroups=roc_picker.datacard:plot_km_likelihood_two_groups",
     ],
   }
 )

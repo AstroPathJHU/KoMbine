@@ -1042,7 +1042,8 @@ def plot_km_likelihood_two_groups():
   group.add_argument("--include-binomial-only", action="store_true", help="Include error bands for the binomial error alone.")
   group.add_argument("--include-patient-wise-only", action="store_true", help="Include error bands for the patient-wise error alone.")
   parser.add_argument("--exclude-full-nll", action="store_false", help="Exclude the full NLL from the plot.", dest="include_full_NLL", default=True)
-  parser.add_argument("--include-median-survival", action="store_true", help="Include the median survival line in the plot.", dest="include_median_survival", default=True)
+  parser.add_argument("--include-median-survival", action="store_true", help="Include the median survival line in the plot.", dest="include_median_survival")
+  parser.add_argument("--print-progress", action="store_true", help="Print progress messages during the computation.", dest="print_progress")
   # pylint: enable=C0301
   args = parser.parse_args()
   if (
@@ -1070,8 +1071,9 @@ def plot_km_likelihood_two_groups():
     "include_patient_wise_only": args.__dict__.pop("include_patient_wise_only"),
     "include_binomial_only": args.__dict__.pop("include_binomial_only"),
     "include_full_NLL": args.__dict__.pop("include_full_NLL"),
-    "include_best_fit": False, # Explicitly set to False as per original logic
+    "include_best_fit": False,
     "include_median_survival": args.__dict__.pop("include_median_survival"),
+    "print_progress": args.__dict__.pop("print_progress"),
   }
 
   # Configuration for the 'High' group plot (creates the figure)
