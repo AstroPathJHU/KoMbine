@@ -390,7 +390,17 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
         if patient_wise_only:
           probs = self.possible_probabilities(time_point=t)
+          #Explicitly add best_prob to the probabilities
+          #It should be there already, but sometimes isn't due to numerical issues
+          if best_prob not in probs:
+            probs = np.append(probs, best_prob)
+            probs = np.sort(probs)
           i_best = int(np.searchsorted(probs, best_prob))
+          np.testing.assert_equal(
+            probs[i_best],
+            best_prob,
+            err_msg=f"Best probability {best_prob} not found in possible probabilities {probs}",
+          )
 
           # Check edge case: upper bound
           if objective_function(probs[-1]) < 0:
