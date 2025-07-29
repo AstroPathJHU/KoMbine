@@ -1465,15 +1465,10 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
         )
       )
 
-    # Fallback 4: Try different NumericFocus if patient_wise_only
-    if patient_wise_only:
-      fallback_strategies.append(
-        ({'NumericFocus': 1}, "Changed NumericFocus to 1 (balanced)")
-      )
-    else:
-      fallback_strategies.append(
-        ({'NumericFocus': 2}, "Changed NumericFocus to 2 (accuracy)")
-      )
+    # Fallback 4: Try different NumericFocus
+    fallback_strategies.append(
+      ({'NumericFocus': 2}, "Changed NumericFocus to 2 (accuracy)")
+    )
 
     # Fallback 5: Experiment with Cuts (more aggressive)
     fallback_strategies.append(
@@ -1484,6 +1479,50 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     fallback_strategies.append(
       ({'Heuristics': 0.5}, "Less aggressive heuristics")
     )
+
+    #Fallback 7: Tighten barrier convergence tolerance
+    fallback_strategies.append(
+      ({'BarConvTol': 1e-8}, "Tightened barrier convergence tolerance")
+    )
+
+    #Fallback 8: Tighten feasibility tolerance
+    fallback_strategies.append(
+      ({'FeasibilityTol': 1e-8}, "Tightened feasibility tolerance")
+    )
+
+    # Fallback 9: Tighten optimality tolerance
+    fallback_strategies.append(
+      ({'OptimalityTol': 1e-8}, "Tightened optimality tolerance")
+    )
+
+    # Fallback 10: Use barrier method
+    fallback_strategies.append(
+      ({'Method': 2}, "Switched to barrier method")
+    )
+
+    #Fallback 11: Avoid switching back to simplex
+    fallback_strategies.append(
+      ({'CrossOver': 0}, "Avoided switching back to simplex method")
+    )
+
+    # Fallback 12: Barrier at all nodes
+    fallback_strategies.append(
+      ({'NodeMethod': 2}, "Used barrier method at all nodes")
+    )
+
+    # Last fallback: turn verbose output on
+    # This is not going to work, but it will help us debug the issue
+    if not verbose:
+      fallback_strategies.append(
+        (
+          {
+            'OutputFlag': 1,
+            'DisplayInterval': 1,
+            'InfUnbdInfo': 1,
+          },
+          "Turned verbose output on"
+        )
+      )
 
     # Optimize with fallbacks
     model = self._optimize_with_fallbacks(
