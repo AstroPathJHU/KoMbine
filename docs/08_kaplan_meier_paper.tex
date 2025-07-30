@@ -96,43 +96,50 @@ The \pkg{KoMbine} package provides the first method to propagate these types of 
 
 \pkg{KoMbine} uses a log-likelihood to compute the confidence interval for each point on the \KM{} curve.  The log likelihood is a function of the survival probability \(S\) as well as other parameters.  We maximize the likelihood over those other parameters to find the ``likelihood scan'' as a function of \(S\) alone.  The points of maximum likelihood form the \KM{} curve, and the confidence intervals are determined by the points where the log likelihood is below a threshold.
 
+\subsection{Notation}
+
+We denote the inclusion of patient \(j\) by \(a_j\), which is \(1\) if the patient is included and \(0\) if the patient is excluded.  The numbers of patients who were at risk and who died at time \(t_i\) are:
+\begin{align}
+r_i &= \sum_{t_j \geq t_i} a_j, \\
+d_i &= \sum_{\substack{t_j = t_i \\ \neg c_j}} a_j.
+\end{align}
+We will allow \(a_i\) to vary, so that \(r_i\) and \(d_i\) may differ from their nominal values \(\hat{r}_i\) and \(\hat{d}_i\).
+
+The survival probability at time \(t_n\) is given by the \KM{} formula:
+\begin{equation}
+S_n = \prod_{i=1}^{n} p_i^\text{survived}, \label{eq:km-survival}
+\end{equation}
+where \(p_i^\text{survived}\) is the probability that a patient who has survived until a given time point continues to live.  The nominal probability is calculated from the observed survival probabilities:
+\begin{equation}
+\hat{S}_n = \prod_{i=1}^{n} \left(1 - \frac{\hat{d}_i}{\hat{r}_i}\right). \label{eq:km-nominal}
+\end{equation}
+
 For clarity, we will distinguish the two types of uncertainty: the statistical uncertainty from the finite number of patients (which we will call the ``binomial uncertainty'') and the patient-wise uncertainty.
 
 \subsection{Binomial uncertainty}
 
-We will first consider the binomial uncertainty and assume that the patients included in the \KM{} curve are fixed.
-
-The binomial contribution to the \KM{} curve is computed from the number of patients at risk and the number of patients who died at each time point.  The nominal survival probability at time point \(t_n\) is given by the \KM{} formula
+The binomial contribution to the \KM{} curve is computed from the number of patients at risk and the number of patients who died at each time point:
 \begin{equation}
-\hat{S}_n = \prod_{i=1}^{n} \left(1 - \frac{d_i}{r_i}\right), \label{eq:km-probability}
+\mathcal{L}_{\text{binomial}}(p_i^\text{survived}, a_i) = \prod_{i=1}^{n} \binom{r_i}{d_i} {\left(p_i^\text{died}\right)}^{d_i} {\left(p_i^\text{survived}\right)}^{r_i-d_i},
 \end{equation}
-where \(d_i\) is the number of patients who died at time \(t_i\) and \(r_i\) is the number of patients at risk at time \(t_i\).  The binomial probability is
+where \(p_i^\text{died} = 1 - p_i^\text{survived}\).  The negative log likelihood (NLL) is
 \begin{equation}
-\mathcal{L}_{\text{binomial}}(p_i^\text{survived}) = \prod_{i=1}^{n} \binom{r_i}{d_i} {\left(p_i^\text{died}\right)}^{d_i} {\left(p_i^\text{survived}\right)}^{r_i-d_i},
-\end{equation}
-where \(p_i^\text{died} = 1 - p_i^\text{survived}\), and the negative log likelihood (NLL) is
-\begin{equation}
--\log \mathcal{L}_{\text{binomial}}(p_i^\text{survived}) = -\left[\sum_{i=1}^{n} \left( \log\binom{r_i}{d_i} + d_i \log p_i^\text{died} + (r_i-d_i) \log p_i^\text{survived} \right)\right].
+-\log \mathcal{L}_{\text{binomial}}(p_i^\text{survived}, a_i) = -\left[\sum_{i=1}^{n} \left( \log\binom{r_i}{d_i} + d_i \log p_i^\text{died} + (r_i-d_i) \log p_i^\text{survived} \right)\right].
 \end{equation}
 
-Note that the only floating parameters in this binomial NLL are the \(p_i^\text{survived}\), which are the survival probabilities at each time point.  The other parameters, \(r_i\) and \(d_i\), are fixed by the observed data.
-
-We are not interested in the individual \(p_i^\text{survived}\) values, but rather the overall survival probability \(S_n\).  We therefore minimize the NLL over the \(p_i^\text{survived}\) with the constraint
+We are not interested in the individual \(p_i^\text{survived}\) values, but rather the overall survival probability \(S_n\).  We therefore use the constraint
 \begin{equation}
-\prod_{i=1}^{n} p_i^\text{survived} = \hat{S}_n \label{eq:km-probability-constraint}
+\prod_{i=1}^{n} p_i^\text{survived} = S_n \label{eq:km-probability-constraint}
 \end{equation}
-to find the likelihood \(\mathcal{L}_{\text{binomial}}(S_n)\) as a function of \(S_n\).
+when we minimize the NLL\@.
 
 \subsection{Patient-wise uncertainty}
 
-We now consider that some patients' parameters may be subject to uncertainty.  Some patients who were nominally included in the \KM{} curve may actually be excluded or vice versa.  In other words, \(d_i\) and \(r_i\) are no longer fixed numbers, but depend on which patients are included.  If we denote the inclusion of patient \(j\) by \(a_j\), then
-\begin{align}
-r_i &= \sum_{t_j \geq t_i} a_j \\
-d_i &= \sum_{\substack{t_j = t_i \\ \neg c_j}} a_j
-\end{align}
-where \(c_j=1\) if the patient is censored and \(0\) otherwise.
+We now consider that the patients themselves may be subject to uncertainty.  Some patients who were nominally included in the \KM{} curve may actually be excluded or vice versa.
 
-We first precompute the NLL penalty for each patient to be included in the \KM{} curve.  This penalty is negative if the patient is nominally included and positive if the patient is nominally excluded.  The penalty depends on the functional form of the patient's parameter's probability density function.  It is calculated as the difference between the minimum NLL for the parameter to be within the range to be included in the curve and the minimum NLL for it to be outside the range.
+The classic case when this happens is when dividing the patients into groups based on a continuous parameter, such as gene expression or the density of a certain cell type.  The parameter measurement is subject to uncertainty, which must be considered when determining the overall uncertainty on the \KM{} curve.  (This is in contrast to \KM{} curves based on discrete categories with no error, such as treatment vs.\ placebo, where patient-wise uncertainty likely does not enter.)
+
+We first precompute the NLL penalty for each patient to be included in the \KM{} curve, which is negative if the patient is nominally included and positive if the patient is nominally excluded.  The penalty depends on the functional form of the patient's parameter's probability density function, and it is calculated as the difference between the minimum NLL for the parameter to be within the range to be included in the curve and the minimum NLL for it to be outside the range.
 
 For the purpose of the math here, all that is important is that the penalty is a fixed number per patient, which we call \(-\log \mathcal{L}_j^{\text{patient}}\).  We compute the NLL as
 \begin{equation}
@@ -145,24 +152,32 @@ The total NLL is the sum of the binomial NLL and the patient-wise NLL\@:
 \begin{equation}
 -\log \mathcal{L}_{\text{total}}(a_j, p_i^\text{survived}) = -\log \mathcal{L}_{\text{binomial}}(a_j, p_i^\text{survived}) - \log \mathcal{L}_{\text{patient}}(a_j). \label{eq:total-nll}
 \end{equation}
-Now that we have added the patient-wise uncertainty, the binomial penalty therefore also depends on the patient inclusion indicators \(a_j\) via \(r_i\) and \(d_i\).
 
-We minimize the overall NLL \cref{eq:total-nll} over the \(p_i^\text{survived}\) and \(a_j\), again with the constraint \cref{eq:km-probability-constraint}.  This is a mixed integer nonlinear programming problem (MINLP).
+We minimize the overall NLL (\ref{eq:total-nll}) over the \(p_i^\text{survived}\) and \(a_j\), with the constraint (\ref{eq:km-probability-constraint}).  This is a mixed integer nonlinear programming problem (MINLP).
 
-\subsection{Running with patient-wise uncertainties only}
+\subsection{Isolating the binomial and patient-wise uncertainties}
 
 Although the total uncertainty on the \KM{} curve includes both the binomial and the patient-wise uncertainty, it is instructive to look at them separately.  Determining which uncertainty dominates can help to understand the next steps in the analysis: should we try to enroll more patients or should we improve the biomarker measurements?
 
-To examine the binomial uncertainty, we can fix the parameters to their nominal values, fixing \(a_j=1\) for the patients who are nominally included and \(0\) for those who are nominally excluded.  These results are approximately equivalent to the Greenwood confidence intervals used in other packages (our code is somewhat more precise, but also slower), as will be illustrated in \cref{sec:compare-to-greenwood}.
+\subsubsection{Binomial uncertainty}
 
-Isolating the patient-wise uncertainty is somewhat nontrivial.  We do \emph{not} want to vary the survival probabilities \(p_i^\text{survived}\): we would need the binomial term to constrain them.  Instead, \(S\) is calculated as \cref{eq:km-probability}.  However, \(S\) can only take on certain fixed, discrete values.  Furthermore, depending on the order that patients were censored or died, values of \(S\) that are close together may actually only be reachable by very different combinations of patients included in the analysis, with correspondingly different NLL values.  A scatter plot of \(-\log\mathcal{L}\) as a function of \(S\) would be useless.
+To examine the binomial uncertainty, we can fix the parameters to their nominal values, fixing \(a_j=\hat{a}_j=1\) for the patients who are nominally included and \(0\) for those who are nominally excluded.  These results are approximately equivalent to the Greenwood confidence intervals used in other packages.  As will be illustrated in \cref{sec:compare-to-greenwood}, our method is somewhat more precise, but is also computationally slower.
 
-Instead, we use a continuous variable \(S'\).  We calculate \(S_\text{nominal}\) using the nominal values of the patient parameters.  Then, for any value of \(S'\), we minimize the NLL over \(a_i\) with the constraint that \(S\) is at least as far from \(S_\text{nominal}\) as \(S'\):
+\subsubsection{Patient-wise uncertainty}
+
+Isolating the patient-wise uncertainty is somewhat nontrivial.  We cannot allow the survival probabilities \(p_i^\text{survived}\) to vary freely, as we would need the binomial term to constrain them.  Instead, we fix
+\begin{equation}
+p_i^\text{survived}(a_j) = 1 - \frac{d_i(a_j)}{r_i(a_j)}.
+\end{equation}
+
+With this definition, \(S\) can only take on certain fixed, discrete values.  Furthermore, depending on the order that patients were censored or died, values of \(S\) that are close together may actually only be reachable by very different combinations of patients included in the analysis, with correspondingly different NLL values.  A scatter plot of \(-\log\mathcal{L}\) as a function of \(S\) would be useless.
+
+Instead, we use a continuous variable \(S'\).  We calculate \(\hat{S}\) using the nominal values of the patient parameters, as in \cref{eq:km-nominal}.  Then, for any value of \(S'\), we minimize the NLL over \(a_i\) with the constraint that \(S\) is at least as far from \(\hat{S}\) as \(S'\):
 \begin{align}
-S \ge S' & \text{ if } S' > S_\text{nominal} \\
-S \le S' & \text{ if } S' < S_\text{nominal}
+S \ge S' & \text{ if } S' > \hat{S} \\
+S \le S' & \text{ if } S' < \hat{S}
 \end{align}
-This gives an interpretable visualization of the patient-wise uncertainty.  By construction, the NLL has a single minimum at \(S_\text{nominal}\) and increases as \(S'\) moves away in either direction.
+This gives an interpretable visualization of the patient-wise uncertainty: we obtain the NLL that the survival probability is at least as far from the nominal probability as \(S'\).  By construction, \(-\log\mathcal{L}(S')\) has a single minimum (either a single point or, if some patients are exactly on the boundary, a flat region) at \(\hat{S}\) and increases as \(S'\) moves away in either direction.
 
 \section{Implementation}
 
@@ -245,12 +260,14 @@ It should be noted that this is a fairly small cohort of only 25 patients.  In a
 
 As mentioned earlier, most \KM{} curve packages provide confidence intervals using some variation of Greenwood's formula.  At confidence level \(1-\alpha\), Greenwood's interval is given by
 \begin{equation}
-S(t)\in\hat{S}(t) \pm z_{\alpha/2} \sqrt{\hat{S}(t)^2{\sum_{i=1}^{n} \frac{d_i}{r_i(r_i-d_i)}}},
+S(t)\in\hat{S}(t) \pm z_{\alpha/2} \sqrt{{\hat{S}(t)}^2{\sum_{i=1}^{n} \frac{d_i}{r_i(r_i-d_i)}}},
 \end{equation}
-where \(\hat{S}\) is the nominal value of the survival function, given by \cref{eq:km-probability}.  The exponential Greenwood interval is given by
+where \(\hat{S}\) is the nominal value of the survival function, given by \cref{eq:km-nominal}.  The exponential Greenwood interval is given by
 \begin{equation}
-\log{\left(-\log S(t)\right)} \in \log{\left(-\log \hat{S}(t)\right)} \pm z_{\alpha/2} \sqrt{\frac{1}{\log \hat{S}(t)^2} \sum_{i=1}^{n} \frac{d_i}{r_i(r_i-d_i)}}.
+\log{\left(-\log S(t)\right)} \in \log{\left(-\log \hat{S}(t)\right)} \pm z_{\alpha/2} \sqrt{\frac{1}{{\left(\log \hat{S}(t)\right)}^2} \sum_{i=1}^{n} \frac{d_i}{r_i(r_i-d_i)}}.
 \end{equation}
+
+\citet{GreenwoodNotes} gives the derivation of these formulas, which makes certain approximations: the ``delta-method'' approximation, which requires that the true and observed probabilities are close enough that \(\log\left(-\log S(t)\right)\) can be treated as approximately linear, and the assumption that the number of patients is large enough that the binomial distribution can be approximated by a normal distribution.  With large numbers of patients, these approximations hold, but their validity decreases for smaller cohort sizes.
 
 \section{Discussion and Future Work}
 
