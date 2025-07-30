@@ -21,5 +21,9 @@ rocpicker_delta_functions ../test/datacards/simple_examples/example_roc.txt --sc
 python ../test/test_continuous_distributions.py
 
 kombine ../test/datacards/simple_examples/poisson_ratio_km_censoring.txt km_example.pdf --parameter-min 0.45
-kombine_twogroups ../test/datacards/lung/datacard_cells_OS.txt lung_cells_km_OS.pdf --parameter-threshold 0.4 --include-patient-wise-only --print-progress
-kombine_twogroups ../test/datacards/lung/datacard_donuts_OS.txt lung_donuts_km_OS.pdf --parameter-threshold 350 --include-patient-wise-only --print-progress
+kombine_twogroups ../test/datacards/lung/datacard_cells_OS.txt lung_cells_km_OS.pdf --parameter-threshold 0.4 --print-progress
+kombine_twogroups ../test/datacards/lung/datacard_donuts_OS.txt lung_donuts_km_OS.pdf --parameter-threshold 350 --print-progress
+kombine_twogroups ../test/datacards/lung/datacard_cells_OS.txt lung_cells_km_OS_patient_wise.pdf --parameter-threshold 0.4 --include-patient-wise-only --exclude-full-nll --print-progress
+kombine_twogroups ../test/datacards/lung/datacard_donuts_OS.txt lung_donuts_km_OS_patient_wise.pdf --parameter-threshold 350 --include-patient-wise-only --exclude-full-nll --print-progress
+kombine_twogroups ../test/datacards/lung/datacard_cells_OS.txt lung_cells_km_OS_binomial.pdf --parameter-threshold 0.4 --include-binomial-only --exclude-full-nll --print-progress
+kombine_twogroups ../test/datacards/lung/datacard_donuts_OS.txt lung_donuts_km_OS_binomial.pdf --parameter-threshold 350 --include-binomial-only --exclude-full-nll --print-progress
