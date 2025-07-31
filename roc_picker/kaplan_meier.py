@@ -8,6 +8,7 @@ import numbers
 
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.stats
 
 class KaplanMeierPatientBase(abc.ABC):
   """
@@ -231,6 +232,54 @@ class KaplanMeierInstance(KaplanMeierBase):
       times_for_plot = self.times_for_plot
     survival_probabilities = self.survival_probabilities(times_for_plot)
     return self.get_points_for_plot(times_for_plot, survival_probabilities)
+
+  def survival_probabilities_exponential_greenwood(  #pylint: disable=too-many-locals
+    self,
+    CLs: list[float],
+    times_for_plot=None,
+  ):
+    """
+    Returns the survival probabilities and confidence limits
+    at the specified times using the exponential Greenwood method.
+    This is the same behavior as lifelines.
+    See https://www.math.wustl.edu/%7Esawyer/handouts/greenwood.pdf
+    """
+    if times_for_plot is None:
+      times_for_plot = self.times_for_plot
+
+    best_probabilities = []
+    CL_probabilities = []
+    for t in times_for_plot:
+      CL_probabilities_time_point = []
+      CL_probabilities.append(CL_probabilities_time_point)
+      S = self.survival_probability(t)
+      best_probabilities.append(S)
+      for CL in CLs:
+        alpha = 1 - CL
+        z_alpha_over_2 = scipy.stats.norm.ppf(1 - alpha / 2)
+        log_minus_log_S = np.log(-np.log(S))
+        sum_in_sqrt = 0
+        if S > 0:
+          for t_prime in self.patient_death_times:
+            if t_prime > t:
+              continue
+            at_risk = len([p for p in self.patients if p.time >= t_prime])
+            died = len([p for p in self.patients if p.time == t_prime and not p.censored])
+            survived = at_risk - died
+            sum_in_sqrt += died / (at_risk * survived)
+        else:
+          #1 / np.log(S) is 0, so the error is 0
+          pass
+        error = z_alpha_over_2 / np.log(S) * np.sqrt(sum_in_sqrt)
+        log_minus_log_S_upper = log_minus_log_S + error
+        log_minus_log_S_lower = log_minus_log_S - error
+        S_upper = np.exp(-np.exp(log_minus_log_S_upper))
+        S_lower = np.exp(-np.exp(log_minus_log_S_lower))
+        CL_probabilities_time_point.append((S_lower, S_upper))
+
+    best_probabilities = np.asarray(best_probabilities)
+    CL_probabilities = np.asarray(CL_probabilities)
+    return best_probabilities, CL_probabilities
 
 class KaplanMeierPlot(KaplanMeierBase):
   """

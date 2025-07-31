@@ -36,6 +36,8 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   Attributes:
   times_for_plot: Sequence of time points for plotting the survival probabilities.
   include_binomial_only: If True, include error bands for the binomial error alone.
+  include_greenwood: If True, include error bands for the binomial error
+                     using the exponential Greenwood method.
   include_patient_wise_only: If True, include error bands for the patient-wise error alone.
   include_full_NLL: If True, include error bands for the full negative log-likelihood.
   include_best_fit: If True, include the best fit curve in the plot.
@@ -46,6 +48,7 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   best_color: Color for the best fit curve.
   CLs: List of confidence levels for the error bands.
   CL_colors: List of colors for the confidence levels.
+  CL_colors_greenwood: List of colors for the Greenwood confidence levels.
   CL_hatches: List of hatches for the confidence levels
               for the binomial-only or patient-wise-only error bands.
   create_figure: If True, create a new matplotlib figure for the plot.
@@ -65,6 +68,7 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   """
   times_for_plot: typing.Sequence[float] | None = None
   include_binomial_only: bool = False
+  include_greenwood: bool = False
   include_patient_wise_only: bool = False
   include_full_NLL: bool = True
   include_best_fit: bool = True
@@ -76,6 +80,9 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   CLs: list[float] = dataclasses.field(default_factory=lambda: [0.68, 0.95])
   CL_colors: list[str] = dataclasses.field(
     default_factory=lambda: ['dodgerblue', 'skyblue', 'lightblue', 'lightcyan']
+  )
+  CL_colors_greenwood: list[str] = dataclasses.field(
+    default_factory=lambda: ['darkorange', 'gold', 'khaki', 'lightyellow']
   )
   CL_hatches: list[str] = dataclasses.field(
     default_factory=lambda: ['//', '\\\\', 'xx', '++']
@@ -318,6 +325,27 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     x, = result.x
     return x, result.fun
 
+  def survival_probabilities_exponential_greenwood(
+    self,
+    CLs: list[float],
+    times_for_plot: typing.Sequence[float],
+    *,
+    binomial_only=False,
+    patient_wise_only=False,
+  ):
+    """
+    Calculate the survival probabilities using the exponential Greenwood method.
+    """
+    if patient_wise_only or not binomial_only:
+      raise ValueError(
+        "Exponential Greenwood confidence intervals"
+        "can only include the binomial error"
+      )
+    return self.nominalkm.survival_probabilities_exponential_greenwood(
+      CLs=CLs,
+      times_for_plot=times_for_plot,
+    )
+
   def survival_probabilities_likelihood( # pylint: disable=too-many-locals, too-many-branches, too-many-statements, too-many-arguments
     self,
     CLs: list[float],
@@ -548,14 +576,17 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     *,
     label_suffix: str = "",
     use_hatches: bool = False,
+    colors: list[str] | None = None,
   ):
     """
     Helper to plot confidence bands using fill_between.
     """
     results = {}
+    if colors is None:
+      colors = config.CL_colors
     for CL, color, hatch, (p_minus, p_plus) in zip(
       config.CLs,
-      config.CL_colors,
+      colors,
       config.CL_hatches,
       CL_probabilities_data.transpose(1, 2, 0),
       strict=True,
@@ -664,6 +695,21 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           label_suffix="Binomial only", use_hatches=False # No hatches if it's the primary CL
         )
         results.update(CL_results)
+
+    if config.include_greenwood:
+      (
+        _, CL_probabilities_greenwood
+      ) = self.survival_probabilities_exponential_greenwood(
+        CLs=config.CLs,
+        times_for_plot=times_for_plot,
+        binomial_only=True,
+      )
+      CL_results = self._plot_confidence_band_fill(
+        ax, config, times_for_plot, CL_probabilities_greenwood,
+        label_suffix="Binomial only, exp. Greenwood", use_hatches=False,
+        colors=config.CL_colors_greenwood[:len(config.CLs)],
+      )
+      results.update(CL_results)
 
     # Calculate and plot Patient-Wise Only
     if config.include_patient_wise_only:
