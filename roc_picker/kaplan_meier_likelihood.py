@@ -108,7 +108,12 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
     """
     if self.include_binomial_only and self.include_patient_wise_only:
       raise ValueError("include_binomial_only and include_patient_wise_only cannot both be True")
-    if not (self.include_binomial_only or self.include_patient_wise_only or self.include_full_NLL or self.include_greenwood):
+    if not (
+      self.include_binomial_only
+      or self.include_patient_wise_only
+      or self.include_full_NLL
+      or self.include_greenwood
+    ):
       raise ValueError(
         "At least one of include_binomial_only, include_patient_wise_only, "
         "include_full_NLL, or include_greenwood must be True"
