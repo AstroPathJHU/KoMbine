@@ -256,10 +256,10 @@ class KaplanMeierInstance(KaplanMeierBase):
       best_probabilities.append(S)
       for CL in CLs:
         alpha = 1 - CL
-        z_alpha_over_2 = scipy.stats.norm.ppf(1 - alpha / 2)
-        log_minus_log_S = np.log(-np.log(S))
-        sum_in_sqrt = 0
-        if S > 0:
+        if 0 < S < 1:
+          z_alpha_over_2 = scipy.stats.norm.ppf(1 - alpha / 2)
+          log_minus_log_S = np.log(-np.log(S))
+          sum_in_sqrt = 0
           for t_prime in self.patient_death_times:
             if t_prime > t:
               continue
@@ -267,14 +267,15 @@ class KaplanMeierInstance(KaplanMeierBase):
             died = len([p for p in self.patients if p.time == t_prime and not p.censored])
             survived = at_risk - died
             sum_in_sqrt += died / (at_risk * survived)
+          error = z_alpha_over_2 / np.log(S) * np.sqrt(sum_in_sqrt)
+          log_minus_log_S_upper = log_minus_log_S + error
+          log_minus_log_S_lower = log_minus_log_S - error
+          S_upper = np.exp(-np.exp(log_minus_log_S_upper))
+          S_lower = np.exp(-np.exp(log_minus_log_S_lower))
         else:
-          #1 / np.log(S) is 0, so the error is 0
-          pass
-        error = z_alpha_over_2 / np.log(S) * np.sqrt(sum_in_sqrt)
-        log_minus_log_S_upper = log_minus_log_S + error
-        log_minus_log_S_lower = log_minus_log_S - error
-        S_upper = np.exp(-np.exp(log_minus_log_S_upper))
-        S_lower = np.exp(-np.exp(log_minus_log_S_lower))
+          # If S is 0 or 1, 1 / log(S) is 0, so the error is 0.
+          S_upper = S
+          S_lower = S
         CL_probabilities_time_point.append((S_lower, S_upper))
 
     best_probabilities = np.asarray(best_probabilities)

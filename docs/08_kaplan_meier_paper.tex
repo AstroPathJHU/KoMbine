@@ -260,14 +260,39 @@ It should be noted that this is a fairly small cohort of only 25 patients.  In a
 
 As mentioned earlier, most \KM{} curve packages provide confidence intervals using some variation of Greenwood's formula.  At confidence level \(1-\alpha\), Greenwood's interval is given by
 \begin{equation}
+\label{eq:greenwood}
 S(t)\in\hat{S}(t) \pm z_{\alpha/2} \sqrt{{\hat{S}(t)}^2{\sum_{i=1}^{n} \frac{d_i}{r_i(r_i-d_i)}}},
 \end{equation}
 where \(\hat{S}\) is the nominal value of the survival function, given by \cref{eq:km-nominal}.  The exponential Greenwood interval is given by
 \begin{equation}
+\label{eq:exponential-greenwood}
 \log{\left(-\log S(t)\right)} \in \log{\left(-\log \hat{S}(t)\right)} \pm z_{\alpha/2} \sqrt{\frac{1}{{\left(\log \hat{S}(t)\right)}^2} \sum_{i=1}^{n} \frac{d_i}{r_i(r_i-d_i)}}.
 \end{equation}
 
 \citet{GreenwoodNotes} gives the derivation of these formulas, which makes certain approximations: the ``delta-method'' approximation, which requires that the true and observed probabilities are close enough that \(\log\left(-\log S(t)\right)\) can be treated as approximately linear, and the assumption that the number of patients is large enough that the binomial distribution can be approximated by a normal distribution.  With large numbers of patients, these approximations hold, but their validity decreases for smaller cohort sizes.
+
+\Cref{fig:compare-to-greenwood} shows \KM{} curves with the \pkg{KoMbine} confidence intervals and the Greenwood confidence intervals.  The \pkg{KoMbine} are calculated with the binomial error only, to facilitate the comparison.
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.49\textwidth}
+  \centering
+  \includegraphics{comparison_to_greenwood_small_n.pdf}
+  \caption{\label{fig:compare-to-greenwood-small-n} \KM{} curves with small cohort size.}
+\end{subfigure}
+\begin{subfigure}[t]{0.49\textwidth}
+  \centering
+  \includegraphics{comparison_to_greenwood_large_n.pdf}
+  \caption{\label{fig:compare-to-greenwood-large-n} \KM{} curves with large cohort size.}
+\end{subfigure}
+\caption{\label{fig:compare-to-greenwood} \KM{} curves with confidence intervals calculated using the exponential Greenwood formula (\cref{eq:exponential-greenwood}) and the full likelihood method from \pkg{KoMbine}.}
+\end{figure}
+
+In \cref{fig:compare-to-greenwood-small-n}, only 12 patients are included in the \KM{} curve, and the exponential Greenwood are noticeably different from the \pkg{KoMbine} confidence intervals.  \Cref{fig:compare-to-greenwood-large-n} shows \KM{} curves with 100 patients, and the two confidence intervals are in agreement.
+
+One striking difference in both cases is that the Greenwood method cannot calculate confidence intervals for the first or last time points, when the probabilities are \(1\) and \(0\).  This is a fundamental limitation of the Greenwood method, which approximates the uncertainty on the \emph{true} binomial probability using the \emph{observed} numbers of patients who were at risk and who survived.  If everyone survived or died, the binomial uncertainty is \(0\).
+
+Our method, by contrast, calculates the binomial likelihood (and hence the uncertainty) using the \emph{true} survival probability, which we can do despite not knowing it in advance, because it is a parameter in the likelihood fit.  This is the fundamental tradeoff of the likelihood method: we can be more precise, but the likelihood fit is more computationally intensive.
 
 \section{Discussion and Future Work}
 

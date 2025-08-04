@@ -997,8 +997,11 @@ def plot_km_likelihood():
   group = parser.add_mutually_exclusive_group()
   group.add_argument("--include-binomial-only", action="store_true", help="Include error bands for the binomial error alone.")
   group.add_argument("--include-patient-wise-only", action="store_true", help="Include error bands for the patient-wise error alone.")
+  parser.add_argument("--include-exponential-greenwood", action="store_true", help="Include the binomial-only exponential Greenwood error band in the plot.", dest="include_exponential_greenwood")
   parser.add_argument("--exclude-full-nll", action="store_false", help="Exclude the full NLL from the plot.", dest="include_full_NLL", default=True)
+  parser.add_argument("--exclude-nominal", action="store_false", help="Exclude the nominal line from the plot.", dest="include_nominal", default=True)
   parser.add_argument("--include-median-survival", action="store_true", help="Include the median survival line in the plot.", dest="include_median_survival")
+  parser.add_argument("--print-progress", action="store_true", help="Print progress messages during the computation.", dest="print_progress")
   parser.add_argument("--log-zero-epsilon", type=float, help="Log zero epsilon for the likelihood calculation.", dest="log_zero_epsilon", default=1e-10)
   # pylint: enable=C0301
   args = parser.parse_args()
@@ -1022,8 +1025,11 @@ def plot_km_likelihood():
   plot_config = KaplanMeierPlotConfig(
     include_binomial_only=args.__dict__.pop("include_binomial_only"),
     include_patient_wise_only=args.__dict__.pop("include_patient_wise_only"),
+    include_exponential_greenwood=args.__dict__.pop("include_exponential_greenwood"),
     include_full_NLL=args.__dict__.pop("include_full_NLL"),
+    include_nominal=args.__dict__.pop("include_nominal"),
     include_median_survival=args.__dict__.pop("include_median_survival"),
+    print_progress=args.__dict__.pop("print_progress"),
     saveas=args.__dict__.pop("output_file"),
   )
 
@@ -1045,7 +1051,9 @@ def plot_km_likelihood_two_groups():
   group = parser.add_mutually_exclusive_group()
   group.add_argument("--include-binomial-only", action="store_true", help="Include error bands for the binomial error alone.")
   group.add_argument("--include-patient-wise-only", action="store_true", help="Include error bands for the patient-wise error alone.")
+  parser.add_argument("--include-exponential-greenwood", action="store_true", help="Include the binomial-only exponential Greenwood error band in the plot.", dest="include_exponential_greenwood")
   parser.add_argument("--exclude-full-nll", action="store_false", help="Exclude the full NLL from the plot.", dest="include_full_NLL", default=True)
+  parser.add_argument("--exclude-nominal", action="store_false", help="Exclude the nominal line from the plot.", dest="include_nominal", default=True)
   parser.add_argument("--include-median-survival", action="store_true", help="Include the median survival line in the plot.", dest="include_median_survival")
   parser.add_argument("--print-progress", action="store_true", help="Print progress messages during the computation.", dest="print_progress")
   parser.add_argument("--log-zero-epsilon", type=float, help="Epsilon value for log(0) handling in the likelihood computation.", dest="log_zero_epsilon", default=1e-10)
@@ -1078,7 +1086,9 @@ def plot_km_likelihood_two_groups():
   common_plot_kwargs = {
     "include_patient_wise_only": args.__dict__.pop("include_patient_wise_only"),
     "include_binomial_only": args.__dict__.pop("include_binomial_only"),
+    "include_exponential_greenwood": args.__dict__.pop("include_exponential_greenwood"),
     "include_full_NLL": args.__dict__.pop("include_full_NLL"),
+    "include_nominal": args.__dict__.pop("include_nominal"),
     "include_best_fit": False,
     "include_median_survival": args.__dict__.pop("include_median_survival"),
     "print_progress": args.__dict__.pop("print_progress"),

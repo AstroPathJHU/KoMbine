@@ -68,7 +68,7 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   """
   times_for_plot: typing.Sequence[float] | None = None
   include_binomial_only: bool = False
-  include_greenwood: bool = False
+  include_exponential_greenwood: bool = False
   include_patient_wise_only: bool = False
   include_full_NLL: bool = True
   include_best_fit: bool = True
@@ -112,7 +112,7 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
       self.include_binomial_only
       or self.include_patient_wise_only
       or self.include_full_NLL
-      or self.include_greenwood
+      or self.include_exponential_greenwood
     ):
       raise ValueError(
         "At least one of include_binomial_only, include_patient_wise_only, "
@@ -701,7 +701,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         )
         results.update(CL_results)
 
-    if config.include_greenwood:
+    if config.include_exponential_greenwood:
       (
         best_probabilities_greenwood, CL_probabilities_greenwood
       ) = self.survival_probabilities_exponential_greenwood(

@@ -27,3 +27,6 @@ kombine_twogroups ../test/datacards/lung/datacard_cells_OS.txt lung_cells_km_OS_
 kombine_twogroups ../test/datacards/lung/datacard_donuts_OS.txt lung_donuts_km_OS_patient_wise.pdf --parameter-threshold 350 --include-patient-wise-only --exclude-full-nll --print-progress
 kombine_twogroups ../test/datacards/lung/datacard_cells_OS.txt lung_cells_km_OS_binomial.pdf --parameter-threshold 0.4 --include-binomial-only --exclude-full-nll --print-progress
 kombine_twogroups ../test/datacards/lung/datacard_donuts_OS.txt lung_donuts_km_OS_binomial.pdf --parameter-threshold 350 --include-binomial-only --exclude-full-nll --print-progress
+
+kombine ../test/datacards/simple_examples/fixed_km_censoring.txt comparison_to_greenwood_small_n.pdf --exclude-nominal --include-exponential-greenwood --include-binomial-only --exclude-full-nll
+kombine ../test/datacards/simple_examples/fixed_km_censoring_many_patients.txt comparison_to_greenwood_large_n.pdf --exclude-nominal --include-exponential-greenwood --include-binomial-only --exclude-full-nll --print-progress
