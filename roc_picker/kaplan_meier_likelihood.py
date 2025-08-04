@@ -108,10 +108,10 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
     """
     if self.include_binomial_only and self.include_patient_wise_only:
       raise ValueError("include_binomial_only and include_patient_wise_only cannot both be True")
-    if not (self.include_binomial_only or self.include_patient_wise_only or self.include_full_NLL):
+    if not (self.include_binomial_only or self.include_patient_wise_only or self.include_full_NLL or self.include_greenwood):
       raise ValueError(
         "At least one of include_binomial_only, include_patient_wise_only, "
-        "or include_full_NLL must be True"
+        "include_full_NLL, or include_greenwood must be True"
       )
     if len(self.CLs) > len(self.CL_colors):
       raise ValueError(
@@ -698,7 +698,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
     if config.include_greenwood:
       (
-        _, CL_probabilities_greenwood
+        best_probabilities_greenwood, CL_probabilities_greenwood
       ) = self.survival_probabilities_exponential_greenwood(
         CLs=config.CLs,
         times_for_plot=times_for_plot,
@@ -710,6 +710,9 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         colors=config.CL_colors_greenwood[:len(config.CLs)],
       )
       results.update(CL_results)
+      if not config.include_full_NLL and not config.include_binomial_only:
+        best_probabilities = best_probabilities_greenwood
+        CL_probabilities = CL_probabilities_greenwood
 
     # Calculate and plot Patient-Wise Only
     if config.include_patient_wise_only:

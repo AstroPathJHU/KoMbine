@@ -21,14 +21,15 @@ warnings.simplefilter("error")
 # Comparison to Lifelines
 
 
-Our error estimation method is more general than the `lifelines` package, which only supports the statistical uncertainty from the number of patients and not patient-wise uncertainties.  (`lifelines` also contains lots of other functionality that this package does not.)  Here, we apply our method with a fixed observable, which should match what `lifelines` does, and compare the results to `lifelines`.
-
-Note that, to run this notebook, you will need to install the `lifelines` package.  You can do this with `pip install lifelines`.
+Our error estimation method is more general than the exponential Greenwood confidence intervals as used by the `lifelines` package.  Greenwood's method only supports the statistical uncertainty from the number of patients and not patient-wise uncertainties.  (`lifelines` also contains lots of other functionality that this package does not.)  Here, we apply our method with a fixed observable and compare the results to the exponential Greenwood intervals.
 
 ```python
 import pathlib  #noqa: E402
 
-import lifelines  #noqa: E402
+try:
+  import lifelines  #noqa: E402
+except ImportError:
+  lifelines = None
 import matplotlib.pyplot as plt  #noqa: E402
 import numpy as np  #noqa: E402
 
@@ -50,19 +51,27 @@ datacard = Datacard.parse_datacard(datacardfile)
 kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
 ```
 
-Now we convert our datacard to the `lifelines` format.
+First, we want to compare our implementation of the exponential Greenwood confidence intervals to `lifelines`.  We should get a 1:1 match.
+
+(Note that this cell requires the `lifelines` package, which you can install with `pip install lifelines`.)
 
 ```python
-T = [patient.time for patient in kml.nominalkm.patients]
-E = [not patient.censored for patient in kml.nominalkm.patients]
+if lifelines is not None:
+  T = [patient.time for patient in kml.nominalkm.patients]
+  E = [not patient.censored for patient in kml.nominalkm.patients]
+  kmf = lifelines.KaplanMeierFitter()
+  kmf.fit(T, event_observed=E)
+  plt.figure()
+  _ = kml.plot(CLs=[0.95], create_figure=False, include_nominal=False, best_color="red", CL_colors_greenwood=["orangered", "lightcoral"], include_full_NLL=False, include_greenwood=True)
+  kmf.plot_survival_function(label="lifelines")
+  plt.legend()
+  plt.show()
 ```
 
+Since we get 1:1 agreement, we proceed to use our implementation for the rest of the notebook.
+
 ```python
-kmf = lifelines.KaplanMeierFitter()
-kmf.fit(T, event_observed=E)
-plt.figure()
-_ = kml.plot(create_figure=False, include_nominal=False, best_color="red", CL_colors=["orangered", "lightcoral"])
-kmf.plot_survival_function()
+_ = kml.plot(create_figure=False, include_nominal=False, best_color="red", CL_colors=["orangered", "lightcoral"], include_greenwood=True, CL_colors_greenwood=["dodgerblue", "skyblue"])
 plt.legend()
 plt.show()
 ```
@@ -80,16 +89,11 @@ with open(datacardfile_manypatients) as f:
 ```python
 datacard_manypatients = Datacard.parse_datacard(datacardfile_manypatients)
 kml_manypatients = datacard_manypatients.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
-T = [patient.time for patient in kml_manypatients.nominalkm.patients]
-E = [not patient.censored for patient in kml_manypatients.nominalkm.patients]
 ```
 
 ```python
-kmf_manypatients = lifelines.KaplanMeierFitter()
-kmf_manypatients.fit(T, event_observed=E)
 plt.figure()
-_ = kml_manypatients.plot(create_figure=False, include_nominal=False, best_color="red", CL_colors=["orangered", "lightcoral"], print_progress=True)
-kmf_manypatients.plot_survival_function()
+_ = kml_manypatients.plot(create_figure=False, include_nominal=False, best_color="red", CL_colors=["orangered", "lightcoral"], include_greenwood=True, CL_colors_greenwood=["dodgerblue", "skyblue"], print_progress=True)
 plt.legend()
 plt.show()
 ```
