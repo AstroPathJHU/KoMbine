@@ -88,7 +88,7 @@ Sometimes, a patient drops out of the study without experiencing the event of in
 
 Other uncertainties can also affect the \KM{} curve.  Other types of uncertainties will typically be patient-wise uncertainties, which \emph{move} the patient from one \KM{} curve to another.  For example, a biomarker study might classify patients based on the density of a particular cell type.  A \KM{} plot could be constructed with two curves, for patients with a high and low density of the cell type.  However, the cell type is subject to Poisson noise as well as systematic errors in the measurement.  Similar errors apply to \KM{} plots that stratify patients by gene expression levels or other continuous variables.
 
-The \pkg{KoMbine} package provides the first method to propagate these types of errors through the \KM{} curve estimation process.  The techniques are based on the \pkg{Combine} package \citep{CAT-23-001}, developed by the CMS Collaboration in particle physics\@.  \pkg{Combine}, built on the \pkg{RooFit} framework \citep{RooFit}, is used for high-precision measurements of particle properties, which must account for tens or even hundreds of systematic uncertainties, and was used for such high profile measurements as the Higgs boson discovery \citep{HIG-12-028} and subsequent measurements of its properties.
+The \pkg{KoMbine} package provides the first method to propagate these types of errors through the \KM{} curve estimation process.  The techniques are based on the \pkg{Combine} package \citep{CAT-23-001}, developed by the CMS Collaboration in particle physics\@.  \pkg{Combine}, built on the \pkg{RooFit} framework \citep{RooFit} and the \pkg{Minuit} optimizer, is used for high-precision measurements of particle properties, which must account for tens or even hundreds of systematic uncertainties, and was used for such high profile measurements as the Higgs boson discovery \citep{HIG-12-028} and subsequent measurements of its properties.
 
 \pkg{KoMbine} provides a similar interface to propagate uncertainties to \KM{} curves.  It handles the statistical uncertainty on the number of patients in a more precise way than the Greenwood confidence intervals and incorporates patient-wise uncertainties into the calculation.  The statistical and patient-wise uncertainties can also be plotted separately, allowing the user to see which uncertainties dominate.
 
@@ -124,7 +124,7 @@ The binomial contribution to the \KM{} curve is computed from the number of pati
 \end{equation}
 where \(p_i^\text{died} = 1 - p_i^\text{survived}\).  The negative log likelihood (NLL) is
 \begin{equation}
--\log \mathcal{L}_{\text{binomial}}(p_i^\text{survived}, a_i) = -\left[\sum_{i=1}^{n} \left( \log\binom{r_i}{d_i} + d_i \log p_i^\text{died} + (r_i-d_i) \log p_i^\text{survived} \right)\right].
+-\log \mathcal{L}_{\text{binomial}}(p_i^\text{survived}, a_i) = -\left[\sum_{i=1}^{n} \left( \log\binom{r_i}{d_i} + d_i \log p_i^\text{died} + (r_i-d_i) \log p_i^\text{survived} \right)\right]. \label{eq:binomial-nll}
 \end{equation}
 
 We are not interested in the individual \(p_i^\text{survived}\) values, but rather the overall survival probability \(S_n\).  We therefore use the constraint
@@ -294,9 +294,33 @@ One striking difference in both cases is that the Greenwood method cannot calcul
 
 Our method, by contrast, calculates the binomial likelihood (and hence the uncertainty) using the \emph{true} survival probability, which we can do despite not knowing it in advance, because it is a parameter in the likelihood fit.  This is the fundamental tradeoff of the likelihood method: we can be more precise, but the likelihood fit is more computationally intensive.
 
-\section{Discussion and Future Work}
+\section{Future Work}
+
+\subsection{Correlated uncertainties}
+
+One important feature of \pkg{Combine} is uncertainties that are correlated between different channels.  For example, uncertainties on the electron resolution affect, in different ways, the Higgs boson decay to four electrons or to two electrons and two muons.
+
+Similarly, uncertainties resulting from batch effects in a biomarker assay will affect all patients in the same batch\@.  \pkg{KoMbine} does not currently support this correlation.  To implement it, \cref{eq:patient-nll} would need to be modified, as there would no longer be a fixed penalty per patient, but rather a penalty that depends on the other patients in the same batch.  Furthermore, if there are multiple uncertainties correlated between different groups of patients, the penalty would depend on all patients at once.
+
+The current \pkg{Gurobi} model would no longer work, as it requires precomputing \(\mathcal{L}_j^{\text{patient}}\).  With \(N\) patients, we can easily precompute \(N\) values, but not \(2^N\).  Instead, we would likely need to pass the uncertainty parameters \(\theta_k\) directly to the \pkg{Gurobi} model and let it compute \(a_j\left(\theta_k\right)\) and hence \(\mathcal{L}_{\text{patient}}\left(\theta_k\right)\) internally.
+
+The increased number of continuous variables will probably require a rethinking of how the model is solved\@.  \pkg{Gurobi} is not optimized for the types of complex nonlinear relationships that would be necessary here\@.  \pkg{Minuit} \citep{minuit}, which forms the backbone for \pkg{Combine}, \emph{is} optimized for many continuous nuisance variables, but not for the indicator variables we use in \pkg{KoMbine}.  Combining the strengths of both will be an interesting and nontrivial challenge.
+
+\subsection{More advanced survival functionality}
+
+The \pkg{lifelines} package provides support for other types of survival analysis, such as parameteric survival models, left and interval censoring, and other types of visualizations, such as cumulative hazard plots\@.  \pkg{KoMbine} currently only supports the basic \KM{} curve, but similar statistical methods could be used to incorporate these other features.
+
+\subsection{ROC Curves}
+
+Receiver operating characteristic (ROC) curves are also commonly used to evaluate biomarkers and predict patient outcomes.  Similar statistical methods are necessary to propagate uncertainties through the ROC curve estimation process.
+
+Some preliminary work, called \pkg{ROC Picker}, is available in the \pkg{KoMbine} package, but it is not yet fully functional.  Crucially, it can handle either binomial or patient-wise uncertainties, but not both at the same time.  ROC curve estimation is more complex because the uncertainties are correlated across all points in the curve, and the metrics typically used, such as the area under the curve (AUC), are nontrivial functions of the entire curve.
 
 \section{Conclusion}
+
+\pkg{KoMbine} provides a new method to propagate statistical and systematic uncertainties through the \KM{} curve estimation process.  The handling of the binomial uncertainty is more precise than the Greenwood confidence intervals used in other packages, and the patient-wise uncertainties are implemented for the first time.
+
+This package will enable uncertainty estimates on \KM{} curves to take \emph{all} sources of uncertainty into account, facilitating more robust and reproducible biomarker studies.  Furthermore, by allowing the user to plot the different uncertainties separately, it will help researchers understand how to improve the analysis, furthering the development of the next generation of biomarkers.
 
 \section[Introduction: Count data regression in R]{Introduction: Count data regression in \proglang{R}}\label{sec:example-intro}
 
