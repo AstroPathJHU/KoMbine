@@ -93,10 +93,12 @@ The \pkg{KoMbine} package provides the first method to propagate these types of 
 \pkg{KoMbine} provides a similar interface to propagate uncertainties to \KM{} curves.  It handles the statistical uncertainty on the number of patients in a more precise way than the Greenwood confidence intervals and incorporates patient-wise uncertainties into the calculation.  The statistical and patient-wise uncertainties can also be plotted separately, allowing the user to see which uncertainties dominate.
 
 \section{Methodology}
+\label{sec:methodology}
 
 \pkg{KoMbine} uses a log-likelihood to compute the confidence interval for each point on the \KM{} curve.  The log likelihood is a function of the survival probability \(S\) as well as other parameters.  We maximize the likelihood over those other parameters to find the ``likelihood scan'' as a function of \(S\) alone.  The points of maximum likelihood form the \KM{} curve, and the confidence intervals are determined by the points where the log likelihood is below a threshold.
 
 \subsection{Notation}
+\label{sec:notation}
 
 We denote the inclusion of patient \(j\) by \(a_j\), which is \(1\) if the patient is included and \(0\) if the patient is excluded.  The numbers of patients who were at risk and who died at time \(t_i\) are:
 \begin{align}
@@ -117,6 +119,7 @@ where \(p_i^\text{survived}\) is the probability that a patient who has survived
 For clarity, we will distinguish the two types of uncertainty: the statistical uncertainty from the finite number of patients (which we will call the ``binomial uncertainty'') and the patient-wise uncertainty.
 
 \subsection{Binomial uncertainty}
+\label{sec:binomial-uncertainty}
 
 The binomial contribution to the \KM{} curve is computed from the number of patients at risk and the number of patients who died at each time point:
 \begin{equation}
@@ -134,6 +137,7 @@ We are not interested in the individual \(p_i^\text{survived}\) values, but rath
 when we minimize the NLL\@.
 
 \subsection{Patient-wise uncertainty}
+\label{sec:patient-wise-uncertainty}
 
 We now consider that the patients themselves may be subject to uncertainty.  Some patients who were nominally included in the \KM{} curve may actually be excluded or vice versa.
 
@@ -147,6 +151,7 @@ For the purpose of the math here, all that is important is that the penalty is a
 \end{equation}
 
 \subsection{Combining the uncertainties}
+\label{sec:combining-uncertainties}
 
 The total NLL is the sum of the binomial NLL and the patient-wise NLL\@:
 \begin{equation}
@@ -156,6 +161,7 @@ The total NLL is the sum of the binomial NLL and the patient-wise NLL\@:
 We minimize the overall NLL (\ref{eq:total-nll}) over the \(p_i^\text{survived}\) and \(a_j\), with the constraint (\ref{eq:km-probability-constraint}).  This is a mixed integer nonlinear programming problem (MINLP).
 
 \subsection{Isolating the binomial and patient-wise uncertainties}
+\label{sec:isolating-uncertainties}
 
 Although the total uncertainty on the \KM{} curve includes both the binomial and the patient-wise uncertainty, it is instructive to look at them separately.  Determining which uncertainty dominates can help to understand the next steps in the analysis: should we try to enroll more patients or should we improve the biomarker measurements?
 
@@ -322,334 +328,17 @@ Some preliminary work, called \pkg{ROC Picker}, is available in the \pkg{KoMbine
 
 This package will enable uncertainty estimates on \KM{} curves to take \emph{all} sources of uncertainty into account, facilitating more robust and reproducible biomarker studies.  Furthermore, by allowing the user to plot the different uncertainties separately, it will help researchers understand how to improve the analysis, furthering the development of the next generation of biomarkers.
 
-\section[Introduction: Count data regression in R]{Introduction: Count data regression in \proglang{R}}\label{sec:example-intro}
-
-\begin{leftbar}
-The introduction is in principle ``as usual''. However, it should usually embed
-both the implemented \emph{methods} and the \emph{software} into the respective
-relevant literature. For the latter both competing and complementary software
-should be discussed (within the same software environment and beyond), bringing
-out relative (dis)advantages. All software mentioned should be properly  %chktex 36
-\verb|\cite{}|d. (See also Appendix~\ref{app:bibtex} for more details on
-\textsc{Bib}{\TeX}.)
-
-For writing about software JSS requires authors to use the markup
-\verb|\proglang{}| (programming languages and large programmable systems),
-\verb|\pkg{}| (software packages), \verb|\code{}| (functions, commands,
-arguments, etc.). If there is such markup in (sub)section titles (as above), a  %chktex 36
-plain text version has to be provided in the {\LaTeX} command as well. Below we
-also illustrate how abbrevations should be introduced and citation commands can
-be employed. See the {\LaTeX} code for more details.
-\end{leftbar}
-
-Modeling count variables is a common task in economics and the social sciences.
-The classical Poisson regression model for count data is often of limited use in
-these disciplines because empirical count data sets typically exhibit
-overdispersion and/or an excess number of zeros. The former issue can be
-addressed by extending  the plain Poisson regression model in various
-directions: e.g., using sandwich covariances or estimating an additional
-dispersion parameter (in a so-called quasi-Poisson model). Another more formal
-way is to use a negative binomial (NB) regression. All of these models belong to
-the family of generalized linear models (GLMs). However, although these models
-typically can capture overdispersion rather well, they are in many applications
-not sufficient for  modeling excess zeros. Since~\cite{Mullahy:1986} there is
-increased interest in zero-augmented models that address this issue by a second
-model component capturing zero counts. An overview of count data models in
-econometrics, including  hurdle and zero-inflated models, is provided in~\cite{Cameron+Trivedi:2013}.
-
-In \proglang{R} \citep{R}, GLMs are provided by the model fitting functions
-\fct{glm} in the \pkg{stats} package and \fct{glm.nb} in the \pkg{MASS} package
-\citep[][Chapter~7.4]{Venables+Ripley:2002} along with associated methods for
-diagnostics and inference. The manuscript that this document is based on
-\citep{Zeileis+Kleiber+Jackman:2008} then introduced hurdle and zero-inflated
-count models in the functions \fct{hurdle} and \fct{zeroinfl} in the \pkg{pscl}
-package%
-%\citep{Jackman:2015}
-. Of course, much more software could be discussed
-here, including (but not limited to) generalized additive models for count data
-as available in the \proglang{R} packages \pkg{mgcv}~\cite{Wood:2006}, 
-\pkg{gamlss}~\citep{Stasinopoulos+Rigby:2007}, or \pkg{VGAM}~\citep{Yee:2009}.
-
-
-%% -- Manuscript ---------------------------------------------------------------
-
-%% - In principle "as usual" again.
-%% - When using equations (e.g., {equation}, {eqnarray}, {align}, etc.
-%%   avoid empty lines before and after the equation (which would signal a new
-%%   paragraph.
-%% - When describing longer chunks of code that are _not_ meant for execution
-%%   (e.g., a function synopsis or list of arguments), the environment {Code}
-%%   is recommended. Alternatively, a plain {verbatim} can also be used.
-%%   (For executed code see the next section.)
-
-\section{Models and software}\label{sec:models}
-
-The basic Poisson regression model for count data is a special case of the GLM
-framework~\cite{McCullagh+Nelder:1989}. It describes the dependence of a count
-response variable $y_i$ ($i = 1, \dots, n$) by assuming a Poisson distribution
-$y_i \sim \mathrm{Pois}(\mu_i)$. The dependence of the conditional mean
-$\E[y_i \, | \, x_i] = \mu_i$ on the regressors $x_i$ is then specified via a
-log link and a linear predictor
-%
-\begin{equation} \label{eq:mean}
-\log(\mu_i) \quad = \quad x_i^\top \beta,
-\end{equation}
-%
-where the regression coefficients $\beta$ are estimated by maximum likelihood
-(ML) using the iterative weighted least squares (IWLS) algorithm.
-
-\begin{leftbar}
-Note that around the \verb|{equation}| above there should be no spaces (avoided
-in the {\LaTeX} code by \texttt{\%} lines) so that ``normal'' spacing is used and
-not a new paragraph started.
-\end{leftbar}
-
-\proglang{R} provides a very flexible implementation of the general GLM
-framework in the function \fct{glm} \citep{Chambers+Hastie:1992} in the
-\pkg{stats} package. Its most important arguments are
-\begin{Code}
-glm(formula, data, subset, na.action, weights, offset, %chktex 36
-  family = gaussian, start = NULL, control = glm.control(...), %chktex 11 chktex 36
-  model = TRUE, y = TRUE, x = FALSE, ...) %chktex 11 chktex 26
-\end{Code}
-where \code{formula} plus \code{data} is the now standard way of specifying
-regression relationships in \proglang{R}/\proglang{S} introduced in~\cite{Chambers+Hastie:1992}. The remaining arguments in the first line
-(\code{subset}, \code{na.action}, \code{weights}, and \code{offset}) are also
-standard  for setting up formula-based regression models in
-\proglang{R}/\proglang{S}. The arguments in the second line control aspects
-specific to GLMs while the arguments in the last line specify which components
-are returned in the fitted model object (of class \class{glm} which inherits
-from \class{lm}). For further arguments to \fct{glm} (including alternative
-specifications of starting values) see \code{?glm}. For estimating a Poisson
-model \code{family = poisson} has to be specified.
-
-\begin{leftbar}
-As the synopsis above is a code listing that is not meant to be executed,
-one can use either the dedicated \verb|{Code}| environment or a simple
-\verb|{verbatim}| environment for this. Again, spaces before and after should be
-avoided.
-
-Finally, there might be a reference to a \verb|{table}| such as
-Table~\ref{tab:overview}. Usually, these are placed at the top of the page
-(\verb|[t!]|), centered (\verb|\centering|), with a caption below the table,
-column headers and captions in sentence style, and if possible avoiding vertical
-lines.
-\end{leftbar}
-
-\begin{table}[t!]
-\centering
-\begin{tabular}{lllp{7.4cm}}
-\hline  %chktex 44
-Type           & Distribution & Method   & Description \\ \hline  %chktex 44
-%GLM            & Poisson      & ML       & Poisson regression: classical GLM,
-%                                           estimated by maximum likelihood (ML) \\
-%               &              & Quasi    & ``Quasi-Poisson regression'':
-%                                           same mean function, estimated by
-%                                           quasi-ML (QML) or equivalently
-%                                           generalized estimating equations (GEE),
-%                                           inference adjustment via estimated
-%                                           dispersion parameter \\
-%               &              & Adjusted & ``Adjusted Poisson regression'':
-%                                           same mean function, estimated by
-%                                           QML/GEE, inference adjustment via
-%                                           sandwich covariances\\
-               & NB           & ML       & NB regression: extended GLM,
-                                           estimated by ML including additional
-                                           shape parameter \\ \hline %chktex 44
-Zero-augmented & Poisson      & ML       & Zero-inflated Poisson (ZIP),
-                                           hurdle Poisson \\
-               & NB           & ML       & Zero-inflated NB (ZINB),
-                                           hurdle NB \\ \hline %chktex 44
-\end{tabular}
-\caption{\label{tab:overview} Overview of various count regression models. The
-table is usually placed at the top of the page (\texttt{[t!]}), centered
-(\texttt{centering}), has a caption below the table, column headers and captions
-are in sentence style, and if possible vertical lines should be avoided.}
-\end{table}
-
-
-%% -- Illustrations ------------------------------------------------------------
-
-%% - Virtually all JSS manuscripts list source code along with the generated
-%%   output. The style files provide dedicated environments for this.
-%% - In R, the environments {Sinput} and {Soutput} - as produced by Sweave() or
-%%   or knitr using the render_sweave() hook - are used (without the need to
-%%   load Sweave.sty).
-%% - Equivalently, {CodeInput} and {CodeOutput} can be used.
-%% - The code input should use "the usual" command prompt in the respective
-%%   software system.
-%% - For R code, the prompt "R> " should be used with "+  " as the
-%%   continuation prompt.
-%% - Comments within the code chunks should be avoided - these should be made
-%%   within the regular LaTeX text.
-
-\section{Illustrations}\label{sec:illustrations}
-
-For a simple illustration of basic Poisson and NB count regression the
-\code{quine} data from the \pkg{MASS} package is used. This provides the number
-of \code{Days} that children were absent from school in Australia in a
-particular year, along with several covariates that can be employed as regressors.
-The data can be loaded by
-%
-\begin{CodeChunk}
-\begin{CodeInput}
-R> data("quine", package = "MASS") %chktex 36 chktex 18
-\end{CodeInput}
-\end{CodeChunk}
-%
-and a basic frequency distribution of the response variable is displayed in
-Figure~\ref{fig:quine}.
-
-\begin{leftbar}
-For code input and output, the style files provide dedicated environments.
-Either the ``agnostic'' \verb|{CodeInput}| and \verb|{CodeOutput}| can be used
-or, equivalently, the environments \verb|{Sinput}| and \verb|{Soutput}| as
-produced by \fct{Sweave} or \pkg{knitr} when using the \code{render_sweave()} %chktex 36
-hook. Please make sure that all code is properly spaced, e.g., using
-\code{y = a + b * x} and \emph{not} \code{y=a+b*x}. Moreover, code input should
-use ``the usual'' command prompt in the respective software system. For
-\proglang{R} code, the prompt \code{"R> "} should be used with \code{"+  "} as %chktex 18
-the continuation prompt. Generally, comments within the code chunks should be
-avoided---and made in the regular {\LaTeX} text instead. Finally, empty lines
-before and after code input/output should be avoided (see above). %chktex 18
-\end{leftbar}
-
-\begin{figure}[t!]
-\centering
-%\includegraphics{article-visualization}
-\caption{\label{fig:quine} Frequency distribution for number of days absent
-from school.}
-\end{figure}
-
-As a first model for the \code{quine} data, we fit the basic Poisson regression
-model. (Note that JSS prefers when the second line of code is indented by two
-spaces.)
-%
-\begin{CodeChunk}
-\begin{CodeInput}
-R> m_pois <- glm(Days ~ (Eth + Sex + Age + Lrn)^2, data = quine, %chktex 39 chktex 36
-+    family = poisson)
-\end{CodeInput}
-\end{CodeChunk}
-%
-To account for potential overdispersion we also consider a negative binomial
-GLM\@.
-%
-\begin{CodeChunk}
-\begin{CodeInput}
-R> library("MASS") %chktex 36 chktex 18
-R> m_nbin <- glm.nb(Days ~ (Eth + Sex + Age + Lrn)^2, data = quine) %chktex 39 chktex 36
-\end{CodeInput}
-\end{CodeChunk}
-%
-In a comparison with the BIC the latter model is clearly preferred.
-%
-\begin{CodeChunk}
-\begin{CodeInput}
-R> BIC(m_pois, m_nbin) %chktex 36
-\end{CodeInput}
-\begin{CodeOutput}
-       df      BIC
-m_pois 18 2046.851
-m_nbin 19 1157.235
-\end{CodeOutput}
-\end{CodeChunk}
-%
-Hence, the full summary of that model is shown below.
-%
-\begin{CodeChunk}
-\begin{CodeInput}
-R> summary(m_nbin) %chktex 36
-\end{CodeInput}
-\begin{CodeOutput}
-Call:
-glm.nb(formula = Days ~ (Eth + Sex + Age + Lrn)^2, data = quine,  %chktex 39 chktex 36
-    init.theta = 1.60364105, link = log)  %chktex 39
-
-Deviance Residuals: 
-    Min       1Q   Median       3Q      Max  
--3.0857  -0.8306  -0.2620   0.4282   2.0898  
-
-Coefficients: (1 not defined because of singularities)
-            Estimate Std. Error z value Pr(>|z|)  %chktex 36   
-(Intercept)  3.00155    0.33709   8.904  < 2e-16 ***
-EthN        -0.24591    0.39135  -0.628  0.52977    
-SexM        -0.77181    0.38021  -2.030  0.04236 *  
-AgeF1       -0.02546    0.41615  -0.061  0.95121    
-AgeF2       -0.54884    0.54393  -1.009  0.31296    
-AgeF3       -0.25735    0.40558  -0.635  0.52574    
-LrnSL        0.38919    0.48421   0.804  0.42153    
-EthN:SexM    0.36240    0.29430   1.231  0.21818    
-EthN:AgeF1  -0.70000    0.43646  -1.604  0.10876    
-EthN:AgeF2  -1.23283    0.42962  -2.870  0.00411 ** 
-EthN:AgeF3   0.04721    0.44883   0.105  0.91622    
-EthN:LrnSL   0.06847    0.34040   0.201  0.84059    
-SexM:AgeF1   0.02257    0.47360   0.048  0.96198    
-SexM:AgeF2   1.55330    0.51325   3.026  0.00247 ** 
-SexM:AgeF3   1.25227    0.45539   2.750  0.00596 ** 
-SexM:LrnSL   0.07187    0.40805   0.176  0.86019    
-AgeF1:LrnSL -0.43101    0.47948  -0.899  0.36870    
-AgeF2:LrnSL  0.52074    0.48567   1.072  0.28363    
-AgeF3:LrnSL       NA         NA      NA       NA    
----
-Signif.\ codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1 %chktex 38
-
-(Dispersion parameter for Negative Binomial(1.6036) family taken to be 1) %chktex 36
-
-    Null deviance: 235.23  on 145  degrees of freedom
-Residual deviance: 167.53  on 128  degrees of freedom
-AIC: 1100.5 %chktex 13
-
-Number of Fisher Scoring iterations: 1
-
-
-              Theta:  1.604 
-          Std. Err.:  0.214 
-
- 2 x log-likelihood:  -1062.546 
-\end{CodeOutput}
-\end{CodeChunk}
-
-
-
-%% -- Summary/conclusions/discussion -------------------------------------------
-
-\section{Summary and discussion}\label{sec:summary}
-
-\begin{leftbar}
-As usual \dots
-\end{leftbar}
-
-
-%% -- Optional special unnumbered sections -------------------------------------
-
 \section*{Computational details}
 
-\begin{leftbar}
-If necessary or useful, information about certain computational details
-such as version numbers, operating systems, or compilers could be included
-in an unnumbered section. Also, auxiliary packages (say, for visualizations,
-maps, tables, \dots) that are not cited in the main text can be credited here.
-\end{leftbar}
+The results in this paper were obtained using \proglang{Python}~3.11.13 with the \pkg{numpy}~2.3.2, \pkg{scipy}~1.16.1, and \pkg{gurobipy}~12.0.3 packages, as well as \pkg{Gurobi}~10.0.3.  All \proglang{Python} packages can be installed using \pkg{pip} or \pkg{conda}.
 
-The results in this paper were obtained using
-\proglang{R}~3.4.1 with the
-\pkg{MASS}~7.3.47 package\@. \proglang{R} itself
-and all packages used are available from the Comprehensive
-\proglang{R} Archive Network (CRAN) at
-\url{https://CRAN.R-project.org/}.
-
+\pkg{Gurobi} can be downloaded from \url{https://www.gurobi.com/}.  Although it requires a license, free academic licenses are available.
 
 \section*{Acknowledgments}
 
-\begin{leftbar}
-All acknowledgments (note the AE spelling) should be collected in this
-unnumbered section before the references. It may contain the usual information
-about funding and feedback from colleagues/reviewers/etc. Furthermore,
-information such as relative contributions of the authors may be added here
-(if any).
-\end{leftbar}
+I would like to thank my AstroPath colleagues, in particular my mentors, Drs.~Alex Szalay and Janis Taube, for their support on this project.
 
+This research was supported by the Mark Foundation for Cancer Research.
 
 %% -- Bibliography -------------------------------------------------------------
 %% - References need to be provided in a .bib BibTeX database.
@@ -670,55 +359,50 @@ information such as relative contributions of the authors may be added here
 
 \begin{appendix}
 
-\section{More technical details}\label{app:technical}
+\section{Datacard format}\label{app:datacard}
 
-\begin{leftbar}
-Appendices can be included after the bibliography (with a page break). Each
-section within the appendix should have a proper section title (rather than
-just \emph{Appendix}).
-
-For more technical style details, please check out JSS's style FAQ at
-\url{https://www.jstatsoft.org/pages/view/style#frequently-asked-questions}
-which includes the following topics:
-\begin{itemize}
-  \item Title vs.\ sentence case.
-  \item Graphics formatting.
-  \item Naming conventions.
-  \item Turning JSS manuscripts into \proglang{R} package vignettes.
-  \item Trouble shooting.
-  \item Many other potentially helpful details\dots
-\end{itemize}
-\end{leftbar}
-
-
-\section[Using BibTeX]{Using Bib{\TeX}}\label{app:bibtex}
-
-\begin{leftbar}
-References need to be provided in a \textsc{Bib}{\TeX} file (\code{.bib}). All
-references should be made with \verb|\cite|, \verb|\citet|, \verb|\citep|,
-\verb|\citealp| etc.\ (and never hard-coded). This commands yield different
-formats of author-year citations and allow to include additional details (e.g.,
-pages, chapters, \dots) in brackets. In case you are not familiar with these
-commands see the JSS style FAQ for details.
-
-Cleaning up \textsc{Bib}{\TeX} files is a somewhat tedious task---especially
-when acquiring the entries automatically from mixed online sources. However,
-it is important that informations are complete and presented in a consistent
-style to avoid confusions. JSS requires the following format.
-\begin{itemize}
-  \item JSS-specific markup (\verb|\proglang|, \verb|\pkg|, \verb|\code|) should
-    be used in the references.
-  \item Titles should be in title case.
-  \item Journal titles should not be abbreviated and in title case.
-  \item DOIs should be included where available.
-  \item Software should be properly cited as well. For \proglang{R} packages
-    \code{citation("pkgname")} typically provides a good starting point. %chktex 18 chktex 36
-\end{itemize}
-\end{leftbar}
-
+The inputs to \pkg{KoMbine} are provided in a datacard format, similar to the one used in \pkg{Combine} \citep{CAT-23-001}.  The datacard is a text file with the following format:
+\begin{verbatim}
+# Datacard for KoMbine
+# This is a comment line
+observable_type fixed
+------------
+# List of patients
+------------
+survival_time 3   4   5   2   4   5   6   4   3   6   8   7
+censored      0   0   0   0   0   0   0   0   0   0   0   1
+observable    0.1 0.2 0.3 0.4 0.5 0.6 0.3 0.4 0.5 0.6 0.7 0.8
+\end{verbatim}
 \end{appendix}
+Any line starting with \code{\#} is a comment and is ignored, as are lines of hyphens \code{------------}.
 
-%% -----------------------------------------------------------------------------
+The first line is the header, which specifies the type of observable.  In this case, the observable is fixed, which means that there are no patient-wise uncertainties.  The \code{survival\_time} gives the length of time the patient was observed before being censored or dying, and the \code{censored} line indicates whether the patient was censored (1) or not (0).
 
+The \code{observable} line gives the value of the observable for each patient.  The format is similar for other \code{observable\_type}s.  This datacard gives the same nominal \KM{} curve as the previous example, but the patient-wise uncertainties are modeled as a ratio of two Poisson distributions:
+\begin{verbatim}
+observable_type poisson_ratio
+------------
+# List of patients
+------------
+survival_time 3   4   5   2   4   5   6   4   3   6   8   7
+censored      0   0   0   0   0   0   0   0   0   0   0   1
+num           10  20  30  40  50  60  30  40  50  60  70  80
+denom         100 100 100 100 100 100 100 100 100 100 100 100
+\end{verbatim}
+
+To create a \KM{} plot, you can run:
+\begin{CodeInput}
+kombine datacard.txt km_plot.pdf --parameter-min 0.45
+\end{CodeInput}
+This will create a \KM{} plot with the patients whose parameter is at least \(0.45\) included in the curve.
+
+You can also create a \KM{} plot with two curves, for patients with a high and low value of the observable:
+\begin{CodeInput}
+kombine_twogroups datacard.txt --parameter-threshold 0.45
+\end{CodeInput}
+
+The \code{--include-binomial-only} and \code{--include-patient-wise-only} options will calculate error bands that only include the binomial or patient-wise uncertainties, respectively, as described in \cref{sec:isolating-uncertainties}.  By default, the error bands will be drawn hatched, with the combined uncertainty also displayed on the plot.  If that is too hard to see, you can disable the combined uncertainty with \code{--exclude-full-nll}.
+
+Various additional command line arguments are available and are documented in \code{kombine --help} or \code{kombine_twogroups --help}.
 
 \end{document}
