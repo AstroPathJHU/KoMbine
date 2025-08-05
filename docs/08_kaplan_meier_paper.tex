@@ -189,7 +189,7 @@ This gives an interpretable visualization of the patient-wise uncertainty: we ob
 
 \pkg{KoMbine} is implemented in \proglang{Python} and uses \pkg{Gurobi} \citep{gurobi} to minimize the NLL for a given value of \(S\).
 
-We use \code{scipy.optimize.differential_evolution} \citep{differential-evolution,scipy} to minimize \(-\log \mathcal{L}_{\text{total}}\) over \(S\) to find the maximum likelihood estimate\@.  \code{scipy.optimize.brentq} \citep{brentq,scipy} is then used to compute the confidence intervals, bounded by the points where the NLL equals a threshold value (1.0 for 68\% CL and 3.84 for 95\% CL).
+We first minimize \(-\log \mathcal{L}_{\text{total}}\) without the constraint on \(S\) (\ref{eq:km-probability-constraint}) to find the maximum likelihood estimate and the best value of \(S\)\@.  \code{scipy.optimize.brentq} \citep{brentq,scipy} is then used to compute the confidence intervals, bounded by the points where the NLL equals a threshold value (1.0 for 68\% CL and 3.84 for 95\% CL).
 
 For the patient-wise-only error, there is no need to minimize the NLL over \(S'\), as by construction it minimizes at \(S'=S_\text{nominal}\).  To find the confidence intervals, we use a binary search that only looks at the possible discrete values of \(S\): intermediate values of \(S'\) cannot return anything different.
 

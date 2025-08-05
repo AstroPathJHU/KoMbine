@@ -1206,7 +1206,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     return (
       model,
       x,
-      km_probability_var, # New return value
+      km_probability_var,
       expected_probability_var,
       use_binomial_penalty_indicator,
     )
@@ -1223,11 +1223,11 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     self,
     *,
     model: gp.Model,
-    expected_probability: float,
+    expected_probability: float | None,
     patient_wise_only: bool,
     binomial_only: bool,
     x: gp.tupledict[int, gp.Var],
-    km_probability_var: gp.Var, # New parameter
+    km_probability_var: gp.Var,
     use_binomial_penalty_indicator: gp.Var,
     expected_probability_var: gp.Var,
   ):
@@ -1255,10 +1255,11 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
         use_binomial_penalty_indicator == 1,
         name="use_binomial_penalty"
       )
-      self.__expected_probability_constraint = model.addConstr(
-        expected_probability_var == expected_probability,
-        name="expected_probability_constraint",
-      )
+      if expected_probability is not None:
+        self.__expected_probability_constraint = model.addConstr(
+          expected_probability_var == expected_probability,
+          name="expected_probability_constraint",
+        )
     else:
       #no binomial penalty means there's nothing to constrain the observed
       #probability to the expected probability.  In that case, what does
@@ -1272,10 +1273,12 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       )
 
       # Constrain the KM probability based on the expected_probability
-      # If expected_probability > observed, then KM_prob >= expected_probability
-      # If expected_probability < observed, then KM_prob <= expected_probability
-      # If expected_probability == observed, then KM_prob is unconstrained by expected_probability
-      if expected_probability > self.observed_KM_probability:
+      # If expected > observed, then KM_prob >= expected_probability
+      # If expected < observed, then KM_prob <= expected_probability
+      # If expected == observed or is None, then KM_prob is unconstrained
+      if expected_probability is None:
+        pass
+      elif expected_probability > self.observed_KM_probability:
         self.__expected_probability_constraint = model.addConstr(
           km_probability_var >= expected_probability - self.__endpoint_epsilon,
           name="km_prob_ge_expected"
@@ -1365,7 +1368,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
   def run_MINLP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
     self,
-    expected_probability: float,
+    expected_probability: float | None,
     *,
     verbose=False,
     print_progress=False,
@@ -1386,10 +1389,11 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
         "Running MINLP for expected probability ", expected_probability,
         " at time point ", self.time_point, " at time ", datetime.datetime.now()
       )
-    if not patient_wise_only and (expected_probability <= 0 or expected_probability >= 1):
-      raise ValueError("expected_probability must be in (0, 1)")
-    if expected_probability < 0 or expected_probability > 1:
-      raise ValueError("expected_probability must be in [0, 1]")
+    if expected_probability is not None:
+      if not patient_wise_only and (expected_probability <= 0 or expected_probability >= 1):
+        raise ValueError(f"expected_probability={expected_probability} must be in (0, 1) or None")
+      if expected_probability < 0 or expected_probability > 1:
+        raise ValueError(f"expected_probability={expected_probability} must be in [0, 1] or None")
     if binomial_only and patient_wise_only:
       raise ValueError("binomial_only and patient_wise_only cannot both be True")
 
@@ -1545,6 +1549,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
           patient_penalties=nll_penalty_for_patient_in_range,
           selected=[],
           model=model,
+          km_probability=np.nan,
         )
       raise RuntimeError(
         f"Model optimization failed with status {model.status}. "
@@ -1585,4 +1590,5 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       patient_penalties=nll_penalty_for_patient_in_range,
       selected=selected,
       model=model,
+      km_probability=km_probability_var.X,
     )

@@ -17,10 +17,7 @@ import numpy as np
 import scipy.optimize
 import scipy.stats
 
-from .discrete_optimization import (
-  binary_search_sign_change,
-  minimize_discrete_single_minimum,
-)
+from .discrete_optimization import binary_search_sign_change
 from .kaplan_meier import (
   KaplanMeierBase,
   KaplanMeierInstance,
@@ -230,7 +227,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     print_progress=False,
     MIPGap=None,
     MIPGapAbs=None,
-  ) -> collections.abc.Callable[[float], float]:
+  ) -> tuple[
+    collections.abc.Callable[[float | None], scipy.optimize.OptimizeResult],
+    collections.abc.Callable[[float | None], float],
+  ]:
     """
     Get the twoNLL function for the given time point.
     """
@@ -241,11 +241,11 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
     minlp = self.minlp_for_km(time_point=time_point)
     @InspectableCache
-    def twoNLL(expected_probability: float) -> float:
+    def run_MINLP(expected_probability: float | None) -> scipy.optimize.OptimizeResult:
       """
-      The negative log-likelihood function.
+      Run the MINLP for the given expected probability.
       """
-      result = minlp.run_MINLP(
+      return minlp.run_MINLP(
         expected_probability=expected_probability,
         binomial_only=binomial_only,
         patient_wise_only=patient_wise_only,
@@ -254,10 +254,16 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         MIPGap=MIPGap,
         MIPGapAbs=MIPGapAbs,
       )
+    @InspectableCache
+    def twoNLL(expected_probability: float | None) -> float:
+      """
+      The negative log-likelihood function.
+      """
+      result = run_MINLP(expected_probability)
       if not result.success:
         return np.inf
       return result.x
-    return twoNLL
+    return run_MINLP, twoNLL
 
   def calculate_possible_probabilities(self, time_point: float) -> np.ndarray:
     """
@@ -280,55 +286,25 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
   def best_probability( #pylint: disable=too-many-arguments
     self,
-    twoNLL: collections.abc.Callable[[float], float],
-    time_point: float,
-    *,
-    patient_wise_only=False,
-    optimize_verbose=False,
-    MIPGap: float | None = None,
-    MIPGapAbs: float | None = None,
-    _force_minimization: bool = False,
+    run_MINLP: collections.abc.Callable[[float | None], scipy.optimize.OptimizeResult],
+    time_point: float | None = None,
   ) -> tuple[float, float]:
     """
     Find the expected probability that minimizes the negative log-likelihood
     for the given time point.
     """
-    if patient_wise_only:
-      # if patient_wise_only is True, the best probability is the
-      # nominal probability, by construction
-      if _force_minimization:
-        #for debug purposes: actually minimize the twoNLL
-        if MIPGap is None:
-          MIPGap = self.__default_MIPGap
-        if MIPGapAbs is None:
-          MIPGapAbs = self.__default_MIPGapAbs
-
-        # Set atol using MIPGapAbs and rtol using MIPGap
-        atol_for_discrete_min = MIPGapAbs * 1.1 # Or some other factor for safety
-        rtol_for_discrete_min = MIPGap * 1.1 # Use relative MIPGap for rtol
-
-        return minimize_discrete_single_minimum(
-          objective_function=twoNLL,
-          possible_values=self.possible_probabilities(time_point),
-          verbose=optimize_verbose,
-          atol=atol_for_discrete_min,
-          rtol=rtol_for_discrete_min,
-        )
-      expected_probability = self.nominalkm.survival_probability(time_point)
-      return expected_probability, twoNLL(expected_probability)
-    def vectorized_twoNLL(expected_probability: float) -> float:
-      return twoNLL(float(expected_probability))
-    vectorized_twoNLL = np.vectorize(vectorized_twoNLL, otypes=[float])
-    result: scipy.optimize.OptimizeResult = scipy.optimize.differential_evolution(
-      vectorized_twoNLL,
-      bounds=np.array([[self.__endpoint_epsilon, 1 - self.__endpoint_epsilon]]),
-      rng=123456,
-    )
-    assert isinstance(result, scipy.optimize.OptimizeResult)
+    result = run_MINLP(None)
     if not result.success:
-      raise RuntimeError("Failed to find the best probability")
-    x, = result.x
-    return x, result.fun
+      raise RuntimeError(
+        f"Failed to find the best probability for time point {time_point}"
+      )
+    best_prob = result.km_probability
+    twoNLL_min = result.x
+    if not 0 <= best_prob <= 1:
+      raise ValueError(
+        f"Best probability {best_prob} is not in [0, 1] for time point {time_point}"
+      )
+    return best_prob, twoNLL_min
 
   def survival_probabilities_exponential_greenwood(
     self,
@@ -377,7 +353,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         )
       survival_probabilities_time_point = []
       survival_probabilities.append(survival_probabilities_time_point)
-      twoNLL = self.get_twoNLL_function(
+      run_MINLP, twoNLL = self.get_twoNLL_function(
         time_point=t,
         binomial_only=binomial_only,
         patient_wise_only=patient_wise_only,
@@ -390,12 +366,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       # for the given time point
       try:
         best_prob, twoNLL_min = self.best_probability(
-          twoNLL=twoNLL,
+          run_MINLP=run_MINLP,
           time_point=t,
-          patient_wise_only=patient_wise_only,
-          optimize_verbose=optimize_verbose,
-          MIPGap=MIPGap,
-          MIPGapAbs=MIPGapAbs,
         )
       except Exception as e:
         raise RuntimeError(
@@ -416,9 +388,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           twoNLL=twoNLL, twoNLL_min=twoNLL_min, d2NLLcut=d2NLLcut
         ) -> float:
           return twoNLL(expected_probability) - twoNLL_min - d2NLLcut
-        np.testing.assert_almost_equal(
-          objective_function(best_prob),
+        np.testing.assert_allclose(
+          objective_function(np.clip(best_prob, self.__endpoint_epsilon, 1 - self.__endpoint_epsilon)),
           -d2NLLcut,
+          atol=1e-4,
         )
 
         if patient_wise_only:
@@ -468,21 +441,21 @@ class KaplanMeierLikelihood(KaplanMeierBase):
             lower_bound = lower
 
         else:
-          if objective_function(self.__endpoint_epsilon) < 0:
+          if best_prob <= self.__endpoint_epsilon or objective_function(self.__endpoint_epsilon) < 0:
             lower_bound = 0
           else:
             lower_bound = scipy.optimize.brentq(
               objective_function,
               self.__endpoint_epsilon,
-              best_prob,
+              np.clip(best_prob, self.__endpoint_epsilon, 1 - self.__endpoint_epsilon),
               xtol=1e-6,
             )
-          if objective_function(1 - self.__endpoint_epsilon) < 0:
+          if best_prob >= 1 - self.__endpoint_epsilon or objective_function(1 - self.__endpoint_epsilon) < 0:
             upper_bound = 1
           else:
             upper_bound = scipy.optimize.brentq(
               objective_function,
-              best_prob,
+              np.clip(best_prob, self.__endpoint_epsilon, 1 - self.__endpoint_epsilon),
               1 - self.__endpoint_epsilon,
               xtol=1e-6,
             )
