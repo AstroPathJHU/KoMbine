@@ -92,13 +92,11 @@ The \pkg{KoMbine} package provides the first method to propagate these types of 
 
 \pkg{KoMbine} provides a similar interface to propagate uncertainties to \KM{} curves.  It handles the statistical uncertainty on the number of patients in a more precise way than the Greenwood confidence intervals and incorporates patient-wise uncertainties into the calculation.  The statistical and patient-wise uncertainties can also be plotted separately, allowing the user to see which uncertainties dominate.
 
-\section{Methodology}
-\label{sec:methodology}
+\section{Methodology}\label{sec:methodology}
 
 \pkg{KoMbine} uses a log-likelihood to compute the confidence interval for each point on the \KM{} curve.  The log likelihood is a function of the survival probability \(S\) as well as other parameters.  We maximize the likelihood over those other parameters to find the ``likelihood scan'' as a function of \(S\) alone.  The points of maximum likelihood form the \KM{} curve, and the confidence intervals are determined by the points where the log likelihood is below a threshold.
 
-\subsection{Notation}
-\label{sec:notation}
+\subsection{Notation}\label{sec:notation}
 
 We denote the inclusion of patient \(j\) by \(a_j\), which is \(1\) if the patient is included and \(0\) if the patient is excluded.  The numbers of patients who were at risk and who died at time \(t_i\) are:
 \begin{align}
@@ -118,8 +116,7 @@ where \(p_i^\text{survived}\) is the probability that a patient who has survived
 
 For clarity, we will distinguish the two types of uncertainty: the statistical uncertainty from the finite number of patients (which we will call the ``binomial uncertainty'') and the patient-wise uncertainty.
 
-\subsection{Binomial uncertainty}
-\label{sec:binomial-uncertainty}
+\subsection{Binomial uncertainty}\label{sec:binomial-uncertainty}
 
 The binomial contribution to the \KM{} curve is computed from the number of patients at risk and the number of patients who died at each time point:
 \begin{equation}
@@ -136,8 +133,7 @@ We are not interested in the individual \(p_i^\text{survived}\) values, but rath
 \end{equation}
 when we minimize the NLL\@.
 
-\subsection{Patient-wise uncertainty}
-\label{sec:patient-wise-uncertainty}
+\subsection{Patient-wise uncertainty}\label{sec:patient-wise-uncertainty}
 
 We now consider that the patients themselves may be subject to uncertainty.  Some patients who were nominally included in the \KM{} curve may actually be excluded or vice versa.
 
@@ -150,8 +146,7 @@ For the purpose of the math here, all that is important is that the penalty is a
 -\log \mathcal{L}_{\text{patient}}(a_j) = -\sum_{j=1}^{m} a_j\log \mathcal{L}_j^{\text{patient}}. \label{eq:patient-nll}
 \end{equation}
 
-\subsection{Combining the uncertainties}
-\label{sec:combining-uncertainties}
+\subsection{Combining the uncertainties}\label{sec:combining-uncertainties}
 
 The total NLL is the sum of the binomial NLL and the patient-wise NLL\@:
 \begin{equation}
@@ -160,8 +155,7 @@ The total NLL is the sum of the binomial NLL and the patient-wise NLL\@:
 
 We minimize the overall NLL (\ref{eq:total-nll}) over the \(p_i^\text{survived}\) and \(a_j\), with the constraint (\ref{eq:km-probability-constraint}).  This is a mixed integer nonlinear programming problem (MINLP).
 
-\subsection{Isolating the binomial and patient-wise uncertainties}
-\label{sec:isolating-uncertainties}
+\subsection{Isolating the binomial and patient-wise uncertainties}\label{sec:isolating-uncertainties}
 
 Although the total uncertainty on the \KM{} curve includes both the binomial and the patient-wise uncertainty, it is instructive to look at them separately.  Determining which uncertainty dominates can help to understand the next steps in the analysis: should we try to enroll more patients or should we improve the biomarker measurements?
 
