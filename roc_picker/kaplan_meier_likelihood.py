@@ -374,6 +374,14 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           f"Failed to find the best probability for time point {t}"
         ) from e
       best_probabilities.append(best_prob)
+      if patient_wise_only:
+        best_prob_clipped = best_prob
+      else:
+        best_prob_clipped = np.clip(
+          best_prob,
+          self.__endpoint_epsilon,
+          1 - self.__endpoint_epsilon,
+        )
 
       for CL in CLs:
         if patient_wise_only and t < min(self.patient_death_times):
@@ -389,7 +397,9 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         ) -> float:
           return twoNLL(expected_probability) - twoNLL_min - d2NLLcut
         np.testing.assert_allclose(
-          objective_function(np.clip(best_prob, self.__endpoint_epsilon, 1 - self.__endpoint_epsilon)),
+          objective_function(
+            best_prob_clipped
+          ),
           -d2NLLcut,
           atol=1e-4,
         )
@@ -447,7 +457,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
             lower_bound = scipy.optimize.brentq(
               objective_function,
               self.__endpoint_epsilon,
-              np.clip(best_prob, self.__endpoint_epsilon, 1 - self.__endpoint_epsilon),
+              best_prob_clipped,
               xtol=1e-6,
             )
           if best_prob >= 1 - self.__endpoint_epsilon or objective_function(1 - self.__endpoint_epsilon) < 0:
@@ -455,7 +465,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           else:
             upper_bound = scipy.optimize.brentq(
               objective_function,
-              np.clip(best_prob, self.__endpoint_epsilon, 1 - self.__endpoint_epsilon),
+              best_prob_clipped,
               1 - self.__endpoint_epsilon,
               xtol=1e-6,
             )
