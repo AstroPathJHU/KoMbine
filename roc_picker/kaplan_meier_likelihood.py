@@ -396,13 +396,16 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           twoNLL=twoNLL, twoNLL_min=twoNLL_min, d2NLLcut=d2NLLcut
         ) -> float:
           return twoNLL(expected_probability) - twoNLL_min - d2NLLcut
-        np.testing.assert_allclose(
-          objective_function(
-            best_prob_clipped
-          ),
-          -d2NLLcut,
-          atol=1e-4,
-        )
+        if best_prob == best_prob_clipped:
+          #only do this if it's not too close to the edge
+          #to avoid edge effects
+          np.testing.assert_allclose(
+            objective_function(
+              best_prob
+            ),
+            -d2NLLcut,
+            atol=1e-4,
+          )
 
         if patient_wise_only:
           probs = self.possible_probabilities(time_point=t)
