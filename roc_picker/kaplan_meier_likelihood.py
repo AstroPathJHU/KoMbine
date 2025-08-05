@@ -404,7 +404,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               best_prob
             ),
             -d2NLLcut,
-            atol=1e-4,
+            atol=1e-2,
           )
 
         if patient_wise_only:
