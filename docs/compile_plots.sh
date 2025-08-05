@@ -3,6 +3,7 @@
 set -euxo pipefail
 
 export PYTHONWARNINGS=error
+export PYTHONUNBUFFERED=1
 export MPLBACKEND=Agg
 
 cd $(dirname $0)
