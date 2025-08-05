@@ -451,7 +451,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
             lower_bound = lower
 
         else:
-          if best_prob <= self.__endpoint_epsilon or objective_function(self.__endpoint_epsilon) < 0:
+          if (
+            best_prob <= self.__endpoint_epsilon
+            or objective_function(self.__endpoint_epsilon) < 0
+          ):
             lower_bound = 0
           else:
             lower_bound = scipy.optimize.brentq(
@@ -460,7 +463,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               best_prob_clipped,
               xtol=1e-6,
             )
-          if best_prob >= 1 - self.__endpoint_epsilon or objective_function(1 - self.__endpoint_epsilon) < 0:
+          if (
+            best_prob >= 1 - self.__endpoint_epsilon
+            or objective_function(1 - self.__endpoint_epsilon) < 0
+          ):
             upper_bound = 1
           else:
             upper_bound = scipy.optimize.brentq(
