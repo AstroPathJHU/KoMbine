@@ -97,6 +97,10 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   ylabel: str = "Survival Probability"
   show_grid: bool = True
   figsize: tuple[float, float] = (10, 7)
+  legend_fontsize: int = 10
+  label_fontsize: int = 12
+  title_fontsize: int = 14
+  tick_fontsize: int = 10
   dpi: int = 100
 
   def __post_init__(self):
@@ -774,14 +778,19 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     config: KaplanMeierPlotConfig,
   ):
     """Adds final plot elements and handles saving/showing/closing."""
-    ax.set_xlabel(config.xlabel)
-    ax.set_ylabel(config.ylabel)
+    ax.set_xlabel(config.xlabel, fontsize=config.label_fontsize)
+    ax.set_ylabel(config.ylabel, fontsize=config.label_fontsize)
     if config.title is not None:
-      ax.set_title(config.title)
-    ax.legend()
+      ax.set_title(config.title, fontsize=config.title_fontsize)
+    ax.legend(fontsize=config.legend_fontsize)
     if config.show_grid:
       ax.grid()
     ax.set_ylim(0, 1.05) # Ensure y-axis is from 0 to 1.05 for survival probability
+
+    #set font sizes
+    ax.tick_params(labelsize=config.tick_fontsize)
+    if config.title is not None:
+      ax.title.set_fontsize(config.title_fontsize)
 
     if config.saveas is not None:
       save_path = pathlib.Path(config.saveas)

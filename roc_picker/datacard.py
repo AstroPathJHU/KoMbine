@@ -998,6 +998,11 @@ def _make_common_parser(description: str) -> argparse.ArgumentParser:
   parser.add_argument("--include-median-survival", action="store_true", dest="include_median_survival", help="Include the median survival line in the plot.")
   parser.add_argument("--print-progress", action="store_true", dest="print_progress", help="Print progress messages during the computation.")
   parser.add_argument("--log-zero-epsilon", type=float, dest="log_zero_epsilon", default=1e-10, help="Log zero epsilon for the likelihood calculation.")
+  parser.add_argument("--figsize", nargs=2, type=float, metavar=("WIDTH", "HEIGHT"), help="Figure size in inches.", default=KaplanMeierPlotConfig.figsize)
+  parser.add_argument("--legend-fontsize", type=float, help="Font size for legend text.", default=KaplanMeierPlotConfig.legend_fontsize)
+  parser.add_argument("--label-fontsize", type=float, help="Font size for axis labels.", default=KaplanMeierPlotConfig.label_fontsize)
+  parser.add_argument("--title-fontsize", type=float, help="Font size for the plot title.", default=KaplanMeierPlotConfig.title_fontsize)
+  parser.add_argument("--tick-fontsize", type=float, help="Font size for the tick labels.", default=KaplanMeierPlotConfig.tick_fontsize)
   # pylint: enable=C0301
   return parser
 
@@ -1021,6 +1026,11 @@ def _extract_common_plot_config_args(args: argparse.Namespace) -> dict:
     "include_nominal": args.__dict__.pop("include_nominal"),
     "include_median_survival": args.__dict__.pop("include_median_survival"),
     "print_progress": args.__dict__.pop("print_progress"),
+    "figsize": args.__dict__.pop("figsize"),
+    "legend_fontsize": args.__dict__.pop("legend_fontsize"),
+    "label_fontsize": args.__dict__.pop("label_fontsize"),
+    "title_fontsize": args.__dict__.pop("title_fontsize"),
+    "tick_fontsize": args.__dict__.pop("tick_fontsize"),
   }
 
 def plot_km_likelihood():
