@@ -1034,6 +1034,9 @@ def _extract_common_plot_config_args(args: argparse.Namespace) -> dict:
   }
 
 def plot_km_likelihood():
+  """
+  Run Kaplan-Meier likelihood method from a datacard.
+  """
   parser = _make_common_parser("Run Kaplan-Meier likelihood method from a datacard.")
   parser.add_argument("--parameter-min", type=float, dest="parameter_min", default=-np.inf)
   parser.add_argument("--parameter-max", type=float, dest="parameter_max", default=np.inf)
@@ -1058,8 +1061,14 @@ def plot_km_likelihood():
     raise ValueError(f"Unused arguments: {args.__dict__}")
 
 def plot_km_likelihood_two_groups():
+  """
+  Run Kaplan-Meier likelihood method from a datacard, and plot Kaplan-Meier
+  curves for two groups separated into high and low values of the parameter.
+  """
+  # pylint: disable=C0301
   parser = _make_common_parser("Run Kaplan-Meier likelihood method from a datacard, and plot Kaplan-Meier curves for two groups separated into high and low values of the parameter.")
   parser.add_argument("--parameter-threshold", type=float, dest="parameter_threshold", required=True)
+  # pylint: enable=C0301
   args = parser.parse_args()
   _validate_plot_args(args, parser)
 
@@ -1067,8 +1076,16 @@ def plot_km_likelihood_two_groups():
   threshold = args.__dict__.pop("parameter_threshold")
   log_zero_epsilon = args.__dict__.pop("log_zero_epsilon")
 
-  kml_low = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=threshold, log_zero_epsilon=log_zero_epsilon)
-  kml_high = datacard.km_likelihood(parameter_min=threshold, parameter_max=np.inf, log_zero_epsilon=log_zero_epsilon)
+  kml_low = datacard.km_likelihood(
+    parameter_min=-np.inf,
+    parameter_max=threshold,
+    log_zero_epsilon=log_zero_epsilon
+  )
+  kml_high = datacard.km_likelihood(
+    parameter_min=threshold,
+    parameter_max=np.inf,
+    log_zero_epsilon=log_zero_epsilon
+  )
 
   common_plot_kwargs = _extract_common_plot_config_args(args)
   common_plot_kwargs["include_best_fit"] = False
