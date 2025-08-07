@@ -1570,8 +1570,10 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     n_total_val = np.rint(n_total.X)
 
     patient_penalty_val = sum(
-      nll_penalty_for_patient_in_range[i] * (x[i].X - (1 if nll_penalty_for_patient_in_range[i] < 0 else 0))
-      for i in range(self.n_patients)
+      nll_penalty_for_patient_in_range[i] * (
+        x[i].X
+        - (1 if nll_penalty_for_patient_in_range[i] < 0 else 0)
+      ) for i in range(self.n_patients)
       if np.isfinite(nll_penalty_for_patient_in_range[i])
     )
     binom_penalty_var = model.getVarByName("binom_penalty")
