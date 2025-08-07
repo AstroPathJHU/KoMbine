@@ -1127,7 +1127,12 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     patient_penalties = []
     for i in range(self.n_patients):
       if np.isfinite(self.nll_penalty_for_patient_in_range[i]):
-        patient_penalties.append(self.nll_penalty_for_patient_in_range[i] * x[i])
+        penalty = self.nll_penalty_for_patient_in_range[i] * x[i]
+        if self.nll_penalty_for_patient_in_range[i] < 0:
+          # If the penalty is negative, it means the patient is nominally within the range
+          # We want the penalty to be 0 when all the patients are at their nominal values
+          penalty -= self.nll_penalty_for_patient_in_range[i]
+        patient_penalties.append(penalty)
       elif np.isneginf(self.nll_penalty_for_patient_in_range[i]):
         #the patient must be selected, so we add a constraint
         model.addConstr(
@@ -1565,7 +1570,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     n_total_val = np.rint(n_total.X)
 
     patient_penalty_val = sum(
-      nll_penalty_for_patient_in_range[i] * x[i].X
+      nll_penalty_for_patient_in_range[i] * (x[i].X - (1 if nll_penalty_for_patient_in_range[i] < 0 else 0))
       for i in range(self.n_patients)
       if np.isfinite(nll_penalty_for_patient_in_range[i])
     )
