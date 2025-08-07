@@ -984,27 +984,24 @@ def plot_delta_functions_roc():
   if args.__dict__:
     raise ValueError(f"Unused arguments: {args.__dict__}")
 
-def plot_km_likelihood():
-  """
-  Run Kaplan-Meier likelihood method from a datacard.
-  """
+def _make_common_parser(description: str) -> argparse.ArgumentParser:
   # pylint: disable=C0301
-  parser = argparse.ArgumentParser(description="Run Kaplan-Meier likelihood method from a datacard.")
+  parser = argparse.ArgumentParser(description=description)
   parser.add_argument("datacard", type=pathlib.Path, help="Path to the datacard file.")
   parser.add_argument("output_file", type=pathlib.Path, help="Path to the output file for the plot.")
-  parser.add_argument("--parameter-min", type=float, help="Minimum parameter value for the likelihood scan.", dest="parameter_min", default=-np.inf)
-  parser.add_argument("--parameter-max", type=float, help="Maximum parameter value for the likelihood scan.", dest="parameter_max", default=np.inf)
   group = parser.add_mutually_exclusive_group()
   group.add_argument("--include-binomial-only", action="store_true", help="Include error bands for the binomial error alone.")
   group.add_argument("--include-patient-wise-only", action="store_true", help="Include error bands for the patient-wise error alone.")
-  parser.add_argument("--include-exponential-greenwood", action="store_true", help="Include the binomial-only exponential Greenwood error band in the plot.", dest="include_exponential_greenwood")
-  parser.add_argument("--exclude-full-nll", action="store_false", help="Exclude the full NLL from the plot.", dest="include_full_NLL", default=True)
-  parser.add_argument("--exclude-nominal", action="store_false", help="Exclude the nominal line from the plot.", dest="include_nominal", default=True)
-  parser.add_argument("--include-median-survival", action="store_true", help="Include the median survival line in the plot.", dest="include_median_survival")
-  parser.add_argument("--print-progress", action="store_true", help="Print progress messages during the computation.", dest="print_progress")
-  parser.add_argument("--log-zero-epsilon", type=float, help="Log zero epsilon for the likelihood calculation.", dest="log_zero_epsilon", default=1e-10)
+  parser.add_argument("--include-exponential-greenwood", action="store_true", dest="include_exponential_greenwood", help="Include the binomial-only exponential Greenwood error band in the plot.")
+  parser.add_argument("--exclude-full-nll", action="store_false", dest="include_full_NLL", default=True, help="Exclude the full NLL from the plot.")
+  parser.add_argument("--exclude-nominal", action="store_false", dest="include_nominal", default=True, help="Exclude the nominal line from the plot.")
+  parser.add_argument("--include-median-survival", action="store_true", dest="include_median_survival", help="Include the median survival line in the plot.")
+  parser.add_argument("--print-progress", action="store_true", dest="print_progress", help="Print progress messages during the computation.")
+  parser.add_argument("--log-zero-epsilon", type=float, dest="log_zero_epsilon", default=1e-10, help="Log zero epsilon for the likelihood calculation.")
   # pylint: enable=C0301
-  args = parser.parse_args()
+  return parser
+
+def _validate_plot_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
   if (
     not args.include_full_NLL
     and not args.include_binomial_only
@@ -1014,6 +1011,25 @@ def plot_km_likelihood():
       "If --exclude-full-nll is set, at least one of "
       "--include-binomial-only or --include-patient-wise-only must be set."
     )
+
+def _extract_common_plot_config_args(args: argparse.Namespace) -> dict:
+  return {
+    "include_patient_wise_only": args.__dict__.pop("include_patient_wise_only"),
+    "include_binomial_only": args.__dict__.pop("include_binomial_only"),
+    "include_exponential_greenwood": args.__dict__.pop("include_exponential_greenwood"),
+    "include_full_NLL": args.__dict__.pop("include_full_NLL"),
+    "include_nominal": args.__dict__.pop("include_nominal"),
+    "include_median_survival": args.__dict__.pop("include_median_survival"),
+    "print_progress": args.__dict__.pop("print_progress"),
+  }
+
+def plot_km_likelihood():
+  parser = _make_common_parser("Run Kaplan-Meier likelihood method from a datacard.")
+  parser.add_argument("--parameter-min", type=float, dest="parameter_min", default=-np.inf)
+  parser.add_argument("--parameter-max", type=float, dest="parameter_max", default=np.inf)
+  args = parser.parse_args()
+  _validate_plot_args(args, parser)
+
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
   kml = datacard.km_likelihood(
     parameter_min=args.__dict__.pop("parameter_min"),
@@ -1021,15 +1037,8 @@ def plot_km_likelihood():
     log_zero_epsilon=args.__dict__.pop("log_zero_epsilon"),
   )
 
-  # Create KaplanMeierPlotConfig object from parsed arguments
   plot_config = KaplanMeierPlotConfig(
-    include_binomial_only=args.__dict__.pop("include_binomial_only"),
-    include_patient_wise_only=args.__dict__.pop("include_patient_wise_only"),
-    include_exponential_greenwood=args.__dict__.pop("include_exponential_greenwood"),
-    include_full_NLL=args.__dict__.pop("include_full_NLL"),
-    include_nominal=args.__dict__.pop("include_nominal"),
-    include_median_survival=args.__dict__.pop("include_median_survival"),
-    print_progress=args.__dict__.pop("print_progress"),
+    **_extract_common_plot_config_args(args),
     saveas=args.__dict__.pop("output_file"),
   )
 
@@ -1039,90 +1048,46 @@ def plot_km_likelihood():
     raise ValueError(f"Unused arguments: {args.__dict__}")
 
 def plot_km_likelihood_two_groups():
-  """
-  Run Kaplan-Meier likelihood method from a datacard, and plot Kaplan-Meier
-  curves for two groups separated into high and low values of the parameter.
-  """
-  # pylint: disable=C0301
-  parser = argparse.ArgumentParser(description="Run Kaplan-Meier likelihood method from a datacard, and plot Kaplan-Meier curves for two groups separated into high and low values of the parameter.")
-  parser.add_argument("datacard", type=pathlib.Path, help="Path to the datacard file.")
-  parser.add_argument("output_file", type=pathlib.Path, help="Path to the output file for the plot.")
-  parser.add_argument("--parameter-threshold", type=float, help="Threshold value for the parameter to separate the two groups.", dest="parameter_threshold", required=True)
-  group = parser.add_mutually_exclusive_group()
-  group.add_argument("--include-binomial-only", action="store_true", help="Include error bands for the binomial error alone.")
-  group.add_argument("--include-patient-wise-only", action="store_true", help="Include error bands for the patient-wise error alone.")
-  parser.add_argument("--include-exponential-greenwood", action="store_true", help="Include the binomial-only exponential Greenwood error band in the plot.", dest="include_exponential_greenwood")
-  parser.add_argument("--exclude-full-nll", action="store_false", help="Exclude the full NLL from the plot.", dest="include_full_NLL", default=True)
-  parser.add_argument("--exclude-nominal", action="store_false", help="Exclude the nominal line from the plot.", dest="include_nominal", default=True)
-  parser.add_argument("--include-median-survival", action="store_true", help="Include the median survival line in the plot.", dest="include_median_survival")
-  parser.add_argument("--print-progress", action="store_true", help="Print progress messages during the computation.", dest="print_progress")
-  parser.add_argument("--log-zero-epsilon", type=float, help="Epsilon value for log(0) handling in the likelihood computation.", dest="log_zero_epsilon", default=1e-10)
-  # pylint: enable=C0301
+  parser = _make_common_parser("Run Kaplan-Meier likelihood method from a datacard, and plot Kaplan-Meier curves for two groups separated into high and low values of the parameter.")
+  parser.add_argument("--parameter-threshold", type=float, dest="parameter_threshold", required=True)
   args = parser.parse_args()
-  if (
-    not args.include_full_NLL
-    and not args.include_binomial_only
-    and not args.include_patient_wise_only
-  ):
-    parser.error(
-      "If --exclude-full-nll is set, at least one of "
-      "--include-binomial-only or --include-patient-wise-only must be set."
-    )
+  _validate_plot_args(args, parser)
+
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
   threshold = args.__dict__.pop("parameter_threshold")
   log_zero_epsilon = args.__dict__.pop("log_zero_epsilon")
-  kml_low = datacard.km_likelihood(
-    parameter_min=-np.inf,
-    parameter_max=threshold,
-    log_zero_epsilon=log_zero_epsilon,
-  )
-  kml_high = datacard.km_likelihood(
-    parameter_min=threshold,
-    parameter_max=np.inf,
-    log_zero_epsilon=log_zero_epsilon,
-  )
 
-  # Common plot configuration arguments
-  common_plot_kwargs = {
-    "include_patient_wise_only": args.__dict__.pop("include_patient_wise_only"),
-    "include_binomial_only": args.__dict__.pop("include_binomial_only"),
-    "include_exponential_greenwood": args.__dict__.pop("include_exponential_greenwood"),
-    "include_full_NLL": args.__dict__.pop("include_full_NLL"),
-    "include_nominal": args.__dict__.pop("include_nominal"),
-    "include_best_fit": False,
-    "include_median_survival": args.__dict__.pop("include_median_survival"),
-    "print_progress": args.__dict__.pop("print_progress"),
-  }
+  kml_low = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=threshold, log_zero_epsilon=log_zero_epsilon)
+  kml_high = datacard.km_likelihood(parameter_min=threshold, parameter_max=np.inf, log_zero_epsilon=log_zero_epsilon)
 
-  # Configuration for the 'High' group plot (creates the figure)
+  common_plot_kwargs = _extract_common_plot_config_args(args)
+  common_plot_kwargs["include_best_fit"] = False
+
   config_high = KaplanMeierPlotConfig(
     **common_plot_kwargs,
     create_figure=True,
-    close_figure=False, # Do not close figure after first plot
-    show=False, # Do not show figure yet
-    saveas=None, # Do not save yet
+    close_figure=False,
+    show=False,
+    saveas=None,
     nominal_label=f"High (n={len(kml_high.nominalkm.patients)})",
     nominal_color="blue",
     CL_colors=["dodgerblue", "skyblue"],
-    title="Kaplan-Meier Curves", # Set title on the first plot config
-    xlabel="Time", # Set xlabel on the first plot config
-    ylabel="Survival Probability", # Set ylabel on the first plot config
-    show_grid=True, # Set show_grid on the first plot config
+    title="Kaplan-Meier Curves",
+    xlabel="Time",
+    ylabel="Survival Probability",
+    show_grid=True,
   )
   kml_high.plot(config=config_high)
 
-  # Configuration for the 'Low' group plot (draws on existing figure)
   config_low = KaplanMeierPlotConfig(
     **common_plot_kwargs,
-    create_figure=False, # Do not create a new figure
-    show=False, # Do not show figure yet, handled by saveas
-    saveas=args.__dict__.pop("output_file"), # Save the combined plot here
+    create_figure=False,
+    show=False,
+    saveas=args.__dict__.pop("output_file"),
     nominal_label=f"Low (n={len(kml_low.nominalkm.patients)})",
     nominal_color="red",
     CL_colors=["orangered", "lightcoral"],
-    # Title, labels, grid are already set by config_high, but can be overridden here if needed
-    # For a combined plot, it's better to set them once.
-    title="Kaplan-Meier Curves", # Re-setting for clarity, but already set by config_high
+    title="Kaplan-Meier Curves",
     xlabel="Time",
     ylabel="Survival Probability",
     show_grid=True,
