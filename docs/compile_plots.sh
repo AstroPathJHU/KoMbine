@@ -21,7 +21,7 @@ rocpicker_delta_functions ../test/datacards/simple_examples/example_roc.txt --sc
 
 python ../test/test_continuous_distributions.py
 
-FONT_SIZE_ARGS="--legend-fontsize 16 --title-fontsize 16 --label-fontsize 16 --tick-fontsize 16"
+FONT_SIZE_ARGS="--legend-fontsize 16 --title-fontsize 24 --label-fontsize 16 --tick-fontsize 16"
 
 kombine ../test/datacards/simple_examples/poisson_ratio_km_censoring.txt km_example.pdf --parameter-min 0.45 $FONT_SIZE_ARGS --title "Kaplan-Meier Example"
 
