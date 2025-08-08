@@ -831,8 +831,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     if config.title is not None:
       ax.set_title(config.title, fontsize=config.title_fontsize)
     ax.legend(fontsize=config.legend_fontsize)
-    if config.show_grid:
-      ax.grid()
+    ax.grid(visible=config.show_grid)
     ax.set_ylim(0, 1.05) # Ensure y-axis is from 0 to 1.05 for survival probability
 
     #set font sizes
