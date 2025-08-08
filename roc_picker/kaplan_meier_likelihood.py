@@ -663,40 +663,44 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       results[label] = (y_minus, y_plus)
     return results
 
-  def _calculate_and_plot_confidence_bands( # pylint: disable=too-many-locals
+  def _calculate_and_plot_confidence_bands( # pylint: disable=too-many-locals 
     self,
     ax: matplotlib.axes.Axes,
     config: KaplanMeierPlotConfig,
     times_for_plot: typing.Sequence[float]
   ):
     """Calculates and plots the confidence bands and best-fit curve."""
+
+    # --- storage for computed results (no plotting yet) ---
     best_probabilities = None
     CL_probabilities = None
-    # For binomial_only or patient_wise_only if full NLL is also included
     CL_probabilities_subset = None
-
     results = {}
 
-    # Calculate and plot Full NLL
+    best_prob_full = None
+    CL_prob_full = None
+
+    best_prob_binomial = None
+    CL_prob_binomial = None
+
+    best_prob_greenwood = None
+    CL_prob_greenwood = None
+
+    best_prob_patient = None
+    CL_prob_patient = None
+
+    # --- compute required probability sets (no fills plotted here) ---
     if config.include_full_NLL:
-      best_probabilities, CL_probabilities = self.survival_probabilities_likelihood(
+      best_prob_full, CL_prob_full = self.survival_probabilities_likelihood(
         CLs=config.CLs,
         times_for_plot=times_for_plot,
         print_progress=config.print_progress,
         MIPGap=config.MIPGap,
         MIPGapAbs=config.MIPGapAbs,
       )
-      # Plot the full NLL confidence bands
-      CL_results = self._plot_confidence_band_fill(
-        ax, config, times_for_plot, CL_probabilities, use_hatches=False
-      )
-      results.update(CL_results)
 
-    # Calculate and plot Binomial Only
     if config.include_binomial_only:
-      (
-        best_probabilities_binomial, CL_probabilities_binomial
-      ) = self.survival_probabilities_likelihood(
+      best_prob_binomial, CL_prob_binomial = self.survival_probabilities_likelihood(
         CLs=config.CLs,
         times_for_plot=times_for_plot,
         binomial_only=True,
@@ -704,45 +708,16 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         MIPGap=config.MIPGap,
         MIPGapAbs=config.MIPGapAbs,
       )
-      if config.include_full_NLL:
-        CL_probabilities_subset = CL_probabilities_binomial
-        CL_results = self._plot_confidence_band_fill(
-          ax, config, times_for_plot, CL_probabilities_subset,
-          label_suffix="Binomial only", use_hatches=True
-        )
-        results.update(CL_results)
-      else:
-        best_probabilities = best_probabilities_binomial
-        CL_probabilities = CL_probabilities_binomial
-        CL_results = self._plot_confidence_band_fill(
-          ax, config, times_for_plot, CL_probabilities,
-          label_suffix="Binomial only", use_hatches=False # No hatches if it's the primary CL
-        )
-        results.update(CL_results)
 
     if config.include_exponential_greenwood:
-      (
-        best_probabilities_greenwood, CL_probabilities_greenwood
-      ) = self.survival_probabilities_exponential_greenwood(
+      best_prob_greenwood, CL_prob_greenwood = self.survival_probabilities_exponential_greenwood(
         CLs=config.CLs,
         times_for_plot=times_for_plot,
         binomial_only=True,
       )
-      CL_results = self._plot_confidence_band_fill(
-        ax, config, times_for_plot, CL_probabilities_greenwood,
-        label_suffix="Binomial only, exp. Greenwood", use_hatches=False,
-        colors=config.CL_colors_greenwood[:len(config.CLs)],
-      )
-      results.update(CL_results)
-      if not config.include_full_NLL and not config.include_binomial_only:
-        best_probabilities = best_probabilities_greenwood
-        CL_probabilities = CL_probabilities_greenwood
 
-    # Calculate and plot Patient-Wise Only
     if config.include_patient_wise_only:
-      (
-        best_probabilities_patient_wise, CL_probabilities_patient_wise
-      ) = self.survival_probabilities_likelihood(
+      best_prob_patient, CL_prob_patient = self.survival_probabilities_likelihood(
         CLs=config.CLs,
         times_for_plot=times_for_plot,
         patient_wise_only=True,
@@ -750,27 +725,41 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         MIPGap=config.MIPGap,
         MIPGapAbs=config.MIPGapAbs,
       )
+
+    # --- determine which set is the 'best' (preserve original precedence) ---
+    if config.include_full_NLL:
+      best_probabilities = best_prob_full
+      CL_probabilities = CL_prob_full
+
+    if config.include_binomial_only:
       if config.include_full_NLL:
-        CL_probabilities_subset = CL_probabilities_patient_wise
-        CL_results = self._plot_confidence_band_fill(
-          ax, config, times_for_plot, CL_probabilities_subset,
-          label_suffix="Patient-wise only", use_hatches=True
-        )
-        results.update(CL_results)
+        CL_probabilities_subset = CL_prob_binomial
       else:
-        best_probabilities = best_probabilities_patient_wise
-        CL_probabilities = CL_probabilities_patient_wise
-        CL_results = self._plot_confidence_band_fill(
-          ax, config, times_for_plot, CL_probabilities,
-          label_suffix="Patient-wise only", use_hatches=False # No hatches if it's the primary CL
-        )
-        results.update(CL_results)
+        best_probabilities = best_prob_binomial
+        CL_probabilities = CL_prob_binomial
 
-    assert best_probabilities is not None
-    assert CL_probabilities is not None
+    if config.include_exponential_greenwood:
+      # does not override an explicit full/binomial preference
+      if not config.include_full_NLL and not config.include_binomial_only:
+        best_probabilities = best_prob_greenwood
+        CL_probabilities = CL_prob_greenwood
 
-    # Plot best fit curve
-    if config.include_best_fit and best_probabilities is not None:
+    if config.include_patient_wise_only:
+      if config.include_full_NLL:
+        CL_probabilities_subset = CL_prob_patient
+      else:
+        best_probabilities = best_prob_patient
+        CL_probabilities = CL_prob_patient
+
+    # --- fail fast if we couldn't determine a best probability set ---
+    if best_probabilities is None or CL_probabilities is None:
+      raise ValueError(
+        "Could not determine best_probabilities or CL_probabilities. "
+        "Check config flags and data returned by likelihood/greenwood calls."
+      )
+
+    # --- PLOT PHASE: plot best-fit first (so it appears above fills added here) ---
+    if config.include_best_fit:
       best_x, best_y = self.get_points_for_plot(times_for_plot, best_probabilities)
       label = config.best_label
       if config.include_median_survival:
@@ -787,6 +776,47 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         linestyle='--'
       )
       results["best_fit"] = best_y
+
+    # --- now plot confidence-band fills in the original sequence ---
+    if config.include_full_NLL:
+      CL_results = self._plot_confidence_band_fill(
+        ax, config, times_for_plot, CL_prob_full, use_hatches=False
+      )
+      results.update(CL_results)
+
+    if config.include_binomial_only:
+      if config.include_full_NLL:
+        CL_results = self._plot_confidence_band_fill(
+          ax, config, times_for_plot, CL_prob_binomial,
+          label_suffix="Binomial only", use_hatches=True
+        )
+      else:
+        CL_results = self._plot_confidence_band_fill(
+          ax, config, times_for_plot, CL_prob_binomial,
+          label_suffix="Binomial only", use_hatches=False
+        )
+      results.update(CL_results)
+
+    if config.include_exponential_greenwood:
+      CL_results = self._plot_confidence_band_fill(
+        ax, config, times_for_plot, CL_prob_greenwood,
+        label_suffix="Binomial only, exp. Greenwood", use_hatches=False,
+        colors=config.CL_colors_greenwood[:len(config.CLs)],
+      )
+      results.update(CL_results)
+
+    if config.include_patient_wise_only:
+      if config.include_full_NLL:
+        CL_results = self._plot_confidence_band_fill(
+          ax, config, times_for_plot, CL_prob_patient,
+          label_suffix="Patient-wise only", use_hatches=True
+        )
+      else:
+        CL_results = self._plot_confidence_band_fill(
+          ax, config, times_for_plot, CL_prob_patient,
+          label_suffix="Patient-wise only", use_hatches=False
+        )
+      results.update(CL_results)
 
     return results
 
