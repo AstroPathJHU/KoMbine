@@ -33,7 +33,7 @@
 %% - \Shorttitle{} with LaTeX markup (if any), used as running title
 \title{\pkg{KoMbine}: Propagating Statistical and Systematic Errors to \KM{} Curves}
 \Plaintitle{KoMbine: Propagating Statistical and Systematic Errors to \KM{} Curves}
-\Shorttitle{KoMbine: Propagating Errors to \KM{} Curves}
+\Shorttitle{\pkg{KoMbine}: Propagating Errors to \KM{} Curves}
 
 %% - \Abstract{} almost as usual
 \Abstract{
@@ -199,9 +199,7 @@ Counter-intuitively, the best fit \KM{} curve does not necessarily coincide with
 
 If only the binomial penalty is included, the survival NLL always minimizes at the nominal survival probability.  Similarly, with only the patient-wise errors, the nominal survival probability is also always optimal.  However, when both are included, the two may differ.
 
-To understand this, imagine a case where a patient is excluded from the curve, but their parameter is arbitrarily close to the boundary.  Nominally, this patient is included in the curve, but they can be included with only a small NLL penalty.  Adjusting the survival probability can improve the binomial penalty term by more than this small penalty loss:
-for example, \code{scipy.stats.logpmf(4, 7, 4/7)=-1.225}, but \code{scipy.stats.logpmf(5, 8, 5/8)=-1.267}. %chktex 36
-If the patient is close enough to the boundary, this difference in the binomial penalty may outweigh the small penalty for including the patient.
+To understand this, imagine a case where 7 patients were at risk at a particular time point, and 4 of them survived.  An additional patient who survived is nominally excluded from the curve, but their parameter is so close to the boundary that they can be included with only a small NLL penalty of \(0.01\)\@.  \Cref{eq:binomial-nll} evaluates to \(-1.255\) for \(4\) patients surviving out of \(7\) with \(p_\text{survived}=4/7\), but \(-1.267\) for \(5\) patients surviving out of \(8\) with \(p_\text{survived}=5/8\).  This small difference in the binomial penalty outweighs the even smaller penalty for including the patient, and so the minimum NLL occurs at the best fit survival probability of \(5/8\).
 
 This surprising result highlights the importance of the patient-wise uncertainties.  If the NLL penalty for including the patient really is that small, then we cannot, with any confidence, assign the patient to one \KM{} curve or the other.
 
@@ -221,39 +219,42 @@ This example is taken from \citet{AstroPathLung}, in which we analyzed pre-treat
 
 It should be noted that this is a fairly small cohort of only 25 patients.  In a larger-scale study, the binomial uncertainties would be smaller and the difference in patient-wise uncertainties would be even more important.
 
-\begin{figure}
+\begin{figure}[p]
+  \newcommand{\spacebetweenrows}{1em}
   \centering
   \begin{subfigure}[t]{0.49\textwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_cells_km_OS.pdf}
-    \caption{\label{fig:lung-dataset-cells} Caption goes here}
+    \caption{\label{fig:lung-dataset-cells}}
   \end{subfigure}
   \begin{subfigure}[t]{0.49\textwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_donuts_km_OS.pdf}
-    \caption{\label{fig:lung-dataset-donuts} Caption goes here}
-  \end{subfigure}
+    \caption{\label{fig:lung-dataset-donuts}}
+  \end{subfigure} \\
+  \vspace{\spacebetweenrows}
   \begin{subfigure}[t]{0.49\textwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_cells_km_OS_patient_wise.pdf}
-    \caption{\label{fig:lung-dataset-cells-patient-wise} Caption goes here}
+    \caption{\label{fig:lung-dataset-cells-patient-wise}}
   \end{subfigure}
   \begin{subfigure}[t]{0.49\textwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_donuts_km_OS_patient_wise.pdf}
-    \caption{\label{fig:lung-dataset-donuts-patient-wise} Caption goes here}
-  \end{subfigure}
+    \caption{\label{fig:lung-dataset-donuts-patient-wise}}
+  \end{subfigure} \\
+  \vspace{\spacebetweenrows}
   \begin{subfigure}[t]{0.49\textwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_cells_km_OS_binomial.pdf}
-    \caption{\label{fig:lung-dataset-cells-binomial} Caption goes here}
+    \caption{\label{fig:lung-dataset-cells-binomial}}
   \end{subfigure}
   \begin{subfigure}[t]{0.49\textwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_donuts_km_OS_binomial.pdf}
-    \caption{\label{fig:lung-dataset-donuts-binomial} Caption goes here}
+    \caption{\label{fig:lung-dataset-donuts-binomial}}
   \end{subfigure}
-  \caption{\label{fig:lung-dataset} Caption goes here}
+  \caption{\label{fig:lung-dataset} \KM{} curves for the lung cancer dataset, stratifying patients by their densities of either CD8+FoxP3+ cells (left) or DONUTS (right).  The top row shows the full uncertainty, while the middle and bottom rows show the uncertainties broken down into patient-wise and binomial contributions, respectively.}
 \end{figure}
 
 \subsection{Comparison with Greenwood confidence intervals}\label{sec:compare-to-greenwood}
@@ -304,11 +305,11 @@ Similarly, uncertainties resulting from batch effects in a biomarker assay will 
 
 The current \pkg{Gurobi} model would no longer work, as it requires precomputing \(\mathcal{L}_j^{\text{patient}}\).  With \(N\) patients, we can easily precompute \(N\) values, but not \(2^N\).  Instead, we would likely need to pass the uncertainty parameters \(\theta_k\) directly to the \pkg{Gurobi} model and let it compute \(a_j\left(\theta_k\right)\) and hence \(\mathcal{L}_{\text{patient}}\left(\theta_k\right)\) internally.
 
-The increased number of continuous variables will probably require a rethinking of how the model is solved\@.  \pkg{Gurobi} is not optimized for the types of complex nonlinear relationships that would be necessary here\@.  \pkg{Minuit} \citep{minuit}, which forms the backbone for \pkg{Combine}, \emph{is} optimized for many continuous nuisance variables, but not for the indicator variables we use in \pkg{KoMbine}.  Combining the strengths of both will be an interesting and nontrivial challenge.
+The increased number of continuous variables will probably require a rethinking of how the model is solved\@.  \pkg{Gurobi} is not optimized for the types of complex nonlinear relationships that would be necessary here\@.  \pkg{Minuit} \citep{minuit}, which forms the backbone for \pkg{Combine}, \emph{is} optimized for many continuous nuisance variables, but cannot handle indicator variables such as our \(a_j\), which are fundamental to the logic of \pkg{KoMbine}.  Combining the strengths of both will be an interesting and nontrivial challenge.
 
 \subsection{More advanced survival functionality}
 
-The \pkg{lifelines} package provides support for other types of survival analysis, such as parameteric survival models, left and interval censoring, and other types of visualizations, such as cumulative hazard plots\@.  \pkg{KoMbine} currently only supports the basic \KM{} curve, but similar statistical methods could be used to incorporate these other features.
+The \pkg{lifelines} package provides support for other types of survival analysis, such as parameteric survival models, left and interval censoring, and other types of visualizations, such as cumulative hazard plots\@.  \pkg{KoMbine} currently only supports the basic \KM{} curve, including right censoring, but similar statistical methods could be used to incorporate these other features.
 
 \subsection{ROC Curves}
 
@@ -326,7 +327,7 @@ This package will enable uncertainty estimates on \KM{} curves to take \emph{all
 
 The results in this paper were obtained using \proglang{Python}~3.11.13 with \pkg{numpy}~2.3.2, \pkg{scipy}~1.16.1, and \pkg{gurobipy}~12.0.3, as well as \pkg{Gurobi}~10.0.3.  All \proglang{Python} packages can be installed using \pkg{pip} or \pkg{conda}.
 
-\pkg{Gurobi} can be downloaded from \url{https://www.gurobi.com/}.  Although it requires a license, free academic licenses are available.
+\pkg{Gurobi} can be downloaded from \url{https://www.gurobi.com/}.  Although it requires a license, free licenses are available for academic use.
 
 \section*{Acknowledgments}
 
