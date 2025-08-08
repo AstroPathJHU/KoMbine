@@ -1090,7 +1090,6 @@ def plot_km_likelihood_two_groups():
   )
 
   common_plot_kwargs = _extract_common_plot_config_args(args)
-  common_plot_kwargs["include_best_fit"] = False
 
   config_high = KaplanMeierPlotConfig(
     **common_plot_kwargs,
@@ -1098,8 +1097,8 @@ def plot_km_likelihood_two_groups():
     close_figure=False,
     show=False,
     saveas=None,
-    nominal_label=f"High (n={len(kml_high.nominalkm.patients)})",
-    nominal_color="blue",
+    best_label=f"High (n={len(kml_high.nominalkm.patients)})",
+    best_color="blue",
     CL_colors=["dodgerblue", "skyblue"],
     xlabel="Time",
     ylabel="Survival Probability",
@@ -1112,8 +1111,8 @@ def plot_km_likelihood_two_groups():
     create_figure=False,
     show=False,
     saveas=args.__dict__.pop("output_file"),
-    nominal_label=f"Low (n={len(kml_low.nominalkm.patients)})",
-    nominal_color="red",
+    best_label=f"Low (n={len(kml_low.nominalkm.patients)})",
+    best_color="red",
     CL_colors=["orangered", "lightcoral"],
     xlabel="Time",
     ylabel="Survival Probability",
