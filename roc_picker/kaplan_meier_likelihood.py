@@ -44,6 +44,10 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   nominal_color: Color for the nominal curve.
   best_label: Label for the best fit curve.
   best_color: Color for the best fit curve.
+  patient_wise_only_suffix: Suffix for the patient-wise only error bands.
+  binomial_only_suffix: Suffix for the binomial-only error bands.
+  full_NLL_suffix: Suffix for the full NLL error bands.
+  exponential_greenwood_suffix: Suffix for the exponential Greenwood error bands.
   CLs: List of confidence levels for the error bands.
   CL_colors: List of colors for the confidence levels.
   CL_colors_greenwood: List of colors for the Greenwood confidence levels.
@@ -62,6 +66,11 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   ylabel: Label for the y-axis.
   show_grid: If True, display a grid on the plot.
   figsize: Size of the figure as a tuple (width, height).
+  legend_fontsize: Font size for the legend.
+  label_fontsize: Font size for the axis labels.
+  title_fontsize: Font size for the plot title.
+  tick_fontsize: Font size for the tick labels.
+  legend_loc: Location of the legend in the plot.
   dpi: Dots per inch for the figure resolution.
   """
   times_for_plot: typing.Sequence[float] | None = None
@@ -75,6 +84,10 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   nominal_color: str = 'red'
   best_label: str = 'Best Fit'
   best_color: str = 'blue'
+  patient_wise_only_suffix: str = 'Patient-wise only'
+  binomial_only_suffix: str = 'Binomial only'
+  full_NLL_suffix: str = ''
+  exponential_greenwood_suffix: str = 'Binomial only, exp. Greenwood'
   CLs: list[float] = dataclasses.field(default_factory=lambda: [0.68, 0.95])
   CL_colors: list[str] = dataclasses.field(
     default_factory=lambda: ['dodgerblue', 'skyblue', 'lightblue', 'lightcyan']
@@ -102,6 +115,7 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   label_fontsize: int = 12
   title_fontsize: int = 14
   tick_fontsize: int = 10
+  legend_loc: str | None = None
   dpi: int = 100
 
   def __post_init__(self):
@@ -785,12 +799,12 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       if config.include_full_NLL:
         CL_results = self._plot_confidence_band_fill(
           ax, config, times_for_plot, CL_prob_binomial,
-          label_suffix="Binomial only", use_hatches=True
+          label_suffix=config.binomial_only_suffix, use_hatches=True
         )
       else:
         CL_results = self._plot_confidence_band_fill(
           ax, config, times_for_plot, CL_prob_binomial,
-          label_suffix="Binomial only", use_hatches=False
+          label_suffix=config.binomial_only_suffix, use_hatches=False
         )
       results.update(CL_results)
 
@@ -798,7 +812,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       assert CL_prob_greenwood is not None
       CL_results = self._plot_confidence_band_fill(
         ax, config, times_for_plot, CL_prob_greenwood,
-        label_suffix="Binomial only, exp. Greenwood", use_hatches=False,
+        label_suffix=config.exponential_greenwood_suffix, use_hatches=False,
         colors=config.CL_colors_greenwood[:len(config.CLs)],
       )
       results.update(CL_results)
@@ -808,12 +822,12 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       if config.include_full_NLL:
         CL_results = self._plot_confidence_band_fill(
           ax, config, times_for_plot, CL_prob_patient,
-          label_suffix="Patient-wise only", use_hatches=True
+          label_suffix=config.patient_wise_only_suffix, use_hatches=True
         )
       else:
         CL_results = self._plot_confidence_band_fill(
           ax, config, times_for_plot, CL_prob_patient,
-          label_suffix="Patient-wise only", use_hatches=False
+          label_suffix=config.patient_wise_only_suffix, use_hatches=False
         )
       results.update(CL_results)
 
@@ -830,7 +844,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     ax.set_ylabel(config.ylabel, fontsize=config.label_fontsize)
     if config.title is not None:
       ax.set_title(config.title, fontsize=config.title_fontsize)
-    ax.legend(fontsize=config.legend_fontsize)
+    ax.legend(fontsize=config.legend_fontsize, loc=config.legend_loc)
     ax.grid(visible=config.show_grid)
     ax.set_ylim(0, 1.05) # Ensure y-axis is from 0 to 1.05 for survival probability
 

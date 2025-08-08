@@ -205,7 +205,7 @@ This surprising result highlights the importance of the patient-wise uncertainti
 
 \begin{figure}
   \centering
-  \includegraphics[width=0.75\textwidth]{km_example.pdf}
+  \includegraphics[width=0.5\textwidth]{km_example.pdf}
   \caption{\label{fig:best-fit-vs-nominal} An example \KM{} curve.  The best fit (blue) does not coincide with the nominal curve (red).  The error bands are shown as shaded blue areas.}
 \end{figure}
 
@@ -221,35 +221,36 @@ It should be noted that this is a fairly small cohort of only 25 patients.  In a
 
 \begin{figure}[p]
   \newcommand{\spacebetweenrows}{1em}
+  \newcommand{\figwidth}{0.4\textwidth}
   \centering
-  \begin{subfigure}[t]{0.49\textwidth}
+  \begin{subfigure}[t]{\figwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_cells_km_OS.pdf}
     \caption{\label{fig:lung-dataset-cells}}
   \end{subfigure}
-  \begin{subfigure}[t]{0.49\textwidth}
+  \begin{subfigure}[t]{\figwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_donuts_km_OS.pdf}
     \caption{\label{fig:lung-dataset-donuts}}
   \end{subfigure} \\
   \vspace{\spacebetweenrows}
-  \begin{subfigure}[t]{0.49\textwidth}
+  \begin{subfigure}[t]{\figwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_cells_km_OS_patient_wise.pdf}
     \caption{\label{fig:lung-dataset-cells-patient-wise}}
   \end{subfigure}
-  \begin{subfigure}[t]{0.49\textwidth}
+  \begin{subfigure}[t]{\figwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_donuts_km_OS_patient_wise.pdf}
     \caption{\label{fig:lung-dataset-donuts-patient-wise}}
   \end{subfigure} \\
   \vspace{\spacebetweenrows}
-  \begin{subfigure}[t]{0.49\textwidth}
+  \begin{subfigure}[t]{\figwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_cells_km_OS_binomial.pdf}
     \caption{\label{fig:lung-dataset-cells-binomial}}
   \end{subfigure}
-  \begin{subfigure}[t]{0.49\textwidth}
+  \begin{subfigure}[t]{\figwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_donuts_km_OS_binomial.pdf}
     \caption{\label{fig:lung-dataset-donuts-binomial}}

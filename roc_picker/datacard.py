@@ -1003,9 +1003,14 @@ def _make_common_parser(description: str) -> argparse.ArgumentParser:
   parser.add_argument("--label-fontsize", type=float, help="Font size for axis labels.", default=KaplanMeierPlotConfig.label_fontsize)
   parser.add_argument("--title-fontsize", type=float, help="Font size for the plot title.", default=KaplanMeierPlotConfig.title_fontsize)
   parser.add_argument("--tick-fontsize", type=float, help="Font size for the tick labels.", default=KaplanMeierPlotConfig.tick_fontsize)
+  parser.add_argument("--legend-loc", type=str, help="Location of the legend in the plot.", default=KaplanMeierPlotConfig.legend_loc)
   parser.add_argument("--title", type=str, help="Title for the plot.", default=KaplanMeierPlotConfig.title)
   parser.add_argument("--xlabel", type=str, help="Label for the x-axis.", default=KaplanMeierPlotConfig.xlabel)
   parser.add_argument("--ylabel", type=str, help="Label for the y-axis.", default=KaplanMeierPlotConfig.ylabel)
+  parser.add_argument("--patient-wise-only-suffix", type=str, help="Suffix to add to the patient-wise-only label in the legend.", default=KaplanMeierPlotConfig.patient_wise_only_suffix)
+  parser.add_argument("--binomial-only-suffix", type=str, help="Suffix to add to the binomial-only label in the legend.", default=KaplanMeierPlotConfig.binomial_only_suffix)
+  parser.add_argument("--full-nll-suffix", type=str, help="Suffix to add to the full NLL label in the legend.", default=KaplanMeierPlotConfig.full_NLL_suffix)
+  parser.add_argument("--exponential-greenwood-suffix", type=str, help="Suffix to add to the exponential Greenwood label in the legend.", default=KaplanMeierPlotConfig.exponential_greenwood_suffix)
   # pylint: enable=C0301
   return parser
 
@@ -1037,6 +1042,11 @@ def _extract_common_plot_config_args(args: argparse.Namespace) -> dict:
     "title": args.__dict__.pop("title"),
     "xlabel": args.__dict__.pop("xlabel"),
     "ylabel": args.__dict__.pop("ylabel"),
+    "legend_loc": args.__dict__.pop("legend_loc"),
+    "patient_wise_only_suffix": args.__dict__.pop("patient_wise_only_suffix"),
+    "binomial_only_suffix": args.__dict__.pop("binomial_only_suffix"),
+    "full_NLL_suffix": args.__dict__.pop("full_nll_suffix"),
+    "exponential_greenwood_suffix": args.__dict__.pop("exponential_greenwood_suffix"),
   }
 
 def plot_km_likelihood():
