@@ -1004,6 +1004,8 @@ def _make_common_parser(description: str) -> argparse.ArgumentParser:
   parser.add_argument("--title-fontsize", type=float, help="Font size for the plot title.", default=KaplanMeierPlotConfig.title_fontsize)
   parser.add_argument("--tick-fontsize", type=float, help="Font size for the tick labels.", default=KaplanMeierPlotConfig.tick_fontsize)
   parser.add_argument("--title", type=str, help="Title for the plot.", default=KaplanMeierPlotConfig.title)
+  parser.add_argument("--xlabel", type=str, help="Label for the x-axis.", default=KaplanMeierPlotConfig.xlabel)
+  parser.add_argument("--ylabel", type=str, help="Label for the y-axis.", default=KaplanMeierPlotConfig.ylabel)
   # pylint: enable=C0301
   return parser
 
@@ -1033,6 +1035,8 @@ def _extract_common_plot_config_args(args: argparse.Namespace) -> dict:
     "title_fontsize": args.__dict__.pop("title_fontsize"),
     "tick_fontsize": args.__dict__.pop("tick_fontsize"),
     "title": args.__dict__.pop("title"),
+    "xlabel": args.__dict__.pop("xlabel"),
+    "ylabel": args.__dict__.pop("ylabel"),
   }
 
 def plot_km_likelihood():
@@ -1100,8 +1104,6 @@ def plot_km_likelihood_two_groups():
     best_label=f"High (n={len(kml_high.nominalkm.patients)})",
     best_color="blue",
     CL_colors=["dodgerblue", "skyblue"],
-    xlabel="Time",
-    ylabel="Survival Probability",
     show_grid=True,
   )
   kml_high.plot(config=config_high)
@@ -1114,8 +1116,6 @@ def plot_km_likelihood_two_groups():
     best_label=f"Low (n={len(kml_low.nominalkm.patients)})",
     best_color="red",
     CL_colors=["orangered", "lightcoral"],
-    xlabel="Time",
-    ylabel="Survival Probability",
     show_grid=True,
   )
   kml_low.plot(config=config_low)
