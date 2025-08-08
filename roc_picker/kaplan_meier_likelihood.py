@@ -663,7 +663,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       results[label] = (y_minus, y_plus)
     return results
 
-  def _calculate_and_plot_confidence_bands( # pylint: disable=too-many-locals 
+  def _calculate_and_plot_confidence_bands( # pylint: disable=too-many-locals, too-many-branches, too-many-statements
     self,
     ax: matplotlib.axes.Axes,
     config: KaplanMeierPlotConfig,
@@ -674,7 +674,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     # --- storage for computed results (no plotting yet) ---
     best_probabilities = None
     CL_probabilities = None
-    CL_probabilities_subset = None
     results = {}
 
     best_prob_full = None
@@ -732,9 +731,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       CL_probabilities = CL_prob_full
 
     if config.include_binomial_only:
-      if config.include_full_NLL:
-        CL_probabilities_subset = CL_prob_binomial
-      else:
+      if not config.include_full_NLL:
         best_probabilities = best_prob_binomial
         CL_probabilities = CL_prob_binomial
 
@@ -745,9 +742,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         CL_probabilities = CL_prob_greenwood
 
     if config.include_patient_wise_only:
-      if config.include_full_NLL:
-        CL_probabilities_subset = CL_prob_patient
-      else:
+      if not config.include_full_NLL:
         best_probabilities = best_prob_patient
         CL_probabilities = CL_prob_patient
 
@@ -779,12 +774,14 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
     # --- now plot confidence-band fills in the original sequence ---
     if config.include_full_NLL:
+      assert CL_prob_full is not None
       CL_results = self._plot_confidence_band_fill(
         ax, config, times_for_plot, CL_prob_full, use_hatches=False
       )
       results.update(CL_results)
 
     if config.include_binomial_only:
+      assert CL_prob_binomial is not None
       if config.include_full_NLL:
         CL_results = self._plot_confidence_band_fill(
           ax, config, times_for_plot, CL_prob_binomial,
@@ -798,6 +795,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       results.update(CL_results)
 
     if config.include_exponential_greenwood:
+      assert CL_prob_greenwood is not None
       CL_results = self._plot_confidence_band_fill(
         ax, config, times_for_plot, CL_prob_greenwood,
         label_suffix="Binomial only, exp. Greenwood", use_hatches=False,
@@ -806,6 +804,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       results.update(CL_results)
 
     if config.include_patient_wise_only:
+      assert CL_prob_patient is not None
       if config.include_full_NLL:
         CL_results = self._plot_confidence_band_fill(
           ax, config, times_for_plot, CL_prob_patient,
