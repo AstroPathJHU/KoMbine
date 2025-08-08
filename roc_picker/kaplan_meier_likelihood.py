@@ -507,10 +507,17 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     fig, ax = self._prepare_figure(config)
 
     # Plot nominal curve and censored points
-    results = self._plot_nominal_and_censored(ax, config, times_for_plot)
+    results = self._plot_nominal(ax, config, times_for_plot)
 
     # Calculate and plot confidence bands and best fit curve
     results.update(self._calculate_and_plot_confidence_bands(ax, config, times_for_plot))
+
+    self._plot_censored(
+      ax,
+      config,
+      results["x"],
+      results["nominal"] if config.include_nominal else results["best_fit"],
+    )
 
     # Finalize plot elements (legend, labels, grid, save/show/close)
     self._finalize_plot(fig, ax, config)
@@ -530,7 +537,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       ax = plt.gca() # Get current axes if figure already exists
     return fig, ax
 
-  def _plot_nominal_and_censored(
+  def _plot_nominal(
     self,
     ax: matplotlib.axes.Axes,
     config: KaplanMeierPlotConfig,
@@ -554,23 +561,34 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         linestyle='--'
       )
 
-    patient_censored_times = sorted(self.nominalkm.patient_censored_times)
-    censored_times_probabilities = self.nominalkm.survival_probabilities(
-      patient_censored_times,
-    )
-    ax.plot(
-      patient_censored_times,
-      censored_times_probabilities,
-      marker='|',
-      color=config.nominal_color,
-      markersize=8,
-      markeredgewidth=1.5,
-      linestyle="",
-    )
     return {
       "x": nominal_x,
       "nominal": nominal_y,
     }
+
+  def _plot_censored(
+    self,
+    ax: matplotlib.axes.Axes,
+    config: KaplanMeierPlotConfig,
+    x_for_plot: typing.Sequence[float],
+    y_for_plot: typing.Sequence[float],
+  ):
+    patient_censored_times = sorted(self.nominalkm.patient_censored_times)
+    censored_times_probabilities = [
+      y_for_plot[
+        max(i for i, t in enumerate(x_for_plot) if t <= patient_censored_time)
+      ]
+      for patient_censored_time in patient_censored_times
+    ]
+    ax.plot(
+      patient_censored_times,
+      censored_times_probabilities,
+      marker='|',
+      color=config.nominal_color if config.include_nominal else config.best_color,
+      markersize=8,
+      markeredgewidth=1.5,
+      linestyle="",
+    )
 
   def _plot_confidence_band_fill( # pylint: disable=too-many-arguments, too-many-locals
     self,
