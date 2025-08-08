@@ -72,9 +72,9 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   include_best_fit: bool = True
   include_nominal: bool = True
   nominal_label: str = 'Nominal'
-  nominal_color: str = 'blue'
+  nominal_color: str = 'red'
   best_label: str = 'Best Fit'
-  best_color: str = 'red'
+  best_color: str = 'blue'
   CLs: list[float] = dataclasses.field(default_factory=lambda: [0.68, 0.95])
   CL_colors: list[str] = dataclasses.field(
     default_factory=lambda: ['dodgerblue', 'skyblue', 'lightblue', 'lightcyan']
