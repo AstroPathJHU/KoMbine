@@ -14,6 +14,7 @@ import matplotlib.axes
 import matplotlib.figure
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
 import scipy.optimize
 import scipy.stats
 
@@ -507,7 +508,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     fig, ax = self._prepare_figure(config)
 
     # Plot nominal curve and censored points
-    results = self._plot_nominal(ax, config, times_for_plot)
+    results: dict[str, npt.NDArray[np.float64]] = self._plot_nominal(ax, config, times_for_plot)
 
     # Calculate and plot confidence bands and best fit curve
     results.update(self._calculate_and_plot_confidence_bands(ax, config, times_for_plot))
@@ -570,8 +571,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     self,
     ax: matplotlib.axes.Axes,
     config: KaplanMeierPlotConfig,
-    x_for_plot: typing.Sequence[float],
-    y_for_plot: typing.Sequence[float],
+    x_for_plot: typing.Sequence[float] | npt.NDArray[np.float64],
+    y_for_plot: typing.Sequence[float] | npt.NDArray[np.float64],
   ):
     patient_censored_times = sorted(self.nominalkm.patient_censored_times)
     censored_times_probabilities = [
