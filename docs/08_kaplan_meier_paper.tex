@@ -211,7 +211,7 @@ This surprising result highlights the importance of the patient-wise uncertainti
 
 \subsection{Lung cancer dataset}
 
-This example is taken from \citet{AstroPathLung}, in which we analyzed pre-treatment biopsies from a cohort of patients with non-small-cell lung cancer (NSCLC) treated with anti-PD-1 immunotherapy.  We identified CD8+FoxP3+ cells, which are associated with good outcomes, but are extremely rare: a patient may have only one or two in their biopsy.  We also developed a probabilistic biomarker, called DONUTS, which resemble the niche of the CD8+FoxP3+ cells but are much more abundant.
+This example is taken from \citet{DONUTS}, in which we analyzed pre-treatment biopsies from a cohort of patients with non-small-cell lung cancer (NSCLC) treated with anti-PD-1 immunotherapy.  We identified CD8+FoxP3+ cells, which are associated with good outcomes, but are extremely rare: a patient may have only one or two in their biopsy.  We also developed a probabilistic biomarker, called DONUTS, which resemble the niche of the CD8+FoxP3+ cells but are much more abundant.
 
 \Cref{fig:lung-dataset-cells} shows \KM{} curves for regression-free survival (RFS) of patients with high and low densities of CD8+FoxP3+ cells.  The patients with a high density of CD8+FoxP3+ cells have better outcomes, as expected, but the error bands are large due to the high Poisson uncertainty in the number of CD8+FoxP3+ cells.  By contrast, \Cref{fig:lung-dataset-donuts} shows the \KM{} curves for RFS of patients with high and low densities of DONUTS\@.  The error bands are much smaller, as the DONUTS are much more abundant.
 
