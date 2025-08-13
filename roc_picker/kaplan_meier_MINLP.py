@@ -123,7 +123,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
   # ---------- constructors with full_nll definitions ----------
 
   @classmethod
-  def from_fixed_observable(
+  def from_fixed_observable( # pylint: disable=too-many-arguments
     cls,
     time: float,
     censored: bool,
@@ -133,6 +133,10 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     abs_epsilon: float = 1e-8,
     systematics: list[float] | None = None,
   ):
+    """
+    Create a KaplanMeierPatientNLL from a fixed observable.
+    The NLL is a delta function, plus systematics.
+    """
     systematics = systematics or []
     m = len(systematics)
 
@@ -141,7 +145,11 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       def full_nll_0d(eff: float) -> float:
         if eff <= 0:
           return float('inf')
-        return 0.0 if np.isclose(eff, observable, rtol=rel_epsilon, atol=abs_epsilon) else float('inf')
+        return (
+          0.0
+          if np.isclose(eff, observable, rtol=rel_epsilon, atol=abs_epsilon)
+          else float('inf')
+        )
       wrapped = cls._solve_0d(full_nll_0d)
 
     elif m == 1:
@@ -166,7 +174,11 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
             return float('inf')
           prod_factor *= a**t
         nominal = eff / prod_factor
-        base = 0.0 if np.isclose(nominal, observable, rtol=rel_epsilon, atol=abs_epsilon) else float('inf')
+        base = (
+          0.0
+          if np.isclose(nominal, observable, rtol=rel_epsilon, atol=abs_epsilon)
+          else float('inf')
+        )
         penalty = 0.5 * float(np.sum(np.square(thetas)))
         return base + penalty
       wrapped = cls._solve_nd(full_nll_nd, var_types=['theta'] * m)
@@ -182,6 +194,11 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     *,
     systematics: list[float] | None = None,
   ):
+    """
+    Create a KaplanMeierPatientNLL from a count.
+    The parameter NLL gives the negative log-likelihood to observe the count
+    given the parameter, which is the mean of the Poisson distribution.
+    """
     systematics = systematics or []
     m = len(systematics)
 
@@ -230,7 +247,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     return cls(time, censored, wrapped, count)
 
   @classmethod
-  def from_poisson_density(
+  def from_poisson_density( # pylint: disable=too-many-arguments
     cls,
     time: float,
     censored: bool,
@@ -239,6 +256,10 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     *,
     systematics: list[float] | None = None,
   ):
+    """
+    Create a KaplanMeierPatientNLL from a Poisson count
+    divided by an area that is known precisely.
+    """
     if denominator_area <= 0:
       raise ValueError("denominator_area must be > 0")
     systematics = systematics or []
@@ -293,7 +314,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     return cls(time, censored, wrapped, observed_density)
 
   @classmethod
-  def from_poisson_ratio(
+  def from_poisson_ratio( # pylint: disable=too-many-arguments
     cls,
     time: float,
     censored: bool,
@@ -302,6 +323,15 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     *,
     systematics: list[float] | None = None,
   ):
+    """
+    Create a KaplanMeierPatientNLL from a ratio of two counts.
+    The parameter NLL gives the negative log-likelihood to observe the
+    numberator and denominator counts given the parameter, which is the
+    ratio of the two Poisson distribution means.  We do this by floating
+    the denominator mean and fixing the numerator mean to the ratio
+    times the denominator mean.  We then minimize the NLL to observe the
+    numerator and denominator counts given the denominator mean.
+    """
     if denominator_count < 0 or numerator_count < 0:
       raise ValueError("Counts must be >= 0")
     systematics = systematics or []
@@ -346,11 +376,17 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
         var_types=['positive'] + ['theta'] * m
       )
 
-    observed_ratio = (numerator_count / denominator_count) if denominator_count > 0 else float('inf')
+    if denominator_count <= 0:
+      observed_ratio = float('inf')
+    else:
+      observed_ratio = numerator_count / denominator_count
     return cls(time, censored, wrapped, observed_ratio)
 
   @property
   def nominal(self) -> KaplanMeierPatient:
+    """
+    Returns the nominal Kaplan-Meier patient.
+    """
     return KaplanMeierPatient(
       time=self.time,
       censored=self.censored,
