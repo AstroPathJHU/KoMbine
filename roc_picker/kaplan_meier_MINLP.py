@@ -88,7 +88,9 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
         x0=np.array([0.0]),
         method='BFGS',
       )
-      return res.fun if res.success else float('inf')
+      if not res.success:
+        raise RuntimeError(f"Optimization failed:\n{res}")
+      return res.fun
     return wrapped
 
   @staticmethod
@@ -117,7 +119,9 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
         x0=np.zeros(len(var_types)),
         method='BFGS',
       )
-      return res.fun if res.success else float('inf')
+      if not res.success:
+        raise RuntimeError(f"Optimization failed:\n{res}")
+      return res.fun
     return wrapped
 
   # ---------- constructors with full_nll definitions ----------
