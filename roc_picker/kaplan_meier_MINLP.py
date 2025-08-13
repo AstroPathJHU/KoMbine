@@ -56,27 +56,71 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     return self.__observed_parameter
 
   @staticmethod
-  def _finalize_nll(
-    full_nll: collections.abc.Callable[..., float],
-    n_latent: int,
-    n_systematics: int
+  def _solve_0d(
+    full_nll: collections.abc.Callable[[float], float],
   ) -> collections.abc.Callable[[float], float]:
-    n_free_params = n_latent + n_systematics
-    if n_free_params == 0:
-      return lambda effective_param: full_nll(effective_param)
-    elif n_free_params == 1:
-      return lambda effective_param: full_nll(effective_param, 0.0)
+    def wrapped(effective_param: float) -> float:
+      return full_nll(effective_param)
+    return wrapped
+
+  @staticmethod
+  def _solve_1d(
+    full_nll: collections.abc.Callable[[float, float], float],
+    *,
+    var_type: str,  # 'theta' (ℝ) or 'positive' (>0 via exp)
+  ) -> collections.abc.Callable[[float], float]:
+    if var_type == 'theta':
+      def map_var(s: float) -> float:
+        return s
+    elif var_type == 'positive':
+      def map_var(s: float) -> float:
+        return float(np.exp(s))
     else:
-      def wrapped(effective_param: float) -> float:
-        def obj(free_params: np.ndarray) -> float:
-          return full_nll(effective_param, *free_params)
-        result = scipy.optimize.minimize(
-          obj,
-          x0=np.zeros(n_free_params),
-          method="BFGS"
-        )
-        return result.fun if result.success else float("inf")
-      return wrapped
+      raise ValueError(f"Unexpected var_type={var_type}")
+
+    def wrapped(effective_param: float) -> float:
+      def obj(s_arr: np.ndarray) -> float:
+        s = float(s_arr[0])
+        v = map_var(s)
+        return full_nll(effective_param, v)
+      res = scipy.optimize.minimize(
+        obj,
+        x0=np.array([0.0]),
+        method='BFGS',
+      )
+      return res.fun if res.success else float('inf')
+    return wrapped
+
+  @staticmethod
+  def _solve_nd(
+    full_nll: collections.abc.Callable[[float, list[float]], float],
+    *,
+    var_types: list[str],  # each in {'theta','positive'}
+  ) -> collections.abc.Callable[[float], float]:
+    def map_vars(s_vec: np.ndarray) -> list[float]:
+      out: list[float] = []
+      for s, t in zip(s_vec, var_types, strict=True):
+        if t == 'theta':
+          out.append(float(s))
+        elif t == 'positive':
+          out.append(float(np.exp(s)))
+        else:
+          raise ValueError(f"Unexpected var_type={t}")
+      return out
+
+    def wrapped(effective_param: float) -> float:
+      def obj(s_vec: np.ndarray) -> float:
+        vars_ = map_vars(s_vec)
+        return full_nll(effective_param, vars_)
+      res = scipy.optimize.minimize(
+        obj,
+        x0=np.zeros(len(var_types)),
+        method='BFGS',
+      )
+      return res.fun if res.success else float('inf')
+    return wrapped
+
+  # ---------- constructors with full_nll definitions ----------
 
   @classmethod
   def from_fixed_observable(
@@ -87,26 +131,47 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     *,
     rel_epsilon: float = 1e-6,
     abs_epsilon: float = 1e-8,
-    systematics: list[float] | None = None
+    systematics: list[float] | None = None,
   ):
     systematics = systematics or []
-    n_latent = 0
-    n_systematics = len(systematics)
+    m = len(systematics)
 
-    def full_nll(effective_param: float, *thetas: float) -> float:
-      if effective_param <= 0:
-        return float("inf")
-      if n_systematics:
-        prod_factor = np.prod([a**t for a, t in zip(systematics, thetas, strict=True)])
-        nominal_param = effective_param / prod_factor
-      else:
-        nominal_param = effective_param
-      base_nll = 0.0 if np.isclose(nominal_param, observable, rtol=rel_epsilon, atol=abs_epsilon) else float("inf")
-      penalty = 0.5 * np.sum(np.square(thetas))
-      return base_nll + penalty
+    if m == 0:
+      # 0D: direct check
+      def full_nll_0d(eff: float) -> float:
+        if eff <= 0:
+          return float('inf')
+        return 0.0 if np.isclose(eff, observable, rtol=rel_epsilon, atol=abs_epsilon) else float('inf')
+      wrapped = cls._solve_0d(full_nll_0d)
 
-    wrapped_nll = cls._finalize_nll(full_nll, n_latent, n_systematics)
-    return cls(time, censored, wrapped_nll, observable)
+    elif m == 1:
+      # analytic: eff = observable * a^theta  => theta = ln(eff/observable)/ln(a)
+      a = systematics[0]
+      if a <= 0:
+        raise ValueError("Systematic base 'a' must be > 0")
+      def wrapped(eff: float) -> float:
+        if eff <= 0:
+          return float('inf')
+        theta = np.log(eff / observable) / np.log(a)
+        return 0.5 * float(theta * theta)
+
+    else:
+      # nD over thetas
+      def full_nll_nd(eff: float, thetas: list[float]) -> float:
+        if eff <= 0:
+          return float('inf')
+        prod_factor = 1.0
+        for a, t in zip(systematics, thetas, strict=True):
+          if a <= 0:
+            return float('inf')
+          prod_factor *= a**t
+        nominal = eff / prod_factor
+        base = 0.0 if np.isclose(nominal, observable, rtol=rel_epsilon, atol=abs_epsilon) else float('inf')
+        penalty = 0.5 * float(np.sum(np.square(thetas)))
+        return base + penalty
+      wrapped = cls._solve_nd(full_nll_nd, var_types=['theta'] * m)
+
+    return cls(time, censored, wrapped, observable)
 
   @classmethod
   def from_count(
@@ -115,26 +180,54 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     censored: bool,
     count: int,
     *,
-    systematics: list[float] | None = None
+    systematics: list[float] | None = None,
   ):
     systematics = systematics or []
-    n_latent = 1  # lambda
-    n_systematics = len(systematics)
+    m = len(systematics)
 
-    def full_nll(effective_param: float, lambda_param: float, *thetas: float) -> float:
-      if effective_param <= 0 or lambda_param <= 0:
-        return float("inf")
-      if n_systematics:
-        prod_factor = np.prod([a**t for a, t in zip(systematics, thetas, strict=True)])
-        nominal_param = effective_param / prod_factor
-      else:
-        nominal_param = effective_param
-      base_nll = -scipy.stats.poisson.logpmf(count, nominal_param).item()
-      penalty = 0.5 * np.sum(np.square(thetas))
-      return base_nll + penalty
+    if m == 0:
+      # 0D: parameter is the Poisson mean itself
+      def full_nll_0d(eff: float) -> float:
+        if eff <= 0:
+          return float('inf')
+        return -scipy.stats.poisson.logpmf(count, eff).item()
+      wrapped = cls._solve_0d(full_nll_0d)
 
-    wrapped_nll = cls._finalize_nll(full_nll, n_latent, n_systematics)
-    return cls(time, censored, wrapped_nll, count)
+    elif m == 1:
+      # 1D over theta
+      a = systematics[0]
+      if a <= 0:
+        raise ValueError("Systematic base 'a' must be > 0")
+      def full_nll_1d(eff: float, theta: float) -> float:
+        if eff <= 0:
+          return float('inf')
+        nominal = eff / (a**theta)
+        if nominal <= 0:
+          return float('inf')
+        base = -scipy.stats.poisson.logpmf(count, nominal).item()
+        penalty = 0.5 * float(theta * theta)
+        return base + penalty
+      wrapped = cls._solve_1d(full_nll_1d, var_type='theta')
+
+    else:
+      # nD over thetas
+      def full_nll_nd(eff: float, thetas: list[float]) -> float:
+        if eff <= 0:
+          return float('inf')
+        prod_factor = 1.0
+        for a, t in zip(systematics, thetas, strict=True):
+          if a <= 0:
+            return float('inf')
+          prod_factor *= a**t
+        nominal = eff / prod_factor
+        if nominal <= 0:
+          return float('inf')
+        base = -scipy.stats.poisson.logpmf(count, nominal).item()
+        penalty = 0.5 * float(np.sum(np.square(thetas)))
+        return base + penalty
+      wrapped = cls._solve_nd(full_nll_nd, var_types=['theta'] * m)
+
+    return cls(time, censored, wrapped, count)
 
   @classmethod
   def from_poisson_density(
@@ -144,28 +237,60 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     numerator_count: int,
     denominator_area: float,
     *,
-    systematics: list[float] | None = None
+    systematics: list[float] | None = None,
   ):
+    if denominator_area <= 0:
+      raise ValueError("denominator_area must be > 0")
     systematics = systematics or []
-    n_latent = 1  # density
-    n_systematics = len(systematics)
+    m = len(systematics)
 
-    def full_nll(effective_param: float, density: float, *thetas: float) -> float:
-      if effective_param <= 0 or density <= 0:
-        return float("inf")
-      if n_systematics:
-        prod_factor = np.prod([a**t for a, t in zip(systematics, thetas, strict=True)])
-        nominal_param = effective_param / prod_factor
-      else:
-        nominal_param = effective_param
-      lambda_ = nominal_param * denominator_area
-      base_nll = -scipy.stats.poisson.logpmf(numerator_count, lambda_).item()
-      penalty = 0.5 * np.sum(np.square(thetas))
-      return base_nll + penalty
+    if m == 0:
+      # 0D: parameter is the density itself
+      def full_nll_0d(eff_density: float) -> float:
+        if eff_density <= 0:
+          return float('inf')
+        lam = eff_density * denominator_area
+        return -scipy.stats.poisson.logpmf(numerator_count, lam).item()
+      wrapped = cls._solve_0d(full_nll_0d)
+
+    elif m == 1:
+      # 1D over theta
+      a = systematics[0]
+      if a <= 0:
+        raise ValueError("Systematic base 'a' must be > 0")
+      def full_nll_1d(eff_density: float, theta: float) -> float:
+        if eff_density <= 0:
+          return float('inf')
+        nominal = eff_density / (a**theta)
+        if nominal <= 0:
+          return float('inf')
+        lam = nominal * denominator_area
+        base = -scipy.stats.poisson.logpmf(numerator_count, lam).item()
+        penalty = 0.5 * float(theta * theta)
+        return base + penalty
+      wrapped = cls._solve_1d(full_nll_1d, var_type='theta')
+
+    else:
+      # nD over thetas
+      def full_nll_nd(eff_density: float, thetas: list[float]) -> float:
+        if eff_density <= 0:
+          return float('inf')
+        prod_factor = 1.0
+        for a, t in zip(systematics, thetas, strict=True):
+          if a <= 0:
+            return float('inf')
+          prod_factor *= a**t
+        nominal = eff_density / prod_factor
+        if nominal <= 0:
+          return float('inf')
+        lam = nominal * denominator_area
+        base = -scipy.stats.poisson.logpmf(numerator_count, lam).item()
+        penalty = 0.5 * float(np.sum(np.square(thetas)))
+        return base + penalty
+      wrapped = cls._solve_nd(full_nll_nd, var_types=['theta'] * m)
 
     observed_density = numerator_count / denominator_area
-    wrapped_nll = cls._finalize_nll(full_nll, n_latent, n_systematics)
-    return cls(time, censored, wrapped_nll, observed_density)
+    return cls(time, censored, wrapped, observed_density)
 
   @classmethod
   def from_poisson_ratio(
@@ -175,35 +300,57 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     numerator_count: int,
     denominator_count: int,
     *,
-    systematics: list[float] | None = None
+    systematics: list[float] | None = None,
   ):
+    if denominator_count < 0 or numerator_count < 0:
+      raise ValueError("Counts must be >= 0")
     systematics = systematics or []
-    n_latent = 1  # denominator mean lambda_d
-    n_systematics = len(systematics)
+    m = len(systematics)
 
-    def full_nll(effective_ratio: float, lambda_d: float, *thetas: float) -> float:
-      if effective_ratio <= 0 or lambda_d <= 0:
-        return float("inf")
-      if n_systematics:
-        prod_factor = np.prod([a**t for a, t in zip(systematics, thetas, strict=True)])
-        nominal_ratio = effective_ratio / prod_factor
-      else:
-        nominal_ratio = effective_ratio
-      lambda_n = nominal_ratio * lambda_d
-      nll_numerator = -scipy.stats.poisson.logpmf(numerator_count, lambda_n)
-      nll_denominator = -scipy.stats.poisson.logpmf(denominator_count, lambda_d)
-      penalty = 0.5 * np.sum(np.square(thetas))
-      return (nll_numerator + nll_denominator).item() + penalty
+    if m == 0:
+      # 1D over lambda_d > 0 (ratio already includes systematics)
+      def full_nll_1d(eff_ratio: float, lambda_d: float) -> float:
+        if eff_ratio <= 0 or lambda_d <= 0:
+          return float('inf')
+        lambda_n = eff_ratio * lambda_d
+        nll_n = -scipy.stats.poisson.logpmf(numerator_count, lambda_n)
+        nll_d = -scipy.stats.poisson.logpmf(denominator_count, lambda_d)
+        return float((nll_n + nll_d).item())
+      wrapped = cls._solve_1d(full_nll_1d, var_type='positive')
 
-    observed_ratio = numerator_count / denominator_count if denominator_count > 0 else float("inf")
-    wrapped_nll = cls._finalize_nll(full_nll, n_latent, n_systematics)
-    return cls(time, censored, wrapped_nll, observed_ratio)
+    else:
+      # nD over [lambda_d (>0), thetas (ℝ)]
+      def full_nll_nd(eff_ratio: float, vars_: list[float]) -> float:
+        if not vars_ or len(vars_) != 1 + m:
+          raise ValueError("Unexpected variables length in ratio nD")
+        lambda_d = vars_[0]
+        thetas = vars_[1:]
+        if eff_ratio <= 0 or lambda_d <= 0:
+          return float('inf')
+        prod_factor = 1.0
+        for a, t in zip(systematics, thetas, strict=True):
+          if a <= 0:
+            return float('inf')
+          prod_factor *= a**t
+        nominal_ratio = eff_ratio / prod_factor
+        if nominal_ratio <= 0:
+          return float('inf')
+        lambda_n = nominal_ratio * lambda_d
+        nll_n = -scipy.stats.poisson.logpmf(numerator_count, lambda_n)
+        nll_d = -scipy.stats.poisson.logpmf(denominator_count, lambda_d)
+        penalty = 0.5 * float(np.sum(np.square(thetas)))
+        return float((nll_n + nll_d).item() + penalty)
+
+      wrapped = cls._solve_nd(
+        full_nll_nd,
+        var_types=['positive'] + ['theta'] * m
+      )
+
+    observed_ratio = (numerator_count / denominator_count) if denominator_count > 0 else float('inf')
+    return cls(time, censored, wrapped, observed_ratio)
 
   @property
   def nominal(self) -> KaplanMeierPatient:
-    """
-    The nominal value of the parameter.
-    """
     return KaplanMeierPatient(
       time=self.time,
       censored=self.censored,
@@ -610,6 +757,8 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     and positive if it is outside the range.
     """
     sgn_nll_penalty_for_patient_in_range = 2 * self.parameter_in_range - 1
+    for p in self.all_patients:
+      print(p.observed_parameter, p.parameter(p.observed_parameter))
     observed_nll = np.array([
       p.parameter(p.observed_parameter)
       for p in self.all_patients
