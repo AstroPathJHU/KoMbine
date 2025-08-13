@@ -33,6 +33,8 @@ def runtest(
       "fixed": datacards / "fixed_km_censoring.txt",
       "density": datacards / "poisson_density_km_censoring.txt",
       "count": datacards / "poisson_km_censoring.txt",
+      "systematic": datacards / "poisson_ratio_km_censoring_systematic.txt",
+      "systematic_small": datacards / "poisson_ratio_km_censoring_systematic_small.txt",
     }
     reffile = here / "reference" / "km_likelihood_with_censoring.json"
   else:
@@ -198,12 +200,21 @@ def runtest(
       times_for_plot=times_for_plot,
       binomial_only=True,
     )
+    (
+      best_probabilities_noboundary,
+      CL_probabilities_noboundary
+    ) = kml3.survival_probabilities_likelihood(
+      CLs=CLs,
+      times_for_plot=times_for_plot,
+    )
 
     for name, dcfile_alt in alt_datacards.items():
       factor = {
         "fixed": 1,
         "density": 1,
         "count": 100,
+        "systematic": 1,
+        "systematic_small": 1,
       }[name]
       datacard_alt = roc_picker.datacard.Datacard.parse_datacard(dcfile_alt)
       kml3_alt = datacard_alt.km_likelihood(
@@ -245,14 +256,8 @@ def runtest(
           **tolerance,
         )
       elif name == "count":
-        nominal_probabilities_noboundary_density = alt_results["density"]["nominal_probabilities"]
         best_probabilities_noboundary_density = alt_results["density"]["best_probabilities"]
         CL_probabilities_noboundary_density = alt_results["density"]["CL_probabilities"]
-        np.testing.assert_allclose(
-          nominal_probabilities_noboundary_density,
-          nominal_probabilities_noboundary_alt,
-          **tolerance,
-        )
         np.testing.assert_allclose(
           best_probabilities_noboundary_density,
           best_probabilities_noboundary_alt,
@@ -263,6 +268,30 @@ def runtest(
           CL_probabilities_noboundary_alt,
           **tolerance,
         )
+      elif name == "systematic_small":
+        np.testing.assert_allclose(
+          best_probabilities_noboundary,
+          best_probabilities_noboundary_alt,
+          **tolerance,
+        )
+        np.testing.assert_allclose(
+          CL_probabilities_noboundary,
+          CL_probabilities_noboundary_alt,
+          **tolerance,
+        )
+      elif name == "systematic":
+        try:
+          np.testing.assert_allclose(
+            CL_probabilities_noboundary,
+            CL_probabilities_noboundary_alt,
+            **tolerance,
+          )
+        except AssertionError:
+          pass
+        else:
+          raise AssertionError(
+            "Probabilities should not be unchanged when applying a large systematic uncertainty"
+          )
 
   # Define the arrays to be compared in the desired order
   ordered_array_data = {
