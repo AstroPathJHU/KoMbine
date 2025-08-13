@@ -228,12 +228,12 @@ def runtest(
         "CL_probabilities": CL_probabilities_noboundary_alt,
       }
 
+      np.testing.assert_allclose(
+        nominal_probabilities_noboundary,
+        nominal_probabilities_noboundary_alt,
+        **tolerance,
+      )
       if name == "fixed":
-        np.testing.assert_allclose(
-          nominal_probabilities_noboundary,
-          nominal_probabilities_noboundary_alt,
-          **tolerance,
-        )
         np.testing.assert_allclose(
           best_probabilities_noboundary_alt,
           best_probabilities_noboundary_binomial,
@@ -310,8 +310,6 @@ def runtest(
       )
   except Exception:
     with open(here / "test_output" / reffile.name, "w", encoding="utf-8") as f:
-      # Convert NumPy arrays to lists and format floats before dumping as a dictionary,
-      # ensuring sorted keys and reduced indentation.
       formatted_data_for_json = {
         k: format_value_for_json(v.tolist(), json_precision)
         for k, v in ordered_array_data.items()
@@ -319,8 +317,8 @@ def runtest(
       json.dump(
         formatted_data_for_json,
         f,
-        indent=2, # Reduced indent to 2 spaces
-        sort_keys=True # Ensure deterministic output order
+        indent=2,
+        sort_keys=True,
       )
     raise
 
