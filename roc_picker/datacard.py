@@ -418,7 +418,7 @@ class Systematic:
     Returns the patients that this systematic is applied to.
     """
     return tuple(self.__patients)
-  
+
   def mark_as_applied_to_patient(self, patient: "Patient"):
     """
     Mark this systematic as applied to a patient.
