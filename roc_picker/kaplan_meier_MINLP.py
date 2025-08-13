@@ -55,8 +55,31 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     """
     return self.__observed_parameter
 
+  @staticmethod
+  def _finalize_nll(
+    full_nll: collections.abc.Callable[..., float],
+    n_latent: int,
+    n_systematics: int
+  ) -> collections.abc.Callable[[float], float]:
+    n_free_params = n_latent + n_systematics
+    if n_free_params == 0:
+      return lambda effective_param: full_nll(effective_param)
+    elif n_free_params == 1:
+      return lambda effective_param: full_nll(effective_param, 0.0)
+    else:
+      def wrapped(effective_param: float) -> float:
+        def obj(free_params: np.ndarray) -> float:
+          return full_nll(effective_param, *free_params)
+        result = scipy.optimize.minimize(
+          obj,
+          x0=np.zeros(n_free_params),
+          method="BFGS"
+        )
+        return result.fun if result.success else float("inf")
+      return wrapped
+
   @classmethod
-  def from_fixed_observable( #pylint: disable=too-many-arguments
+  def from_fixed_observable(
     cls,
     time: float,
     censored: bool,
@@ -64,27 +87,26 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     *,
     rel_epsilon: float = 1e-6,
     abs_epsilon: float = 1e-8,
+    systematics: list[float] | None = None
   ):
-    """
-    Create a KaplanMeierPatientNLL from a fixed parameter.
-    The parameter NLL gives the negative log-likelihood to observe the
-    parameter given the parameter, which is the fixed value.
-    """
-    def parameter_nll(x: float) -> float:
-      """
-      The parameter is a log-likelihood function.
-      It returns 0 if the parameter equals the observable value,
-      and infinity otherwise.
-      """
-      if np.isclose(x, observable, rtol=rel_epsilon, atol=abs_epsilon):
-        return 0.0
-      return float('inf')
-    return cls(
-      time=time,
-      censored=censored,
-      parameter_nll=parameter_nll,
-      observed_parameter=observable,
-    )
+    systematics = systematics or []
+    n_latent = 0
+    n_systematics = len(systematics)
+
+    def full_nll(effective_param: float, *thetas: float) -> float:
+      if effective_param <= 0:
+        return float("inf")
+      if n_systematics:
+        prod_factor = np.prod([a**t for a, t in zip(systematics, thetas, strict=True)])
+        nominal_param = effective_param / prod_factor
+      else:
+        nominal_param = effective_param
+      base_nll = 0.0 if np.isclose(nominal_param, observable, rtol=rel_epsilon, atol=abs_epsilon) else float("inf")
+      penalty = 0.5 * np.sum(np.square(thetas))
+      return base_nll + penalty
+
+    wrapped_nll = cls._finalize_nll(full_nll, n_latent, n_systematics)
+    return cls(time, censored, wrapped_nll, observable)
 
   @classmethod
   def from_count(
@@ -92,23 +114,27 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     time: float,
     censored: bool,
     count: int,
+    *,
+    systematics: list[float] | None = None
   ):
-    """
-    Create a KaplanMeierPatientNLL from a count.
-    The parameter NLL gives the negative log-likelihood to observe the count
-    given the parameter, which is the mean of the Poisson distribution.
-    """
-    def parameter_nll(x: float) -> float:
-      """
-      The parameter is a log-likelihood function.
-      """
-      return -scipy.stats.poisson.logpmf(count, x).item()
-    return cls(
-      time=time,
-      censored=censored,
-      parameter_nll=parameter_nll,
-      observed_parameter=count,
-    )
+    systematics = systematics or []
+    n_latent = 1  # lambda
+    n_systematics = len(systematics)
+
+    def full_nll(effective_param: float, lambda_param: float, *thetas: float) -> float:
+      if effective_param <= 0 or lambda_param <= 0:
+        return float("inf")
+      if n_systematics:
+        prod_factor = np.prod([a**t for a, t in zip(systematics, thetas, strict=True)])
+        nominal_param = effective_param / prod_factor
+      else:
+        nominal_param = effective_param
+      base_nll = -scipy.stats.poisson.logpmf(count, nominal_param).item()
+      penalty = 0.5 * np.sum(np.square(thetas))
+      return base_nll + penalty
+
+    wrapped_nll = cls._finalize_nll(full_nll, n_latent, n_systematics)
+    return cls(time, censored, wrapped_nll, count)
 
   @classmethod
   def from_poisson_density(
@@ -117,26 +143,29 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     censored: bool,
     numerator_count: int,
     denominator_area: float,
+    *,
+    systematics: list[float] | None = None
   ):
-    """
-    Create a KaplanMeierPatientNLL from a Poisson count
-    divided by an area that is known precisely.
-    """
-    def parameter_nll(density: float) -> float:
-      """
-      The parameter is a log-likelihood function.
-      """
-      return -scipy.stats.poisson.logpmf(
-        numerator_count,
-        density * denominator_area,
-      ).item()
-    return cls(
-      time=time,
-      censored=censored,
-      parameter_nll=parameter_nll,
-      observed_parameter=numerator_count / denominator_area,
-    )
+    systematics = systematics or []
+    n_latent = 1  # density
+    n_systematics = len(systematics)
 
+    def full_nll(effective_param: float, density: float, *thetas: float) -> float:
+      if effective_param <= 0 or density <= 0:
+        return float("inf")
+      if n_systematics:
+        prod_factor = np.prod([a**t for a, t in zip(systematics, thetas, strict=True)])
+        nominal_param = effective_param / prod_factor
+      else:
+        nominal_param = effective_param
+      lambda_ = nominal_param * denominator_area
+      base_nll = -scipy.stats.poisson.logpmf(numerator_count, lambda_).item()
+      penalty = 0.5 * np.sum(np.square(thetas))
+      return base_nll + penalty
+
+    observed_density = numerator_count / denominator_area
+    wrapped_nll = cls._finalize_nll(full_nll, n_latent, n_systematics)
+    return cls(time, censored, wrapped_nll, observed_density)
 
   @classmethod
   def from_poisson_ratio(
@@ -145,46 +174,30 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     censored: bool,
     numerator_count: int,
     denominator_count: int,
+    *,
+    systematics: list[float] | None = None
   ):
-    """
-    Create a KaplanMeierPatientNLL from a ratio of two counts.
-    The parameter NLL gives the negative log-likelihood to observe the
-    numberator and denominator counts given the parameter, which is the
-    ratio of the two Poisson distribution means.  We do this by floating
-    the denominator mean and fixing the numerator mean to the ratio
-    times the denominator mean.  We then minimize the NLL to observe the
-    numerator and denominator counts given the denominator mean.
-    """
-    def parameter_nll(ratio: float) -> float:
-      if ratio < 0:
-        return float('inf')  # Ratio must be positive
+    systematics = systematics or []
+    n_latent = 1  # denominator mean lambda_d
+    n_systematics = len(systematics)
 
-      # Define the NLL as a function of the (latent) denominator mean
-      def nll_given_lambda_d(lambda_d: float) -> float:
-        lambda_n = ratio * lambda_d
-        # Poisson negative log-likelihoods
-        nll_numerator = -scipy.stats.poisson.logpmf(numerator_count, lambda_n)
-        nll_denominator = -scipy.stats.poisson.logpmf(denominator_count, lambda_d)
-        return (nll_numerator + nll_denominator).item()
+    def full_nll(effective_ratio: float, lambda_d: float, *thetas: float) -> float:
+      if effective_ratio <= 0 or lambda_d <= 0:
+        return float("inf")
+      if n_systematics:
+        prod_factor = np.prod([a**t for a, t in zip(systematics, thetas, strict=True)])
+        nominal_ratio = effective_ratio / prod_factor
+      else:
+        nominal_ratio = effective_ratio
+      lambda_n = nominal_ratio * lambda_d
+      nll_numerator = -scipy.stats.poisson.logpmf(numerator_count, lambda_n)
+      nll_denominator = -scipy.stats.poisson.logpmf(denominator_count, lambda_d)
+      penalty = 0.5 * np.sum(np.square(thetas))
+      return (nll_numerator + nll_denominator).item() + penalty
 
-      # Optimize over lambda_d > 0
-      result = scipy.optimize.minimize_scalar(
-        nll_given_lambda_d,
-        bounds=(1e-8, 1e6),
-        method='bounded'
-      )
-      assert isinstance(result, scipy.optimize.OptimizeResult)
-      return result.fun if result.success else float('inf')
-
-    # Use the MLE ratio as the observed value
-    observed_ratio = numerator_count / denominator_count if denominator_count > 0 else float('inf')
-
-    return cls(
-      time=time,
-      censored=censored,
-      parameter_nll=parameter_nll,
-      observed_parameter=observed_ratio,
-    )
+    observed_ratio = numerator_count / denominator_count if denominator_count > 0 else float("inf")
+    wrapped_nll = cls._finalize_nll(full_nll, n_latent, n_systematics)
+    return cls(time, censored, wrapped_nll, observed_ratio)
 
   @property
   def nominal(self) -> KaplanMeierPatient:
