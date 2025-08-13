@@ -57,7 +57,7 @@ class Observable(abc.ABC): # pylint: disable=too-few-public-methods
     return self._create_observable_distribution()
 
   @abc.abstractmethod
-  def patient_nll(self, time, censored) -> KaplanMeierPatientNLL:
+  def patient_nll(self, time, censored, *, systematics) -> KaplanMeierPatientNLL:
     """
     Get the patient NLL for the likelihood method.
     """
@@ -86,7 +86,13 @@ class FixedObservable(Observable):
   def __str__(self):
     return str(self.value)
 
-  def patient_nll(self, time, censored) -> KaplanMeierPatientNLL:
+  def patient_nll(
+    self,
+    time: float,
+    censored: bool,
+    *,
+    systematics: list[float] | None
+  ) -> KaplanMeierPatientNLL:
     """
     Get the patient NLL for the likelihood method.
     """
@@ -94,6 +100,7 @@ class FixedObservable(Observable):
       observable=self.value,
       censored=censored,
       time=time,
+      systematics=systematics,
     )
 
 class PoissonObservable(Observable):
@@ -121,7 +128,12 @@ class PoissonObservable(Observable):
       unique_id=self.unique_id,
     )
 
-  def patient_nll(self, time, censored) -> KaplanMeierPatientNLL:
+  def patient_nll(
+    self,
+    time: float,
+    censored: bool, *,
+    systematics: list[float] | None
+  ) -> KaplanMeierPatientNLL:
     """
     Get the patient NLL for the likelihood method.
     """
@@ -129,6 +141,7 @@ class PoissonObservable(Observable):
       count=self.count,
       censored=censored,
       time=time,
+      systematics=systematics,
     )
 
 class PoissonDensityObservable(Observable):
@@ -205,7 +218,12 @@ class PoissonDensityObservable(Observable):
       unique_id=self.unique_id_numerator,
     ) / self.denominator
 
-  def patient_nll(self, time, censored) -> KaplanMeierPatientNLL:
+  def patient_nll(
+    self,
+    time: float,
+    censored: bool, *,
+    systematics: list[float] | None
+  ) -> KaplanMeierPatientNLL:
     """
     Get the patient NLL for the likelihood method.
     """
@@ -216,6 +234,7 @@ class PoissonDensityObservable(Observable):
       denominator_area=self.denominator,
       time=time,
       censored=censored,
+      systematics=systematics,
     )
 
 class PoissonRatioObservable(Observable):
@@ -305,7 +324,13 @@ class PoissonRatioObservable(Observable):
       unique_id=self.unique_id_denominator,
     )
 
-  def patient_nll(self, time, censored) -> KaplanMeierPatientNLL:
+  def patient_nll(
+    self,
+    time: float,
+    censored: bool,
+    *,
+    systematics: list[float] | None
+  ) -> KaplanMeierPatientNLL:
     """
     Get the patient NLL for the likelihood method.
     """
@@ -316,6 +341,7 @@ class PoissonRatioObservable(Observable):
       denominator_count=self.denominator,
       time=time,
       censored=censored,
+      systematics=systematics,
     )
 
 
@@ -340,6 +366,7 @@ class Systematic:
       raise ValueError(f"Invalid systematic type: {systematic_type}")
     self.systematic_type = systematic_type
     self.unique_id = unique_id
+    self.__patients: list[Patient] = []
 
   def __repr__(self):
     return (
@@ -385,6 +412,19 @@ class Systematic:
       return True
     return False
 
+  @property
+  def patients(self):
+    """
+    Returns the patients that this systematic is applied to.
+    """
+    return tuple(self.__patients)
+  
+  def mark_as_applied_to_patient(self, patient: "Patient"):
+    """
+    Mark this systematic as applied to a patient.
+    """
+    self.__patients.append(patient)
+
 class Patient: # pylint: disable=too-many-instance-attributes
   """
   A class to represent a patient.
@@ -402,7 +442,7 @@ class Patient: # pylint: disable=too-many-instance-attributes
     self.__survival_time = None
     self.__censored = None
     self.__observable = None
-    self.__systematics = []
+    self.__systematics : list[tuple[Systematic, float]] = []
     self.response = response
     self.survival_time = survival_time
     self.censored = censored
@@ -503,14 +543,16 @@ class Patient: # pylint: disable=too-many-instance-attributes
     """
     return self.__systematics
 
-  def add_systematic(self, systematic: Systematic, value: float):
+  def add_systematic(self, systematic: Systematic, value: float | None):
     """
     Add a systematic to the patient.
     """
     for s, v in self.__systematics:
       if s == systematic:
         raise ValueError(f"Systematic {systematic} already added with value {v}")
-    self.__systematics.append((systematic, value))
+    if value is not None:
+      self.__systematics.append((systematic, value))
+      systematic.mark_as_applied_to_patient(self)
 
   def get_distribution(self) -> DistributionBase:
     """
@@ -534,12 +576,19 @@ class Patient: # pylint: disable=too-many-instance-attributes
       raise ValueError("Survival time not set")
     if self.censored is None:
       raise ValueError("Censored status not set")
-    result = self.observable.patient_nll(self.survival_time, self.censored)
-    for systematic, value in self.__systematics: # pylint: disable=unused-variable
-      raise NotImplementedError(
-        "Systematics for KaplanMeierPatientNLL not implemented yet"
-      )
-      # result = systematic.apply(result, value)
+    systematics = []
+    for systematic, value in self.__systematics:
+      if len(systematic.patients) > 1:
+        raise NotImplementedError("Correlated systematics among patients are not supported")
+      if systematic.systematic_type == "lnN":
+        systematics.append(value)
+      else:
+        raise NotImplementedError(f"Systematic type {systematic.systematic_type} not supported")
+    result = self.observable.patient_nll(
+      time=self.survival_time,
+      censored=self.censored,
+      systematics=systematics,
+    )
     return result
 
 class Datacard:
