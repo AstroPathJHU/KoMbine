@@ -27,13 +27,17 @@ def runtest(
 
   if censoring:
     dcfile = datacards / "poisson_ratio_km_censoring.txt"
-    dcfile_fixed = datacards / "fixed_km_censoring.txt"
-    # This is the same datacard as poisson_ratio_km_censoring, but with
-    # the observable type set to fixed instead of poisson_ratio.
+    # These are the same datacard as poisson_ratio_km_censoring, but with
+    # the observable type set to other types instead of poisson_ratio.
+    alt_datacards = {
+      "fixed": datacards / "fixed_km_censoring.txt",
+      "density": datacards / "poisson_density_km_censoring.txt",
+      "count": datacards / "poisson_km_censoring.txt",
+    }
     reffile = here / "reference" / "km_likelihood_with_censoring.json"
   else:
     dcfile = datacards / "poisson_ratio_km.txt"
-    dcfile_fixed = None
+    alt_datacards = None
     reffile = here / "reference" / "km_likelihood.json"
 
   tolerance: Tolerance = {"atol": 2e-4, "rtol": 2e-4}
@@ -176,8 +180,8 @@ def runtest(
       "with only the binomial penalty and with the patient-wise penalty."
     )
 
-  if dcfile_fixed is not None:
-    datacard_fixed = roc_picker.datacard.Datacard.parse_datacard(dcfile_fixed)
+  alt_results = {}
+  if alt_datacards is not None:
     kml3 = datacard.km_likelihood(
       parameter_min=0.25,
       parameter_max=0.75,
@@ -195,37 +199,70 @@ def runtest(
       binomial_only=True,
     )
 
-    kml3_fixed = datacard_fixed.km_likelihood(
-      parameter_min=0.25,
-      parameter_max=0.75,
-      endpoint_epsilon=1e-4
-    )
-    nominal_probabilities_noboundary_fixed = kml3_fixed.nominalkm.survival_probabilities(
-      times_for_plot=times_for_plot,
-    )
-    (
-      best_probabilities_noboundary_fixed,
-      CL_probabilities_noboundary_fixed,
-    ) = kml3_fixed.survival_probabilities_likelihood(
-      CLs=CLs,
-      times_for_plot=times_for_plot,
-    )
+    for name, dcfile_alt in alt_datacards.items():
+      factor = {
+        "fixed": 1,
+        "density": 1,
+        "count": 100,
+      }[name]
+      datacard_alt = roc_picker.datacard.Datacard.parse_datacard(dcfile_alt)
+      kml3_alt = datacard_alt.km_likelihood(
+        parameter_min=0.25*factor,
+        parameter_max=0.75*factor,
+        endpoint_epsilon=1e-4
+      )
+      nominal_probabilities_noboundary_alt = kml3_alt.nominalkm.survival_probabilities(
+        times_for_plot=times_for_plot,
+      )
+      (
+        best_probabilities_noboundary_alt,
+        CL_probabilities_noboundary_alt,
+      ) = kml3_alt.survival_probabilities_likelihood(
+        CLs=CLs,
+        times_for_plot=times_for_plot,
+      )
 
-    np.testing.assert_allclose(
-      nominal_probabilities_noboundary,
-      nominal_probabilities_noboundary_fixed,
-      **tolerance,
-    )
-    np.testing.assert_allclose(
-      best_probabilities_noboundary_fixed,
-      best_probabilities_noboundary_binomial,
-      **tolerance,
-    )
-    np.testing.assert_allclose(
-      CL_probabilities_noboundary_fixed,
-      CL_probabilities_noboundary_binomial,
-      **tolerance,
-    )
+      alt_results[name] = {
+        "nominal_probabilities": nominal_probabilities_noboundary_alt,
+        "best_probabilities": best_probabilities_noboundary_alt,
+        "CL_probabilities": CL_probabilities_noboundary_alt,
+      }
+
+      if name == "fixed":
+        np.testing.assert_allclose(
+          nominal_probabilities_noboundary,
+          nominal_probabilities_noboundary_alt,
+          **tolerance,
+        )
+        np.testing.assert_allclose(
+          best_probabilities_noboundary_alt,
+          best_probabilities_noboundary_binomial,
+          **tolerance,
+        )
+        np.testing.assert_allclose(
+          CL_probabilities_noboundary_alt,
+          CL_probabilities_noboundary_binomial,
+          **tolerance,
+        )
+      elif name == "count":
+        nominal_probabilities_noboundary_density = alt_results["density"]["nominal_probabilities"]
+        best_probabilities_noboundary_density = alt_results["density"]["best_probabilities"]
+        CL_probabilities_noboundary_density = alt_results["density"]["CL_probabilities"]
+        np.testing.assert_allclose(
+          nominal_probabilities_noboundary_density,
+          nominal_probabilities_noboundary_alt,
+          **tolerance,
+        )
+        np.testing.assert_allclose(
+          best_probabilities_noboundary_density,
+          best_probabilities_noboundary_alt,
+          **tolerance,
+        )
+        np.testing.assert_allclose(
+          CL_probabilities_noboundary_density,
+          CL_probabilities_noboundary_alt,
+          **tolerance,
+        )
 
   # Define the arrays to be compared in the desired order
   ordered_array_data = {
@@ -240,6 +277,10 @@ def runtest(
     "best_probabilities_patient_wise": best_probabilities_patient_wise,
     "CL_probabilities_patient_wise": CL_probabilities_patient_wise,
   }
+  for name, alt_data in alt_results.items():
+    ordered_array_data[f"nominal_probabilities_{name}"] = alt_data["nominal_probabilities"]
+    ordered_array_data[f"best_probabilities_{name}"] = alt_data["best_probabilities"]
+    ordered_array_data[f"CL_probabilities_{name}"] = alt_data["CL_probabilities"]
 
   try:
     with open(reffile, "r", encoding="utf-8") as f:
