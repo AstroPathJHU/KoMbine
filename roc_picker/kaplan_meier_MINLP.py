@@ -794,8 +794,6 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     and positive if it is outside the range.
     """
     sgn_nll_penalty_for_patient_in_range = 2 * self.parameter_in_range - 1
-    for p in self.all_patients:
-      print(p.observed_parameter, p.parameter(p.observed_parameter))
     observed_nll = np.array([
       p.parameter(p.observed_parameter)
       for p in self.all_patients
