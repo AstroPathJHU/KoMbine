@@ -9,6 +9,7 @@ import abc
 import argparse
 import functools
 import itertools
+import os
 import pathlib
 
 import numpy as np
@@ -585,7 +586,7 @@ class Datacard:
     return systematics
 
   @classmethod
-  def parse_datacard(cls, file_path): # pylint: disable=too-many-branches, too-many-statements, too-many-locals
+  def parse_datacard(cls, file_path: os.PathLike): # pylint: disable=too-many-branches, too-many-statements, too-many-locals
     #disable warnings because this function is just parsing a file and is not too complex
     """
     Parse a datacard file and return a Datacard object.
