@@ -157,11 +157,12 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       a = systematics[0]
       if a <= 0:
         raise ValueError("Systematic base 'a' must be > 0")
-      def wrapped(eff: float) -> float:
+      def full_nll_1d(eff: float, theta: float) -> float:
         if eff <= 0:
           return float('inf')
         theta = np.log(eff / observable) / np.log(a)
         return 0.5 * float(theta * theta)
+      wrapped = cls._solve_1d(full_nll_1d, var_type='theta')
 
     else:
       # nD over thetas
