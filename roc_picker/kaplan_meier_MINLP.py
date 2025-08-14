@@ -148,11 +148,10 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     systematics = systematics or []
     m = len(systematics)
 
-    if m == 0:
+    if m == 0 or observable == 0:
+      # if observable == 0, then multiplicative systematics can't affect it
       # 0D: direct check
       def full_nll_0d(eff: float) -> float:
-        if eff <= 0:
-          return float('inf')
         return (
           0.0
           if np.isclose(eff, observable, rtol=rel_epsilon, atol=abs_epsilon)
@@ -165,40 +164,29 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       a = systematics[0]
       if a <= 0:
         raise ValueError("Systematic base 'a' must be > 0")
-      def full_nll_1d(eff: float, theta: float) -> float:
+      def full_nll_1d(eff: float) -> float:
         if eff <= 0:
           return float('inf')
         theta = np.log(eff / observable) / np.log(a)
         return 0.5 * float(theta * theta)
-      wrapped = cls._solve_1d(full_nll_1d, var_type='theta')
+      wrapped = cls._solve_0d(full_nll_1d)
 
     else:
       # nD over thetas
-      def full_nll_nd(eff: float, thetas: list[float]) -> float:
+      def full_nll_nd(eff: float, thetas_except_last: list[float]) -> float:
         if eff <= 0:
           return float('inf')
-        prod_factor = 1.0
-        for a, t in zip(systematics, thetas, strict=True):
-          if a <= 0:
-            return float('inf')
-          prod_factor *= a**t
-        nominal = eff / prod_factor
-        base = (
-          0.0
-          if np.isclose(nominal, observable, rtol=rel_epsilon, atol=abs_epsilon)
-          else float('inf')
-        )
-        penalty = 0.5 * float(np.sum(np.square(thetas)))
-        return base + penalty
-      wrapped = cls._solve_nd(full_nll_nd, var_types=['theta'] * m)
+        last_theta = (
+          np.log(eff / observable)
+          - sum(theta * np.log(a) for theta, a in zip(thetas_except_last, systematics[:-1]))
+        ) / np.log(systematics[-1])
+        thetas = thetas_except_last + [last_theta]
+        return 0.5 * float(np.sum(np.square(thetas)))
+      wrapped = cls._solve_nd(full_nll_nd, var_types=['theta'] * (m-1))
 
     return cls(time, censored, wrapped, observable)
 
   @classmethod
-
-
-
-
   def from_count(
     cls,
     time: float,
@@ -218,6 +206,8 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     if m == 0:
       # 0D: parameter is the Poisson mean itself
       def full_nll_0d(eff: float) -> float:
+        if eff == 0 and count == 0:
+          return 0
         if eff <= 0:
           return float('inf')
         return -scipy.stats.poisson.logpmf(count, eff).item()
@@ -229,6 +219,8 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       if a <= 0:
         raise ValueError("Systematic base 'a' must be > 0")
       def full_nll_1d(eff: float, theta: float) -> float:
+        if eff == 0 and count == 0:
+          return 0
         if eff <= 0:
           return float('inf')
         nominal = eff / (a**theta)
@@ -242,6 +234,8 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     else:
       # nD over thetas
       def full_nll_nd(eff: float, thetas: list[float]) -> float:
+        if eff == 0 and count == 0:
+          return 0
         if eff <= 0:
           return float('inf')
         prod_factor = 1.0
@@ -281,6 +275,8 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     if m == 0:
       # 0D: parameter is the density itself
       def full_nll_0d(eff_density: float) -> float:
+        if eff_density == 0 and numerator_count == 0:
+          return 0
         if eff_density <= 0:
           return float('inf')
         lam = eff_density * denominator_area
@@ -293,6 +289,8 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       if a <= 0:
         raise ValueError("Systematic base 'a' must be > 0")
       def full_nll_1d(eff_density: float, theta: float) -> float:
+        if eff_density == 0 and numerator_count == 0:
+          return 0
         if eff_density <= 0:
           return float('inf')
         nominal = eff_density / (a**theta)
@@ -307,6 +305,8 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     else:
       # nD over thetas
       def full_nll_nd(eff_density: float, thetas: list[float]) -> float:
+        if eff_density == 0 and numerator_count == 0:
+          return 0
         if eff_density <= 0:
           return float('inf')
         prod_factor = 1.0
@@ -351,8 +351,10 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     m = len(systematics)
 
     if m == 0:
-      # 1D over lambda_d > 0 (ratio already includes systematics)
+      # 1D over lambda_d > 0 (no systematics)
       def full_nll_1d(eff_ratio: float, lambda_d: float) -> float:
+        if eff_ratio == 0 and numerator_count == 0:
+          return 0
         if eff_ratio <= 0 or lambda_d <= 0:
           return float('inf')
         lambda_n = eff_ratio * lambda_d
@@ -368,6 +370,8 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
           raise ValueError("Unexpected variables length in ratio nD")
         lambda_d = vars_[0]
         thetas = vars_[1:]
+        if eff_ratio == 0 and numerator_count == 0:
+          return 0
         if eff_ratio <= 0 or lambda_d <= 0:
           return float('inf')
         prod_factor = 1.0
