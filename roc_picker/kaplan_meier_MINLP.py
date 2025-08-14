@@ -118,6 +118,10 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
         obj,
         x0=np.zeros(len(var_types)),
         method='BFGS',
+        options={
+          #loose tolerance - we don't actually care about the values of the nuisance parameters
+          "gtol": 1e-3,
+        }
       )
       if not res.success:
         raise RuntimeError(f"Optimization failed:\n{res}")
@@ -191,6 +195,10 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     return cls(time, censored, wrapped, observable)
 
   @classmethod
+
+
+
+
   def from_count(
     cls,
     time: float,
