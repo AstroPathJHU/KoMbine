@@ -1,6 +1,6 @@
 #pylint: disable=too-many-lines
 """
-Integer Linear Programming implementation for the Kaplan-Meier likelihood method.
+Mixed Integer Nonlinear Programming implementation for the Kaplan-Meier likelihood method.
 """
 
 import collections.abc
