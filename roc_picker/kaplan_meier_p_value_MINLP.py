@@ -1,9 +1,8 @@
 """
-kaplan_meier_MINLP_p_value.py
-
-MINLP solver for calculating p-values for two Kaplan–Meier curves using a shared-survival-probability null model.
-This follows the structure from kaplan_meier_MINLP.py but with x[i] representing group membership (1=group1, 0=group2),
-shared p_survived[j] under H0, and separate p_survived under H1. The p-value is computed via the likelihood ratio test.
+MINLP solver for calculating p-values for two Kaplan-Meier curves.
+The null hypothesis is that the survival curves are identical.
+This follows the structure from kaplan_meier_MINLP.py.
+The p-value is computed via the likelihood ratio test.
 """
 
 import functools
@@ -19,7 +18,10 @@ import scipy.stats
 from .kaplan_meier_MINLP import KaplanMeierPatientNLL
 
 class MINLPforKMPValue:
-  def __init__(
+  """
+  MINLP solver for calculating p-values for two Kaplan-Meier curves.
+  """
+  def __init__( # pylint: disable=too-many-arguments
     self,
     all_patients: list[KaplanMeierPatientNLL],
     *,
@@ -90,7 +92,7 @@ class MINLPforKMPValue:
     The at-risk status of all patients at time t.
     """
     return self.patient_times >= t
-  
+
   @functools.cached_property
   def observed_parameters(self) -> npt.NDArray[np.float64]:
     """
@@ -147,7 +149,8 @@ class MINLPforKMPValue:
       axis=0
     )
 
-    range_boundary_nll: npt.NDArray[np.float64] = np.array([range_boundary_nll_low, range_boundary_nll_high]).T
+    range_boundary_nll: npt.NDArray[np.float64] = \
+      np.array([range_boundary_nll_low, range_boundary_nll_high]).T
     abs_nll_penalty_for_patient_in_range = observed_nll - range_boundary_nll.T
 
     nll_penalty_for_patient_in_range = (
@@ -156,7 +159,7 @@ class MINLPforKMPValue:
     )
 
     return nll_penalty_for_patient_in_range
-  
+
   def add_counter_variables_and_constraints(
     self,
     model: gp.Model,
@@ -166,7 +169,9 @@ class MINLPforKMPValue:
     gp.tupledict[tuple[int, ...], gp.Var],
     gp.tupledict[tuple[int, ...], gp.Var],
   ]:
-    # Add counter variables and constraints to the model
+    """
+    Add counter variables and constraints to the model.
+    """
 
     # A patient can't be in more than one curve.
     # If parameter_min and parameter_max are both infinite,
@@ -178,13 +183,30 @@ class MINLPforKMPValue:
       for i in range(self.n_patients):
         model.addConstr(x[i, 0] + x[i, 1] <= 1)
 
-    n_at_risk = model.addVars(len(self.all_death_times), 2, vtype=gp.GRB.INTEGER, name="n_at_risk")
-    n_died = model.addVars(len(self.all_death_times), 2, vtype=gp.GRB.INTEGER, name="n_died")
-    n_survived = model.addVars(len(self.all_death_times), 2, vtype=gp.GRB.INTEGER, name="n_survived")
+    n_at_risk = model.addVars(
+      len(self.all_death_times), 2, vtype=gp.GRB.INTEGER, name="n_at_risk"
+    )
+    n_died = model.addVars(
+      len(self.all_death_times), 2, vtype=gp.GRB.INTEGER, name="n_died"
+    )
+    n_survived = model.addVars(
+      len(self.all_death_times), 2, vtype=gp.GRB.INTEGER, name="n_survived"
+    )
     for k, t in enumerate(self.all_death_times):
       for j in range(2):
-        model.addConstr(n_at_risk[k, j] == gp.quicksum(x[i, j] for i in range(self.n_patients) if self.patient_still_at_risk(t)[i]))
-        model.addConstr(n_died[k, j] == gp.quicksum(x[i, j] for i in range(self.n_patients) if self.all_patients[i].time == t and not self.all_patients[i].censored))
+        model.addConstr(
+          n_at_risk[k, j] == gp.quicksum(
+            x[i, j] for i in range(self.n_patients)
+            if self.patient_still_at_risk(t)[i]
+          )
+        )
+        model.addConstr(
+          n_died[k, j] == gp.quicksum(
+            x[i, j] for i in range(self.n_patients)
+            if self.all_patients[i].time == t
+            and not self.all_patients[i].censored
+          )
+        )
         model.addConstr(n_survived[k, j] == n_at_risk[k, j] - n_died[k, j])
 
     return n_at_risk, n_died, n_survived
@@ -204,7 +226,7 @@ class MINLPforKMPValue:
         )
     return n_choose_d_term_table
 
-  def add_binomial_penalty(
+  def add_binomial_penalty(  # pylint: disable=too-many-locals
     self,
     model: gp.Model,
     *,
@@ -212,18 +234,39 @@ class MINLPforKMPValue:
     n_died: gp.tupledict[tuple[int, ...], gp.Var],
     n_survived: gp.tupledict[tuple[int, ...], gp.Var],
   ):
-    p_survived = model.addVars(len(self.all_death_times), 2, vtype=gp.GRB.CONTINUOUS, name="p_survived", lb=0, ub=1)
-    p_died = model.addVars(len(self.all_death_times), 2, vtype=gp.GRB.CONTINUOUS, name="p_died", lb=0, ub=1)
+    """
+    Add the binomial penalty to the model.
+    """
+    p_survived = model.addVars(
+      len(self.all_death_times), 2,
+      vtype=gp.GRB.CONTINUOUS, name="p_survived", lb=0, ub=1
+    )
+    p_died = model.addVars(
+      len(self.all_death_times), 2,
+      vtype=gp.GRB.CONTINUOUS, name="p_died", lb=0, ub=1
+    )
     log_p_bounds = np.array([
       np.log(self.__endpoint_epsilon / len(self.all_death_times) / 2),
       np.log(1 - self.__endpoint_epsilon / len(self.all_death_times) / 2),
     ])
-    log_p_survived = model.addVars(len(self.all_death_times), 2, vtype=gp.GRB.CONTINUOUS, name="log_p_survived", lb=log_p_bounds[0], ub=log_p_bounds[1])
-    log_p_died = model.addVars(len(self.all_death_times), 2, vtype=gp.GRB.CONTINUOUS, name="log_p_died", lb=log_p_bounds[0], ub=log_p_bounds[1])
+    log_p_survived = model.addVars(
+      len(self.all_death_times), 2,
+      vtype=gp.GRB.CONTINUOUS, name="log_p_survived",
+      lb=log_p_bounds[0], ub=log_p_bounds[1]
+    )
+    log_p_died = model.addVars(
+      len(self.all_death_times), 2,
+      vtype=gp.GRB.CONTINUOUS, name="log_p_died",
+      lb=log_p_bounds[0], ub=log_p_bounds[1]
+    )
     for i in range(len(self.all_death_times)):
       for j in range(2):
-        model.addGenConstrExp(log_p_survived[i, j], p_survived[i, j], name=f"log_p_survived_constr_{i}_{j}")
-        model.addGenConstrExp(log_p_died[i, j], p_died[i, j], name=f"log_p_died_constr_{i}_{j}")
+        model.addGenConstrExp(
+          log_p_survived[i, j], p_survived[i, j], name=f"log_p_survived_constr_{i}_{j}"
+        )
+        model.addGenConstrExp(
+          log_p_died[i, j], p_died[i, j], name=f"log_p_died_constr_{i}_{j}"
+        )
         model.addConstr(
           p_survived[i, j] + p_died[i, j] == 1,
           name=f"survived_died_constraint_{i}_{j}"
@@ -247,7 +290,10 @@ class MINLPforKMPValue:
       for j in range(2):
         #make sure that exactly one of each indicator is selected
         model.addConstr(
-          gp.quicksum(n_choose_d_indicator_vars[i, j, k] for k in range(len(n_choose_d_term_table))) == 1,
+          gp.quicksum(
+            n_choose_d_indicator_vars[i, j, k]
+            for k in range(len(n_choose_d_term_table))
+          ) == 1,
           name=f"n_choose_d_indicator_unique_{i}_{j}",
         )
         model.addConstr(
@@ -371,7 +417,12 @@ class MINLPforKMPValue:
     x = model.addVars(self.n_patients, 2, vtype=gp.GRB.BINARY, name="x")
 
     n_at_risk, n_died, n_survived = self.add_counter_variables_and_constraints(model, x)
-    binomial_penalty, null_hypothesis_indicator = self.add_binomial_penalty(model, n_died=n_died, n_at_risk=n_at_risk, n_survived=n_survived)
+    binomial_penalty, null_hypothesis_indicator = self.add_binomial_penalty(
+      model,
+      n_died=n_died,
+      n_at_risk=n_at_risk,
+      n_survived=n_survived
+    )
     patient_penalty = self.add_patient_wise_penalty(model, x)
 
     model.setObjective(
@@ -396,6 +447,10 @@ class MINLPforKMPValue:
     null_hypothesis_indicator,
     null_hypothesis: bool,
   ):
+    """
+    Update the model to indicate whether or not we are running
+    for the null hypothesis.
+    """
     if self.__null_hypothesis_constraint is not None:
       model.remove(self.__null_hypothesis_constraint)
 
@@ -408,6 +463,9 @@ class MINLPforKMPValue:
       self.__null_hypothesis_constraint = None
 
   def solve_and_pvalue(self):
+    """
+    Solve the MINLP and return the p value.
+    """
     model, null_hypothesis_indicator = self.gurobi_model
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, True)
     model.optimize()

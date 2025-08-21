@@ -943,7 +943,7 @@ class Datacard:
       endpoint_epsilon=endpoint_epsilon,
       log_zero_epsilon=log_zero_epsilon,
     )
-  
+
   def km_p_value(
     self,
     *,
@@ -951,6 +951,10 @@ class Datacard:
     parameter_threshold: float,
     parameter_max: float = np.inf,
   ) -> MINLPforKMPValue:
+    """
+    Generate a MINLPforKMPValue object for calculating p-values for Kaplan-Meier curves
+    using the likelihood method.
+    """
     patients = []
     for p in self.patients:
       nll = p.get_nll()
