@@ -1204,18 +1204,19 @@ def plot_km_likelihood_two_groups():
   )
   kml_low.plot(config=config_low)
 
-  p_value_minlp = datacard.km_p_value(
-    parameter_min=parameter_min,
-    parameter_threshold=threshold,
-    parameter_max=parameter_max,
-  )
-  p_value, *_ = p_value_minlp.solve_and_pvalue()
-  ax = plt.gca()
-  ax.text(
-    0.95, 0.95, f"p = {p_value:.3g}",
-    ha="right", va="top",
-    transform=ax.transAxes,
-  )
+  if common_plot_kwargs["include_full_NLL"]:
+    p_value_minlp = datacard.km_p_value(
+      parameter_min=parameter_min,
+      parameter_threshold=threshold,
+      parameter_max=parameter_max,
+    )
+    p_value, *_ = p_value_minlp.solve_and_pvalue()
+    ax = plt.gca()
+    ax.text(
+      0.95, 0.95, f"p = {p_value:.3g}",
+      ha="right", va="top",
+      transform=ax.transAxes,
+    )
 
   plt.savefig(args.__dict__.pop("output_file"))
 
