@@ -430,7 +430,9 @@ class MINLPforKMPValue:
     )
 
     lr_stat = twonll_null - twonll_alt
-    # Chi-square with df = len(all_death_times)
+    # The number of degrees of freedom is the number of constraints added
+    # under the null hypothesis.  This is one constraint per death time:
+    # that the survival probabilities of the two curves are equal.
     df = len(self.all_death_times)
     p_value = scipy.stats.chi2.sf(lr_stat, df)
     return p_value, result_null, result_alt

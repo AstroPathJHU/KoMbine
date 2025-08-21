@@ -12,6 +12,7 @@ import itertools
 import os
 import pathlib
 
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats
 
@@ -22,6 +23,7 @@ from .kaplan_meier_likelihood import (
   KaplanMeierPatientNLL,
   KaplanMeierPlotConfig,
 )
+from .kaplan_meier_p_value_MINLP import MINLPforKMPValue
 from .systematics_mc import DistributionBase, DummyDistribution, ROCDistributions, ScipyDistribution
 
 class Response:
@@ -1097,6 +1099,7 @@ def _extract_common_plot_config_args(args: argparse.Namespace) -> dict:
     "binomial_only_suffix": args.__dict__.pop("binomial_only_suffix"),
     "full_NLL_suffix": args.__dict__.pop("full_nll_suffix"),
     "exponential_greenwood_suffix": args.__dict__.pop("exponential_greenwood_suffix"),
+    "show_grid": True,
   }
 
 def plot_km_likelihood():
@@ -1133,23 +1136,27 @@ def plot_km_likelihood_two_groups():
   """
   # pylint: disable=C0301
   parser = _make_common_parser("Run Kaplan-Meier likelihood method from a datacard, and plot Kaplan-Meier curves for two groups separated into high and low values of the parameter.")
-  parser.add_argument("--parameter-threshold", type=float, dest="parameter_threshold", required=True)
+  parser.add_argument("--parameter-threshold", type=float, dest="parameter_threshold", required=True, help="The parameter threshold for separating high and low groups.")
+  parser.add_argument("--parameter-min", type=float, dest="parameter_min", default=-np.inf, help="The minimum parameter value for the low group.")
+  parser.add_argument("--parameter-max", type=float, dest="parameter_max", default=np.inf, help="The maximum parameter value for the high group.")
   # pylint: enable=C0301
   args = parser.parse_args()
   _validate_plot_args(args, parser)
 
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
+  parameter_min = args.__dict__.pop("parameter_min")
   threshold = args.__dict__.pop("parameter_threshold")
+  parameter_max = args.__dict__.pop("parameter_max")
   log_zero_epsilon = args.__dict__.pop("log_zero_epsilon")
 
   kml_low = datacard.km_likelihood(
-    parameter_min=-np.inf,
+    parameter_min=parameter_min,
     parameter_max=threshold,
     log_zero_epsilon=log_zero_epsilon
   )
   kml_high = datacard.km_likelihood(
     parameter_min=threshold,
-    parameter_max=np.inf,
+    parameter_max=parameter_max,
     log_zero_epsilon=log_zero_epsilon
   )
 
@@ -1164,21 +1171,36 @@ def plot_km_likelihood_two_groups():
     best_label=f"High (n={len(kml_high.nominalkm.patients)})",
     best_color="blue",
     CL_colors=["dodgerblue", "skyblue"],
-    show_grid=True,
   )
   kml_high.plot(config=config_high)
 
   config_low = KaplanMeierPlotConfig(
     **common_plot_kwargs,
     create_figure=False,
+    close_figure=False,
     show=False,
-    saveas=args.__dict__.pop("output_file"),
+    saveas=None,
     best_label=f"Low (n={len(kml_low.nominalkm.patients)})",
     best_color="red",
     CL_colors=["orangered", "lightcoral"],
-    show_grid=True,
   )
   kml_low.plot(config=config_low)
+
+  p_value_minlp = MINLPforKMPValue(
+    all_patients=kml_low.all_patients,
+    parameter_min=parameter_min,
+    parameter_threshold=threshold,
+    parameter_max=parameter_max,
+  )
+  p_value, *_ = p_value_minlp.solve_and_pvalue()
+  ax = plt.gca()
+  ax.text(
+    0.95, 0.95, f"p = {p_value:.3g}",
+    ha="right", va="top",
+    transform=ax.transAxes,
+  )
+
+  plt.savefig(args.__dict__.pop("output_file"))
 
   if args.__dict__:
     raise ValueError(f"Unused arguments: {args.__dict__}")
