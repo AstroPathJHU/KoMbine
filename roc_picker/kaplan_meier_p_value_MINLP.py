@@ -413,7 +413,7 @@ class MINLPforKMPValue:
     model.optimize()
     if model.status != GRB.OPTIMAL:
       raise ValueError("Null model did not converge")
-    twonll_null = model.objective_value
+    twonll_null = model.ObjVal
     result_null = scipy.optimize.OptimizeResult(
       x=model.ObjVal,
       success=model.status == GRB.OPTIMAL,
@@ -423,7 +423,7 @@ class MINLPforKMPValue:
     model.optimize()
     if model.status != GRB.OPTIMAL:
       raise ValueError("Alternative model did not converge")
-    twonll_alt = model.objective_value
+    twonll_alt = model.ObjVal
     result_alt = scipy.optimize.OptimizeResult(
       x=model.ObjVal,
       success=model.status == GRB.OPTIMAL,
