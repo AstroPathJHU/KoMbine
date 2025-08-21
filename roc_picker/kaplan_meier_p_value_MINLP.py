@@ -148,11 +148,11 @@ class MINLPforKMPValue:
     )
 
     range_boundary_nll: npt.NDArray[np.float64] = np.array([range_boundary_nll_low, range_boundary_nll_high]).T
-    abs_nll_penalty_for_patient_in_range = observed_nll - range_boundary_nll
+    abs_nll_penalty_for_patient_in_range = observed_nll - range_boundary_nll.T
 
     nll_penalty_for_patient_in_range = (
       sgn_nll_penalty_for_patient_in_range
-      * abs_nll_penalty_for_patient_in_range
+      * abs_nll_penalty_for_patient_in_range.T
     )
 
     return nll_penalty_for_patient_in_range
@@ -336,7 +336,7 @@ class MINLPforKMPValue:
     patient_penalties = []
     for i in range(self.n_patients):
       for j in range(2):
-        if np.isfinite(self.nll_penalty_for_patient_in_range[i]):
+        if np.isfinite(self.nll_penalty_for_patient_in_range[i, j]):
           penalty = self.nll_penalty_for_patient_in_range[i, j] * x[i, j]
           if self.nll_penalty_for_patient_in_range[i, j] < 0:
             # If the penalty is negative, it means the patient is nominally in the range
