@@ -943,13 +943,31 @@ class Datacard:
       endpoint_epsilon=endpoint_epsilon,
       log_zero_epsilon=log_zero_epsilon,
     )
+  
+  def km_p_value(
+    self,
+    *,
+    parameter_min: float = -np.inf,
+    parameter_threshold: float,
+    parameter_max: float = np.inf,
+  ) -> MINLPforKMPValue:
+    patients = []
+    for p in self.patients:
+      nll = p.get_nll()
+      patients.append(nll)
+    return MINLPforKMPValue(
+      all_patients=patients,
+      parameter_min=parameter_min,
+      parameter_threshold=parameter_threshold,
+      parameter_max=parameter_max,
+    )
 
   def clear_distributions(self):
     """
     Delete the distributions for all patients.
     This is useful for clearing the unique_ids so that they can be
-    regenerated.  You can always rerun systematics_mc_roc() or
-    systematics_mc_km() to regenerate the distributions.
+    regenerated.  You can always rerun systematics_mc_roc()
+    to regenerate the distributions.
     """
     for p in self.patients:
       if p.observable is not None:
@@ -1186,8 +1204,7 @@ def plot_km_likelihood_two_groups():
   )
   kml_low.plot(config=config_low)
 
-  p_value_minlp = MINLPforKMPValue(
-    all_patients=kml_low.all_patients,
+  p_value_minlp = datacard.km_p_value(
     parameter_min=parameter_min,
     parameter_threshold=threshold,
     parameter_max=parameter_max,
