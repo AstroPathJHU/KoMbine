@@ -263,9 +263,9 @@ class MINLPforKMPValue:
           name=f"survived_died_constraint_{i}_{j}"
         )
 
-    n_choose_d_term_table = self.n_choose_d_term_table
+    n_choose_d_table = self.n_choose_d_term_table
     n_choose_d_indicator_vars = model.addVars(
-      len(self.all_death_times), 2, len(n_choose_d_term_table),
+      len(self.all_death_times), 2, len(n_choose_d_table),
       vtype=gp.GRB.BINARY, name="n_choose_d_indicator",
     )
     n_died_indicator_vars = model.addVars(
@@ -283,7 +283,7 @@ class MINLPforKMPValue:
         model.addConstr(
           gp.quicksum(
             n_choose_d_indicator_vars[i, j, k]
-            for k in range(len(n_choose_d_term_table))
+            for k in range(len(n_choose_d_table))
           ) == 1,
           name=f"n_choose_d_indicator_unique_{i}_{j}",
         )
@@ -297,7 +297,7 @@ class MINLPforKMPValue:
         )
 
         #Add the n choose d term
-        for k, ((n, d), penalty) in enumerate(n_choose_d_term_table.items()):
+        for k, ((n, d), penalty) in enumerate(n_choose_d_table.items()):
           indicator = n_choose_d_indicator_vars[i, j, k]
           binomial_terms.append(-penalty * indicator)
           model.addGenConstrIndicator(

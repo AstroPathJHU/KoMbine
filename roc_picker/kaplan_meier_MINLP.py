@@ -26,15 +26,15 @@ def n_choose_d_term_table(n_patients) -> dict[tuple[int, int], float]:
   """
   Precompute the n choose d terms for the binomial penalty.
   """
-  n_choose_d_term_table = {}
+  table = {}
   for n in range(n_patients + 1):
     for d in range(n + 1):
-      n_choose_d_term_table[(n, d)] = (
+      table[(n, d)] = (
         math.lgamma(n + 1)
         - math.lgamma(d + 1)
         - math.lgamma(n - d + 1)
       )
-  return n_choose_d_term_table
+  return table
 
 
 class KaplanMeierPatientNLL(KaplanMeierPatientBase):
@@ -1187,9 +1187,9 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     )
 
     #n_at_risk choose n_died term
-    n_choose_d_term_table = self.n_choose_d_term_table
+    n_choose_d_table = self.n_choose_d_term_table
     n_choose_d_indicator_vars = model.addVars(
-      self.n_groups * len(n_choose_d_term_table),
+      self.n_groups * len(n_choose_d_table),
       vtype=GRB.BINARY,
       name="n_choose_d_indicator",
     )
@@ -1198,7 +1198,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     for indicator_var_idx, (group_idx, ((n, d), penalty)) in enumerate(
       itertools.product(
         range(self.n_groups),
-        n_choose_d_term_table.items(),
+        n_choose_d_table.items(),
       )
     ):
       indicator = n_choose_d_indicator_vars[indicator_var_idx]
