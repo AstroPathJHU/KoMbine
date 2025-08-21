@@ -6,7 +6,6 @@ The p-value is computed via the likelihood ratio test.
 """
 
 import functools
-import math
 
 import gurobipy as gp
 from gurobipy import GRB
@@ -15,7 +14,7 @@ import numpy.typing as npt
 import scipy.optimize
 import scipy.stats
 
-from .kaplan_meier_MINLP import KaplanMeierPatientNLL
+from .kaplan_meier_MINLP import KaplanMeierPatientNLL, n_choose_d_term_table
 
 class MINLPforKMPValue:
   """
@@ -216,15 +215,7 @@ class MINLPforKMPValue:
     """
     Precompute the n choose d terms for the binomial penalty.
     """
-    n_choose_d_term_table = {}
-    for n in range(self.n_patients + 1):
-      for d in range(n + 1):
-        n_choose_d_term_table[(n, d)] = (
-          math.lgamma(n + 1)
-          - math.lgamma(d + 1)
-          - math.lgamma(n - d + 1)
-        )
-    return n_choose_d_term_table
+    return n_choose_d_term_table(n_patients=self.n_patients)
 
   def add_binomial_penalty(  # pylint: disable=too-many-locals
     self,

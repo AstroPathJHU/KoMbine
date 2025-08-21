@@ -22,6 +22,21 @@ from .kaplan_meier import (
   KaplanMeierPatient,
 )
 
+def n_choose_d_term_table(n_patients) -> dict[tuple[int, int], float]:
+  """
+  Precompute the n choose d terms for the binomial penalty.
+  """
+  n_choose_d_term_table = {}
+  for n in range(n_patients + 1):
+    for d in range(n + 1):
+      n_choose_d_term_table[(n, d)] = (
+        math.lgamma(n + 1)
+        - math.lgamma(d + 1)
+        - math.lgamma(n - d + 1)
+      )
+  return n_choose_d_term_table
+
+
 class KaplanMeierPatientNLL(KaplanMeierPatientBase):
   """
   A patient with a time and a parameter.
@@ -847,15 +862,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     """
     Precompute the n choose d terms for the binomial penalty.
     """
-    n_choose_d_term_table = {}
-    for n in range(self.n_patients + 1):
-      for d in range(n + 1):
-        n_choose_d_term_table[(n, d)] = (
-          math.lgamma(n + 1)
-          - math.lgamma(d + 1)
-          - math.lgamma(n - d + 1)
-        )
-    return n_choose_d_term_table
+    return n_choose_d_term_table(n_patients=self.n_patients)
 
   def add_counter_variables_and_constraints(
     self,
