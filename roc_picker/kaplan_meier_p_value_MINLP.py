@@ -315,7 +315,7 @@ class MINLPforKMPValue:
       model.addGenConstrIndicator(
         null_hypothesis_indicator,
         True,
-        n_survived[i, 0] - n_survived[i, 1],
+        p_survived[i, 0] - p_survived[i, 1],
         GRB.EQUAL,
         0,
         name=f"null_hypothesis_{i}"
