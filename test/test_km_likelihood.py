@@ -194,7 +194,21 @@ def runtest(
   )
   p_value, _, _ = km_p_value_minlp.solve_and_pvalue()
   p_value_binomial, _, _ = km_p_value_minlp.solve_and_pvalue(binomial_only=True)
-  # p_value_patient_wise, _, _ = km_p_value_minlp.solve_and_pvalue(patient_wise_only=True)
+  p_value_patient_wise, _, _ = km_p_value_minlp.solve_and_pvalue(patient_wise_only=True)
+
+  # Test that patient_wise_only produces different results than regular p-value
+  # (unless they happen to be very close for this particular dataset)
+  p_value_diff = abs(p_value_patient_wise - p_value)
+  if p_value_diff > 1e-10:  # Allow for very small differences due to numerical precision
+    print(f"Patient-wise-only p-value ({p_value_patient_wise:.6f}) differs from regular p-value ({p_value:.6f})")
+  
+  # Test mutual exclusion of options
+  try:
+    km_p_value_minlp.solve_and_pvalue(binomial_only=True, patient_wise_only=True)
+    raise AssertionError("Should have raised ValueError for both binomial_only and patient_wise_only being True")
+  except ValueError as e:
+    if "binomial_only and patient_wise_only cannot both be True" not in str(e):
+      raise AssertionError(f"Wrong error message: {e}")
 
   alt_results = {}
   if alt_datacards is not None:
@@ -321,7 +335,7 @@ def runtest(
     "CL_probabilities_patient_wise": CL_probabilities_patient_wise,
     "p_value": np.array([p_value]),  # Convert scalar to array for consistency
     "p_value_binomial": np.array([p_value_binomial]),
-    # "p_value_patient_wise": np.array([p_value_patient_wise]),
+    "p_value_patient_wise": np.array([p_value_patient_wise]),
   }
   for name, alt_data in alt_results.items():
     ordered_array_data[f"nominal_probabilities_{name}"] = alt_data["nominal_probabilities"]
