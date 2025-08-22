@@ -34,8 +34,10 @@ class MINLPforKMPValue:
     self.__parameter_threshold = parameter_threshold
     self.__parameter_max = parameter_max
     self.__endpoint_epsilon = endpoint_epsilon
+    self.__log_zero_epsilon = 1e-10
     self.__null_hypothesis_constraint = None
     self.__patient_constraints_for_binomial_only = None
+    self.__patient_wise_only_constraints = None
 
   @property
   def all_patients(self) -> list[KaplanMeierPatientNLL]:
@@ -111,6 +113,75 @@ class MINLPforKMPValue:
       (self.observed_parameters >= self.parameter_threshold)
       & (self.observed_parameters < self.parameter_max)
     ))).T
+
+  @functools.cached_property
+  def nominal_curves_probabilities(self) -> tuple[float, float]:
+    """
+    Calculate the nominal Kaplan-Meier probabilities for both low and high curves.
+    Uses the observed parameters to assign patients to their nominal curves.
+    Returns (low_curve_prob, high_curve_prob).
+    """
+    # Patients in low curve (parameter < threshold)
+    low_curve_patients = [
+      i for i in range(self.n_patients)
+      if self.observed_parameters[i] < self.parameter_threshold
+    ]
+    
+    # Patients in high curve (parameter >= threshold) 
+    high_curve_patients = [
+      i for i in range(self.n_patients)
+      if self.observed_parameters[i] >= self.parameter_threshold
+    ]
+    
+    # Calculate probabilities for each curve using the static method from MINLP
+    from .kaplan_meier_MINLP import MINLPForKM
+    
+    def calculate_curve_probability(patient_indices):
+      if not patient_indices:
+        return 1.0
+      
+      # Group patients by their death times
+      times_died = []
+      times_censored = []
+      
+      for i in patient_indices:
+        patient = self.all_patients[i]
+        if patient.censored:
+          times_censored.append(patient.time)
+        else:
+          times_died.append(patient.time)
+      
+      # Get unique death times in order
+      unique_death_times = sorted(set(times_died))
+      if not unique_death_times:
+        return 1.0
+        
+      # Count deaths and censored patients at each death time
+      died_counts = []
+      censored_counts = []
+      
+      for t in unique_death_times:
+        # Count deaths at this time
+        deaths_at_t = sum(1 for i in patient_indices 
+                         if not self.all_patients[i].censored and self.all_patients[i].time == t)
+        died_counts.append(deaths_at_t)
+        
+        # Count censored patients before this time  
+        # (who are no longer at risk at time t)
+        censored_before_t = sum(1 for i in patient_indices
+                               if self.all_patients[i].censored and self.all_patients[i].time < t)
+        censored_counts.append(censored_before_t)
+        
+      return MINLPForKM.calculate_KM_probability(
+        total_count=len(patient_indices),
+        censored_counts=tuple(censored_counts),
+        died_counts=tuple(died_counts),
+      )
+    
+    low_prob = calculate_curve_probability(low_curve_patients)
+    high_prob = calculate_curve_probability(high_curve_patients)
+    
+    return low_prob, high_prob
 
   @functools.cached_property
   def nll_penalty_for_patient_in_range(self) -> npt.NDArray[np.float64]:
@@ -210,6 +281,146 @@ class MINLPforKMPValue:
         model.addConstr(n_survived[k, j] == n_at_risk[k, j] - n_died[k, j])
 
     return n_at_risk, n_died, n_survived
+
+  def add_kaplan_meier_probability_variables_and_constraints(
+    self,
+    model: gp.Model,
+    n_at_risk: gp.tupledict[tuple[int, ...], gp.Var],
+    n_survived: gp.tupledict[tuple[int, ...], gp.Var],
+  ) -> tuple[gp.Var, gp.Var]:
+    """
+    Add variables and constraints to calculate the Kaplan-Meier probabilities
+    for both curves directly within the Gurobi model using logarithmic transformations.
+    Returns km_probability_vars for low and high curves.
+    """
+    km_probability_vars = []
+    
+    for j in range(2):  # j=0 for low curve, j=1 for high curve
+      # Variables for log of counts
+      log_n_at_risk_vars = model.addVars(
+        len(self.all_death_times),
+        vtype=GRB.CONTINUOUS,
+        name=f"log_n_at_risk_curve_{j}",
+        lb=-GRB.INFINITY,
+        ub=np.log(self.n_patients + self.__log_zero_epsilon),
+      )
+      log_n_survived_vars = model.addVars(
+        len(self.all_death_times),
+        vtype=GRB.CONTINUOUS,
+        name=f"log_n_survived_curve_{j}",
+        lb=-GRB.INFINITY,
+        ub=np.log(self.n_patients + self.__log_zero_epsilon),
+      )
+
+      # Helper variables for log arguments (n_at_risk + epsilon, n_survived + epsilon)
+      n_at_risk_plus_epsilon = model.addVars(
+        len(self.all_death_times),
+        vtype=GRB.CONTINUOUS,
+        name=f"n_at_risk_plus_epsilon_curve_{j}",
+        lb=self.__log_zero_epsilon,
+      )
+      n_survived_plus_epsilon = model.addVars(
+        len(self.all_death_times),
+        vtype=GRB.CONTINUOUS,
+        name=f"n_survived_plus_epsilon_curve_{j}",
+        lb=self.__log_zero_epsilon,
+      )
+
+      # Constraints to link original counts to epsilon-added variables
+      for i in range(len(self.all_death_times)):
+        model.addConstr(
+          n_at_risk_plus_epsilon[i] == n_at_risk[i, j] + self.__log_zero_epsilon,
+          name=f"n_at_risk_plus_epsilon_constr_{i}_curve_{j}"
+        )
+        model.addConstr(
+          n_survived_plus_epsilon[i] == n_survived[i, j] + self.__log_zero_epsilon,
+          name=f"n_survived_plus_epsilon_constr_{i}_curve_{j}"
+        )
+
+      # Link count variables to their log counterparts using GenConstrLog
+      for i in range(len(self.all_death_times)):
+        model.addGenConstrLog(
+          n_at_risk_plus_epsilon[i],
+          log_n_at_risk_vars[i],
+          name=f"log_n_at_risk_constr_{i}_curve_{j}"
+        )
+        model.addGenConstrLog(
+          n_survived_plus_epsilon[i],
+          log_n_survived_vars[i],
+          name=f"log_n_survived_constr_{i}_curve_{j}"
+        )
+
+      # Binary indicator for whether n_at_risk for a death time is zero
+      is_n_at_risk_zero = model.addVars(
+        len(self.all_death_times),
+        vtype=GRB.BINARY,
+        name=f"is_n_at_risk_zero_curve_{j}"
+      )
+
+      # Link is_n_at_risk_zero to n_at_risk using indicator constraint
+      for i in range(len(self.all_death_times)):
+        model.addGenConstrIndicator(
+          is_n_at_risk_zero[i], True, n_at_risk[i, j], GRB.EQUAL, 0,
+          name=f"is_n_at_risk_zero_indicator_{i}_curve_{j}"
+        )
+
+      # Kaplan-Meier log probability for each death time term
+      km_log_probability_per_time_terms = model.addVars(
+        len(self.all_death_times),
+        vtype=GRB.CONTINUOUS,
+        name=f"km_log_prob_time_term_curve_{j}",
+        lb=-GRB.INFINITY,
+        ub=0,
+      )
+
+      # Use indicator constraints to set km_log_probability_per_time_terms[i]
+      for i in range(len(self.all_death_times)):
+        # If is_n_at_risk_zero[i] is 0 (i.e., n_at_risk[i, j] > 0)
+        model.addGenConstrIndicator(
+          is_n_at_risk_zero[i], False,
+          km_log_probability_per_time_terms[i] - (log_n_survived_vars[i] - log_n_at_risk_vars[i]),
+          GRB.EQUAL,
+          0,
+          name=f"km_log_prob_time_active_{i}_curve_{j}"
+        )
+        # If is_n_at_risk_zero[i] is 1 (i.e., n_at_risk[i, j] == 0)
+        model.addGenConstrIndicator(
+          is_n_at_risk_zero[i], True,
+          km_log_probability_per_time_terms[i],
+          GRB.EQUAL,
+          0.0,
+          name=f"km_log_prob_time_zero_at_risk_{i}_curve_{j}"
+        )
+
+      # Total Kaplan-Meier log probability: sum of log probabilities per death time
+      km_log_probability_total = model.addVar(
+        vtype=GRB.CONTINUOUS,
+        name=f"km_log_probability_total_curve_{j}",
+        lb=-GRB.INFINITY,
+        ub=0,
+      )
+      model.addConstr(
+        km_log_probability_total == km_log_probability_per_time_terms.sum(),
+        name=f"km_log_probability_total_def_curve_{j}"
+      )
+
+      # Kaplan-Meier probability variable (linear scale)
+      km_probability_var = model.addVar(
+        vtype=GRB.CONTINUOUS,
+        name=f"km_probability_curve_{j}",
+        lb=0,
+        ub=1,
+      )
+      # Link log probability to linear probability using GenConstrExp
+      model.addGenConstrExp(
+        km_log_probability_total,
+        km_probability_var,
+        name=f"exp_km_probability_curve_{j}"
+      )
+      
+      km_probability_vars.append(km_probability_var)
+
+    return km_probability_vars[0], km_probability_vars[1]
 
   @functools.cached_property
   def n_choose_d_term_table(self) -> dict[tuple[int, int], float]:
@@ -409,6 +620,12 @@ class MINLPforKMPValue:
     x = model.addVars(self.n_patients, 2, vtype=gp.GRB.BINARY, name="x")
 
     n_at_risk, n_died, n_survived = self.add_counter_variables_and_constraints(model, x)
+    
+    # Add Kaplan-Meier probability variables and constraints
+    km_probability_low, km_probability_high = self.add_kaplan_meier_probability_variables_and_constraints(
+      model, n_at_risk, n_survived
+    )
+    
     binomial_penalty, null_hypothesis_indicator = self.add_binomial_penalty(
       model,
       n_died=n_died,
@@ -423,7 +640,7 @@ class MINLPforKMPValue:
     )
     model.update()
 
-    return model, null_hypothesis_indicator, x
+    return model, null_hypothesis_indicator, x, km_probability_low, km_probability_high
 
   @functools.cached_property
   def gurobi_model(self):
@@ -494,7 +711,65 @@ class MINLPforKMPValue:
 
     model.update()
 
-  def solve_and_pvalue(self, *, binomial_only: bool = False):
+  def update_model_with_patient_wise_only_constraints(
+    self,
+    model: gp.Model,
+    km_probability_low: gp.Var,
+    km_probability_high: gp.Var,
+    null_hypothesis_indicator: gp.Var,
+    patient_wise_only: bool,
+  ):
+    """
+    Update the model with patient_wise_only constraints.
+    When patient_wise_only=True, we constrain the curves to be flipped
+    relative to their nominal probabilities under the null hypothesis.
+    """
+    # Remove existing constraints if they exist
+    if self.__patient_wise_only_constraints is not None:
+      for constr in self.__patient_wise_only_constraints:
+        model.remove(constr)
+      self.__patient_wise_only_constraints = None
+
+    if patient_wise_only:
+      self.__patient_wise_only_constraints = []
+      
+      # Get nominal probabilities for both curves
+      nominal_low_prob, nominal_high_prob = self.nominal_curves_probabilities
+      
+      # For the null hypothesis, constrain the curves to be flipped:
+      # If nominal low > nominal high, constrain actual low <= actual high
+      # If nominal low < nominal high, constrain actual low >= actual high
+      # If they're equal, no additional constraint needed
+      
+      if abs(nominal_low_prob - nominal_high_prob) > self.__endpoint_epsilon:
+        if nominal_low_prob > nominal_high_prob:
+          # Under null hypothesis: low curve should be <= high curve
+          # (flipped from nominal where low > high)
+          self.__patient_wise_only_constraints.append(
+            model.addGenConstrIndicator(
+              null_hypothesis_indicator, True,
+              km_probability_low - km_probability_high,
+              GRB.LESS_EQUAL,
+              self.__endpoint_epsilon,
+              name="patient_wise_only_low_le_high"
+            )
+          )
+        else:
+          # Under null hypothesis: low curve should be >= high curve  
+          # (flipped from nominal where low < high)
+          self.__patient_wise_only_constraints.append(
+            model.addGenConstrIndicator(
+              null_hypothesis_indicator, True,
+              km_probability_low - km_probability_high,
+              GRB.GREATER_EQUAL,
+              -self.__endpoint_epsilon,
+              name="patient_wise_only_low_ge_high"
+            )
+          )
+
+    model.update()
+
+  def solve_and_pvalue(self, *, binomial_only: bool = False, patient_wise_only: bool = False):
     """
     Solve the MINLP and return the p value.
     
@@ -503,11 +778,22 @@ class MINLPforKMPValue:
     binomial_only : bool, optional
         If True, add constraints for x[i, j] to be either 0 or 1,
         based on parameter_in_range. Default is False.
+    patient_wise_only : bool, optional
+        If True, only consider patient-wise errors and constrain the curves
+        to be flipped relative to nominal under the null hypothesis. Default is False.
     """
-    model, null_hypothesis_indicator, x = self.gurobi_model
+    if binomial_only and patient_wise_only:
+      raise ValueError("binomial_only and patient_wise_only cannot both be True")
+    
+    model, null_hypothesis_indicator, x, km_probability_low, km_probability_high = self.gurobi_model
 
     # Apply binomial_only constraints if specified
     self.update_model_with_binomial_only_constraints(model, x, binomial_only)
+    
+    # Apply patient_wise_only constraints if specified
+    self.update_model_with_patient_wise_only_constraints(
+      model, km_probability_low, km_probability_high, null_hypothesis_indicator, patient_wise_only
+    )
 
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, True)
     model.optimize()
