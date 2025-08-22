@@ -966,6 +966,50 @@ class Datacard:
       parameter_max=parameter_max,
     )
 
+  def km_p_value_logrank(
+    self,
+    *,
+    parameter_threshold: float,
+    parameter_min: float = -np.inf,
+    parameter_max: float = np.inf,
+    binomial_only: bool = True,
+  ) -> float:
+    """
+    Calculate p-value for comparing two Kaplan-Meier curves using the conventional
+    logrank test method.
+    
+    This is a convenience method that creates a KaplanMeierLikelihood object
+    and calls its survival_curves_pvalue_logrank method.
+    
+    Parameters
+    ----------
+    parameter_threshold : float
+        The threshold value that separates the two groups.
+    parameter_min : float, optional
+        The minimum parameter value to include in the analysis. Default is -inf.
+    parameter_max : float, optional
+        The maximum parameter value to include in the analysis. Default is +inf.
+    binomial_only : bool, optional
+        If True, only include patients whose observed parameter is within the
+        specified ranges. Default is True.
+        
+    Returns
+    -------
+    float
+        The p-value from the logrank test.
+    """
+    km_likelihood = self.km_likelihood(
+      parameter_min=parameter_min,
+      parameter_max=parameter_max,
+    )
+    
+    return km_likelihood.survival_curves_pvalue_logrank(
+      parameter_threshold=parameter_threshold,
+      parameter_min=parameter_min,
+      parameter_max=parameter_max,
+      binomial_only=binomial_only,
+    )
+
   def clear_distributions(self):
     """
     Delete the distributions for all patients.
@@ -1067,9 +1111,6 @@ def _make_common_parser(description: str) -> argparse.ArgumentParser:
   group.add_argument("--include-binomial-only", action="store_true", help="Include error bands for the binomial error alone.")
   group.add_argument("--include-patient-wise-only", action="store_true", help="Include error bands for the patient-wise error alone.")
   parser.add_argument("--include-exponential-greenwood", action="store_true", dest="include_exponential_greenwood", help="Include the binomial-only exponential Greenwood error band in the plot.")
-  parser.add_argument("--include-greenwood-pvalues", action="store_true", dest="include_greenwood_pvalues", help="Include p-values using the exponential Greenwood method (only when Greenwood error bands are included).")
-  parser.add_argument("--null-survival-probability", type=float, dest="null_survival_probability", default=0.5, help="Null hypothesis survival probability for p-value calculations.")
-  parser.add_argument("--pvalue-significance-threshold", type=float, dest="pvalue_significance_threshold", default=0.05, help="Significance threshold for highlighting p-values.")
   parser.add_argument("--exclude-full-nll", action="store_false", dest="include_full_NLL", default=True, help="Exclude the full NLL from the plot.")
   parser.add_argument("--exclude-nominal", action="store_false", dest="include_nominal", default=True, help="Exclude the nominal line from the plot.")
   parser.add_argument("--include-median-survival", action="store_true", dest="include_median_survival", help="Include the median survival line in the plot.")
@@ -1107,9 +1148,6 @@ def _extract_common_plot_config_args(args: argparse.Namespace) -> dict:
     "include_patient_wise_only": args.__dict__.pop("include_patient_wise_only"),
     "include_binomial_only": args.__dict__.pop("include_binomial_only"),
     "include_exponential_greenwood": args.__dict__.pop("include_exponential_greenwood"),
-    "include_greenwood_pvalues": args.__dict__.pop("include_greenwood_pvalues"),
-    "null_survival_probability": args.__dict__.pop("null_survival_probability"),
-    "pvalue_significance_threshold": args.__dict__.pop("pvalue_significance_threshold"),
     "include_full_NLL": args.__dict__.pop("include_full_NLL"),
     "include_nominal": args.__dict__.pop("include_nominal"),
     "include_median_survival": args.__dict__.pop("include_median_survival"),
@@ -1167,6 +1205,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   parser.add_argument("--parameter-threshold", type=float, dest="parameter_threshold", required=True, help="The parameter threshold for separating high and low groups.")
   parser.add_argument("--parameter-min", type=float, dest="parameter_min", default=-np.inf, help="The minimum parameter value for the low group.")
   parser.add_argument("--parameter-max", type=float, dest="parameter_max", default=np.inf, help="The maximum parameter value for the high group.")
+  parser.add_argument("--include-logrank-pvalue", action="store_true", dest="include_logrank_pvalue", help="Include conventional logrank p-value for comparison with likelihood method.")
   # pylint: enable=C0301
   args = parser.parse_args()
   _validate_plot_args(args, parser)
@@ -1176,6 +1215,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   threshold = args.__dict__.pop("parameter_threshold")
   parameter_max = args.__dict__.pop("parameter_max")
   log_zero_epsilon = args.__dict__.pop("log_zero_epsilon")
+  include_logrank_pvalue = args.__dict__.pop("include_logrank_pvalue")
 
   kml_low = datacard.km_likelihood(
     parameter_min=parameter_min,
@@ -1237,6 +1277,16 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
     if common_plot_kwargs["include_patient_wise_only"]:
       p_value_patient_wise, *_ = p_value_minlp.solve_and_pvalue(patient_wise_only=True)
       p_value_texts.append(f"p (patient-wise only) = {p_value_patient_wise:.3g}")
+
+  # Add logrank p-value if requested  
+  if include_logrank_pvalue:
+    p_value_logrank = datacard.km_p_value_logrank(
+      parameter_threshold=threshold,
+      parameter_min=parameter_min,
+      parameter_max=parameter_max,
+      binomial_only=True,
+    )
+    p_value_texts.append(f"p (logrank) = {p_value_logrank:.3g}")
 
   # Display p-value text(s) on the plot
   if p_value_texts:

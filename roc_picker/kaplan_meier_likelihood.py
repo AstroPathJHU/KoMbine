@@ -40,7 +40,6 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   include_full_NLL: If True, include error bands for the full negative log-likelihood.
   include_best_fit: If True, include the best fit curve in the plot.
   include_nominal: If True, include the nominal Kaplan-Meier curve.
-  include_greenwood_pvalues: If True, include p-values using the exponential Greenwood method.
   nominal_label: Label for the nominal curve.
   nominal_color: Color for the nominal curve.
   best_label: Label for the best fit curve.
@@ -49,8 +48,6 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   binomial_only_suffix: Suffix for the binomial-only error bands.
   full_NLL_suffix: Suffix for the full NLL error bands.
   exponential_greenwood_suffix: Suffix for the exponential Greenwood error bands.
-  null_survival_probability: Null hypothesis value for p-value calculations.
-  pvalue_significance_threshold: Threshold for highlighting significant p-values.
   CLs: List of confidence levels for the error bands.
   CL_colors: List of colors for the confidence levels.
   CL_colors_greenwood: List of colors for the Greenwood confidence levels.
@@ -83,7 +80,6 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   include_full_NLL: bool = True
   include_best_fit: bool = True
   include_nominal: bool = True
-  include_greenwood_pvalues: bool = False
   nominal_label: str = 'Nominal'
   nominal_color: str = 'red'
   best_label: str = 'Best Fit'
@@ -92,8 +88,6 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   binomial_only_suffix: str = 'Binomial only'
   full_NLL_suffix: str = ''
   exponential_greenwood_suffix: str = 'Binomial only, exp. Greenwood'
-  null_survival_probability: float = 0.5
-  pvalue_significance_threshold: float = 0.05
   CLs: list[float] = dataclasses.field(default_factory=lambda: [0.68, 0.95])
   CL_colors: list[str] = dataclasses.field(
     default_factory=lambda: ['dodgerblue', 'skyblue', 'lightblue', 'lightcyan']
@@ -350,27 +344,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     return self.nominalkm.survival_probabilities_exponential_greenwood(
       CLs=CLs,
       times_for_plot=times_for_plot,
-    )
-
-  def survival_probabilities_pvalues_greenwood(
-    self,
-    times_for_plot: typing.Sequence[float],
-    *,
-    null_survival_probability: float = 0.5,
-    binomial_only=False,
-    patient_wise_only=False,
-  ):
-    """
-    Calculate the survival probabilities and p-values using the exponential Greenwood method.
-    """
-    if patient_wise_only or not binomial_only:
-      raise ValueError(
-        "Exponential Greenwood p-values"
-        "can only include the binomial error"
-      )
-    return self.nominalkm.survival_probabilities_pvalues_greenwood(
-      times_for_plot=times_for_plot,
-      null_survival_probability=null_survival_probability,
     )
 
   def survival_probabilities_likelihood( # pylint: disable=too-many-locals, too-many-branches, too-many-statements, too-many-arguments
@@ -844,16 +817,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       )
       results.update(CL_results)
 
-    # --- Calculate and display p-values if requested ---
-    if config.include_greenwood_pvalues and config.include_exponential_greenwood:
-      best_prob_pvalues, p_values = self.survival_probabilities_pvalues_greenwood(
-        times_for_plot=times_for_plot,
-        null_survival_probability=config.null_survival_probability,
-        binomial_only=True,
-      )
-      self._plot_pvalues(ax, config, times_for_plot, p_values)
-      results["p_values"] = p_values
-
     if config.include_patient_wise_only:
       assert CL_prob_patient is not None
       if config.include_full_NLL:
@@ -869,56 +832,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       results.update(CL_results)
 
     return results
-
-  def _plot_pvalues(
-    self,
-    ax: matplotlib.axes.Axes,
-    config: KaplanMeierPlotConfig,
-    times_for_plot: typing.Sequence[float],
-    p_values: np.ndarray,
-  ):
-    """Plot p-values on the survival curve as annotations."""
-    # Find significant time points
-    significant_times = []
-    significant_pvalues = []
-    
-    for t, p in zip(times_for_plot, p_values, strict=True):
-      if p < config.pvalue_significance_threshold:
-        significant_times.append(t)
-        significant_pvalues.append(p)
-    
-    if significant_times:
-      # Get survival probabilities at significant time points for positioning
-      survival_probs = self.nominalkm.survival_probabilities(times_for_plot=significant_times)
-      
-      # Add annotations for significant p-values
-      for t, p, s in zip(significant_times, significant_pvalues, survival_probs, strict=True):
-        # Format p-value nicely
-        if p < 0.001:
-          p_text = "p<0.001"
-        elif p < 0.01:
-          p_text = f"p={p:.3f}"
-        else:
-          p_text = f"p={p:.2f}"
-        
-        # Position annotation slightly above the survival curve
-        y_offset = 0.05
-        ax.annotate(
-          p_text,
-          xy=(t, s),
-          xytext=(t, s + y_offset),
-          fontsize=config.tick_fontsize - 2,
-          ha='center',
-          va='bottom',
-          color='red',
-          weight='bold',
-          arrowprops=dict(
-            arrowstyle='->',
-            color='red',
-            alpha=0.7,
-            lw=0.8
-          )
-        )
 
   def _finalize_plot(
     self,
@@ -953,3 +866,148 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         plt.close(fig)
     elif config.close_figure:
       plt.close(fig)
+
+  def survival_curves_pvalue_logrank(
+    self,
+    *,
+    parameter_threshold: float,
+    parameter_min: float = -np.inf,
+    parameter_max: float = np.inf,
+    binomial_only: bool = True,
+  ) -> float:
+    """
+    Calculate p-value for comparing two Kaplan-Meier curves using the conventional
+    logrank test method.
+    
+    This method splits patients into two groups based on their observed parameter
+    values relative to the parameter_threshold, then uses the standard logrank test
+    to test the null hypothesis that the two survival curves are identical.
+    
+    This provides the conventional method for comparison with the likelihood-based
+    approach implemented in kaplan_meier_p_value_MINLP.py.
+    
+    Parameters
+    ----------
+    parameter_threshold : float
+        The threshold value that separates the two groups. Patients with
+        observed_parameter < parameter_threshold are in the "low" group,
+        and patients with observed_parameter >= parameter_threshold are in the "high" group.
+    parameter_min : float, optional
+        The minimum parameter value to include in the analysis. Default is -inf
+        (include all patients below threshold).
+    parameter_max : float, optional
+        The maximum parameter value to include in the analysis. Default is +inf
+        (include all patients above threshold).
+    binomial_only : bool, optional
+        If True, only include patients whose observed parameter is within the
+        specified range [parameter_min, parameter_threshold) for low group or
+        [parameter_threshold, parameter_max) for high group. This matches the
+        behavior of binomial_only in the likelihood method. Default is True.
+        
+    Returns
+    -------
+    float
+        The p-value from the logrank test. A small p-value (typically < 0.05)
+        indicates evidence against the null hypothesis that the two curves are identical.
+        
+    Notes
+    -----
+    The logrank test is the standard non-parametric test for comparing survival curves.
+    It tests the null hypothesis that the hazard functions of the two groups are equal
+    at all time points.
+    
+    The test statistic follows a chi-square distribution with 1 degree of freedom
+    under the null hypothesis.
+    
+    This implementation only supports binomial_only=True, which restricts analysis
+    to patients whose parameters fall within the specified ranges.
+    """
+    if not binomial_only:
+      raise ValueError(
+        "survival_curves_pvalue_logrank only supports binomial_only=True, "
+        "which restricts analysis to patients within the specified parameter ranges."
+      )
+    
+    # Get all patients and their observed parameters
+    all_patients = self.all_patients
+    
+    # Split patients into two groups based on parameter threshold
+    group1_patients = []  # Low group: parameter < threshold and >= parameter_min
+    group2_patients = []  # High group: parameter >= threshold and < parameter_max
+    
+    for patient in all_patients:
+      param_value = patient.observed_parameter
+      
+      if parameter_min <= param_value < parameter_threshold:
+        group1_patients.append(patient)
+      elif parameter_threshold <= param_value < parameter_max:
+        group2_patients.append(patient)
+      # Patients outside the ranges are excluded when binomial_only=True
+    
+    if not group1_patients or not group2_patients:
+      raise ValueError(
+        f"Need patients in both groups for comparison. "
+        f"Got {len(group1_patients)} in low group and {len(group2_patients)} in high group."
+      )
+    
+    # Get all unique death times (excluding censored events)
+    all_death_times = set()
+    for patient in group1_patients + group2_patients:
+      if not patient.censored:
+        all_death_times.add(patient.time)
+    
+    if not all_death_times:
+      raise ValueError("No death events found in either group.")
+      
+    all_death_times = sorted(all_death_times)
+    
+    # Calculate logrank test statistic
+    U = 0.0  # Sum of (observed - expected) for group 1
+    V = 0.0  # Sum of variances
+    
+    for death_time in all_death_times:
+      # Count patients at risk at this death time
+      n1_at_risk = sum(1 for p in group1_patients if p.time >= death_time)
+      n2_at_risk = sum(1 for p in group2_patients if p.time >= death_time)
+      n_total_at_risk = n1_at_risk + n2_at_risk
+      
+      if n_total_at_risk == 0:
+        continue
+        
+      # Count deaths at this exact time
+      d1_deaths = sum(1 for p in group1_patients 
+                     if p.time == death_time and not p.censored)
+      d2_deaths = sum(1 for p in group2_patients 
+                     if p.time == death_time and not p.censored)
+      d_total_deaths = d1_deaths + d2_deaths
+      
+      if d_total_deaths == 0:
+        continue
+        
+      # Expected deaths in group 1 under null hypothesis
+      expected_d1 = n1_at_risk * d_total_deaths / n_total_at_risk
+      
+      # Variance for this time point
+      if n_total_at_risk > 1:
+        variance_t = (n1_at_risk * n2_at_risk * d_total_deaths * 
+                     (n_total_at_risk - d_total_deaths)) / (
+                     n_total_at_risk * n_total_at_risk * (n_total_at_risk - 1))
+      else:
+        variance_t = 0.0
+      
+      # Accumulate test statistic components
+      U += d1_deaths - expected_d1
+      V += variance_t
+    
+    if V <= 0:
+      # No variance means no information for comparison
+      # This can happen if there's only one death time or other edge cases
+      return 1.0  # No evidence against null hypothesis
+    
+    # Logrank test statistic
+    logrank_statistic = U * U / V
+    
+    # Calculate p-value using chi-square distribution with 1 degree of freedom
+    p_value = 1.0 - scipy.stats.chi2.cdf(logrank_statistic, df=1)
+    
+    return p_value
