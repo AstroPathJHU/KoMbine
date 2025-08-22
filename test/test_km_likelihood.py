@@ -193,22 +193,8 @@ def runtest(
     parameter_max=parameter_max,
   )
   p_value, _, _ = km_p_value_minlp.solve_and_pvalue()
-
-  # km_p_value_minlp_binomial = datacard.km_p_value(
-  #   parameter_min=parameter_min,
-  #   parameter_threshold=parameter_threshold,
-  #   parameter_max=parameter_max,
-  #   binomial_only=True,
-  # )
-  # p_value_binomial, _, _ = km_p_value_minlp_binomial.solve_and_pvalue()
-
-  # km_p_value_minlp_patient_wise = datacard.km_p_value(
-  #   parameter_min=parameter_min,
-  #   parameter_threshold=parameter_threshold,
-  #   parameter_max=parameter_max,
-  #   patient_wise_only=True,
-  # )
-  # p_value_patient_wise, _, _ = km_p_value_minlp_patient_wise.solve_and_pvalue()
+  p_value_binomial, _, _ = km_p_value_minlp.solve_and_pvalue(binomial_only=True)
+  # p_value_patient_wise, _, _ = km_p_value_minlp.solve_and_pvalue(patient_wise_only=True)
 
   alt_results = {}
   if alt_datacards is not None:
@@ -334,7 +320,7 @@ def runtest(
     "best_probabilities_patient_wise": best_probabilities_patient_wise,
     "CL_probabilities_patient_wise": CL_probabilities_patient_wise,
     "p_value": np.array([p_value]),  # Convert scalar to array for consistency
-    # "p_value_binomial": np.array([p_value_binomial]),
+    "p_value_binomial": np.array([p_value_binomial]),
     # "p_value_patient_wise": np.array([p_value_patient_wise]),
   }
   for name, alt_data in alt_results.items():
