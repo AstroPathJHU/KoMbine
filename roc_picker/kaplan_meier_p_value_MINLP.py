@@ -14,9 +14,9 @@ import numpy.typing as npt
 import scipy.optimize
 import scipy.stats
 
-from .kaplan_meier_MINLP import KaplanMeierPatientNLL, n_choose_d_term_table
+from .kaplan_meier_MINLP import KaplanMeierPatientNLL, MINLPForKM, n_choose_d_term_table
 
-class MINLPforKMPValue:
+class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-instance-attributes
   """
   MINLP solver for calculating p-values for two Kaplan-Meier curves.
   """
@@ -126,65 +126,65 @@ class MINLPforKMPValue:
       i for i in range(self.n_patients)
       if self.observed_parameters[i] < self.parameter_threshold
     ]
-    
-    # Patients in high curve (parameter >= threshold) 
+
+    # Patients in high curve (parameter >= threshold)
     high_curve_patients = [
       i for i in range(self.n_patients)
       if self.observed_parameters[i] >= self.parameter_threshold
     ]
-    
+
     # Calculate probabilities for each curve using the static method from MINLP
-    from .kaplan_meier_MINLP import MINLPForKM
-    
     def calculate_curve_probability(patient_indices):
       if not patient_indices:
         return 1.0
-      
+
       # Group patients by their death times
       times_died = []
       times_censored = []
-      
+
       for i in patient_indices:
         patient = self.all_patients[i]
         if patient.censored:
           times_censored.append(patient.time)
         else:
           times_died.append(patient.time)
-      
+
       # Get unique death times in order
       unique_death_times = sorted(set(times_died))
       if not unique_death_times:
         return 1.0
-        
+
       # Count deaths and censored patients at each death time
       died_counts = []
       censored_counts = []
-      
+
       for t in unique_death_times:
         # Count deaths at this time
-        deaths_at_t = sum(1 for i in patient_indices 
+        deaths_at_t = sum(1 for i in patient_indices
                          if not self.all_patients[i].censored and self.all_patients[i].time == t)
         died_counts.append(deaths_at_t)
-        
-        # Count censored patients before this time  
+
+        # Count censored patients before this time
         # (who are no longer at risk at time t)
         censored_before_t = sum(1 for i in patient_indices
                                if self.all_patients[i].censored and self.all_patients[i].time < t)
         censored_counts.append(censored_before_t)
-        
+
       return MINLPForKM.calculate_KM_probability(
         total_count=len(patient_indices),
         censored_counts=tuple(censored_counts),
         died_counts=tuple(died_counts),
       )
-    
+
     low_prob = calculate_curve_probability(low_curve_patients)
     high_prob = calculate_curve_probability(high_curve_patients)
-    
+
     return low_prob, high_prob
 
-  @functools.cached_property 
-  def nominal_curves_probabilities_at_each_time(self) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+  @functools.cached_property
+  def nominal_curves_probabilities_at_each_time(
+    self
+  ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """
     Calculate the nominal Kaplan-Meier probabilities at each death time for both curves.
     Returns (low_curve_probs_at_times, high_curve_probs_at_times) where each is an array
@@ -195,49 +195,49 @@ class MINLPforKMPValue:
       i for i in range(self.n_patients)
       if self.observed_parameters[i] < self.parameter_threshold
     ]
-    
-    # Patients in high curve (parameter >= threshold) 
+
+    # Patients in high curve (parameter >= threshold)
     high_curve_patients = [
       i for i in range(self.n_patients)
       if self.observed_parameters[i] >= self.parameter_threshold
     ]
-    
+
     def calculate_curve_probabilities_at_times(patient_indices):
       """Calculate KM probabilities at each death time for given patients."""
       if not patient_indices:
         return np.ones(len(self.all_death_times))
-      
+
       probabilities_at_times = []
-      
+
       for death_time_idx, death_time in enumerate(self.all_death_times):
         # Count patients at risk at this death time
-        at_risk_count = sum(1 for i in patient_indices 
+        at_risk_count = sum(1 for i in patient_indices
                            if self.all_patients[i].time >= death_time)
-        
-        # Count deaths at this death time 
+
+        # Count deaths at this death time
         deaths_at_time = sum(1 for i in patient_indices
-                            if (not self.all_patients[i].censored 
+                            if (not self.all_patients[i].censored
                                 and self.all_patients[i].time == death_time))
-        
+
         # Calculate survival probability at this time point
         if at_risk_count == 0:
           survival_prob = 1.0  # No patients at risk means no deaths
         else:
           survival_prob = (at_risk_count - deaths_at_time) / at_risk_count
-        
+
         # Calculate cumulative KM probability up to this time
         if death_time_idx == 0:
           km_prob_at_time = survival_prob
         else:
           km_prob_at_time = probabilities_at_times[-1] * survival_prob
-        
+
         probabilities_at_times.append(km_prob_at_time)
-      
+
       return np.array(probabilities_at_times)
-    
+
     low_probs = calculate_curve_probabilities_at_times(low_curve_patients)
     high_probs = calculate_curve_probabilities_at_times(high_curve_patients)
-    
+
     return low_probs, high_probs
 
   @functools.cached_property
@@ -339,12 +339,12 @@ class MINLPforKMPValue:
 
     return n_at_risk, n_died, n_survived
 
-  def add_kaplan_meier_probability_variables_and_constraints(
+  def add_kaplan_meier_probability_variables_and_constraints( #pylint: disable=too-many-locals
     self,
     model: gp.Model,
     n_at_risk: gp.tupledict[tuple[int, ...], gp.Var],
     n_survived: gp.tupledict[tuple[int, ...], gp.Var],
-  ) -> tuple[gp.Var, gp.Var, gp.tupledict, gp.tupledict]:
+  ) -> tuple[gp.tupledict, gp.tupledict]:
     """
     Add variables and constraints to calculate the Kaplan-Meier probabilities
     for both curves directly within the Gurobi model using logarithmic transformations.
@@ -352,7 +352,7 @@ class MINLPforKMPValue:
     """
     km_probability_vars = []
     km_probability_at_time_vars = []  # KM probabilities at each death time
-    
+
     for j in range(2):  # j=0 for low curve, j=1 for high curve
       # Variables for log of counts
       log_n_at_risk_vars = model.addVars(
@@ -458,7 +458,7 @@ class MINLPforKMPValue:
         lb=-GRB.INFINITY,
         ub=0,
       )
-      
+
       km_probability_at_time = model.addVars(
         len(self.all_death_times),
         vtype=GRB.CONTINUOUS,
@@ -466,7 +466,7 @@ class MINLPforKMPValue:
         lb=0,
         ub=1,
       )
-      
+
       # Calculate cumulative log probabilities at each death time
       for i in range(len(self.all_death_times)):
         if i == 0:
@@ -478,10 +478,11 @@ class MINLPforKMPValue:
         else:
           # Subsequent death times: cumulative sum up to this point
           model.addConstr(
-            km_log_probability_at_time[i] == km_log_probability_at_time[i-1] + km_log_probability_per_time_terms[i],
+            km_log_probability_at_time[i]
+              == km_log_probability_at_time[i-1] + km_log_probability_per_time_terms[i],
             name=f"km_log_prob_at_time_{i}_curve_{j}"
           )
-        
+
         # Convert from log to linear scale
         model.addGenConstrExp(
           km_log_probability_at_time[i],
@@ -514,12 +515,11 @@ class MINLPforKMPValue:
         km_probability_var,
         name=f"exp_km_probability_curve_{j}"
       )
-      
+
       km_probability_vars.append(km_probability_var)
       km_probability_at_time_vars.append(km_probability_at_time)
 
-    return (km_probability_vars[0], km_probability_vars[1], 
-            km_probability_at_time_vars[0], km_probability_at_time_vars[1])
+    return km_probability_at_time_vars[0], km_probability_at_time_vars[1]
 
   @functools.cached_property
   def n_choose_d_term_table(self) -> dict[tuple[int, int], float]:
@@ -719,13 +719,15 @@ class MINLPforKMPValue:
     x = model.addVars(self.n_patients, 2, vtype=gp.GRB.BINARY, name="x")
 
     n_at_risk, n_died, n_survived = self.add_counter_variables_and_constraints(model, x)
-    
+
     # Add Kaplan-Meier probability variables and constraints
-    (km_probability_low, km_probability_high, 
-     km_probability_at_time_low, km_probability_at_time_high) = self.add_kaplan_meier_probability_variables_and_constraints(
+    (
+      km_probability_at_time_low,
+      km_probability_at_time_high
+    ) = self.add_kaplan_meier_probability_variables_and_constraints(
       model, n_at_risk, n_survived
     )
-    
+
     binomial_penalty, null_hypothesis_indicator = self.add_binomial_penalty(
       model,
       n_died=n_died,
@@ -740,8 +742,13 @@ class MINLPforKMPValue:
     )
     model.update()
 
-    return (model, null_hypothesis_indicator, x, km_probability_low, km_probability_high,
-            km_probability_at_time_low, km_probability_at_time_high)
+    return (
+      model,
+      null_hypothesis_indicator,
+      x,
+      km_probability_at_time_low,
+      km_probability_at_time_high
+    )
 
   @functools.cached_property
   def gurobi_model(self):
@@ -771,6 +778,8 @@ class MINLPforKMPValue:
       )
     else:
       self.__null_hypothesis_constraint = None
+
+    model.update()
 
   def update_model_with_binomial_only_constraints(
     self,
@@ -812,11 +821,10 @@ class MINLPforKMPValue:
 
     model.update()
 
-  def update_model_with_patient_wise_only_constraints(
+  def update_model_with_patient_wise_only_constraints( #pylint: disable=too-many-arguments
     self,
     model: gp.Model,
-    km_probability_low: gp.Var,
-    km_probability_high: gp.Var,
+    *,
     km_probability_at_time_low: gp.tupledict,
     km_probability_at_time_high: gp.tupledict,
     null_hypothesis_indicator: gp.Var,
@@ -835,19 +843,20 @@ class MINLPforKMPValue:
 
     if patient_wise_only:
       self.__patient_wise_only_constraints = []
-      
+
       # Get nominal probabilities at each death time for both curves
-      nominal_low_probs_at_times, nominal_high_probs_at_times = self.nominal_curves_probabilities_at_each_time
-      
+      nominal_low_probs_at_times, nominal_high_probs_at_times = \
+        self.nominal_curves_probabilities_at_each_time
+
       # For the null hypothesis, constrain the curves to be flipped at each time point:
       # If nominal low > nominal high at time i, constrain actual low <= actual high at time i
       # If nominal low < nominal high at time i, constrain actual low >= actual high at time i
       # If they're equal, no additional constraint needed for that time point
-      
+
       for i in range(len(self.all_death_times)):
         nominal_low_at_i = nominal_low_probs_at_times[i]
         nominal_high_at_i = nominal_high_probs_at_times[i]
-        
+
         if abs(nominal_low_at_i - nominal_high_at_i) > self.__endpoint_epsilon:
           if nominal_low_at_i > nominal_high_at_i:
             # Under null hypothesis: low curve should be <= high curve at time i
@@ -876,10 +885,15 @@ class MINLPforKMPValue:
 
     model.update()
 
-  def solve_and_pvalue(self, *, binomial_only: bool = False, patient_wise_only: bool = False):
+  def solve_and_pvalue( # pylint: disable=too-many-locals
+    self,
+    *,
+    binomial_only: bool = False,
+    patient_wise_only: bool = False
+  ):
     """
     Solve the MINLP and return the p value.
-    
+
     Parameters
     ----------
     binomial_only : bool, optional
@@ -887,22 +901,30 @@ class MINLPforKMPValue:
         based on parameter_in_range. Default is False.
     patient_wise_only : bool, optional
         If True, only consider patient-wise errors and constrain the curves
-        to be flipped relative to nominal at each death time point under the null hypothesis. Default is False.
+        to be flipped relative to nominal at each death time point under the null hypothesis.
+        Default is False.
     """
     if binomial_only and patient_wise_only:
       raise ValueError("binomial_only and patient_wise_only cannot both be True")
-    
-    (model, null_hypothesis_indicator, x, km_probability_low, km_probability_high,
-     km_probability_at_time_low, km_probability_at_time_high) = self.gurobi_model
+
+    (
+      model,
+      null_hypothesis_indicator,
+      x,
+      km_probability_at_time_low,
+      km_probability_at_time_high
+    ) = self.gurobi_model
 
     # Apply binomial_only constraints if specified
     self.update_model_with_binomial_only_constraints(model, x, binomial_only)
-    
+
     # Apply patient_wise_only constraints if specified
     self.update_model_with_patient_wise_only_constraints(
-      model, km_probability_low, km_probability_high, 
-      km_probability_at_time_low, km_probability_at_time_high,
-      null_hypothesis_indicator, patient_wise_only
+      model,
+      km_probability_at_time_low=km_probability_at_time_low,
+      km_probability_at_time_high=km_probability_at_time_high,
+      null_hypothesis_indicator=null_hypothesis_indicator,
+      patient_wise_only=patient_wise_only,
     )
 
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, True)
@@ -926,19 +948,19 @@ class MINLPforKMPValue:
     )
 
     lr_stat = twonll_null - twonll_alt
-    
+
     # The number of degrees of freedom depends on the constraints added
     # under the null hypothesis
     if patient_wise_only:
       # For patient_wise_only, we add one constraint per death time where
-      # the nominal probabilities differ between curves 
+      # the nominal probabilities differ between curves
       nominal_low_probs, nominal_high_probs = self.nominal_curves_probabilities_at_each_time
       df = sum(1 for i in range(len(self.all_death_times))
                if abs(nominal_low_probs[i] - nominal_high_probs[i]) > self.__endpoint_epsilon)
     else:
-      # For regular case, one constraint per death time: 
+      # For regular case, one constraint per death time:
       # that the survival probabilities of the two curves are equal
       df = len(self.all_death_times)
-    
+
     p_value = scipy.stats.chi2.sf(lr_stat, df)
     return p_value, result_null, result_alt
