@@ -184,26 +184,28 @@ def runtest(
 
   # Calculate p-value using the likelihood method
   # Use the middle of the parameter range as threshold for the p-value calculation
-  parameter_threshold = (kml2.parameter_min + kml2.parameter_max) / 2
+  parameter_min = 0.0001
+  parameter_max = 100
+  parameter_threshold = 0.45
   km_p_value_minlp = datacard.km_p_value(
-    parameter_min=kml2.parameter_min,
+    parameter_min=parameter_min,
     parameter_threshold=parameter_threshold,
-    parameter_max=kml2.parameter_max,
+    parameter_max=parameter_max,
   )
   p_value, _, _ = km_p_value_minlp.solve_and_pvalue()
 
   # km_p_value_minlp_binomial = datacard.km_p_value(
-  #   parameter_min=kml2.parameter_min,
+  #   parameter_min=parameter_min,
   #   parameter_threshold=parameter_threshold,
-  #   parameter_max=kml2.parameter_max,
+  #   parameter_max=parameter_max,
   #   binomial_only=True,
   # )
   # p_value_binomial, _, _ = km_p_value_minlp_binomial.solve_and_pvalue()
   
   # km_p_value_minlp_patient_wise = datacard.km_p_value(
-  #   parameter_min=kml2.parameter_min,
+  #   parameter_min=parameter_min,
   #   parameter_threshold=parameter_threshold,
-  #   parameter_max=kml2.parameter_max,
+  #   parameter_max=parameter_max,
   #   patient_wise_only=True,
   # )
   # p_value_patient_wise, _, _ = km_p_value_minlp_patient_wise.solve_and_pvalue()
