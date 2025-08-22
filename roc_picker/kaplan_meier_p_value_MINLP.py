@@ -505,10 +505,10 @@ class MINLPforKMPValue:
         based on parameter_in_range. Default is False.
     """
     model, null_hypothesis_indicator, x = self.gurobi_model
-    
+
     # Apply binomial_only constraints if specified
     self.update_model_with_binomial_only_constraints(model, x, binomial_only)
-    
+
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, True)
     model.optimize()
     if model.status != GRB.OPTIMAL:
