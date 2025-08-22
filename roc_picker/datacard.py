@@ -1220,7 +1220,7 @@ def plot_km_likelihood_two_groups():
     
     if common_plot_kwargs["include_full_NLL"]:
       p_value, *_ = p_value_minlp.solve_and_pvalue()
-      p_value_texts.append(f"p (full NLL) = {p_value:.3g}")
+      p_value_texts.append(f"p = {p_value:.3g}")
     
     if common_plot_kwargs["include_binomial_only"]:
       p_value_binomial, *_ = p_value_minlp.solve_and_pvalue(binomial_only=True)
