@@ -40,6 +40,7 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   include_full_NLL: If True, include error bands for the full negative log-likelihood.
   include_best_fit: If True, include the best fit curve in the plot.
   include_nominal: If True, include the nominal Kaplan-Meier curve.
+  include_greenwood_pvalues: If True, include p-values using the exponential Greenwood method.
   nominal_label: Label for the nominal curve.
   nominal_color: Color for the nominal curve.
   best_label: Label for the best fit curve.
@@ -48,6 +49,8 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   binomial_only_suffix: Suffix for the binomial-only error bands.
   full_NLL_suffix: Suffix for the full NLL error bands.
   exponential_greenwood_suffix: Suffix for the exponential Greenwood error bands.
+  null_survival_probability: Null hypothesis value for p-value calculations.
+  pvalue_significance_threshold: Threshold for highlighting significant p-values.
   CLs: List of confidence levels for the error bands.
   CL_colors: List of colors for the confidence levels.
   CL_colors_greenwood: List of colors for the Greenwood confidence levels.
@@ -80,6 +83,7 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   include_full_NLL: bool = True
   include_best_fit: bool = True
   include_nominal: bool = True
+  include_greenwood_pvalues: bool = False
   nominal_label: str = 'Nominal'
   nominal_color: str = 'red'
   best_label: str = 'Best Fit'
@@ -88,6 +92,8 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   binomial_only_suffix: str = 'Binomial only'
   full_NLL_suffix: str = ''
   exponential_greenwood_suffix: str = 'Binomial only, exp. Greenwood'
+  null_survival_probability: float = 0.5
+  pvalue_significance_threshold: float = 0.05
   CLs: list[float] = dataclasses.field(default_factory=lambda: [0.68, 0.95])
   CL_colors: list[str] = dataclasses.field(
     default_factory=lambda: ['dodgerblue', 'skyblue', 'lightblue', 'lightcyan']
@@ -344,6 +350,27 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     return self.nominalkm.survival_probabilities_exponential_greenwood(
       CLs=CLs,
       times_for_plot=times_for_plot,
+    )
+
+  def survival_probabilities_pvalues_greenwood(
+    self,
+    times_for_plot: typing.Sequence[float],
+    *,
+    null_survival_probability: float = 0.5,
+    binomial_only=False,
+    patient_wise_only=False,
+  ):
+    """
+    Calculate the survival probabilities and p-values using the exponential Greenwood method.
+    """
+    if patient_wise_only or not binomial_only:
+      raise ValueError(
+        "Exponential Greenwood p-values"
+        "can only include the binomial error"
+      )
+    return self.nominalkm.survival_probabilities_pvalues_greenwood(
+      times_for_plot=times_for_plot,
+      null_survival_probability=null_survival_probability,
     )
 
   def survival_probabilities_likelihood( # pylint: disable=too-many-locals, too-many-branches, too-many-statements, too-many-arguments
@@ -817,6 +844,16 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       )
       results.update(CL_results)
 
+    # --- Calculate and display p-values if requested ---
+    if config.include_greenwood_pvalues and config.include_exponential_greenwood:
+      best_prob_pvalues, p_values = self.survival_probabilities_pvalues_greenwood(
+        times_for_plot=times_for_plot,
+        null_survival_probability=config.null_survival_probability,
+        binomial_only=True,
+      )
+      self._plot_pvalues(ax, config, times_for_plot, p_values)
+      results["p_values"] = p_values
+
     if config.include_patient_wise_only:
       assert CL_prob_patient is not None
       if config.include_full_NLL:
@@ -832,6 +869,56 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       results.update(CL_results)
 
     return results
+
+  def _plot_pvalues(
+    self,
+    ax: matplotlib.axes.Axes,
+    config: KaplanMeierPlotConfig,
+    times_for_plot: typing.Sequence[float],
+    p_values: np.ndarray,
+  ):
+    """Plot p-values on the survival curve as annotations."""
+    # Find significant time points
+    significant_times = []
+    significant_pvalues = []
+    
+    for t, p in zip(times_for_plot, p_values, strict=True):
+      if p < config.pvalue_significance_threshold:
+        significant_times.append(t)
+        significant_pvalues.append(p)
+    
+    if significant_times:
+      # Get survival probabilities at significant time points for positioning
+      survival_probs = self.nominalkm.survival_probabilities(times_for_plot=significant_times)
+      
+      # Add annotations for significant p-values
+      for t, p, s in zip(significant_times, significant_pvalues, survival_probs, strict=True):
+        # Format p-value nicely
+        if p < 0.001:
+          p_text = "p<0.001"
+        elif p < 0.01:
+          p_text = f"p={p:.3f}"
+        else:
+          p_text = f"p={p:.2f}"
+        
+        # Position annotation slightly above the survival curve
+        y_offset = 0.05
+        ax.annotate(
+          p_text,
+          xy=(t, s),
+          xytext=(t, s + y_offset),
+          fontsize=config.tick_fontsize - 2,
+          ha='center',
+          va='bottom',
+          color='red',
+          weight='bold',
+          arrowprops=dict(
+            arrowstyle='->',
+            color='red',
+            alpha=0.7,
+            lw=0.8
+          )
+        )
 
   def _finalize_plot(
     self,

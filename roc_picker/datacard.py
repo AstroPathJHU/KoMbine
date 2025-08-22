@@ -1067,6 +1067,9 @@ def _make_common_parser(description: str) -> argparse.ArgumentParser:
   group.add_argument("--include-binomial-only", action="store_true", help="Include error bands for the binomial error alone.")
   group.add_argument("--include-patient-wise-only", action="store_true", help="Include error bands for the patient-wise error alone.")
   parser.add_argument("--include-exponential-greenwood", action="store_true", dest="include_exponential_greenwood", help="Include the binomial-only exponential Greenwood error band in the plot.")
+  parser.add_argument("--include-greenwood-pvalues", action="store_true", dest="include_greenwood_pvalues", help="Include p-values using the exponential Greenwood method (only when Greenwood error bands are included).")
+  parser.add_argument("--null-survival-probability", type=float, dest="null_survival_probability", default=0.5, help="Null hypothesis survival probability for p-value calculations.")
+  parser.add_argument("--pvalue-significance-threshold", type=float, dest="pvalue_significance_threshold", default=0.05, help="Significance threshold for highlighting p-values.")
   parser.add_argument("--exclude-full-nll", action="store_false", dest="include_full_NLL", default=True, help="Exclude the full NLL from the plot.")
   parser.add_argument("--exclude-nominal", action="store_false", dest="include_nominal", default=True, help="Exclude the nominal line from the plot.")
   parser.add_argument("--include-median-survival", action="store_true", dest="include_median_survival", help="Include the median survival line in the plot.")
@@ -1104,6 +1107,9 @@ def _extract_common_plot_config_args(args: argparse.Namespace) -> dict:
     "include_patient_wise_only": args.__dict__.pop("include_patient_wise_only"),
     "include_binomial_only": args.__dict__.pop("include_binomial_only"),
     "include_exponential_greenwood": args.__dict__.pop("include_exponential_greenwood"),
+    "include_greenwood_pvalues": args.__dict__.pop("include_greenwood_pvalues"),
+    "null_survival_probability": args.__dict__.pop("null_survival_probability"),
+    "pvalue_significance_threshold": args.__dict__.pop("pvalue_significance_threshold"),
     "include_full_NLL": args.__dict__.pop("include_full_NLL"),
     "include_nominal": args.__dict__.pop("include_nominal"),
     "include_median_survival": args.__dict__.pop("include_median_survival"),

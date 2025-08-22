@@ -282,6 +282,67 @@ class KaplanMeierInstance(KaplanMeierBase):
     CL_probabilities = np.asarray(CL_probabilities)
     return best_probabilities, CL_probabilities
 
+  def survival_probabilities_pvalues_greenwood(  #pylint: disable=too-many-locals
+    self,
+    times_for_plot=None,
+    null_survival_probability: float = 0.5,
+  ):
+    """
+    Returns the survival probabilities and p-values
+    at the specified times using the exponential Greenwood method.
+    The p-values test the null hypothesis that the survival probability
+    at each time point equals null_survival_probability.
+    This uses the same variance estimation as the exponential Greenwood confidence intervals.
+    """
+    if times_for_plot is None:
+      times_for_plot = self.times_for_plot
+
+    best_probabilities = []
+    p_values = []
+    for t in times_for_plot:
+      S = self.survival_probability(t)
+      best_probabilities.append(S)
+      
+      if 0 < S < 1 and 0 < null_survival_probability < 1:
+        log_minus_log_S = np.log(-np.log(S))
+        log_minus_log_S_null = np.log(-np.log(null_survival_probability))
+        
+        # Calculate Greenwood variance estimate
+        sum_in_sqrt = 0
+        for t_prime in self.patient_death_times:
+          if t_prime > t:
+            continue
+          at_risk = len([p for p in self.patients if p.time >= t_prime])
+          died = len([p for p in self.patients if p.time == t_prime and not p.censored])
+          survived = at_risk - died
+          if survived > 0:  # Avoid division by zero
+            sum_in_sqrt += died / (at_risk * survived)
+        
+        if sum_in_sqrt > 0 and np.log(S) != 0:
+          # Calculate standard error
+          standard_error = (1 / abs(np.log(S))) * np.sqrt(sum_in_sqrt)
+          
+          # Calculate z-statistic for two-sided test
+          z_stat = abs(log_minus_log_S - log_minus_log_S_null) / standard_error
+          
+          # Calculate two-sided p-value
+          p_value = 2 * (1 - scipy.stats.norm.cdf(z_stat))
+        else:
+          p_value = 1.0  # No evidence against null hypothesis
+      else:
+        # If S is 0 or 1, or null is 0 or 1, can't use log transformation
+        # Use exact test based on whether S equals null_survival_probability
+        if S == null_survival_probability:
+          p_value = 1.0
+        else:
+          p_value = 0.0  # Deterministic difference
+      
+      p_values.append(p_value)
+
+    best_probabilities = np.asarray(best_probabilities)
+    p_values = np.asarray(p_values)
+    return best_probabilities, p_values
+
 class KaplanMeierPlot(KaplanMeierBase):
   """
   Class to represent a set of Kaplan-Meier curves.
