@@ -35,6 +35,7 @@ class MINLPforKMPValue:
     self.__parameter_max = parameter_max
     self.__endpoint_epsilon = endpoint_epsilon
     self.__null_hypothesis_constraint = None
+    self.__patient_constraints_for_binomial_only = None
 
   @property
   def all_patients(self) -> list[KaplanMeierPatientNLL]:
@@ -422,7 +423,7 @@ class MINLPforKMPValue:
     )
     model.update()
 
-    return model, null_hypothesis_indicator
+    return model, null_hypothesis_indicator, x
 
   @functools.cached_property
   def gurobi_model(self):
@@ -453,11 +454,61 @@ class MINLPforKMPValue:
     else:
       self.__null_hypothesis_constraint = None
 
-  def solve_and_pvalue(self):
+  def update_model_with_binomial_only_constraints(
+    self,
+    model: gp.Model,
+    x: gp.tupledict[tuple[int, ...], gp.Var],
+    binomial_only: bool,
+  ):
+    """
+    Update the model with binomial_only constraints.
+    If binomial_only is True, we add constraints for x[i, j] to be either 0 or 1,
+    based on parameter_in_range.
+    """
+    # Remove existing constraints if they exist
+    if self.__patient_constraints_for_binomial_only is not None:
+      for constr in self.__patient_constraints_for_binomial_only:
+        model.remove(constr)
+      self.__patient_constraints_for_binomial_only = None
+
+    if binomial_only:
+      self.__patient_constraints_for_binomial_only = []
+      for i in range(self.n_patients):
+        for j in range(2):  # j=0 for low curve, j=1 for high curve
+          if self.parameter_in_range[i, j]:
+            # The patient must be selected for this curve
+            self.__patient_constraints_for_binomial_only.append(
+              model.addConstr(
+                x[i, j] == 1,
+                name=f"patient_{i}_must_be_selected_curve_{j}_binomial_only",
+              )
+            )
+          else:
+            # The patient must not be selected for this curve
+            self.__patient_constraints_for_binomial_only.append(
+              model.addConstr(
+                x[i, j] == 0,
+                name=f"patient_{i}_must_not_be_selected_curve_{j}_binomial_only",
+              )
+            )
+
+    model.update()
+
+  def solve_and_pvalue(self, *, binomial_only: bool = False):
     """
     Solve the MINLP and return the p value.
+    
+    Parameters
+    ----------
+    binomial_only : bool, optional
+        If True, add constraints for x[i, j] to be either 0 or 1,
+        based on parameter_in_range. Default is False.
     """
-    model, null_hypothesis_indicator = self.gurobi_model
+    model, null_hypothesis_indicator, x = self.gurobi_model
+
+    # Apply binomial_only constraints if specified
+    self.update_model_with_binomial_only_constraints(model, x, binomial_only)
+
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, True)
     model.optimize()
     if model.status != GRB.OPTIMAL:

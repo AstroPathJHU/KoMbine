@@ -1151,7 +1151,7 @@ def plot_km_likelihood():
   if args.__dict__:
     raise ValueError(f"Unused arguments: {args.__dict__}")
 
-def plot_km_likelihood_two_groups():
+def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   """
   Run Kaplan-Meier likelihood method from a datacard, and plot Kaplan-Meier
   curves for two groups separated into high and low values of the parameter.
@@ -1208,19 +1208,35 @@ def plot_km_likelihood_two_groups():
   )
   kml_low.plot(config=config_low)
 
-  if common_plot_kwargs["include_full_NLL"]:
+  # Calculate and display p-values based on options
+  p_value_texts = []
+
+  if common_plot_kwargs["include_full_NLL"] or common_plot_kwargs["include_binomial_only"]:
     p_value_minlp = datacard.km_p_value(
       parameter_min=parameter_min,
       parameter_threshold=threshold,
       parameter_max=parameter_max,
     )
-    p_value, *_ = p_value_minlp.solve_and_pvalue()
+
+    if common_plot_kwargs["include_full_NLL"]:
+      p_value, *_ = p_value_minlp.solve_and_pvalue()
+      p_value_texts.append(f"p = {p_value:.3g}")
+
+    if common_plot_kwargs["include_binomial_only"]:
+      p_value_binomial, *_ = p_value_minlp.solve_and_pvalue(binomial_only=True)
+      p_value_texts.append(f"p (binomial only) = {p_value_binomial:.3g}")
+
+  # Display p-value text(s) on the plot
+  if p_value_texts:
     ax = plt.gca()
-    ax.text(
-      0.95, 0.95, f"p = {p_value:.3g}",
-      ha="right", va="top",
-      transform=ax.transAxes,
-    )
+    # Position multiple p-values vertically, starting from top-right
+    for i, text in enumerate(p_value_texts):
+      y_pos = 0.95 - (i * 0.05)  # Each line is 5% down from the previous
+      ax.text(
+        0.95, y_pos, text,
+        ha="right", va="top",
+        transform=ax.transAxes,
+      )
 
   plt.savefig(args.__dict__.pop("output_file"))
 
