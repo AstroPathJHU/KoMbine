@@ -201,7 +201,7 @@ def runtest(
   #   binomial_only=True,
   # )
   # p_value_binomial, _, _ = km_p_value_minlp_binomial.solve_and_pvalue()
-  
+
   # km_p_value_minlp_patient_wise = datacard.km_p_value(
   #   parameter_min=parameter_min,
   #   parameter_threshold=parameter_threshold,
@@ -334,8 +334,8 @@ def runtest(
     "best_probabilities_patient_wise": best_probabilities_patient_wise,
     "CL_probabilities_patient_wise": CL_probabilities_patient_wise,
     "p_value": np.array([p_value]),  # Convert scalar to array for consistency
-    # "p_value_binomial": np.array([p_value_binomial]),  # TODO: Uncomment when implemented
-    # "p_value_patient_wise": np.array([p_value_patient_wise]),  # TODO: Uncomment when implemented
+    # "p_value_binomial": np.array([p_value_binomial]),
+    # "p_value_patient_wise": np.array([p_value_patient_wise]),
   }
   for name, alt_data in alt_results.items():
     ordered_array_data[f"nominal_probabilities_{name}"] = alt_data["nominal_probabilities"]
