@@ -902,5 +902,8 @@
   ],
   "p_value_binomial": [
     0.6095
+  ],
+  "p_value_patient_wise": [
+    0.0014
   ]
 }
