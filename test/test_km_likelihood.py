@@ -185,44 +185,28 @@ def runtest(
   # Calculate p-value using the likelihood method
   # Use the middle of the parameter range as threshold for the p-value calculation
   parameter_threshold = (kml2.parameter_min + kml2.parameter_max) / 2
-  try:
-    km_p_value_minlp = datacard.km_p_value(
-      parameter_min=kml2.parameter_min,
-      parameter_threshold=parameter_threshold,
-      parameter_max=kml2.parameter_max,
-    )
-    p_value, _, _ = km_p_value_minlp.solve_and_pvalue()
-  except Exception as e:
-    # If the p-value calculation fails (e.g., due to Gurobi license), 
-    # use a placeholder value for reference comparison
-    print(f"Warning: P-value calculation failed: {e}")
-    p_value = 0.5  # Placeholder value
+  km_p_value_minlp = datacard.km_p_value(
+    parameter_min=kml2.parameter_min,
+    parameter_threshold=parameter_threshold,
+    parameter_max=kml2.parameter_max,
+  )
+  p_value, _, _ = km_p_value_minlp.solve_and_pvalue()
+
+  # km_p_value_minlp_binomial = datacard.km_p_value(
+  #   parameter_min=kml2.parameter_min,
+  #   parameter_threshold=parameter_threshold,
+  #   parameter_max=kml2.parameter_max,
+  #   binomial_only=True,
+  # )
+  # p_value_binomial, _, _ = km_p_value_minlp_binomial.solve_and_pvalue()
   
-  # # TODO: Uncomment once binomial_only is implemented for p-values
-  # try:
-  #   km_p_value_minlp_binomial = datacard.km_p_value(
-  #     parameter_min=kml2.parameter_min,
-  #     parameter_threshold=parameter_threshold,
-  #     parameter_max=kml2.parameter_max,
-  #     binomial_only=True,
-  #   )
-  #   p_value_binomial, _, _ = km_p_value_minlp_binomial.solve_and_pvalue()
-  # except Exception as e:
-  #   print(f"Warning: P-value binomial calculation failed: {e}")
-  #   p_value_binomial = 0.5  # Placeholder value
-  
-  # # TODO: Uncomment once patient_wise_only is implemented for p-values
-  # try:
-  #   km_p_value_minlp_patient_wise = datacard.km_p_value(
-  #     parameter_min=kml2.parameter_min,
-  #     parameter_threshold=parameter_threshold,
-  #     parameter_max=kml2.parameter_max,
-  #     patient_wise_only=True,
-  #   )
-  #   p_value_patient_wise, _, _ = km_p_value_minlp_patient_wise.solve_and_pvalue()
-  # except Exception as e:
-  #   print(f"Warning: P-value patient-wise calculation failed: {e}")
-  #   p_value_patient_wise = 0.5  # Placeholder value
+  # km_p_value_minlp_patient_wise = datacard.km_p_value(
+  #   parameter_min=kml2.parameter_min,
+  #   parameter_threshold=parameter_threshold,
+  #   parameter_max=kml2.parameter_max,
+  #   patient_wise_only=True,
+  # )
+  # p_value_patient_wise, _, _ = km_p_value_minlp_patient_wise.solve_and_pvalue()
 
   alt_results = {}
   if alt_datacards is not None:
