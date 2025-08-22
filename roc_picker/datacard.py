@@ -1211,7 +1211,9 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   # Calculate and display p-values based on options
   p_value_texts = []
 
-  if common_plot_kwargs["include_full_NLL"] or common_plot_kwargs["include_binomial_only"]:
+  if (common_plot_kwargs["include_full_NLL"] 
+      or common_plot_kwargs["include_binomial_only"]
+      or common_plot_kwargs["include_patient_wise_only"]):
     p_value_minlp = datacard.km_p_value(
       parameter_min=parameter_min,
       parameter_threshold=threshold,
@@ -1225,6 +1227,10 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
     if common_plot_kwargs["include_binomial_only"]:
       p_value_binomial, *_ = p_value_minlp.solve_and_pvalue(binomial_only=True)
       p_value_texts.append(f"p (binomial only) = {p_value_binomial:.3g}")
+
+    if common_plot_kwargs["include_patient_wise_only"]:
+      p_value_patient_wise, *_ = p_value_minlp.solve_and_pvalue(patient_wise_only=True)
+      p_value_texts.append(f"p (patient-wise only) = {p_value_patient_wise:.3g}")
 
   # Display p-value text(s) on the plot
   if p_value_texts:

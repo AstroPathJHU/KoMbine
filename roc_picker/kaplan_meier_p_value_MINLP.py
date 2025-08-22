@@ -889,7 +889,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     self,
     *,
     binomial_only: bool = False,
-    patient_wise_only: bool = False
+    patient_wise_only: bool = False,
+    gurobi_verbose: bool = False
   ):
     """
     Solve the MINLP and return the p value.
@@ -903,6 +904,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
         If True, only consider patient-wise errors and constrain the curves
         to be flipped relative to nominal at each death time point under the null hypothesis.
         Default is False.
+    gurobi_verbose : bool, optional
+        If True, enable verbose output from Gurobi solver. Default is False.
     """
     if binomial_only and patient_wise_only:
       raise ValueError("binomial_only and patient_wise_only cannot both be True")
@@ -926,6 +929,9 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       null_hypothesis_indicator=null_hypothesis_indicator,
       patient_wise_only=patient_wise_only,
     )
+
+    # Set Gurobi verbose output parameter
+    model.setParam('OutputFlag', 1 if gurobi_verbose else 0)
 
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, True)
     model.optimize()
