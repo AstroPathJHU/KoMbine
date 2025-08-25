@@ -557,10 +557,16 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       vtype=gp.GRB.CONTINUOUS, name="log_p_survived",
       lb=log_p_bounds[0], ub=log_p_bounds[1]
     )
+    # Expand bounds for log_p_died to accommodate hazard ratio constraint
+    # log_p_died[i, 0] = log_hazard_ratio + log_p_died[i, 1] where log_hazard_ratio in [-3, 3]
+    log_p_died_bounds = np.array([
+      log_p_bounds[0] - 3.0,  # Allow for negative hazard ratio  
+      log_p_bounds[1] + 3.0,  # Allow for positive hazard ratio
+    ])
     log_p_died = model.addVars(
       len(self.all_death_times), 2,
       vtype=gp.GRB.CONTINUOUS, name="log_p_died",
-      lb=log_p_bounds[0], ub=log_p_bounds[1]
+      lb=log_p_died_bounds[0], ub=log_p_died_bounds[1]
     )
     for i in range(len(self.all_death_times)):
       for j in range(2):
@@ -658,13 +664,25 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
           )
     binomial_penalty = gp.quicksum(binomial_terms)
 
-    #under the null hypothesis, both curves have the same survival probability
+    # Add log hazard ratio variable for null hypothesis constraint
+    # Range should allow for reasonable hazard ratios (e.g., 0.1 to 10)
+    # log(0.1) = -2.3, log(10) = 2.3, so use a range of [-3, 3] to be safe
+    log_hazard_ratio = model.addVar(
+      vtype=gp.GRB.CONTINUOUS,
+      name="log_hazard_ratio",
+      lb=-3.0,
+      ub=3.0,
+    )
+
+    # Under the null hypothesis, assume constant hazard ratio between curves
+    # This constrains: p_died[i, 0] = hazard_ratio * p_died[i, 1]  
+    # In log scale: log_p_died[i, 0] = log_hazard_ratio + log_p_died[i, 1]
     null_hypothesis_indicator = model.addVar(vtype=gp.GRB.BINARY, name="null_hypothesis_indicator")
     for i in range(len(self.all_death_times)):
       model.addGenConstrIndicator(
         null_hypothesis_indicator,
         True,
-        p_survived[i, 0] - p_survived[i, 1],
+        log_p_died[i, 0] - log_p_died[i, 1] - log_hazard_ratio,
         GRB.EQUAL,
         0,
         name=f"null_hypothesis_{i}"
