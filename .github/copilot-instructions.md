@@ -15,11 +15,11 @@ ROC Picker is a Python package for propagating statistical and systematic uncert
 
 **Always run installation in this exact sequence:**
 1. `pip install .` - installs the package and dependencies
-2. `pip install pylint pyflakes` - installs required linting tools
+2. `pip install pylint pyflakes texoutparse` - installs required linting and development tools
 3. `rm -rf build` - clean up build artifacts (if needed for clean builds)
 
 **Dependencies installed**: gurobipy, matplotlib, numpy, scipy>=1.15
-**Additional development tools required**: pylint, pyflakes (for linting and code quality checks)
+**Additional development tools required**: pylint, pyflakes, texoutparse (for linting and code quality checks)
 
 ### Command Line Interface
 
@@ -90,7 +90,7 @@ GurobiError: Model too large for size-limited license
 
 ### Testing Commands
 
-**Prerequisites**: Ensure you have installed linting tools: `pip install pylint pyflakes`
+**Prerequisites**: Ensure you have installed linting and development tools: `pip install pylint pyflakes texoutparse`
 
 **Run tests in this order** (some will fail due to Gurobi license):
 ```bash
@@ -111,7 +111,7 @@ python -m test.test_km_likelihood  # Will fail with "Model too large for size-li
 **Always run linting before committing**:
 ```bash
 python -m pyflakes .        # Should pass (may show f-string warnings in generated docs/)
-python -m pylint .          # Should score ~9.98/10 (ignore texoutparse import error in checklog.py)
+python -m pylint .          # Should score ~10/10
 ```
 
 **Linting configuration**: `.pylintrc` configures 2-space indentation, ignores invalid variable names (C0103), and has scipy.special whitelist.
@@ -125,7 +125,7 @@ pip install jupytext nbconvert  # For Jupyter notebook conversion
 
 **Optional tools for comprehensive development environment** (matching GitHub Actions):
 ```bash
-pip install ipykernel lifelines texoutparse  # Additional tools used in CI
+pip install ipykernel lifelines  # Additional tools used in CI
 ```
 
 **Build documentation**:
@@ -220,7 +220,7 @@ observable 1 2 3 ...
 1. **Installation**: 
    ```bash
    pip install .
-   pip install pylint pyflakes
+   pip install pylint pyflakes texoutparse
    ```
 2. **Linting**: `python -m pyflakes . && python -m pylint .`
 3. **Test relevant modules**: Run appropriate test modules (avoid KM tests if no Gurobi license)
@@ -234,8 +234,7 @@ observable 1 2 3 ...
 **Linting f-string warnings**: Acceptable in generated `docs/*.py` files from jupytext
 **Test timing**: `test_discrete_optimization` is slow (~90s) - this is normal
 **Network timeouts during install**: Retry pip install if PyPI connection fails
-**Pylint import errors**: The error "Unable to import 'texoutparse'" is expected and can be ignored (score should still be ~9.98/10)
-**Missing linting tools**: If you get "No module named pylint" or "No module named pyflakes", make sure to run `pip install pylint pyflakes` after the main installation
+**Missing linting tools**: If you get "No module named pylint", "No module named pyflakes", or "No module named texoutparse", make sure to run `pip install pylint pyflakes texoutparse` after the main installation
 
 ## Common Patterns
 
