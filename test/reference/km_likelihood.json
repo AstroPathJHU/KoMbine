@@ -441,5 +441,8 @@
   ],
   "p_value_patient_wise": [
     0.0017
+  ],
+  "p_value_logrank": [
+    0.12497926296336248
   ]
 }

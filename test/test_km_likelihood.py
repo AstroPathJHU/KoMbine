@@ -206,6 +206,27 @@ def runtest(
     if "binomial_only and patient_wise_only cannot both be True" not in str(e):
       raise AssertionError("Wrong error message") from e
 
+  # Calculate p-value using the conventional logrank method for comparison
+  p_value_logrank = datacard.km_p_value_logrank(
+    parameter_threshold=parameter_threshold,
+    parameter_min=parameter_min,
+    parameter_max=parameter_max,
+    binomial_only=True,
+  )
+
+  # Test that logrank method requires binomial_only=True
+  try:
+    datacard.km_p_value_logrank(
+      parameter_threshold=parameter_threshold,
+      parameter_min=parameter_min,
+      parameter_max=parameter_max,
+      binomial_only=False,
+    )
+    raise AssertionError("Should have raised ValueError for binomial_only=False")
+  except ValueError as e:
+    if "only supports binomial_only=True" not in str(e):
+      raise AssertionError("Wrong error message for binomial_only=False") from e
+
   alt_results = {}
   if alt_datacards is not None:
     kml3 = datacard.km_likelihood(
@@ -332,6 +353,7 @@ def runtest(
     "p_value": np.array([p_value]),  # Convert scalar to array for consistency
     "p_value_binomial": np.array([p_value_binomial]),
     "p_value_patient_wise": np.array([p_value_patient_wise]),
+    "p_value_logrank": np.array([p_value_logrank]),  # Convert scalar to array for consistency
   }
   for name, alt_data in alt_results.items():
     ordered_array_data[f"nominal_probabilities_{name}"] = alt_data["nominal_probabilities"]

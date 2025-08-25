@@ -966,6 +966,48 @@ class Datacard:
       parameter_max=parameter_max,
     )
 
+  def km_p_value_logrank(
+    self,
+    *,
+    parameter_threshold: float,
+    parameter_min: float = -np.inf,
+    parameter_max: float = np.inf,
+    binomial_only: bool = True,
+  ) -> float:
+    """
+    Calculate p-value for comparing two Kaplan-Meier curves using the conventional
+    logrank test method.
+
+    This is a convenience method that creates a MINLPforKMPValue object
+    and calls its survival_curves_pvalue_logrank method.
+
+    Parameters
+    ----------
+    parameter_threshold : float
+        The threshold value that separates the two groups.
+    parameter_min : float, optional
+        The minimum parameter value to include in the analysis. Default is -inf.
+    parameter_max : float, optional
+        The maximum parameter value to include in the analysis. Default is +inf.
+    binomial_only : bool, optional
+        If True, only include patients whose observed parameter is within the
+        specified ranges. Default is True.
+
+    Returns
+    -------
+    float
+        The p-value from the logrank test.
+    """
+    minlp_pvalue = self.km_p_value(
+      parameter_min=parameter_min,
+      parameter_threshold=parameter_threshold,
+      parameter_max=parameter_max,
+    )
+
+    return minlp_pvalue.survival_curves_pvalue_logrank(
+      binomial_only=binomial_only,
+    )
+
   def clear_distributions(self):
     """
     Delete the distributions for all patients.
@@ -1161,6 +1203,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   parser.add_argument("--parameter-threshold", type=float, dest="parameter_threshold", required=True, help="The parameter threshold for separating high and low groups.")
   parser.add_argument("--parameter-min", type=float, dest="parameter_min", default=-np.inf, help="The minimum parameter value for the low group.")
   parser.add_argument("--parameter-max", type=float, dest="parameter_max", default=np.inf, help="The maximum parameter value for the high group.")
+  parser.add_argument("--include-logrank-pvalue", action="store_true", dest="include_logrank_pvalue", help="Include conventional logrank p-value for comparison with likelihood method.")
   # pylint: enable=C0301
   args = parser.parse_args()
   _validate_plot_args(args, parser)
@@ -1170,6 +1213,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   threshold = args.__dict__.pop("parameter_threshold")
   parameter_max = args.__dict__.pop("parameter_max")
   log_zero_epsilon = args.__dict__.pop("log_zero_epsilon")
+  include_logrank_pvalue = args.__dict__.pop("include_logrank_pvalue")
 
   kml_low = datacard.km_likelihood(
     parameter_min=parameter_min,
@@ -1231,6 +1275,16 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
     if common_plot_kwargs["include_patient_wise_only"]:
       p_value_patient_wise, *_ = p_value_minlp.solve_and_pvalue(patient_wise_only=True)
       p_value_texts.append(f"p (patient-wise only) = {p_value_patient_wise:.3g}")
+
+  # Add logrank p-value if requested
+  if include_logrank_pvalue:
+    p_value_logrank = datacard.km_p_value_logrank(
+      parameter_threshold=threshold,
+      parameter_min=parameter_min,
+      parameter_max=parameter_max,
+      binomial_only=True,
+    )
+    p_value_texts.append(f"p (logrank) = {p_value_logrank:.3g}")
 
   # Display p-value text(s) on the plot
   if p_value_texts:

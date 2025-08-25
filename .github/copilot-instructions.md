@@ -1,0 +1,1 @@
+Please avoid trailing whitespace in code (including lone whitespace on empty lines).
