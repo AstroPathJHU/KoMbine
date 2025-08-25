@@ -977,10 +977,10 @@ class Datacard:
     """
     Calculate p-value for comparing two Kaplan-Meier curves using the conventional
     logrank test method.
-    
+
     This is a convenience method that creates a KaplanMeierLikelihood object
     and calls its survival_curves_pvalue_logrank method.
-    
+
     Parameters
     ----------
     parameter_threshold : float
@@ -992,7 +992,7 @@ class Datacard:
     binomial_only : bool, optional
         If True, only include patients whose observed parameter is within the
         specified ranges. Default is True.
-        
+
     Returns
     -------
     float
@@ -1002,7 +1002,7 @@ class Datacard:
       parameter_min=parameter_min,
       parameter_max=parameter_max,
     )
-    
+
     return km_likelihood.survival_curves_pvalue_logrank(
       parameter_threshold=parameter_threshold,
       parameter_min=parameter_min,
@@ -1278,7 +1278,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
       p_value_patient_wise, *_ = p_value_minlp.solve_and_pvalue(patient_wise_only=True)
       p_value_texts.append(f"p (patient-wise only) = {p_value_patient_wise:.3g}")
 
-  # Add logrank p-value if requested  
+  # Add logrank p-value if requested
   if include_logrank_pvalue:
     p_value_logrank = datacard.km_p_value_logrank(
       parameter_threshold=threshold,

@@ -867,7 +867,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     elif config.close_figure:
       plt.close(fig)
 
-  def survival_curves_pvalue_logrank(
+  def survival_curves_pvalue_logrank(  #pylint: disable=too-many-locals, too-many-branches
     self,
     *,
     parameter_threshold: float,
@@ -878,14 +878,14 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     """
     Calculate p-value for comparing two Kaplan-Meier curves using the conventional
     logrank test method.
-    
+
     This method splits patients into two groups based on their observed parameter
     values relative to the parameter_threshold, then uses the standard logrank test
     to test the null hypothesis that the two survival curves are identical.
-    
+
     This provides the conventional method for comparison with the likelihood-based
     approach implemented in kaplan_meier_p_value_MINLP.py.
-    
+
     Parameters
     ----------
     parameter_threshold : float
@@ -903,22 +903,22 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         specified range [parameter_min, parameter_threshold) for low group or
         [parameter_threshold, parameter_max) for high group. This matches the
         behavior of binomial_only in the likelihood method. Default is True.
-        
+
     Returns
     -------
     float
         The p-value from the logrank test. A small p-value (typically < 0.05)
         indicates evidence against the null hypothesis that the two curves are identical.
-        
+
     Notes
     -----
     The logrank test is the standard non-parametric test for comparing survival curves.
     It tests the null hypothesis that the hazard functions of the two groups are equal
     at all time points.
-    
+
     The test statistic follows a chi-square distribution with 1 degree of freedom
     under the null hypothesis.
-    
+
     This implementation only supports binomial_only=True, which restricts analysis
     to patients whose parameters fall within the specified ranges.
     """
@@ -927,87 +927,87 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         "survival_curves_pvalue_logrank only supports binomial_only=True, "
         "which restricts analysis to patients within the specified parameter ranges."
       )
-    
+
     # Get all patients and their observed parameters
     all_patients = self.all_patients
-    
+
     # Split patients into two groups based on parameter threshold
     group1_patients = []  # Low group: parameter < threshold and >= parameter_min
     group2_patients = []  # High group: parameter >= threshold and < parameter_max
-    
+
     for patient in all_patients:
       param_value = patient.observed_parameter
-      
+
       if parameter_min <= param_value < parameter_threshold:
         group1_patients.append(patient)
       elif parameter_threshold <= param_value < parameter_max:
         group2_patients.append(patient)
       # Patients outside the ranges are excluded when binomial_only=True
-    
+
     if not group1_patients or not group2_patients:
       raise ValueError(
         f"Need patients in both groups for comparison. "
         f"Got {len(group1_patients)} in low group and {len(group2_patients)} in high group."
       )
-    
+
     # Get all unique death times (excluding censored events)
     all_death_times = set()
     for patient in group1_patients + group2_patients:
       if not patient.censored:
         all_death_times.add(patient.time)
-    
+
     if not all_death_times:
       raise ValueError("No death events found in either group.")
-      
+
     all_death_times = sorted(all_death_times)
-    
+
     # Calculate logrank test statistic
     U = 0.0  # Sum of (observed - expected) for group 1
     V = 0.0  # Sum of variances
-    
+
     for death_time in all_death_times:
       # Count patients at risk at this death time
       n1_at_risk = sum(1 for p in group1_patients if p.time >= death_time)
       n2_at_risk = sum(1 for p in group2_patients if p.time >= death_time)
       n_total_at_risk = n1_at_risk + n2_at_risk
-      
+
       if n_total_at_risk == 0:
         continue
-        
+
       # Count deaths at this exact time
-      d1_deaths = sum(1 for p in group1_patients 
+      d1_deaths = sum(1 for p in group1_patients
                      if p.time == death_time and not p.censored)
-      d2_deaths = sum(1 for p in group2_patients 
+      d2_deaths = sum(1 for p in group2_patients
                      if p.time == death_time and not p.censored)
       d_total_deaths = d1_deaths + d2_deaths
-      
+
       if d_total_deaths == 0:
         continue
-        
+
       # Expected deaths in group 1 under null hypothesis
       expected_d1 = n1_at_risk * d_total_deaths / n_total_at_risk
-      
+
       # Variance for this time point
       if n_total_at_risk > 1:
-        variance_t = (n1_at_risk * n2_at_risk * d_total_deaths * 
+        variance_t = (n1_at_risk * n2_at_risk * d_total_deaths *
                      (n_total_at_risk - d_total_deaths)) / (
                      n_total_at_risk * n_total_at_risk * (n_total_at_risk - 1))
       else:
         variance_t = 0.0
-      
+
       # Accumulate test statistic components
       U += d1_deaths - expected_d1
       V += variance_t
-    
+
     if V <= 0:
       # No variance means no information for comparison
       # This can happen if there's only one death time or other edge cases
       return 1.0  # No evidence against null hypothesis
-    
+
     # Logrank test statistic
     logrank_statistic = U * U / V
-    
+
     # Calculate p-value using chi-square distribution with 1 degree of freedom
-    p_value = 1.0 - scipy.stats.chi2.cdf(logrank_statistic, df=1)
-    
+    p_value = 1.0 - scipy.stats.chi2.cdf(logrank_statistic, df=1).item()
+
     return p_value
