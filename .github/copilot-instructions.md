@@ -15,9 +15,11 @@ ROC Picker is a Python package for propagating statistical and systematic uncert
 
 **Always run installation in this exact sequence:**
 1. `pip install .` - installs the package and dependencies
-2. `rm -rf build` - clean up build artifacts (if needed for clean builds)
+2. `pip install pylint pyflakes` - installs required linting tools
+3. `rm -rf build` - clean up build artifacts (if needed for clean builds)
 
 **Dependencies installed**: gurobipy, matplotlib, numpy, scipy>=1.15
+**Additional development tools required**: pylint, pyflakes (for linting and code quality checks)
 
 ### Command Line Interface
 
@@ -56,7 +58,39 @@ GurobiError: Model too large for size-limited license
 - Kaplan-Meier likelihood tests (`test_km_likelihood.py`)
 - `kombine` and `kombine_twogroups` command-line tools
 
+### Gurobi License Configuration for Copilot Agents
+
+**IMPORTANT**: GitHub Copilot agents do not have direct access to repository secrets like GitHub Actions workflows do. This is by design for security reasons.
+
+**If you need to test Gurobi functionality as a Copilot agent:**
+
+1. **Limited license testing**: Most functionality works with Gurobi's restricted license that comes with the gurobipy package installation. Only large models will fail.
+
+2. **For full license access**: The repository owner would need to provide Gurobi license information through alternative means:
+   - **Option A**: Provide a temporary license file that can be placed in the repository (not recommended for security)
+   - **Option B**: Set up environment variables manually in the session:
+     ```bash
+     export GUROBI_WLSACCESSID="your_access_id"
+     export GUROBI_WLSSECRET="your_secret" 
+     export GUROBI_LICENSEID="your_license_id"
+     cat <<EOF > ~/gurobi.lic
+     WLSACCESSID=$GUROBI_WLSACCESSID
+     WLSSECRET=$GUROBI_WLSSECRET
+     LICENSEID=$GUROBI_LICENSEID
+     EOF
+     ```
+   - **Option C**: Focus testing on methods that don't require full Gurobi license
+
+**Recommendation**: Start with testing the methods that work with restricted license, and document any Gurobi license limitations as expected behavior. The repository owner can manually test the full Gurobi functionality if needed.
+
+**Note**: The GitHub Actions workflow uses these secrets for Gurobi WLS license:
+- `GUROBI_WLSACCESSID`
+- `GUROBI_WLSSECRET` 
+- `GUROBI_LICENSEID`
+
 ### Testing Commands
+
+**Prerequisites**: Ensure you have installed linting tools: `pip install pylint pyflakes`
 
 **Run tests in this order** (some will fail due to Gurobi license):
 ```bash
@@ -86,7 +120,12 @@ python -m pylint .          # Should score ~9.98/10 (ignore texoutparse import e
 
 **Documentation tools needed**:
 ```bash
-pip install jupytext nbconvert
+pip install jupytext nbconvert  # For Jupyter notebook conversion
+```
+
+**Optional tools for comprehensive development environment** (matching GitHub Actions):
+```bash
+pip install ipykernel lifelines texoutparse  # Additional tools used in CI
 ```
 
 **Build documentation**:
@@ -178,7 +217,11 @@ observable 1 2 3 ...
 
 ## Workflow for Code Changes
 
-1. **Installation**: `pip install .`
+1. **Installation**: 
+   ```bash
+   pip install .
+   pip install pylint pyflakes
+   ```
 2. **Linting**: `python -m pyflakes . && python -m pylint .`
 3. **Test relevant modules**: Run appropriate test modules (avoid KM tests if no Gurobi license)
 4. **Validation**: Use reference data tests to ensure numerical stability
@@ -191,6 +234,8 @@ observable 1 2 3 ...
 **Linting f-string warnings**: Acceptable in generated `docs/*.py` files from jupytext
 **Test timing**: `test_discrete_optimization` is slow (~90s) - this is normal
 **Network timeouts during install**: Retry pip install if PyPI connection fails
+**Pylint import errors**: The error "Unable to import 'texoutparse'" is expected and can be ignored (score should still be ~9.98/10)
+**Missing linting tools**: If you get "No module named pylint" or "No module named pyflakes", make sure to run `pip install pylint pyflakes` after the main installation
 
 ## Common Patterns
 
