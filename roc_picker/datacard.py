@@ -998,8 +998,7 @@ class Datacard:
     float
         The p-value from the logrank test.
     """
-    minlp_pvalue = MINLPforKMPValue(
-      all_patients=self.kaplan_meier_all_patients(),
+    minlp_pvalue = self.km_p_value(
       parameter_min=parameter_min,
       parameter_threshold=parameter_threshold,
       parameter_max=parameter_max,

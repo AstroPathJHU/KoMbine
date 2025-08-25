@@ -220,7 +220,7 @@ def runtest(
       parameter_min=parameter_min,
       parameter_max=parameter_max,
     )
-    km_likelihood.survival_curves_pvalue_logrank(
+    km_likelihood.km_pvalue_logrank(
       parameter_threshold=parameter_threshold,
       parameter_min=parameter_min,
       parameter_max=parameter_max,

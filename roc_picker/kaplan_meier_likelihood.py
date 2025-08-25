@@ -866,4 +866,3 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         plt.close(fig)
     elif config.close_figure:
       plt.close(fig)
-
