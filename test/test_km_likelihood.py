@@ -213,7 +213,7 @@ def runtest(
     parameter_max=parameter_max,
     binomial_only=True,
   )
-  
+
   # Test that logrank method requires binomial_only=True
   try:
     datacard.km_p_value_logrank(
