@@ -43,6 +43,7 @@ def runtest(
     reffile = here / "reference" / "km_likelihood.json"
 
   tolerance: Tolerance = {"atol": 2e-4, "rtol": 2e-4}
+  p_value_patient_wise_tolerance: Tolerance = {"atol": 1e-8, "rtol": 1e-4}
 
   # Calculate precision for JSON output based on rtol
   rtol_value = tolerance["rtol"]
@@ -51,6 +52,9 @@ def runtest(
     json_precision = int(abs(math.log10(rtol_value))) + 1
   else:
     json_precision = 4 # Default precision if rtol is 0 or undefined
+
+  # Higher precision for patient-wise p-values to avoid rounding small values to 0
+  patient_wise_precision = 8
 
   datacard = roc_picker.datacard.Datacard.parse_datacard(dcfile)
   kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
@@ -383,15 +387,17 @@ def runtest(
       np.testing.assert_allclose(
         array,
         ref,
-        **tolerance,
+        **(p_value_patient_wise_tolerance if name == "p_value_patient_wise" else tolerance),
         err_msg=f"Array '{name}' does not match the reference."
       )
   except Exception:
     with open(here / "test_output" / reffile.name, "w", encoding="utf-8") as f:
-      formatted_data_for_json = {
-        k: format_value_for_json(v.tolist(), json_precision)
-        for k, v in ordered_array_data.items()
-      }
+      formatted_data_for_json = {}
+      for k, v in ordered_array_data.items():
+        # Use higher precision for patient-wise p-values
+        precision_to_use = patient_wise_precision if "patient_wise" in k else json_precision
+        formatted_data_for_json[k] = format_value_for_json(v.tolist(), precision_to_use)
+
       json.dump(
         formatted_data_for_json,
         f,

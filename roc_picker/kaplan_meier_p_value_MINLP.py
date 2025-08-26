@@ -557,10 +557,16 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       vtype=gp.GRB.CONTINUOUS, name="log_p_survived",
       lb=log_p_bounds[0], ub=log_p_bounds[1]
     )
+    # Expand bounds for log_p_died to accommodate hazard ratio constraint
+    # log_p_died[i, 0] = log_hazard_ratio + log_p_died[i, 1] where log_hazard_ratio in [-3, 3]
+    log_p_died_bounds = np.array([
+      log_p_bounds[0] - 3.0,  # Allow for negative hazard ratio
+      log_p_bounds[1] + 3.0,  # Allow for positive hazard ratio
+    ])
     log_p_died = model.addVars(
       len(self.all_death_times), 2,
       vtype=gp.GRB.CONTINUOUS, name="log_p_died",
-      lb=log_p_bounds[0], ub=log_p_bounds[1]
+      lb=log_p_died_bounds[0], ub=log_p_died_bounds[1]
     )
     for i in range(len(self.all_death_times)):
       for j in range(2):
@@ -658,17 +664,33 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
           )
     binomial_penalty = gp.quicksum(binomial_terms)
 
-    #under the null hypothesis, both curves have the same survival probability
-    null_hypothesis_indicator = model.addVar(vtype=gp.GRB.BINARY, name="null_hypothesis_indicator")
+    # Add log hazard ratio variable for constant hazard ratio constraint
+    # Range should allow for reasonable hazard ratios (e.g., 0.05 to 20)
+    # log(0.05) ≈ -3.0, log(20) ≈ 3.0
+    log_hazard_ratio = model.addVar(
+      vtype=gp.GRB.CONTINUOUS,
+      name="log_hazard_ratio",
+      lb=-3.0,
+      ub=3.0,
+    )
+
+    # Constant hazard ratio constraint: applies unconditionally
+    # (both under null and alternative hypothesis)
+    # This constrains: p_died[i, 0] = hazard_ratio * p_died[i, 1]
+    # In log scale: log_p_died[i, 0] = log_hazard_ratio + log_p_died[i, 1]
     for i in range(len(self.all_death_times)):
-      model.addGenConstrIndicator(
-        null_hypothesis_indicator,
-        True,
-        p_survived[i, 0] - p_survived[i, 1],
-        GRB.EQUAL,
-        0,
-        name=f"null_hypothesis_{i}"
+      model.addConstr(
+        log_p_died[i, 0] - log_p_died[i, 1] - log_hazard_ratio == 0,
+        name=f"constant_hazard_ratio_{i}"
       )
+
+    # Null hypothesis indicator for constraining log_hazard_ratio = 0
+    null_hypothesis_indicator = model.addVar(vtype=gp.GRB.BINARY, name="null_hypothesis_indicator")
+    model.addGenConstrIndicator(
+      null_hypothesis_indicator, True,
+      log_hazard_ratio, GRB.EQUAL, 0,
+      name="null_hypothesis_constraint"
+    )
 
     return binomial_penalty, null_hypothesis_indicator
 
@@ -768,10 +790,11 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     """
     Update the model to indicate whether or not we are running
     for the null hypothesis.
+    Under null hypothesis: log_hazard_ratio is fixed to 0 (hazard ratio = 1)
+    Under alternative hypothesis: log_hazard_ratio is free to float
     """
     if self.__null_hypothesis_constraint is not None:
       model.remove(self.__null_hypothesis_constraint)
-
     if null_hypothesis:
       self.__null_hypothesis_constraint = model.addConstr(
         null_hypothesis_indicator == 1,
@@ -956,18 +979,9 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     lr_stat = twonll_null - twonll_alt
 
-    # The number of degrees of freedom depends on the constraints added
-    # under the null hypothesis
-    if patient_wise_only:
-      # For patient_wise_only, we add one constraint per death time where
-      # the nominal probabilities differ between curves
-      nominal_low_probs, nominal_high_probs = self.nominal_curves_probabilities_at_each_time
-      df = sum(1 for i in range(len(self.all_death_times))
-               if abs(nominal_low_probs[i] - nominal_high_probs[i]) > self.__endpoint_epsilon)
-    else:
-      # For regular case, one constraint per death time:
-      # that the survival probabilities of the two curves are equal
-      df = len(self.all_death_times)
+    # The degrees of freedom is 1: the only difference between null and alternative
+    # is whether the log hazard ratio is constrained to 0 (null) or free to float (alternative)
+    df = 1
 
     p_value = scipy.stats.chi2.sf(lr_stat, df)
     return p_value, result_null, result_alt
