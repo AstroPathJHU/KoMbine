@@ -25,7 +25,7 @@ jobs:
       - name: convert notebooks
         run: |
           jupytext --sync docs/*.md
-      - uses: jakebailey/pyright-action@v2
+      - uses: jakebailey/pyright-action@v2.3.2
         with:
           version: 1.1.400
 
