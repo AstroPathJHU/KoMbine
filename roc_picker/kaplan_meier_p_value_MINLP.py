@@ -688,7 +688,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     # Null hypothesis indicator for constraining log_hazard_ratio = 0
     null_hypothesis_indicator = model.addVar(vtype=gp.GRB.BINARY, name="null_hypothesis_indicator")
 
-    return binomial_penalty, null_hypothesis_indicator
+    return binomial_penalty, null_hypothesis_indicator, log_hazard_ratio
 
   def add_patient_wise_penalty(
     self,
@@ -747,7 +747,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       model, n_at_risk, n_survived
     )
 
-    binomial_penalty, null_hypothesis_indicator = self.add_binomial_penalty(
+    binomial_penalty, null_hypothesis_indicator, log_hazard_ratio = self.add_binomial_penalty(
       model,
       n_died=n_died,
       n_at_risk=n_at_risk,
