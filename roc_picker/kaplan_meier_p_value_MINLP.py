@@ -37,7 +37,6 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     self.__endpoint_epsilon = endpoint_epsilon
     self.__log_zero_epsilon = 1e-10
     self.__null_hypothesis_constraint = None
-    self.__hazard_ratio_null_constraint = None
     self.__patient_constraints_for_binomial_only = None
     self.__patient_wise_only_constraints = None
 
@@ -561,7 +560,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     # Expand bounds for log_p_died to accommodate hazard ratio constraint
     # log_p_died[i, 0] = log_hazard_ratio + log_p_died[i, 1] where log_hazard_ratio in [-3, 3]
     log_p_died_bounds = np.array([
-      log_p_bounds[0] - 3.0,  # Allow for negative hazard ratio  
+      log_p_bounds[0] - 3.0,  # Allow for negative hazard ratio
       log_p_bounds[1] + 3.0,  # Allow for positive hazard ratio
     ])
     log_p_died = model.addVars(
@@ -675,9 +674,9 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       ub=3.0,
     )
 
-    # Constant hazard ratio constraint: applies unconditionally 
+    # Constant hazard ratio constraint: applies unconditionally
     # (both under null and alternative hypothesis)
-    # This constrains: p_died[i, 0] = hazard_ratio * p_died[i, 1]  
+    # This constrains: p_died[i, 0] = hazard_ratio * p_died[i, 1]
     # In log scale: log_p_died[i, 0] = log_hazard_ratio + log_p_died[i, 1]
     for i in range(len(self.all_death_times)):
       model.addConstr(
@@ -687,8 +686,13 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     # Null hypothesis indicator for constraining log_hazard_ratio = 0
     null_hypothesis_indicator = model.addVar(vtype=gp.GRB.BINARY, name="null_hypothesis_indicator")
+    model.addGenConstrIndicator(
+      null_hypothesis_indicator, True,
+      log_hazard_ratio, GRB.EQUAL, 0,
+      name="null_hypothesis_constraint"
+    )
 
-    return binomial_penalty, null_hypothesis_indicator, log_hazard_ratio
+    return binomial_penalty, null_hypothesis_indicator
 
   def add_patient_wise_penalty(
     self,
@@ -747,7 +751,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       model, n_at_risk, n_survived
     )
 
-    binomial_penalty, null_hypothesis_indicator, log_hazard_ratio = self.add_binomial_penalty(
+    binomial_penalty, null_hypothesis_indicator = self.add_binomial_penalty(
       model,
       n_died=n_died,
       n_at_risk=n_at_risk,
@@ -764,7 +768,6 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     return (
       model,
       null_hypothesis_indicator,
-      log_hazard_ratio,
       x,
       km_probability_at_time_low,
       km_probability_at_time_high
@@ -782,7 +785,6 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     self,
     model,
     null_hypothesis_indicator,
-    log_hazard_ratio,
     null_hypothesis: bool,
   ):
     """
@@ -793,22 +795,13 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     """
     if self.__null_hypothesis_constraint is not None:
       model.remove(self.__null_hypothesis_constraint)
-    if self.__hazard_ratio_null_constraint is not None:
-      model.remove(self.__hazard_ratio_null_constraint)
-
     if null_hypothesis:
       self.__null_hypothesis_constraint = model.addConstr(
         null_hypothesis_indicator == 1,
         name="null_hypothesis_constraint"
       )
-      # Under null hypothesis: fix log_hazard_ratio = 0 (hazard ratio = 1)
-      self.__hazard_ratio_null_constraint = model.addConstr(
-        log_hazard_ratio == 0,
-        name="hazard_ratio_null_constraint"
-      )
     else:
       self.__null_hypothesis_constraint = None
-      self.__hazard_ratio_null_constraint = None
 
     model.update()
 
@@ -944,7 +937,6 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     (
       model,
       null_hypothesis_indicator,
-      log_hazard_ratio,
       x,
       km_probability_at_time_low,
       km_probability_at_time_high
@@ -965,7 +957,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     # Set Gurobi verbose output parameter
     model.setParam('OutputFlag', 1 if gurobi_verbose else 0)
 
-    self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, log_hazard_ratio, True)
+    self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, True)
     model.optimize()
     if model.status != GRB.OPTIMAL:
       raise ValueError("Null model did not converge")
@@ -975,7 +967,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       success=model.status == GRB.OPTIMAL,
     )
 
-    self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, log_hazard_ratio, False)
+    self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, False)
     model.optimize()
     if model.status != GRB.OPTIMAL:
       raise ValueError("Alternative model did not converge")
@@ -989,19 +981,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     # The degrees of freedom is 1: the only difference between null and alternative
     # is whether the log hazard ratio is constrained to 0 (null) or free to float (alternative)
-    if patient_wise_only:
-      # For patient_wise_only, we add one constraint per death time where
-      # the nominal probabilities differ between curves, plus the hazard ratio constraint
-      nominal_low_probs, nominal_high_probs = self.nominal_curves_probabilities_at_each_time
-      df_patient_wise = sum(1 for i in range(len(self.all_death_times))
-                           if abs(nominal_low_probs[i] - nominal_high_probs[i]) > self.__endpoint_epsilon)
-      # However, with the constant hazard ratio assumption, the effective degrees of freedom is still 1
-      # because all the death time constraints are linked through the common hazard ratio
-      df = 1
-    else:
-      # With constant hazard ratio assumption, degrees of freedom is 1:
-      # the single parameter difference (log_hazard_ratio = 0 vs free)
-      df = 1
+    df = 1
 
     p_value = scipy.stats.chi2.sf(lr_stat, df)
     return p_value, result_null, result_alt
