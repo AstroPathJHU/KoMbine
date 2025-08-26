@@ -434,15 +434,15 @@
     0.0
   ],
   "p_value": [
-    0.6293
+    0.2028
   ],
   "p_value_binomial": [
-    0.7209
-  ],
-  "p_value_patient_wise": [
-    0.0017
+    0.1891
   ],
   "p_value_logrank": [
-    0.12497926296336248
+    0.125
+  ],
+  "p_value_patient_wise": [
+    0.0
   ]
 }
