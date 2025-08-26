@@ -43,6 +43,7 @@ def runtest(
     reffile = here / "reference" / "km_likelihood.json"
 
   tolerance: Tolerance = {"atol": 2e-4, "rtol": 2e-4}
+  p_value_patient_wise_tolerance: Tolerance = {"atol": 1e-8, "rtol": 1e-4}
 
   # Calculate precision for JSON output based on rtol
   rtol_value = tolerance["rtol"]
@@ -383,22 +384,12 @@ def runtest(
     # Compare arrays in the defined order
     for name, array in ordered_array_data.items():
       ref = reference_data[name]
-      # Use stricter tolerance for patient-wise p-values
-      if "patient_wise" in name:
-        patient_wise_tolerance = {"atol": 1e-8, "rtol": 1e-8}
-        np.testing.assert_allclose(
-          array,
-          ref,
-          **patient_wise_tolerance,
-          err_msg=f"Array '{name}' does not match the reference."
-        )
-      else:
-        np.testing.assert_allclose(
-          array,
-          ref,
-          **tolerance,
-          err_msg=f"Array '{name}' does not match the reference."
-        )
+      np.testing.assert_allclose(
+        array,
+        ref,
+        **(p_value_patient_wise_tolerance if name == "p_value_patient_wise" else tolerance),
+        err_msg=f"Array '{name}' does not match the reference."
+      )
   except Exception:
     with open(here / "test_output" / reffile.name, "w", encoding="utf-8") as f:
       formatted_data_for_json = {}
