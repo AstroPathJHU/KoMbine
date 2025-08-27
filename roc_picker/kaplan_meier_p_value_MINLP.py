@@ -606,7 +606,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       len(self.all_death_times), 2, self.n_patients + 1,
       vtype=gp.GRB.BINARY, name="n_survived_indicator",
     )
-    binomial_terms = []
+    binomial_terms_low = []  # Terms for curve 0 (j=0)
+    binomial_terms_high = []  # Terms for curve 1 (j=1)
     for i in range(len(self.all_death_times)):
       for j in range(2):
         #make sure that exactly one of each indicator is selected
@@ -625,6 +626,9 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
           gp.quicksum(n_survived_indicator_vars[i, j, k] for k in range(self.n_patients + 1)) == 1,
           name=f"n_survived_indicator_unique_{i}_{j}",
         )
+
+        # Choose the appropriate list for this curve
+        binomial_terms = binomial_terms_low if j == 0 else binomial_terms_high
 
         #Add the n choose d term
         for k, ((n, d_value), penalty) in enumerate(n_choose_d_table.items()):
@@ -674,7 +678,29 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
             s,
             name=f"n_survived_indicator_{i}_{j}_{s}",
           )
-    binomial_penalty = gp.quicksum(binomial_terms)
+
+    # Create separate penalty variables for each curve
+    binomial_penalty_low = model.addVar(
+      vtype=gp.GRB.CONTINUOUS,
+      name="binomial_penalty_low",
+    )
+    binomial_penalty_high = model.addVar(
+      vtype=gp.GRB.CONTINUOUS,
+      name="binomial_penalty_high",
+    )
+
+    # Set the penalty values
+    binomial_penalty_low_expr = gp.quicksum(binomial_terms_low)
+    binomial_penalty_high_expr = gp.quicksum(binomial_terms_high)
+
+    model.addConstr(
+      binomial_penalty_low == binomial_penalty_low_expr,
+      name="binomial_penalty_low_constraint"
+    )
+    model.addConstr(
+      binomial_penalty_high == binomial_penalty_high_expr,
+      name="binomial_penalty_high_constraint"
+    )
 
     # Add log hazard ratio variable for constant hazard ratio constraint
     # Range should allow for reasonable hazard ratios (e.g., 0.05 to 20)
@@ -704,7 +730,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       name="null_hypothesis_constraint",
     )
 
-    return binomial_penalty, null_hypothesis_indicator
+    return binomial_penalty_low, binomial_penalty_high, null_hypothesis_indicator
 
   def add_patient_wise_penalty(
     self,
@@ -744,6 +770,104 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     patient_penalty = gp.quicksum(patient_penalties)
     return patient_penalty
 
+  def _extract_patients_per_curve(self, a: gp.tupledict[tuple[int, ...], gp.Var]):
+    """
+    Extract which patients are included in each curve from the optimized model.
+
+    Returns:
+        tuple: (patients_low, patients_high) where each is a list of patient indices
+    """
+    patients_low = []
+    patients_high = []
+
+    for i in range(self.n_patients):
+      if a[i, 0].X > 0.5:  # Patient is in curve 0 (low)
+        patients_low.append(i)
+      if a[i, 1].X > 0.5:  # Patient is in curve 1 (high)
+        patients_high.append(i)
+
+    return patients_low, patients_high
+
+  def _extract_curve_statistics(
+    self, model: gp.Model, km_probability_at_time_low, km_probability_at_time_high
+  ):
+    """
+    Extract statistics for each curve from the optimized model.
+
+    Returns:
+        tuple: (n_total_low, n_alive_low, km_prob_low, n_total_high, n_alive_high, km_prob_high)
+    """
+    # Extract KM probabilities for each curve
+    print(km_probability_at_time_low)
+    km_prob_low = [
+      km_prob.X for i, km_prob in km_probability_at_time_low.items()
+    ]
+    km_prob_high = [
+      km_prob.X for i, km_prob in km_probability_at_time_high.items()
+    ]
+
+    # For n_total and n_alive, we need to look at the r and d variables per curve
+    # These represent at-risk and died counts for each curve
+    n_total_low = 0
+    n_alive_low = 0
+    n_total_high = 0
+    n_alive_high = 0
+
+    for i in range(len(self.all_death_times)):
+      r_low = model.getVarByName(f"r[{i},0]")
+      r_high = model.getVarByName(f"r[{i},1]")
+      d_low = model.getVarByName(f"d[{i},0]")
+      d_high = model.getVarByName(f"d[{i},1]")
+      assert r_low is not None
+      assert r_high is not None
+      assert d_low is not None
+      assert d_high is not None
+
+      if i == 0:  # Use first time point as representative
+        n_total_low = int(np.rint(r_low.X))
+      if i == 0:  # Use first time point as representative
+        n_total_high = int(np.rint(r_high.X))
+
+      n_alive_low = n_total_low - int(np.rint(d_low.X))
+      n_alive_high = n_total_high - int(np.rint(d_high.X))
+    return n_total_low, n_alive_low, km_prob_low, n_total_high, n_alive_high, km_prob_high
+
+  def _compute_patient_wise_penalty_value(self, a: gp.tupledict[tuple[int, ...], gp.Var]):
+    """
+    Compute the actual patient-wise penalty value from the optimized model.
+
+    Returns:
+        float: The patient-wise penalty value (not multiplied by 2)
+    """
+    penalty = 0.0
+    for i in range(self.n_patients):
+      for j in range(2):
+        if np.isfinite(self.nll_penalty_for_patient_in_range[i, j]):
+          contribution = self.nll_penalty_for_patient_in_range[i, j] * (
+            a[i, j].X - (1 if self.nll_penalty_for_patient_in_range[i, j] < 0 else 0)
+          )
+          penalty += contribution
+    return penalty
+
+  def _compute_binomial_penalty_per_curve(self, model: gp.Model):
+    """
+    Compute the binomial penalty for each curve separately.
+
+    Returns:
+        tuple: (total_binomial_penalty, binomial_penalty_low, binomial_penalty_high)
+    """
+    binomial_penalty_low_var = model.getVarByName("binomial_penalty_low")
+    binomial_penalty_high_var = model.getVarByName("binomial_penalty_high")
+
+    assert binomial_penalty_low_var is not None
+    assert binomial_penalty_high_var is not None
+
+    penalty_low = binomial_penalty_low_var.X
+    penalty_high = binomial_penalty_high_var.X
+    total_penalty = penalty_low + penalty_high
+
+    return total_penalty, penalty_low, penalty_high
+
   def _make_gurobi_model(self):
     """
     Create the Gurobi model for the Kaplan-Meier p-value MINLP.
@@ -763,7 +887,11 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       model, r, n_survived
     )
 
-    binomial_penalty, null_hypothesis_indicator = self.add_binomial_penalty(
+    (
+      binomial_penalty_low,
+      binomial_penalty_high,
+      null_hypothesis_indicator
+    ) = self.add_binomial_penalty(
       model,
       d=d,
       r=r,
@@ -772,7 +900,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     patient_penalty = self.add_patient_wise_penalty(model, a)
 
     model.setObjective(
-      2 * (binomial_penalty + patient_penalty),
+      2 * (binomial_penalty_low + binomial_penalty_high + patient_penalty),
       GRB.MINIMIZE,
     )
     model.update()
@@ -974,9 +1102,48 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     if model.status != GRB.OPTIMAL:
       raise ValueError(f"Null model failed with status {model.status}")
     twonll_null = model.ObjVal
+
+    # Extract detailed information for null hypothesis result
+    patients_low_null, patients_high_null = self._extract_patients_per_curve(a)
+    patient_penalty_null = self._compute_patient_wise_penalty_value(a)
+    binomial_penalty_total_null, binomial_penalty_low_null, binomial_penalty_high_null = (
+      self._compute_binomial_penalty_per_curve(model)
+    )
+
+    # Extract curve statistics for null hypothesis
+    (n_total_low_null, n_alive_low_null, km_prob_low_null,
+     n_total_high_null, n_alive_high_null, km_prob_high_null) = (
+      self._extract_curve_statistics(
+        model, km_probability_at_time_low, km_probability_at_time_high
+      )
+    )
+
+    # Extract hazard ratio for null hypothesis (should be 1.0)
+    log_hazard_ratio_var = model.getVarByName("log_hazard_ratio")
+    hazard_ratio_null = np.exp(log_hazard_ratio_var.X) if log_hazard_ratio_var else 1.0
+
     result_null = scipy.optimize.OptimizeResult(
       x=model.ObjVal,
       success=model.status == GRB.OPTIMAL,
+      patients_low=patients_low_null,
+      patients_high=patients_high_null,
+      n_total_low=n_total_low_null,
+      n_alive_low=n_alive_low_null,
+      n_total_high=n_total_high_null,
+      n_alive_high=n_alive_high_null,
+      km_probability_low=km_prob_low_null,
+      km_probability_high=km_prob_high_null,
+      binomial_2NLL=2*binomial_penalty_total_null,
+      binomial_2NLL_low=(
+        2*binomial_penalty_low_null if binomial_penalty_low_null is not None else None
+      ),
+      binomial_2NLL_high=(
+        2*binomial_penalty_high_null if binomial_penalty_high_null is not None else None
+      ),
+      patient_2NLL=2*patient_penalty_null,
+      patient_penalties=self.nll_penalty_for_patient_in_range,
+      hazard_ratio=hazard_ratio_null,
+      model=model,
     )
 
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, False)
@@ -984,9 +1151,47 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     if model.status != GRB.OPTIMAL:
       raise ValueError(f"Alternative model failed with status {model.status}")
     twonll_alt = model.ObjVal
+
+    # Extract detailed information for alternative hypothesis result
+    patients_low_alt, patients_high_alt = self._extract_patients_per_curve(a)
+    patient_penalty_alt = self._compute_patient_wise_penalty_value(a)
+    binomial_penalty_total_alt, binomial_penalty_low_alt, binomial_penalty_high_alt = (
+      self._compute_binomial_penalty_per_curve(model)
+    )
+
+    # Extract curve statistics for alternative hypothesis
+    (n_total_low_alt, n_alive_low_alt, km_prob_low_alt,
+     n_total_high_alt, n_alive_high_alt, km_prob_high_alt) = (
+      self._extract_curve_statistics(
+        model, km_probability_at_time_low, km_probability_at_time_high
+      )
+    )
+
+    # Extract hazard ratio for alternative hypothesis (can be any value)
+    hazard_ratio_alt = np.exp(log_hazard_ratio_var.X) if log_hazard_ratio_var else 1.0
+
     result_alt = scipy.optimize.OptimizeResult(
       x=model.ObjVal,
       success=model.status == GRB.OPTIMAL,
+      patients_low=patients_low_alt,
+      patients_high=patients_high_alt,
+      n_total_low=n_total_low_alt,
+      n_alive_low=n_alive_low_alt,
+      n_total_high=n_total_high_alt,
+      n_alive_high=n_alive_high_alt,
+      km_probability_low=km_prob_low_alt,
+      km_probability_high=km_prob_high_alt,
+      binomial_2NLL=2*binomial_penalty_total_alt,
+      binomial_2NLL_low=(
+        2*binomial_penalty_low_alt if binomial_penalty_low_alt is not None else None
+      ),
+      binomial_2NLL_high=(
+        2*binomial_penalty_high_alt if binomial_penalty_high_alt is not None else None
+      ),
+      patient_2NLL=2*patient_penalty_alt,
+      patient_penalties=self.nll_penalty_for_patient_in_range,
+      hazard_ratio=hazard_ratio_alt,
+      model=model,
     )
 
     lr_stat = twonll_null - twonll_alt
