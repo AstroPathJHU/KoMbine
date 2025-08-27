@@ -29,13 +29,14 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     parameter_threshold: float,
     parameter_max: float = np.inf,
     endpoint_epsilon: float = 1e-6,
+    log_zero_epsilon: float = 1e-10,
   ):
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min
     self.__parameter_threshold = parameter_threshold
     self.__parameter_max = parameter_max
     self.__endpoint_epsilon = endpoint_epsilon
-    self.__log_zero_epsilon = 1e-10
+    self.__log_zero_epsilon = log_zero_epsilon
     self.__null_hypothesis_constraint = None
     self.__patient_constraints_for_binomial_only = None
     self.__patient_wise_only_constraints = None
@@ -960,7 +961,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, True)
     model.optimize()
     if model.status != GRB.OPTIMAL:
-      raise ValueError("Null model did not converge")
+      raise ValueError(f"Null model failed with status {model.status}")
     twonll_null = model.ObjVal
     result_null = scipy.optimize.OptimizeResult(
       x=model.ObjVal,
@@ -970,7 +971,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, False)
     model.optimize()
     if model.status != GRB.OPTIMAL:
-      raise ValueError("Alternative model did not converge")
+      raise ValueError(f"Alternative model failed with status {model.status}")
     twonll_alt = model.ObjVal
     result_alt = scipy.optimize.OptimizeResult(
       x=model.ObjVal,

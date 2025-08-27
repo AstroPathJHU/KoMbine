@@ -950,6 +950,8 @@ class Datacard:
     parameter_min: float = -np.inf,
     parameter_threshold: float,
     parameter_max: float = np.inf,
+    endpoint_epsilon: float = 1e-6,
+    log_zero_epsilon: float = 1e-10,
   ) -> MINLPforKMPValue:
     """
     Generate a MINLPforKMPValue object for calculating p-values for Kaplan-Meier curves
@@ -964,6 +966,8 @@ class Datacard:
       parameter_min=parameter_min,
       parameter_threshold=parameter_threshold,
       parameter_max=parameter_max,
+      endpoint_epsilon=endpoint_epsilon,
+      log_zero_epsilon=log_zero_epsilon,
     )
 
   def km_p_value_logrank(
@@ -1113,6 +1117,7 @@ def _make_common_parser(description: str) -> argparse.ArgumentParser:
   parser.add_argument("--exclude-nominal", action="store_false", dest="include_nominal", default=True, help="Exclude the nominal line from the plot.")
   parser.add_argument("--include-median-survival", action="store_true", dest="include_median_survival", help="Include the median survival line in the plot.")
   parser.add_argument("--print-progress", action="store_true", dest="print_progress", help="Print progress messages during the computation.")
+  parser.add_argument("--endpoint-epsilon", type=float, dest="endpoint_epsilon", default=1e-6, help="Endpoint epsilon for the likelihood calculation.")
   parser.add_argument("--log-zero-epsilon", type=float, dest="log_zero_epsilon", default=1e-10, help="Log zero epsilon for the likelihood calculation.")
   parser.add_argument("--figsize", nargs=2, type=float, metavar=("WIDTH", "HEIGHT"), help="Figure size in inches.", default=KaplanMeierPlotConfig.figsize)
   parser.add_argument("--legend-fontsize", type=float, help="Font size for legend text.", default=KaplanMeierPlotConfig.legend_fontsize)
@@ -1180,6 +1185,7 @@ def plot_km_likelihood():
   kml = datacard.km_likelihood(
     parameter_min=args.__dict__.pop("parameter_min"),
     parameter_max=args.__dict__.pop("parameter_max"),
+    endpoint_epsilon=args.__dict__.pop("endpoint_epsilon"),
     log_zero_epsilon=args.__dict__.pop("log_zero_epsilon"),
   )
 
@@ -1213,6 +1219,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   threshold = args.__dict__.pop("parameter_threshold")
   parameter_max = args.__dict__.pop("parameter_max")
   log_zero_epsilon = args.__dict__.pop("log_zero_epsilon")
+  endpoint_epsilon = args.__dict__.pop("endpoint_epsilon")
   include_logrank_pvalue = args.__dict__.pop("include_logrank_pvalue")
 
   kml_low = datacard.km_likelihood(
@@ -1262,6 +1269,8 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
       parameter_min=parameter_min,
       parameter_threshold=threshold,
       parameter_max=parameter_max,
+      endpoint_epsilon=endpoint_epsilon,
+      log_zero_epsilon=log_zero_epsilon,
     )
 
     if common_plot_kwargs["include_full_NLL"]:

@@ -25,13 +25,23 @@ COMMON_ARGS=(--figsize 7 7 --legend-fontsize 16 --title-fontsize 16 --label-font
 
 kombine ../test/datacards/simple_examples/poisson_ratio_km_censoring.txt km_example.pdf --parameter-min 0.45 "${COMMON_ARGS[@]}" --title "Kaplan-Meier Example"
 
-COMMON_TWOGROUPS_ARGS=(--exclude-nominal --print-progress  --xlabel 'Time (Months)' --ylabel 'Overall Survival Probability' --legend-loc 'lower right'  --patient-wise-only-suffix '' --binomial-only-suffix '' "${COMMON_ARGS[@]}")
-kombine_twogroups ../test/datacards/lung/datacard_cells_OS.txt lung_cells_km_OS.pdf --parameter-threshold 0.4 "${COMMON_TWOGROUPS_ARGS[@]}" --title "CD8+FoxP3+ Cells"
-kombine_twogroups ../test/datacards/lung/datacard_donuts_OS.txt lung_donuts_km_OS.pdf --parameter-threshold 350 "${COMMON_TWOGROUPS_ARGS[@]}" --title "DONUTS"
-kombine_twogroups ../test/datacards/lung/datacard_cells_OS.txt lung_cells_km_OS_patient_wise.pdf --parameter-threshold 0.4 --include-patient-wise-only --exclude-full-nll "${COMMON_TWOGROUPS_ARGS[@]}" --title "CD8+FoxP3+ Cells, Patient-Wise Errors"
-kombine_twogroups ../test/datacards/lung/datacard_donuts_OS.txt lung_donuts_km_OS_patient_wise.pdf --parameter-threshold 350 --include-patient-wise-only --exclude-full-nll "${COMMON_TWOGROUPS_ARGS[@]}" --title "DONUTS, Patient-Wise Errors"
-kombine_twogroups ../test/datacards/lung/datacard_cells_OS.txt lung_cells_km_OS_binomial.pdf --parameter-threshold 0.4 --include-binomial-only --exclude-full-nll "${COMMON_TWOGROUPS_ARGS[@]}" --title "CD8+FoxP3+ Cells, Binomial Errors"
-kombine_twogroups ../test/datacards/lung/datacard_donuts_OS.txt lung_donuts_km_OS_binomial.pdf --parameter-threshold 350 --include-binomial-only --exclude-full-nll "${COMMON_TWOGROUPS_ARGS[@]}" --title "DONUTS, Binomial Errors"
+SURVIVAL_TYPE=RFS
+if [ $SURVIVAL_TYPE = RFS ]; then
+  YLABEL="Regression-Free Survival Probability"
+  CELL_THRESHOLD=0.4
+  DONUT_THRESHOLD=1130
+elif [ $SURVIVAL_TYPE = OS ]; then
+  YLABEL="Overall Survival Probability"
+  CELL_THRESHOLD=0.4
+  DONUT_THRESHOLD=350
+fi
+COMMON_TWOGROUPS_ARGS=(--exclude-nominal --print-progress  --xlabel 'Time (Months)' --ylabel "$YLABEL" --legend-loc 'lower right'  --patient-wise-only-suffix '' --binomial-only-suffix '' "${COMMON_ARGS[@]}")
+kombine_twogroups ../test/datacards/lung/datacard_cells_${SURVIVAL_TYPE}.txt lung_cells_km_${SURVIVAL_TYPE}.pdf --parameter-threshold "$CELL_THRESHOLD" "${COMMON_TWOGROUPS_ARGS[@]}" --title "CD8+FoxP3+ Cells"
+kombine_twogroups ../test/datacards/lung/datacard_donuts_${SURVIVAL_TYPE}.txt lung_donuts_km_${SURVIVAL_TYPE}.pdf --parameter-threshold "$DONUT_THRESHOLD" "${COMMON_TWOGROUPS_ARGS[@]}" --title "DONUTS"
+kombine_twogroups ../test/datacards/lung/datacard_cells_${SURVIVAL_TYPE}.txt lung_cells_km_${SURVIVAL_TYPE}_patient_wise.pdf --parameter-threshold "$CELL_THRESHOLD" --include-patient-wise-only --exclude-full-nll "${COMMON_TWOGROUPS_ARGS[@]}" --title "CD8+FoxP3+ Cells, Patient-Wise Errors"
+kombine_twogroups ../test/datacards/lung/datacard_donuts_${SURVIVAL_TYPE}.txt lung_donuts_km_${SURVIVAL_TYPE}_patient_wise.pdf --parameter-threshold "$DONUT_THRESHOLD" --log-zero-epsilon 1e-7 --include-patient-wise-only --exclude-full-nll "${COMMON_TWOGROUPS_ARGS[@]}" --title "DONUTS, Patient-Wise Errors"
+kombine_twogroups ../test/datacards/lung/datacard_cells_${SURVIVAL_TYPE}.txt lung_cells_km_${SURVIVAL_TYPE}_binomial.pdf --parameter-threshold "$CELL_THRESHOLD" --include-binomial-only --exclude-full-nll "${COMMON_TWOGROUPS_ARGS[@]}" --title "CD8+FoxP3+ Cells, Binomial Errors"
+kombine_twogroups ../test/datacards/lung/datacard_donuts_${SURVIVAL_TYPE}.txt lung_donuts_km_${SURVIVAL_TYPE}_binomial.pdf --parameter-threshold "$DONUT_THRESHOLD" --include-binomial-only --exclude-full-nll "${COMMON_TWOGROUPS_ARGS[@]}" --title "DONUTS, Binomial Errors"
 
 COMMON_EXPONENTIAL_GREENWOOD_ARGS=(--exclude-nominal --include-exponential-greenwood --include-binomial-only --binomial-only-suffix 'KoMbine' --exponential-greenwood-suffix 'e. G.' --exclude-full-nll "${COMMON_ARGS[@]}")
 kombine ../test/datacards/simple_examples/fixed_km_censoring.txt comparison_to_greenwood_small_n.pdf "${COMMON_EXPONENTIAL_GREENWOOD_ARGS[@]}" --title "Comparison to Greenwood, N=12"
