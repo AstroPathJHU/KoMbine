@@ -72,6 +72,8 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   tick_fontsize: Font size for the tick labels.
   legend_loc: Location of the legend in the plot.
   dpi: Dots per inch for the figure resolution.
+  pvalue_fontsize: Font size for the p-value text.
+  pvalue_format: Format string for p-value display (e.g., '.3g', '.2f').
   """
   times_for_plot: typing.Sequence[float] | None = None
   include_binomial_only: bool = False
@@ -117,6 +119,8 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   tick_fontsize: int = 10
   legend_loc: str | None = None
   dpi: int = 100
+  pvalue_fontsize: int = 12
+  pvalue_format: str = '.3g'
 
   def __post_init__(self):
     """
