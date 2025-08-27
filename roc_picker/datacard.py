@@ -1210,6 +1210,8 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   parser.add_argument("--parameter-min", type=float, dest="parameter_min", default=-np.inf, help="The minimum parameter value for the low group.")
   parser.add_argument("--parameter-max", type=float, dest="parameter_max", default=np.inf, help="The maximum parameter value for the high group.")
   parser.add_argument("--include-logrank-pvalue", action="store_true", dest="include_logrank_pvalue", help="Include conventional logrank p-value for comparison with likelihood method.")
+  parser.add_argument("--pvalue-fontsize", type=float, dest="pvalue_fontsize", default=KaplanMeierPlotConfig.pvalue_fontsize, help="Font size for p-value text.")
+  parser.add_argument("--pvalue-format", type=str, dest="pvalue_format", default=KaplanMeierPlotConfig.pvalue_format, help="Format string for p-value display (e.g., '.3g', '.2f').")
   # pylint: enable=C0301
   args = parser.parse_args()
   _validate_plot_args(args, parser)
@@ -1221,6 +1223,8 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   log_zero_epsilon = args.__dict__.pop("log_zero_epsilon")
   endpoint_epsilon = args.__dict__.pop("endpoint_epsilon")
   include_logrank_pvalue = args.__dict__.pop("include_logrank_pvalue")
+  pvalue_fontsize = args.__dict__.pop("pvalue_fontsize")
+  pvalue_format = args.__dict__.pop("pvalue_format")
 
   kml_low = datacard.km_likelihood(
     parameter_min=parameter_min,
@@ -1244,6 +1248,8 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
     best_label=f"High (n={len(kml_high.nominalkm.patients)})",
     best_color="blue",
     CL_colors=["dodgerblue", "skyblue"],
+    pvalue_fontsize=pvalue_fontsize,
+    pvalue_format=pvalue_format,
   )
   kml_high.plot(config=config_high)
 
@@ -1256,6 +1262,8 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
     best_label=f"Low (n={len(kml_low.nominalkm.patients)})",
     best_color="red",
     CL_colors=["orangered", "lightcoral"],
+    pvalue_fontsize=pvalue_fontsize,
+    pvalue_format=pvalue_format,
   )
   kml_low.plot(config=config_low)
 
@@ -1275,15 +1283,15 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
 
     if common_plot_kwargs["include_full_NLL"]:
       p_value, *_ = p_value_minlp.solve_and_pvalue()
-      p_value_texts.append(f"p = {p_value:.3g}")
+      p_value_texts.append(f"p = {p_value:{pvalue_format}}")
 
     if common_plot_kwargs["include_binomial_only"]:
       p_value_binomial, *_ = p_value_minlp.solve_and_pvalue(binomial_only=True)
-      p_value_texts.append(f"p (binomial only) = {p_value_binomial:.3g}")
+      p_value_texts.append(f"p (binomial only) = {p_value_binomial:{pvalue_format}}")
 
     if common_plot_kwargs["include_patient_wise_only"]:
       p_value_patient_wise, *_ = p_value_minlp.solve_and_pvalue(patient_wise_only=True)
-      p_value_texts.append(f"p (patient-wise only) = {p_value_patient_wise:.3g}")
+      p_value_texts.append(f"p (patient-wise only) = {p_value_patient_wise:{pvalue_format}}")
 
   # Add logrank p-value if requested
   if include_logrank_pvalue:
@@ -1293,7 +1301,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
       parameter_max=parameter_max,
       binomial_only=True,
     )
-    p_value_texts.append(f"p (logrank) = {p_value_logrank:.3g}")
+    p_value_texts.append(f"p (logrank) = {p_value_logrank:{pvalue_format}}")
 
   # Display p-value text(s) on the plot
   if p_value_texts:
@@ -1305,6 +1313,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
         0.95, y_pos, text,
         ha="right", va="top",
         transform=ax.transAxes,
+        fontsize=pvalue_fontsize,
       )
 
   plt.savefig(args.__dict__.pop("output_file"))
