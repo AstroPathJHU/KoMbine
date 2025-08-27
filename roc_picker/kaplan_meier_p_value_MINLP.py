@@ -606,7 +606,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       len(self.all_death_times), 2, self.n_patients + 1,
       vtype=gp.GRB.BINARY, name="n_survived_indicator",
     )
-    binomial_terms = []
+    binomial_terms_low = []  # Terms for curve 0 (j=0)
+    binomial_terms_high = []  # Terms for curve 1 (j=1)
     for i in range(len(self.all_death_times)):
       for j in range(2):
         #make sure that exactly one of each indicator is selected
@@ -625,6 +626,9 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
           gp.quicksum(n_survived_indicator_vars[i, j, k] for k in range(self.n_patients + 1)) == 1,
           name=f"n_survived_indicator_unique_{i}_{j}",
         )
+
+        # Choose the appropriate list for this curve
+        binomial_terms = binomial_terms_low if j == 0 else binomial_terms_high
 
         #Add the n choose d term
         for k, ((n, d_value), penalty) in enumerate(n_choose_d_table.items()):
@@ -674,7 +678,29 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
             s,
             name=f"n_survived_indicator_{i}_{j}_{s}",
           )
-    binomial_penalty = gp.quicksum(binomial_terms)
+
+    # Create separate penalty variables for each curve
+    binomial_penalty_low = model.addVar(
+      vtype=gp.GRB.CONTINUOUS,
+      name="binomial_penalty_low",
+    )
+    binomial_penalty_high = model.addVar(
+      vtype=gp.GRB.CONTINUOUS,
+      name="binomial_penalty_high",
+    )
+
+    # Set the penalty values
+    binomial_penalty_low_expr = gp.quicksum(binomial_terms_low)
+    binomial_penalty_high_expr = gp.quicksum(binomial_terms_high)
+
+    model.addConstr(
+      binomial_penalty_low == binomial_penalty_low_expr,
+      name="binomial_penalty_low_constraint"
+    )
+    model.addConstr(
+      binomial_penalty_high == binomial_penalty_high_expr,
+      name="binomial_penalty_high_constraint"
+    )
 
     # Add log hazard ratio variable for constant hazard ratio constraint
     # Range should allow for reasonable hazard ratios (e.g., 0.05 to 20)
@@ -704,7 +730,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       name="null_hypothesis_constraint",
     )
 
-    return binomial_penalty, null_hypothesis_indicator
+    return binomial_penalty_low, binomial_penalty_high, null_hypothesis_indicator
 
   def add_patient_wise_penalty(
     self,
@@ -840,25 +866,20 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     """
     Compute the binomial penalty for each curve separately.
 
-    This requires accessing the binomial terms that were computed during model creation.
-    Since we don't have direct access to per-curve penalties in the current implementation,
-    we return the total binomial penalty and None for per-curve breakdown.
-
     Returns:
         tuple: (total_binomial_penalty, binomial_penalty_low, binomial_penalty_high)
-               where the individual curve penalties may be None if not available
     """
-    binom_penalty_var = model.getVarByName("binom_penalty")
-    if binom_penalty_var is None:
+    binomial_penalty_low_var = model.getVarByName("binomial_penalty_low")
+    binomial_penalty_high_var = model.getVarByName("binomial_penalty_high")
+
+    if binomial_penalty_low_var is None or binomial_penalty_high_var is None:
       return 0.0, None, None
 
-    total_penalty = binom_penalty_var.X
+    penalty_low = binomial_penalty_low_var.X
+    penalty_high = binomial_penalty_high_var.X
+    total_penalty = penalty_low + penalty_high
 
-    # Note: In the current implementation, binomial penalties are computed as a combined sum.
-    # To get per-curve penalties, we would need to refactor the add_binomial_penalty method
-    # to create separate penalty variables for each curve. For now, we return None for
-    # per-curve penalties to indicate they're not available in this implementation.
-    return total_penalty, None, None
+    return total_penalty, penalty_low, penalty_high
 
   def _make_gurobi_model(self):
     """
@@ -879,7 +900,11 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       model, r, n_survived
     )
 
-    binomial_penalty, null_hypothesis_indicator = self.add_binomial_penalty(
+    (
+      binomial_penalty_low,
+      binomial_penalty_high,
+      null_hypothesis_indicator
+    ) = self.add_binomial_penalty(
       model,
       d=d,
       r=r,
@@ -888,7 +913,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     patient_penalty = self.add_patient_wise_penalty(model, a)
 
     model.setObjective(
-      2 * (binomial_penalty + patient_penalty),
+      2 * (binomial_penalty_low + binomial_penalty_high + patient_penalty),
       GRB.MINIMIZE,
     )
     model.update()
