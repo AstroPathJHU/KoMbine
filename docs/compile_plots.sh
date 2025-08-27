@@ -35,7 +35,7 @@ elif [ $SURVIVAL_TYPE = OS ]; then
   CELL_THRESHOLD=0.4
   DONUT_THRESHOLD=350
 fi
-COMMON_TWOGROUPS_ARGS=(--log-zero-epsilon 1e-7 --exclude-nominal --print-progress  --xlabel 'Time (Months)' --ylabel "$YLABEL" --legend-loc 'lower right'  --patient-wise-only-suffix '' --binomial-only-suffix '' "${COMMON_ARGS[@]}")
+COMMON_TWOGROUPS_ARGS=(--log-zero-epsilon 1e-7 --exclude-nominal --print-progress  --xlabel 'Time (Months)' --ylabel "$YLABEL" --legend-loc 'lower right'  --patient-wise-only-suffix '' --binomial-only-suffix '' --pvalue-fontsize 16 "${COMMON_ARGS[@]}")
 kombine_twogroups ../test/datacards/lung/datacard_cells_${SURVIVAL_TYPE}.txt lung_cells_km_${SURVIVAL_TYPE}.pdf --parameter-threshold "$CELL_THRESHOLD" "${COMMON_TWOGROUPS_ARGS[@]}" --title "CD8+FoxP3+ Cells" --pvalue-format '.2f'
 kombine_twogroups ../test/datacards/lung/datacard_donuts_${SURVIVAL_TYPE}.txt lung_donuts_km_${SURVIVAL_TYPE}.pdf --parameter-threshold "$DONUT_THRESHOLD" "${COMMON_TWOGROUPS_ARGS[@]}" --title "DONUTS" --pvalue-format '.2f'
 kombine_twogroups ../test/datacards/lung/datacard_cells_${SURVIVAL_TYPE}.txt lung_cells_km_${SURVIVAL_TYPE}_patient_wise.pdf --parameter-threshold "$CELL_THRESHOLD" --include-patient-wise-only --exclude-full-nll "${COMMON_TWOGROUPS_ARGS[@]}" --title "CD8+FoxP3+ Cells, Patient-Wise Errors" --pvalue-format '.2g'
