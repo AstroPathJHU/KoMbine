@@ -944,7 +944,7 @@ class Datacard:
       log_zero_epsilon=log_zero_epsilon,
     )
 
-  def km_p_value(
+  def km_p_value( #pylint: disable=too-many-arguments
     self,
     *,
     parameter_min: float = -np.inf,
