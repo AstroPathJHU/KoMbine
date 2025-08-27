@@ -788,7 +788,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     return patients_low, patients_high
 
-  def _extract_curve_statistics(
+  def _extract_curve_statistics( #pylint: disable=too-many-locals
     self, model: gp.Model, km_probability_at_time_low, km_probability_at_time_high
   ):
     """
