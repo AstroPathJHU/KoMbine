@@ -627,7 +627,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
         )
 
         #Add the n choose d term
-        for k, ((n, d), penalty) in enumerate(n_choose_d_table.items()):
+        for k, ((n, d_value), penalty) in enumerate(n_choose_d_table.items()):
           indicator = n_choose_d_indicator_vars[i, j, k]
           binomial_terms.append(-penalty * indicator)
           model.addGenConstrIndicator(
@@ -643,22 +643,22 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
             True,
             d[i,j],
             GRB.EQUAL,
-            d,
-            name=f"n_choose_d_indicator_d_{i}_{j}_{d}",
+            d_value,
+            name=f"n_choose_d_indicator_d_{i}_{j}_{d_value}",
           )
 
         #Add the p_died term
-        for d in range(self.n_patients + 1):
+        for d_value in range(self.n_patients + 1):
           binomial_terms.append(
-            -d * log_p_died[i, j] * d_indicator_vars[i, j, d]
+            -d_value * log_p_died[i, j] * d_indicator_vars[i, j, d_value]
           )
           model.addGenConstrIndicator(
-            d_indicator_vars[i, j, d],
+            d_indicator_vars[i, j, d_value],
             True,
             d[i, j],
             GRB.EQUAL,
-            d,
-            name=f"d_indicator_{i}_{j}_{d}",
+            d_value,
+            name=f"d_indicator_{i}_{j}_{d_value}",
           )
 
         #Add the p_survived term

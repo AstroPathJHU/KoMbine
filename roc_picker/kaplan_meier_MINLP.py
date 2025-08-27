@@ -1783,8 +1783,6 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
     n_total = model.getVarByName("n_total")
     n_alive = model.getVarByName("n_alive")
-    # Get the patient inclusion variables a[j]
-    a = [model.getVarByName(f"a[{j}]") for j in range(self.n_patients)]
     assert n_total is not None
     assert n_alive is not None
     assert all(var is not None for var in a)
