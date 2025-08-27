@@ -1195,7 +1195,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     )
     binomial_terms = []
     n_choose_d_indicator_vars_by_group = collections.defaultdict(list)
-    for indicator_var_idx, (group_idx, ((n, d), penalty)) in enumerate(
+    for indicator_var_idx, (group_idx, ((n, d_value), penalty)) in enumerate(  # pylint: disable=redefined-argument-from-local
       itertools.product(
         range(self.n_groups),
         n_choose_d_table.items(),
@@ -1217,10 +1217,10 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       model.addGenConstrIndicator(
         n_choose_d_indicator_vars[indicator_var_idx],
         True,
-        d[group_idx],
+        d[group_idx],  # Gurobi variable d (number died in group)
         GRB.EQUAL,
-        d,
-        name=f"n_choose_d_indicator_d_{group_idx}_{n}_{d}",
+        d_value,       # Loop value (specific number of deaths)
+        name=f"n_choose_d_indicator_d_{group_idx}_{n}_{d_value}",
       )
     for group_idx in range(self.n_groups):
       # Ensure that exactly one n_choose_d_indicator is selected for each group
@@ -1239,18 +1239,18 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     n_died_indicator_vars_by_group = collections.defaultdict(list)
     i = 0
     for group_idx in range(self.n_groups):
-      for d in range(self.n_died_in_group_total[group_idx] + 1):
+      for d_value in range(self.n_died_in_group_total[group_idx] + 1):  # pylint: disable=redefined-argument-from-local
         n_died_indicator_vars_by_group[group_idx].append(n_died_indicator_vars[i])
         model.addGenConstrIndicator(
           n_died_indicator_vars[i],
           True,
-          d[group_idx],
+          d[group_idx],  # Gurobi variable d (number died in group)
           GRB.EQUAL,
-          d,
-          name=f"n_died_indicator_{group_idx}_{d}",
+          d_value,       # Loop value (specific number of deaths)
+          name=f"n_died_indicator_{group_idx}_{d_value}",
         )
         binomial_terms.append(
-          -d * log_p_died[group_idx] * n_died_indicator_vars[i]
+          -d_value * log_p_died[group_idx] * n_died_indicator_vars[i]
         )
         i += 1
     assert i == len(n_died_indicator_vars)
