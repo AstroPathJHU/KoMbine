@@ -867,7 +867,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
   def add_counter_variables_and_constraints(
     self,
     model: gp.Model,
-    x: gp.tupledict[int, gp.Var],
+    a: gp.tupledict[int, gp.Var],
   ):
     """
     Add counter variables for the total number of patients,
@@ -876,7 +876,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     """
     n_total = model.addVar(vtype=GRB.INTEGER, name="n_total")
     model.addConstr(
-      n_total == gp.quicksum(x[i] for i in range(self.n_patients)),
+      n_total == gp.quicksum(a[j] for j in range(self.n_patients)),
       name="n_total_constraint",
     )
 
@@ -886,15 +886,15 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       vtype=GRB.INTEGER,
       name="n_censored_in_group",
     )
-    n_died_in_group = model.addVars(
+    d = model.addVars(
       self.n_groups,
       vtype=GRB.INTEGER,
-      name="n_died_in_group",
+      name="d",
     )
-    n_at_risk = model.addVars(
+    r = model.addVars(
       self.n_groups,
       vtype=GRB.INTEGER,
-      name="n_at_risk",
+      name="r",
     )
     n_survived_in_group = model.addVars(
       self.n_groups,
@@ -903,38 +903,38 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     )
 
     # Constraints to link to totals
-    for idx in range(self.n_groups):
+    for i in range(self.n_groups):
       model.addConstr(
-        n_censored_in_group[idx] == gp.quicksum(
-          x[i] for i in range(self.n_patients) if self.censored_in_group[idx][i]
+        n_censored_in_group[i] == gp.quicksum(
+          a[j] for j in range(self.n_patients) if self.censored_in_group[i][j]
         ),
-        name=f"n_censored_in_group_{idx}",
+        name=f"n_censored_in_group_{i}",
       )
       model.addConstr(
-        n_died_in_group[idx] == gp.quicksum(
-          x[i] for i in range(self.n_patients) if self.died_in_group[idx][i]
+        d[i] == gp.quicksum(
+          a[j] for j in range(self.n_patients) if self.died_in_group[i][j]
         ),
-        name=f"n_died_in_group_{idx}",
+        name=f"d_{i}",
       )
-      if idx == 0:
+      if i == 0:
         model.addConstr(
-          n_at_risk[idx] == n_total - n_censored_in_group[idx],
-          name=f"n_at_risk_{idx}"
+          r[i] == n_total - n_censored_in_group[i],
+          name=f"r_{i}"
         )
       else:
         model.addConstr(
-          n_at_risk[idx]
-            == n_at_risk[idx - 1] - n_died_in_group[idx - 1] - n_censored_in_group[idx],
-          name=f"n_at_risk_{idx}",
+          r[i]
+            == r[i - 1] - d[i - 1] - n_censored_in_group[i],
+          name=f"r_{i}",
         )
       model.addConstr(
-        n_survived_in_group[idx] == n_at_risk[idx] - n_died_in_group[idx],
-        name=f"n_survived_in_group_{idx}",
+        n_survived_in_group[i] == r[i] - d[i],
+        name=f"n_survived_in_group_{i}",
       )
     n_alive = model.addVar(vtype=GRB.INTEGER, name="n_alive")
     model.addConstr(
       n_alive == gp.quicksum(
-        x[i] for i in range(self.n_patients) if self.patient_alive[i]
+        a[j] for j in range(self.n_patients) if self.patient_alive[j]
       ),
       name="n_alive_constraint",
     )
@@ -942,8 +942,8 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     return (
       n_total,
       n_censored_in_group,
-      n_died_in_group,
-      n_at_risk,
+      d,
+      r,
       n_survived_in_group,
       n_alive,
     )
@@ -951,19 +951,19 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
   def add_kaplan_meier_probability_variables_and_constraints(
     self,
     model: gp.Model,
-    n_at_risk: gp.tupledict[int, gp.Var],
+    r: gp.tupledict[int, gp.Var],
     n_survived_in_group: gp.tupledict[int, gp.Var],
   ):
     """
     Add variables and constraints to calculate the Kaplan-Meier probability
     directly within the Gurobi model using logarithmic transformations.
-    Handles the case where n_at_risk for a group is 0.
+    Handles the case where r for a group is 0.
     """
     # Variables for log of counts
-    log_n_at_risk_vars = model.addVars(
+    log_r_vars = model.addVars(
       self.n_groups,
       vtype=GRB.CONTINUOUS,
-      name="log_n_at_risk",
+      name="log_r",
       lb=-GRB.INFINITY,
       ub=np.log(self.n_patients + self.__log_zero_epsilon), # Max possible log(count)
     )
@@ -975,11 +975,11 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       ub=np.log(self.n_patients + self.__log_zero_epsilon), # Max possible log(count)
     )
 
-    # Helper variables for log arguments (n_at_risk + epsilon, n_survived + epsilon)
-    n_at_risk_plus_epsilon = model.addVars(
+    # Helper variables for log arguments (r + epsilon, n_survived + epsilon)
+    r_plus_epsilon = model.addVars(
       self.n_groups,
       vtype=GRB.CONTINUOUS,
-      name="n_at_risk_plus_epsilon",
+      name="r_plus_epsilon",
       lb=self.__log_zero_epsilon, # Ensure strictly positive
     )
     n_survived_plus_epsilon = model.addVars(
@@ -992,8 +992,8 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     # Constraints to link original counts to epsilon-added variables
     for i in range(self.n_groups):
       model.addConstr(
-        n_at_risk_plus_epsilon[i] == n_at_risk[i] + self.__log_zero_epsilon,
-        name=f"n_at_risk_plus_epsilon_constr_{i}"
+        r_plus_epsilon[i] == r[i] + self.__log_zero_epsilon,
+        name=f"r_plus_epsilon_constr_{i}"
       )
       model.addConstr(
         n_survived_plus_epsilon[i] == n_survived_in_group[i] + self.__log_zero_epsilon,
@@ -1004,9 +1004,9 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     for i in range(self.n_groups):
       # Use the new helper variables as arguments to GenConstrLog
       model.addGenConstrLog(
-        n_at_risk_plus_epsilon[i],
-        log_n_at_risk_vars[i],
-        name=f"log_n_at_risk_constr_{i}"
+        r_plus_epsilon[i],
+        log_r_vars[i],
+        name=f"log_r_constr_{i}"
       )
       model.addGenConstrLog(
         n_survived_plus_epsilon[i],
@@ -1014,24 +1014,24 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
         name=f"log_n_survived_constr_{i}"
       )
 
-    # Binary indicator for whether n_at_risk for a group is zero
-    is_n_at_risk_zero = model.addVars(
+    # Binary indicator for whether r for a group is zero
+    is_r_zero = model.addVars(
         self.n_groups,
         vtype=GRB.BINARY,
-        name="is_n_at_risk_zero"
+        name="is_r_zero"
     )
 
-    # Link is_n_at_risk_zero to n_at_risk using indicator constraint
+    # Link is_r_zero to r using indicator constraint
     for i in range(self.n_groups):
-      # If n_at_risk[i] == 0, then is_n_at_risk_zero[i] must be 1
-      # If n_at_risk[i] > 0, then is_n_at_risk_zero[i] must be 0
+      # If r[i] == 0, then is_r_zero[i] must be 1
+      # If r[i] > 0, then is_r_zero[i] must be 0
       model.addGenConstrIndicator(
-        is_n_at_risk_zero[i], True, n_at_risk[i], GRB.EQUAL, 0,
-        name=f"is_n_at_risk_zero_indicator_{i}"
+        is_r_zero[i], True, r[i], GRB.EQUAL, 0,
+        name=f"is_r_zero_indicator_{i}"
       )
 
     # Kaplan-Meier log probability for each group term
-    # This term will be 0 if n_at_risk[i] is 0
+    # This term will be 0 if r[i] is 0
     km_log_probability_per_group_terms = model.addVars(
       self.n_groups,
       vtype=GRB.CONTINUOUS,
@@ -1042,21 +1042,21 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
     # Use indicator constraints to set km_log_probability_per_group_terms[i]
     for i in range(self.n_groups):
-      # If is_n_at_risk_zero[i] is 0 (i.e., n_at_risk[i] > 0)
+      # If is_r_zero[i] is 0 (i.e., r[i] > 0)
       model.addGenConstrIndicator(
-        is_n_at_risk_zero[i], False,
-        km_log_probability_per_group_terms[i] - (log_n_survived_vars[i] - log_n_at_risk_vars[i]),
+        is_r_zero[i], False,
+        km_log_probability_per_group_terms[i] - (log_n_survived_vars[i] - log_r_vars[i]),
         GRB.EQUAL,
         0,
         name=f"km_log_prob_group_active_{i}"
       )
-      # If is_n_at_risk_zero[i] is 1 (i.e., n_at_risk[i] == 0)
+      # If is_r_zero[i] is 1 (i.e., r[i] == 0)
       model.addGenConstrIndicator(
-        is_n_at_risk_zero[i], True,
+        is_r_zero[i], True,
         km_log_probability_per_group_terms[i],
         GRB.EQUAL,
         0.0,
-        name=f"km_log_prob_group_zero_at_risk_{i}"
+        name=f"km_log_prob_group_zero_r_{i}"
       )
 
     # Total Kaplan-Meier log probability: sum of log probabilities per group
@@ -1090,14 +1090,14 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
   def add_binomial_penalty(  # pylint: disable=too-many-locals, too-many-statements
     self,
     model: gp.Model,
-    n_at_risk: gp.tupledict[int, gp.Var],
-    n_died_in_group: gp.tupledict[int, gp.Var],
+    r: gp.tupledict[int, gp.Var],
+    d: gp.tupledict[int, gp.Var],
     n_survived_in_group: gp.tupledict[int, gp.Var],
   ):
     """
     Add the binomial penalty to the model.
     This penalty is based on the expected survival probability
-    and the number of patients who were died and who were at risk in each group.
+    and the number of patients who died and who were at risk in each group.
 
     There's a separate binomial term for each group
     To complicate things, we only know the overall expected survival probability,
@@ -1195,7 +1195,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     )
     binomial_terms = []
     n_choose_d_indicator_vars_by_group = collections.defaultdict(list)
-    for indicator_var_idx, (group_idx, ((n, d), penalty)) in enumerate(
+    for indicator_var_idx, (group_idx, ((n, d_value), penalty)) in enumerate(  # pylint: disable=redefined-argument-from-local
       itertools.product(
         range(self.n_groups),
         n_choose_d_table.items(),
@@ -1209,18 +1209,18 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       model.addGenConstrIndicator(
         n_choose_d_indicator_vars[indicator_var_idx],
         True,
-        n_at_risk[group_idx],
+        r[group_idx],
         GRB.EQUAL,
         n,
-        name=f"n_choose_d_indicator_n_{group_idx}_{n}",
+        name=f"n_choose_d_indicator_r_{group_idx}_{n}",
       )
       model.addGenConstrIndicator(
         n_choose_d_indicator_vars[indicator_var_idx],
         True,
-        n_died_in_group[group_idx],
+        d[group_idx],  # Gurobi variable d (number died in group)
         GRB.EQUAL,
-        d,
-        name=f"n_choose_d_indicator_d_{group_idx}_{n}_{d}",
+        d_value,       # Loop value (specific number of deaths)
+        name=f"n_choose_d_indicator_d_{group_idx}_{n}_{d_value}",
       )
     for group_idx in range(self.n_groups):
       # Ensure that exactly one n_choose_d_indicator is selected for each group
@@ -1239,18 +1239,18 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     n_died_indicator_vars_by_group = collections.defaultdict(list)
     i = 0
     for group_idx in range(self.n_groups):
-      for d in range(self.n_died_in_group_total[group_idx] + 1):
+      for d_value in range(self.n_died_in_group_total[group_idx] + 1):  # pylint: disable=redefined-argument-from-local
         n_died_indicator_vars_by_group[group_idx].append(n_died_indicator_vars[i])
         model.addGenConstrIndicator(
           n_died_indicator_vars[i],
           True,
-          n_died_in_group[group_idx],
+          d[group_idx],  # Gurobi variable d (number died in group)
           GRB.EQUAL,
-          d,
-          name=f"n_died_indicator_{group_idx}_{d}",
+          d_value,       # Loop value (specific number of deaths)
+          name=f"n_died_indicator_{group_idx}_{d_value}",
         )
         binomial_terms.append(
-          -d * log_p_died[group_idx] * n_died_indicator_vars[i]
+          -d_value * log_p_died[group_idx] * n_died_indicator_vars[i]
         )
         i += 1
     assert i == len(n_died_indicator_vars)
@@ -1336,7 +1336,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
   def add_patient_wise_penalty(
     self,
     model: gp.Model,
-    x: gp.tupledict[int, gp.Var],
+    a: gp.tupledict[int, gp.Var],
   ):
     """
     Add the patient-wise penalty to the Gurobi model.
@@ -1345,30 +1345,30 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     """
     # Patient-wise penalties
     patient_penalties = []
-    for i in range(self.n_patients):
-      if np.isfinite(self.nll_penalty_for_patient_in_range[i]):
-        penalty = self.nll_penalty_for_patient_in_range[i] * x[i]
-        if self.nll_penalty_for_patient_in_range[i] < 0:
+    for j in range(self.n_patients):
+      if np.isfinite(self.nll_penalty_for_patient_in_range[j]):
+        penalty = self.nll_penalty_for_patient_in_range[j] * a[j]
+        if self.nll_penalty_for_patient_in_range[j] < 0:
           # If the penalty is negative, it means the patient is nominally within the range
           # We want the penalty to be 0 when all the patients are at their nominal values
-          penalty -= self.nll_penalty_for_patient_in_range[i]
+          penalty -= self.nll_penalty_for_patient_in_range[j]
         patient_penalties.append(penalty)
-      elif np.isneginf(self.nll_penalty_for_patient_in_range[i]):
+      elif np.isneginf(self.nll_penalty_for_patient_in_range[j]):
         #the patient must be selected, so we add a constraint
         model.addConstr(
-          x[i] == 1,
-          name=f"patient_{i}_must_be_selected",
+          a[j] == 1,
+          name=f"patient_{j}_must_be_selected",
         )
-      elif np.isposinf(self.nll_penalty_for_patient_in_range[i]):
+      elif np.isposinf(self.nll_penalty_for_patient_in_range[j]):
         #the patient must not be selected, so we add a constraint
         model.addConstr(
-          x[i] == 0,
-          name=f"patient_{i}_must_not_be_selected",
+          a[j] == 0,
+          name=f"patient_{j}_must_not_be_selected",
         )
       else:
         raise ValueError(
-          f"Unexpected NLL penalty for patient {i}: "
-          f"{self.nll_penalty_for_patient_in_range[i]}"
+          f"Unexpected NLL penalty for patient {j}: "
+          f"{self.nll_penalty_for_patient_in_range[j]}"
         )
 
     patient_penalty = gp.quicksum(patient_penalties)
@@ -1383,25 +1383,25 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     """
     model = gp.Model("Kaplan-Meier MINLP")
 
-    # Binary decision variables: x[i] = 1 if patient i is within the parameter range
-    x = model.addVars(self.n_patients, vtype=GRB.BINARY, name="x")
+    # Binary decision variables: a[j] = 1 if patient j is within the parameter range
+    a = model.addVars(self.n_patients, vtype=GRB.BINARY, name="a")
 
     (
       _,
       _,
-      n_died_in_group,
-      n_at_risk,
+      d,
+      r,
       n_survived_in_group,
       _,
     ) = self.add_counter_variables_and_constraints(
       model=model,
-      x=x,
+      a=a,
     )
 
     # Add Kaplan-Meier probability variables and constraints (replaces trajectory logic)
     km_probability_var = self.add_kaplan_meier_probability_variables_and_constraints(
       model=model,
-      n_at_risk=n_at_risk,
+      r=r,
       n_survived_in_group=n_survived_in_group,
     )
 
@@ -1411,14 +1411,14 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       use_binomial_penalty_indicator,
     ) = self.add_binomial_penalty(
       model=model,
-      n_at_risk=n_at_risk,
-      n_died_in_group=n_died_in_group,
+      r=r,
+      d=d,
       n_survived_in_group=n_survived_in_group,
     )
 
     patient_penalty = self.add_patient_wise_penalty(
       model=model,
-      x=x,
+      a=a,
     )
 
     # Objective: minimize total penalty
@@ -1430,7 +1430,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
     return (
       model,
-      x,
+      a,
       km_probability_var,
       expected_probability_var,
       use_binomial_penalty_indicator,
@@ -1451,7 +1451,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     expected_probability: float | None,
     patient_wise_only: bool,
     binomial_only: bool,
-    x: gp.tupledict[int, gp.Var],
+    a: gp.tupledict[int, gp.Var],
     km_probability_var: gp.Var,
     use_binomial_penalty_indicator: gp.Var,
     expected_probability_var: gp.Var,
@@ -1518,23 +1518,23 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
     if binomial_only:
       self.__patient_constraints_for_binomial_only = []
-      for i in range(self.n_patients):
-        if self.parameter_in_range[i]:
-          assert self.nll_penalty_for_patient_in_range[i] <= 0
+      for j in range(self.n_patients):
+        if self.parameter_in_range[j]:
+          assert self.nll_penalty_for_patient_in_range[j] <= 0
           #the patient must be selected
           self.__patient_constraints_for_binomial_only.append(
             model.addConstr(
-              x[i] == 1,
-              name=f"patient_{i}_must_be_selected_binomial_only",
+              a[j] == 1,
+              name=f"patient_{j}_must_be_selected_binomial_only",
             )
           )
         else:
-          assert self.nll_penalty_for_patient_in_range[i] >= 0
+          assert self.nll_penalty_for_patient_in_range[j] >= 0
           #the patient must not be selected
           self.__patient_constraints_for_binomial_only.append(
             model.addConstr(
-              x[i] == 0,
-              name=f"patient_{i}_must_not_be_selected_binomial_only",
+              a[j] == 0,
+              name=f"patient_{j}_must_not_be_selected_binomial_only",
             )
           )
 
@@ -1631,14 +1631,14 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
     (
       model,
-      x,
+      a,
       km_probability_var,
       expected_probability_var,
       use_binomial_penalty_indicator,
     ) = self.gurobi_model
     self.update_model_with_expected_probability(
       model=model,
-      x=x,
+      a=a,
       km_probability_var=km_probability_var,
       expected_probability=expected_probability,
       patient_wise_only=patient_wise_only,
@@ -1785,16 +1785,17 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     n_alive = model.getVarByName("n_alive")
     assert n_total is not None
     assert n_alive is not None
-    selected = [i for i in range(self.n_patients) if x[i].X > 0.5]
+    assert all(var is not None for var in a)
+    selected = [j for j in range(self.n_patients) if a[j].X > 0.5]
     n_alive_val = np.rint(n_alive.X)
     n_total_val = np.rint(n_total.X)
 
     patient_penalty_val = sum(
-      nll_penalty_for_patient_in_range[i] * (
-        x[i].X
-        - (1 if nll_penalty_for_patient_in_range[i] < 0 else 0)
-      ) for i in range(self.n_patients)
-      if np.isfinite(nll_penalty_for_patient_in_range[i])
+      nll_penalty_for_patient_in_range[j] * (
+        a[j].X
+        - (1 if nll_penalty_for_patient_in_range[j] < 0 else 0)
+      ) for j in range(self.n_patients)
+      if np.isfinite(nll_penalty_for_patient_in_range[j])
     )
     binom_penalty_var = model.getVarByName("binom_penalty")
     assert binom_penalty_var is not None

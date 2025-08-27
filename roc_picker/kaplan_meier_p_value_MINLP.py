@@ -293,7 +293,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
   def add_counter_variables_and_constraints(
     self,
     model: gp.Model,
-    x: gp.tupledict[tuple[int, ...], gp.Var]
+    a: gp.tupledict[tuple[int, ...], gp.Var]
   ) -> tuple[
     gp.tupledict[tuple[int, ...], gp.Var],
     gp.tupledict[tuple[int, ...], gp.Var],
@@ -307,23 +307,23 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     # If parameter_min and parameter_max are both infinite,
     # then each patient must be assigned to a curve.
     if np.isinf(self.parameter_min) and np.isinf(self.parameter_max):
-      for i in range(self.n_patients):
+      for j in range(self.n_patients):
         model.addConstr(
-          x[i, 0] + x[i, 1] == 1,
-          name=f"patient_{i}_assigned_to_curve"
+          a[j, 0] + a[j, 1] == 1,
+          name=f"patient_{j}_assigned_to_curve"
         )
     else:
-      for i in range(self.n_patients):
+      for j in range(self.n_patients):
         model.addConstr(
-          x[i, 0] + x[i, 1] <= 1,
-          name=f"patient_{i}_assigned_to_at_most_one_curve"
+          a[j, 0] + a[j, 1] <= 1,
+          name=f"patient_{j}_assigned_to_at_most_one_curve"
         )
 
-    n_at_risk = model.addVars(
-      len(self.all_death_times), 2, vtype=gp.GRB.INTEGER, name="n_at_risk"
+    r = model.addVars(
+      len(self.all_death_times), 2, vtype=gp.GRB.INTEGER, name="r"
     )
-    n_died = model.addVars(
-      len(self.all_death_times), 2, vtype=gp.GRB.INTEGER, name="n_died"
+    d = model.addVars(
+      len(self.all_death_times), 2, vtype=gp.GRB.INTEGER, name="d"
     )
     n_survived = model.addVars(
       len(self.all_death_times), 2, vtype=gp.GRB.INTEGER, name="n_survived"
@@ -331,31 +331,31 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     for k, t in enumerate(self.all_death_times):
       for j in range(2):
         model.addConstr(
-          n_at_risk[k, j] == gp.quicksum(
-            x[i, j] for i in range(self.n_patients)
+          r[k, j] == gp.quicksum(
+            a[i, j] for i in range(self.n_patients)
             if self.patient_still_at_risk(t)[i]
           ),
-          name=f"n_at_risk_{k}_{j}"
+          name=f"r_{k}_{j}"
         )
         model.addConstr(
-          n_died[k, j] == gp.quicksum(
-            x[i, j] for i in range(self.n_patients)
+          d[k, j] == gp.quicksum(
+            a[i, j] for i in range(self.n_patients)
             if self.all_patients[i].time == t
             and not self.all_patients[i].censored
           ),
-          name=f"n_died_{k}_{j}"
+          name=f"d_{k}_{j}"
         )
         model.addConstr(
-          n_survived[k, j] == n_at_risk[k, j] - n_died[k, j],
+          n_survived[k, j] == r[k, j] - d[k, j],
           name=f"n_survived_{k}_{j}"
         )
 
-    return n_at_risk, n_died, n_survived
+    return r, d, n_survived
 
   def add_kaplan_meier_probability_variables_and_constraints( #pylint: disable=too-many-locals
     self,
     model: gp.Model,
-    n_at_risk: gp.tupledict[tuple[int, ...], gp.Var],
+    r: gp.tupledict[tuple[int, ...], gp.Var],
     n_survived: gp.tupledict[tuple[int, ...], gp.Var],
   ) -> tuple[gp.tupledict, gp.tupledict]:
     """
@@ -368,10 +368,10 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     for j in range(2):  # j=0 for low curve, j=1 for high curve
       # Variables for log of counts
-      log_n_at_risk_vars = model.addVars(
+      log_r_vars = model.addVars(
         len(self.all_death_times),
         vtype=GRB.CONTINUOUS,
-        name=f"log_n_at_risk_curve_{j}",
+        name=f"log_r_curve_{j}",
         lb=-GRB.INFINITY,
         ub=np.log(self.n_patients + self.__log_zero_epsilon),
       )
@@ -383,11 +383,11 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
         ub=np.log(self.n_patients + self.__log_zero_epsilon),
       )
 
-      # Helper variables for log arguments (n_at_risk + epsilon, n_survived + epsilon)
-      n_at_risk_plus_epsilon = model.addVars(
+      # Helper variables for log arguments (r + epsilon, n_survived + epsilon)
+      r_plus_epsilon = model.addVars(
         len(self.all_death_times),
         vtype=GRB.CONTINUOUS,
-        name=f"n_at_risk_plus_epsilon_curve_{j}",
+        name=f"r_plus_epsilon_curve_{j}",
         lb=self.__log_zero_epsilon,
       )
       n_survived_plus_epsilon = model.addVars(
@@ -400,8 +400,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       # Constraints to link original counts to epsilon-added variables
       for i in range(len(self.all_death_times)):
         model.addConstr(
-          n_at_risk_plus_epsilon[i] == n_at_risk[i, j] + self.__log_zero_epsilon,
-          name=f"n_at_risk_plus_epsilon_constr_{i}_curve_{j}",
+          r_plus_epsilon[i] == r[i, j] + self.__log_zero_epsilon,
+          name=f"r_plus_epsilon_constr_{i}_curve_{j}",
         )
         model.addConstr(
           n_survived_plus_epsilon[i] == n_survived[i, j] + self.__log_zero_epsilon,
@@ -411,9 +411,9 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       # Link count variables to their log counterparts using GenConstrLog
       for i in range(len(self.all_death_times)):
         model.addGenConstrLog(
-          n_at_risk_plus_epsilon[i],
-          log_n_at_risk_vars[i],
-          name=f"log_n_at_risk_constr_{i}_curve_{j}",
+          r_plus_epsilon[i],
+          log_r_vars[i],
+          name=f"log_r_constr_{i}_curve_{j}",
         )
         model.addGenConstrLog(
           n_survived_plus_epsilon[i],
@@ -421,18 +421,18 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
           name=f"log_n_survived_constr_{i}_curve_{j}",
         )
 
-      # Binary indicator for whether n_at_risk for a death time is zero
-      is_n_at_risk_zero = model.addVars(
+      # Binary indicator for whether r for a death time is zero
+      is_r_zero = model.addVars(
         len(self.all_death_times),
         vtype=GRB.BINARY,
-        name=f"is_n_at_risk_zero_curve_{j}"
+        name=f"is_r_zero_curve_{j}"
       )
 
-      # Link is_n_at_risk_zero to n_at_risk using indicator constraint
+      # Link is_r_zero to r using indicator constraint
       for i in range(len(self.all_death_times)):
         model.addGenConstrIndicator(
-          is_n_at_risk_zero[i], True, n_at_risk[i, j], GRB.EQUAL, 0,
-          name=f"is_n_at_risk_zero_indicator_{i}_curve_{j}",
+          is_r_zero[i], True, r[i, j], GRB.EQUAL, 0,
+          name=f"is_r_zero_indicator_{i}_curve_{j}",
         )
 
       # Kaplan-Meier log probability for each death time term
@@ -446,17 +446,17 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
       # Use indicator constraints to set km_log_probability_per_time_terms[i]
       for i in range(len(self.all_death_times)):
-        # If is_n_at_risk_zero[i] is 0 (i.e., n_at_risk[i, j] > 0)
+        # If is_r_zero[i] is 0 (i.e., r[i, j] > 0)
         model.addGenConstrIndicator(
-          is_n_at_risk_zero[i], False,
-          km_log_probability_per_time_terms[i] - (log_n_survived_vars[i] - log_n_at_risk_vars[i]),
+          is_r_zero[i], False,
+          km_log_probability_per_time_terms[i] - (log_n_survived_vars[i] - log_r_vars[i]),
           GRB.EQUAL,
           0,
           name=f"km_log_prob_time_active_{i}_curve_{j}",
         )
-        # If is_n_at_risk_zero[i] is 1 (i.e., n_at_risk[i, j] == 0)
+        # If is_r_zero[i] is 1 (i.e., r[i, j] == 0)
         model.addGenConstrIndicator(
-          is_n_at_risk_zero[i], True,
+          is_r_zero[i], True,
           km_log_probability_per_time_terms[i],
           GRB.EQUAL,
           0.0,
@@ -545,8 +545,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     self,
     model: gp.Model,
     *,
-    n_at_risk: gp.tupledict[tuple[int, ...], gp.Var],
-    n_died: gp.tupledict[tuple[int, ...], gp.Var],
+    r: gp.tupledict[tuple[int, ...], gp.Var],
+    d: gp.tupledict[tuple[int, ...], gp.Var],
     n_survived: gp.tupledict[tuple[int, ...], gp.Var],
   ):
     """
@@ -598,9 +598,9 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       len(self.all_death_times), 2, len(n_choose_d_table),
       vtype=gp.GRB.BINARY, name="n_choose_d_indicator",
     )
-    n_died_indicator_vars = model.addVars(
+    d_indicator_vars = model.addVars(
       len(self.all_death_times), 2, self.n_patients + 1,
-      vtype=gp.GRB.BINARY, name="n_died_indicator",
+      vtype=gp.GRB.BINARY, name="d_indicator",
     )
     n_survived_indicator_vars = model.addVars(
       len(self.all_death_times), 2, self.n_patients + 1,
@@ -618,8 +618,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
           name=f"n_choose_d_indicator_unique_{i}_{j}",
         )
         model.addConstr(
-          gp.quicksum(n_died_indicator_vars[i, j, k] for k in range(self.n_patients + 1)) == 1,
-          name=f"n_died_indicator_unique_{i}_{j}",
+          gp.quicksum(d_indicator_vars[i, j, k] for k in range(self.n_patients + 1)) == 1,
+          name=f"d_indicator_unique_{i}_{j}",
         )
         model.addConstr(
           gp.quicksum(n_survived_indicator_vars[i, j, k] for k in range(self.n_patients + 1)) == 1,
@@ -627,13 +627,13 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
         )
 
         #Add the n choose d term
-        for k, ((n, d), penalty) in enumerate(n_choose_d_table.items()):
+        for k, ((n, d_value), penalty) in enumerate(n_choose_d_table.items()):
           indicator = n_choose_d_indicator_vars[i, j, k]
           binomial_terms.append(-penalty * indicator)
           model.addGenConstrIndicator(
             indicator,
             True,
-            n_at_risk[i,j],
+            r[i,j],
             GRB.EQUAL,
             n,
             name=f"n_choose_d_indicator_n_{i}_{j}_{n}",
@@ -641,24 +641,24 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
           model.addGenConstrIndicator(
             indicator,
             True,
-            n_died[i,j],
+            d[i,j],
             GRB.EQUAL,
-            d,
-            name=f"n_choose_d_indicator_d_{i}_{j}_{d}",
+            d_value,
+            name=f"n_choose_d_indicator_d_{i}_{j}_{d_value}",
           )
 
         #Add the p_died term
-        for d in range(self.n_patients + 1):
+        for d_value in range(self.n_patients + 1):
           binomial_terms.append(
-            -d * log_p_died[i, j] * n_died_indicator_vars[i, j, d]
+            -d_value * log_p_died[i, j] * d_indicator_vars[i, j, d_value]
           )
           model.addGenConstrIndicator(
-            n_died_indicator_vars[i, j, d],
+            d_indicator_vars[i, j, d_value],
             True,
-            n_died[i, j],
+            d[i, j],
             GRB.EQUAL,
-            d,
-            name=f"n_died_indicator_{i}_{j}_{d}",
+            d_value,
+            name=f"d_indicator_{i}_{j}_{d_value}",
           )
 
         #Add the p_survived term
@@ -709,7 +709,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
   def add_patient_wise_penalty(
     self,
     model: gp.Model,
-    x: gp.tupledict[tuple[int, ...], gp.Var],
+    a: gp.tupledict[tuple[int, ...], gp.Var],
   ):
     """
     Add the patient-wise penalty to the model.
@@ -720,7 +720,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     for i in range(self.n_patients):
       for j in range(2):
         if np.isfinite(self.nll_penalty_for_patient_in_range[i, j]):
-          penalty = self.nll_penalty_for_patient_in_range[i, j] * x[i, j]
+          penalty = self.nll_penalty_for_patient_in_range[i, j] * a[i, j]
           if self.nll_penalty_for_patient_in_range[i, j] < 0:
             # If the penalty is negative, it means the patient is nominally in the range
             # We want the penalty to be 0 when all patients are at their nominal values
@@ -729,12 +729,12 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
         elif np.isneginf(self.nll_penalty_for_patient_in_range[i, j]):
           #the patient must be selected, so we add a constraint
           model.addConstr(
-            x[i, j] == 1, name=f"patient_{i}_must_be_in_curve_{j}",
+            a[i, j] == 1, name=f"patient_{i}_must_be_in_curve_{j}",
           )
         elif np.isposinf(self.nll_penalty_for_patient_in_range[i, j]):
           # The patient must not be selected, so we add a constraint
           model.addConstr(
-            x[i, j] == 0, name=f"patient_{i}_must_not_be_in_curve_{j}",
+            a[i, j] == 0, name=f"patient_{i}_must_not_be_in_curve_{j}",
           )
         else:
           raise ValueError(
@@ -750,26 +750,26 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     """
     model = gp.Model("Kaplan-Meier p-value MINLP")
 
-    #Binary decision variables: x[i, j] = 1 if patient i is in curve j
-    x = model.addVars(self.n_patients, 2, vtype=gp.GRB.BINARY, name="x")
+    #Binary decision variables: a[j, k] = 1 if patient j is in curve k
+    a = model.addVars(self.n_patients, 2, vtype=gp.GRB.BINARY, name="a")
 
-    n_at_risk, n_died, n_survived = self.add_counter_variables_and_constraints(model, x)
+    r, d, n_survived = self.add_counter_variables_and_constraints(model, a)
 
     # Add Kaplan-Meier probability variables and constraints
     (
       km_probability_at_time_low,
       km_probability_at_time_high
     ) = self.add_kaplan_meier_probability_variables_and_constraints(
-      model, n_at_risk, n_survived
+      model, r, n_survived
     )
 
     binomial_penalty, null_hypothesis_indicator = self.add_binomial_penalty(
       model,
-      n_died=n_died,
-      n_at_risk=n_at_risk,
+      d=d,
+      r=r,
       n_survived=n_survived
     )
-    patient_penalty = self.add_patient_wise_penalty(model, x)
+    patient_penalty = self.add_patient_wise_penalty(model, a)
 
     model.setObjective(
       2 * (binomial_penalty + patient_penalty),
@@ -780,7 +780,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     return (
       model,
       null_hypothesis_indicator,
-      x,
+      a,
       km_probability_at_time_low,
       km_probability_at_time_high
     )
@@ -820,12 +820,12 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
   def update_model_with_binomial_only_constraints(
     self,
     model: gp.Model,
-    x: gp.tupledict[tuple[int, ...], gp.Var],
+    a: gp.tupledict[tuple[int, ...], gp.Var],
     binomial_only: bool,
   ):
     """
     Update the model with binomial_only constraints.
-    If binomial_only is True, we add constraints for x[i, j] to be either 0 or 1,
+    If binomial_only is True, we add constraints for a[i, j] to be either 0 or 1,
     based on parameter_in_range.
     """
     # Remove existing constraints if they exist
@@ -842,7 +842,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
             # The patient must be selected for this curve
             self.__patient_constraints_for_binomial_only.append(
               model.addConstr(
-                x[i, j] == 1,
+                a[i, j] == 1,
                 name=f"patient_{i}_must_be_selected_curve_{j}_binomial_only",
               )
             )
@@ -850,7 +850,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
             # The patient must not be selected for this curve
             self.__patient_constraints_for_binomial_only.append(
               model.addConstr(
-                x[i, j] == 0,
+                a[i, j] == 0,
                 name=f"patient_{i}_must_not_be_selected_curve_{j}_binomial_only",
               )
             )
@@ -934,7 +934,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     Parameters
     ----------
     binomial_only : bool, optional
-        If True, add constraints for x[i, j] to be either 0 or 1,
+        If True, add constraints for a[i, j] to be either 0 or 1,
         based on parameter_in_range. Default is False.
     patient_wise_only : bool, optional
         If True, only consider patient-wise errors and constrain the curves
@@ -949,13 +949,13 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     (
       model,
       null_hypothesis_indicator,
-      x,
+      a,
       km_probability_at_time_low,
       km_probability_at_time_high
     ) = self.gurobi_model
 
     # Apply binomial_only constraints if specified
-    self.update_model_with_binomial_only_constraints(model, x, binomial_only)
+    self.update_model_with_binomial_only_constraints(model, a, binomial_only)
 
     # Apply patient_wise_only constraints if specified
     self.update_model_with_patient_wise_only_constraints(
