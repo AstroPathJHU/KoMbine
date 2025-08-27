@@ -795,15 +795,15 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     Extract statistics for each curve from the optimized model.
 
     Returns:
-        tuple: (n_total_low, n_alive_low, km_prob_low, n_total_high, n_alive_high, km_prob_high)
+        tuple: (n_total_low, n_alive_low, km_prob_low, p_survived_low,
+                n_total_high, n_alive_high, km_prob_high, p_survived_high)
     """
     # Extract KM probabilities for each curve
-    print(km_probability_at_time_low)
     km_prob_low = [
-      km_prob.X for i, km_prob in km_probability_at_time_low.items()
+      km_prob.X for _, km_prob in km_probability_at_time_low.items()
     ]
     km_prob_high = [
-      km_prob.X for i, km_prob in km_probability_at_time_high.items()
+      km_prob.X for _, km_prob in km_probability_at_time_high.items()
     ]
 
     # For n_total and n_alive, we need to look at the r and d variables per curve
@@ -812,16 +812,22 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     n_alive_low = 0
     n_total_high = 0
     n_alive_high = 0
+    p_survived_low = []
+    p_survived_high = []
 
     for i in range(len(self.all_death_times)):
       r_low = model.getVarByName(f"r[{i},0]")
       r_high = model.getVarByName(f"r[{i},1]")
       d_low = model.getVarByName(f"d[{i},0]")
       d_high = model.getVarByName(f"d[{i},1]")
+      p_survived_low_var = model.getVarByName(f"p_survived[{i},0]")
+      p_survived_high_var = model.getVarByName(f"p_survived[{i},1]")
       assert r_low is not None
       assert r_high is not None
       assert d_low is not None
       assert d_high is not None
+      assert p_survived_low_var is not None
+      assert p_survived_high_var is not None
 
       if i == 0:  # Use first time point as representative
         n_total_low = int(np.rint(r_low.X))
@@ -830,7 +836,14 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
       n_alive_low = n_total_low - int(np.rint(d_low.X))
       n_alive_high = n_total_high - int(np.rint(d_high.X))
-    return n_total_low, n_alive_low, km_prob_low, n_total_high, n_alive_high, km_prob_high
+
+      p_survived_low.append(p_survived_low_var.X)
+      p_survived_high.append(p_survived_high_var.X)
+
+    return (
+      n_total_low, n_alive_low, km_prob_low, p_survived_low,
+      n_total_high, n_alive_high, km_prob_high, p_survived_high,
+    )
 
   def _compute_patient_wise_penalty_value(self, a: gp.tupledict[tuple[int, ...], gp.Var]):
     """
@@ -1111,8 +1124,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     )
 
     # Extract curve statistics for null hypothesis
-    (n_total_low_null, n_alive_low_null, km_prob_low_null,
-     n_total_high_null, n_alive_high_null, km_prob_high_null) = (
+    (n_total_low_null, n_alive_low_null, km_prob_low_null, p_survived_low_null,
+     n_total_high_null, n_alive_high_null, km_prob_high_null, p_survived_high_null) = (
       self._extract_curve_statistics(
         model, km_probability_at_time_low, km_probability_at_time_high
       )
@@ -1133,6 +1146,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       n_alive_high=n_alive_high_null,
       km_probability_low=km_prob_low_null,
       km_probability_high=km_prob_high_null,
+      p_survived_low=p_survived_low_null,
+      p_survived_high=p_survived_high_null,
       binomial_2NLL=2*binomial_penalty_total_null,
       binomial_2NLL_low=(
         2*binomial_penalty_low_null if binomial_penalty_low_null is not None else None
@@ -1160,8 +1175,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     )
 
     # Extract curve statistics for alternative hypothesis
-    (n_total_low_alt, n_alive_low_alt, km_prob_low_alt,
-     n_total_high_alt, n_alive_high_alt, km_prob_high_alt) = (
+    (n_total_low_alt, n_alive_low_alt, km_prob_low_alt, p_survived_low_alt,
+     n_total_high_alt, n_alive_high_alt, km_prob_high_alt, p_survived_high_alt) = (
       self._extract_curve_statistics(
         model, km_probability_at_time_low, km_probability_at_time_high
       )
@@ -1181,6 +1196,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       n_alive_high=n_alive_high_alt,
       km_probability_low=km_prob_low_alt,
       km_probability_high=km_prob_high_alt,
+      p_survived_low=p_survived_low_alt,
+      p_survived_high=p_survived_high_alt,
       binomial_2NLL=2*binomial_penalty_total_alt,
       binomial_2NLL_low=(
         2*binomial_penalty_low_alt if binomial_penalty_low_alt is not None else None
