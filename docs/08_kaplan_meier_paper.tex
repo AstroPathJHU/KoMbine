@@ -268,6 +268,35 @@ This surprising result highlights the importance of the patient-wise uncertainti
   \caption{\label{fig:best-fit-vs-nominal} An example \KM{} curve.  The best fit (blue) does not coincide with the nominal curve (red).  The error bands are shown as shaded blue areas.}
 \end{figure}
 
+\subsection{Comparison with conventional methods}\label{sec:compare-to-conventional}
+
+\subsubsection{Greenwood confidence intervals}\label{sec:compare-to-greenwood}
+
+\Cref{fig:compare-to-greenwood} shows \KM{} curves with the \pkg{KoMbine} confidence intervals and the exponential Greenwood confidence intervals from \cref{eq:exponential-greenwood}.  The \pkg{KoMbine} confidence intervals are calculated with the binomial error only, to facilitate the comparison.
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.49\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{comparison_to_greenwood_small_n.pdf}
+  \caption{\label{fig:compare-to-greenwood-small-n}}
+\end{subfigure}
+\begin{subfigure}[t]{0.49\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{comparison_to_greenwood_large_n.pdf}
+  \caption{\label{fig:compare-to-greenwood-large-n}}
+\end{subfigure}
+\caption{\label{fig:compare-to-greenwood} \KM{} curves with confidence intervals using only the binomial error, calculated using the exponential Greenwood (e. G.) formula from \cref{eq:exponential-greenwood} (gold) and the likelihood method from \pkg{KoMbine} (blue).  The left panel shows a small cohort of 12 patients, while the right panel shows a larger cohort of 100 patients.}
+\end{figure}
+
+In \cref{fig:compare-to-greenwood-small-n}, only 12 patients are included in the \KM{} curve, and the exponential Greenwood are noticeably different from the \pkg{KoMbine} confidence intervals.  \Cref{fig:compare-to-greenwood-large-n} shows \KM{} curves with 100 patients, and the two confidence intervals are in agreement.
+
+One striking difference in both cases is that the Greenwood method cannot calculate confidence intervals for the first or last time points, when the probabilities are \(1\) and \(0\).  This is a fundamental limitation of the Greenwood method, which approximates the uncertainty on the \emph{true} binomial probability using the \emph{observed} numbers of patients who were at risk and who survived.  If everyone survived or died, the binomial uncertainty is \(0\).
+
+Our method, by contrast, calculates the binomial likelihood (and hence the uncertainty) using the \emph{true} survival probability, which we can do despite not knowing it in advance, because it is a parameter in the likelihood fit.  This is the fundamental tradeoff of the likelihood method: we can be more precise, but the likelihood fit is more computationally intensive.
+
+\subsubsection[Conventional log-rank p value estimation]{Conventional log-rank \(p\) value estimation}
+
 \subsection{Lung cancer dataset}
 
 This example is taken from \citet{DONUTS}, in which we analyzed pre-treatment biopsies from a cohort of patients with non-small-cell lung cancer (NSCLC) treated with neoadjuvant anti-PD-1 immunotherapy.  We identified CD8+FoxP3+ cells, which are associated with good outcomes, but are extremely rare: a patient may have only one or two in their biopsy.  We also developed a probabilistic biomarker, called DONUTS, which resemble the niche of the CD8+FoxP3+ cells but are much more abundant.
@@ -316,31 +345,6 @@ It should be noted that this is a fairly small cohort of only 25 patients.  In a
   \end{subfigure}
   \caption{\label{fig:lung-dataset} \KM{} curves for the regression-free survival of patients with lung cancer who were treated with neoadjuvant anti-PD-1 immunotherapy, stratifying patients by their pre-treatment densities of either CD8+FoxP3+ cells (left) or DONUTS (right).  The top row shows the full uncertainty, while the middle and bottom rows show the uncertainties broken down into patient-wise and binomial contributions, respectively.}
 \end{figure}
-
-\subsection{Comparison with Greenwood confidence intervals}\label{sec:compare-to-greenwood}
-
-\Cref{fig:compare-to-greenwood} shows \KM{} curves with the \pkg{KoMbine} confidence intervals and the exponential Greenwood confidence intervals from \cref{eq:exponential-greenwood}.  The \pkg{KoMbine} confidence intervals are calculated with the binomial error only, to facilitate the comparison.
-
-\begin{figure}
-\centering
-\begin{subfigure}[t]{0.49\textwidth}
-  \centering
-  \includegraphics[width=\linewidth]{comparison_to_greenwood_small_n.pdf}
-  \caption{\label{fig:compare-to-greenwood-small-n}}
-\end{subfigure}
-\begin{subfigure}[t]{0.49\textwidth}
-  \centering
-  \includegraphics[width=\linewidth]{comparison_to_greenwood_large_n.pdf}
-  \caption{\label{fig:compare-to-greenwood-large-n}}
-\end{subfigure}
-\caption{\label{fig:compare-to-greenwood} \KM{} curves with confidence intervals using only the binomial error, calculated using the exponential Greenwood (e. G.) formula from \cref{eq:exponential-greenwood} (gold) and the likelihood method from \pkg{KoMbine} (blue).  The left panel shows a small cohort of 12 patients, while the right panel shows a larger cohort of 100 patients.}
-\end{figure}
-
-In \cref{fig:compare-to-greenwood-small-n}, only 12 patients are included in the \KM{} curve, and the exponential Greenwood are noticeably different from the \pkg{KoMbine} confidence intervals.  \Cref{fig:compare-to-greenwood-large-n} shows \KM{} curves with 100 patients, and the two confidence intervals are in agreement.
-
-One striking difference in both cases is that the Greenwood method cannot calculate confidence intervals for the first or last time points, when the probabilities are \(1\) and \(0\).  This is a fundamental limitation of the Greenwood method, which approximates the uncertainty on the \emph{true} binomial probability using the \emph{observed} numbers of patients who were at risk and who survived.  If everyone survived or died, the binomial uncertainty is \(0\).
-
-Our method, by contrast, calculates the binomial likelihood (and hence the uncertainty) using the \emph{true} survival probability, which we can do despite not knowing it in advance, because it is a parameter in the likelihood fit.  This is the fundamental tradeoff of the likelihood method: we can be more precise, but the likelihood fit is more computationally intensive.
 
 \section{Future Work}
 
