@@ -6,7 +6,6 @@ The p-value is computed via the likelihood ratio test.
 """
 # pylint: disable=too-many-lines
 
-import collections
 import functools
 import math
 
