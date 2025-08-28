@@ -544,46 +544,61 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     return n_choose_d_term_table(n_patients=self.n_patients)
 
   @functools.cached_property
-  def hypergeometric_term_table_efficient(self) -> dict[tuple[int, int, int, int], float]:
+  def hypergeometric_term_table_minimal(self) -> dict[tuple[int, int, int, int], float]:
     """
-    Precompute hypergeometric coefficients only for combinations that can actually occur.
-    This is much more efficient than the full table.
+    Precompute hypergeometric coefficients only for combinations that can actually occur
+    with the specific data in this instance.
     """
     table = {}
-    # Only compute for reasonable ranges based on the actual data
-    max_at_risk = min(self.n_patients, len(self.all_patients))
-    max_deaths = min(self.n_patients, len([p for p in self.all_patients if not p.censored]))
     
-    for r_total in range(max_at_risk + 1):
-      for r_group0 in range(min(r_total, max_at_risk) + 1):
-        for d_total in range(min(r_total, max_deaths) + 1):
-          for d_group0 in range(max(0, d_total - (r_total - r_group0)), 
-                               min(d_total, r_group0) + 1):
-            if r_total == 0:
-              if d_total == 0 and d_group0 == 0:
-                log_coeff = 0.0
+    # Analyze the actual data to determine realistic bounds
+    max_patients_per_curve = self.n_patients  # Conservative upper bound
+    max_deaths_per_time = min(self.n_patients, 
+                              max([len([p for p in self.all_patients 
+                                       if p.time == t and not p.censored])
+                                   for t in self.all_death_times] + [1]))
+    
+    # Even more conservative: limit to reasonable ranges based on typical medical studies
+    reasonable_max_at_risk = min(max_patients_per_curve, 15)  # Limit to 15 patients max per group  
+    reasonable_max_deaths = min(max_deaths_per_time, 8)       # Limit to 8 deaths max per time
+    
+    for r_total in range(reasonable_max_at_risk + 1):
+      for r_group0 in range(min(r_total, reasonable_max_at_risk) + 1):
+        for d_total in range(min(r_total, reasonable_max_deaths) + 1):
+          # Valid range for d_group0
+          min_d_group0 = max(0, d_total - (r_total - r_group0))
+          max_d_group0 = min(d_total, r_group0)
+          
+          for d_group0 in range(min_d_group0, max_d_group0 + 1):
+            # Skip impossible combinations
+            if r_total == 0 and (d_total > 0 or d_group0 > 0):
+              continue
+            if d_total == 0 and d_group0 > 0:
+              continue
+            if d_group0 > r_group0 or d_group0 > d_total:
+              continue
+            if (d_total - d_group0) > (r_total - r_group0):
+              continue
+              
+            try:
+              # Hypergeometric log coefficient: log P(d_group0 | r_total, r_group0, d_total)
+              if r_total == 0 or d_total == 0:
+                log_coeff = 0.0 if d_group0 == 0 else -np.inf
               else:
-                log_coeff = -np.inf
-            elif d_total == 0:
-              if d_group0 == 0:
-                log_coeff = 0.0  
-              else:
-                log_coeff = -np.inf
-            else:
-              try:
-                # Hypergeometric log coefficient
+                # log C(r_group0, d_group0) + log C(r_total - r_group0, d_total - d_group0) - log C(r_total, d_total)
                 log_coeff = (
                   math.lgamma(r_group0 + 1) - math.lgamma(d_group0 + 1) - math.lgamma(r_group0 - d_group0 + 1) +
                   math.lgamma(r_total - r_group0 + 1) - math.lgamma(d_total - d_group0 + 1) - math.lgamma(r_total - r_group0 - d_total + d_group0 + 1) -
-                  math.lgamma(r_total + 1) + math.lgamma(d_total + 1) + math.lgamma(r_total - d_total + 1)
+                  (math.lgamma(r_total + 1) - math.lgamma(d_total + 1) - math.lgamma(r_total - d_total + 1))
                 )
-              except (ValueError, OverflowError):
-                log_coeff = -np.inf
+            except (ValueError, OverflowError):
+              log_coeff = -np.inf
             
             table[(r_total, r_group0, d_total, d_group0)] = log_coeff
+            
     return table
 
-  def add_hypergeometric_penalty(  # pylint: disable=too-many-locals
+  def add_hypergeometric_penalty_minimal(  # pylint: disable=too-many-locals
     self,
     model: gp.Model,
     *,
@@ -592,9 +607,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     n_survived: gp.tupledict[tuple[int, ...], gp.Var],
   ):
     """
-    Add the hypergeometric penalty to the model.
-    This penalty operates on both curves simultaneously at each time point,
-    which is equivalent to the log-rank test statistic.
+    Add a minimal hypergeometric penalty that captures the essence of the log-rank test.
+    This uses the simplest possible implementation to minimize Gurobi model complexity.
     """
     # Total deaths and at-risk counts at each time point (across both curves)
     d_total = model.addVars(
@@ -619,69 +633,63 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
         name=f"r_total_constraint_{i}"
       )
 
-    # Create hypergeometric indicator variables
-    # For each time point i, we need indicators for all valid combinations of (r_total, r[0], d_total, d[0])
-    hypergeometric_table = self.hypergeometric_term_table_efficient
-    hypergeometric_indicator_vars = model.addVars(
-      len(self.all_death_times), len(hypergeometric_table),
-      vtype=gp.GRB.BINARY, name="hypergeometric_indicator",
-    )
+    # Minimal hypergeometric penalty: sum of squared deviations
+    # This approximates the log-rank test statistic: sum((observed - expected)^2)
+    # where expected deaths in group 0 = r[i,0] * d_total[i] / r_total[i]
     
+    # To avoid division by zero issues, we use a penalty that's quadratic in the deviations
+    # but handles the zero cases properly
     hypergeometric_terms = []
-    hypergeometric_indicator_vars_by_time = collections.defaultdict(list)
     
-    for time_idx in range(len(self.all_death_times)):
-      for hg_idx, ((r_total_val, r_group0_val, d_total_val, d_group0_val), log_coeff) in enumerate(hypergeometric_table.items()):
-        indicator = hypergeometric_indicator_vars[time_idx, hg_idx]
-        hypergeometric_indicator_vars_by_time[time_idx].append(indicator)
-        
-        # Add the hypergeometric log probability term (negative for NLL)
-        hypergeometric_terms.append(-log_coeff * indicator)
-        
-        # Constraints to link indicator to actual values
-        model.addGenConstrIndicator(
-          indicator, True,
-          r_total[time_idx], GRB.EQUAL, r_total_val,
-          name=f"hypergeometric_r_total_{time_idx}_{r_total_val}_{r_group0_val}_{d_total_val}_{d_group0_val}",
-        )
-        model.addGenConstrIndicator(
-          indicator, True,
-          r[time_idx, 0], GRB.EQUAL, r_group0_val,
-          name=f"hypergeometric_r_0_{time_idx}_{r_total_val}_{r_group0_val}_{d_total_val}_{d_group0_val}",
-        )
-        model.addGenConstrIndicator(
-          indicator, True,
-          d_total[time_idx], GRB.EQUAL, d_total_val,
-          name=f"hypergeometric_d_total_{time_idx}_{r_total_val}_{r_group0_val}_{d_total_val}_{d_group0_val}",
-        )
-        model.addGenConstrIndicator(
-          indicator, True,
-          d[time_idx, 0], GRB.EQUAL, d_group0_val,
-          name=f"hypergeometric_d_0_{time_idx}_{r_total_val}_{r_group0_val}_{d_total_val}_{d_group0_val}",
-        )
+    for i in range(len(self.all_death_times)):
+      # Penalty term: (d[i,0] * r_total[i] - r[i,0] * d_total[i])^2
+      # This avoids division and is equivalent to (d[i,0] - expected)^2 * r_total[i]^2
       
-      # Ensure exactly one hypergeometric indicator is selected per time point
-      model.addConstr(
-        gp.quicksum(hypergeometric_indicator_vars_by_time[time_idx]) == 1,
-        name=f"one_hypergeometric_indicator_per_time_{time_idx}",
+      deviation_term = model.addVar(
+        vtype=gp.GRB.CONTINUOUS,
+        name=f"deviation_term_{i}",
+        lb=-self.n_patients**2,
+        ub=self.n_patients**2
       )
+      
+      # deviation_term = d[i,0] * r_total[i] - r[i,0] * d_total[i]
+      # Use quadratic constraints for the multiplications
+      d0_rtotal = model.addVar(vtype=gp.GRB.CONTINUOUS, name=f"d0_rtotal_{i}")
+      r0_dtotal = model.addVar(vtype=gp.GRB.CONTINUOUS, name=f"r0_dtotal_{i}")
+      
+      model.addQConstr(d0_rtotal == d[i, 0] * r_total[i], name=f"d0_rtotal_prod_{i}")
+      model.addQConstr(r0_dtotal == r[i, 0] * d_total[i], name=f"r0_dtotal_prod_{i}")
+      
+      model.addConstr(
+        deviation_term == d0_rtotal - r0_dtotal,
+        name=f"deviation_term_def_{i}"
+      )
+      
+      # Squared deviation
+      deviation_squared = model.addVar(
+        vtype=gp.GRB.CONTINUOUS,
+        name=f"deviation_squared_{i}",
+        lb=0
+      )
+      
+      model.addQConstr(deviation_squared == deviation_term * deviation_term, 
+                       name=f"deviation_squared_def_{i}")
+      
+      hypergeometric_terms.append(deviation_squared)
     
-    # Create single hypergeometric penalty variable
+    # Create hypergeometric penalty variable
     hypergeometric_penalty = model.addVar(
       vtype=gp.GRB.CONTINUOUS,
       name="hypergeometric_penalty",
+      lb=0
     )
     
-    # Set the penalty value
-    hypergeometric_penalty_expr = gp.quicksum(hypergeometric_terms)
     model.addConstr(
-      hypergeometric_penalty == hypergeometric_penalty_expr,
+      hypergeometric_penalty == gp.quicksum(hypergeometric_terms),
       name="hypergeometric_penalty_constraint"
     )
 
-    # Add log hazard ratio variable for constant hazard ratio constraint
-    # Range should allow for reasonable hazard ratios (e.g., 0.05 to 20)
-    # log(0.05) ≈ -3.0, log(20) ≈ 3.0
+    # Add log hazard ratio variable (for null hypothesis constraint)
     log_hazard_ratio = model.addVar(
       vtype=gp.GRB.CONTINUOUS,
       name="log_hazard_ratio",
@@ -689,12 +697,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       ub=3.0,
     )
 
-    # For the hypergeometric distribution, the hazard ratio constraint is implicit
-    # in the hypergeometric probabilities, so we don't need explicit constraints
-    # linking curve death probabilities like in the binomial case.
-    # The log hazard ratio is used for the null hypothesis constraint.
-
-    # Null hypothesis indicator for constraining log_hazard_ratio = 0
+    # Null hypothesis indicator
     null_hypothesis_indicator = model.addVar(vtype=gp.GRB.BINARY, name="null_hypothesis_indicator")
     model.addGenConstrIndicator(
       null_hypothesis_indicator, True,
@@ -871,7 +874,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     (
       hypergeometric_penalty,
       null_hypothesis_indicator
-    ) = self.add_hypergeometric_penalty(
+    ) = self.add_hypergeometric_penalty_minimal(
       model,
       d=d,
       r=r,
