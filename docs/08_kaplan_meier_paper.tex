@@ -181,6 +181,40 @@ S \le S' & \text{ if } S' < \hat{S}
 \end{align}
 This gives an interpretable visualization of the patient-wise uncertainty: we obtain the NLL that the survival probability is at least as far from the nominal probability as \(S'\).  By construction, \(-\log\mathcal{L}(S')\) has a single minimum (either a single point or, if some patients are exactly on the boundary, a flat region) at \(\hat{S}\) and increases as \(S'\) moves away in either direction.
 
+\subsection[p values]{\(p\) values}
+
+\pkg{KoMbine} also provides a method to compute the \(p\) value to reject the null hypothesis that two survival curves are identical.  We use a log-rank approach, similar to the conventional approach used in \pkg{lifelines} and similar packages.  However, as in the case of the \KM{} error bars, our likelihood modeling does not rely on approximating the binomial distribution as normal, and we also include the patient-wise errors.
+
+We have two curves, labeled \(k=0\) and \(k=1\), and we add this index to all relevant quantities.  For example, each patient may be in one of the curves, and this inclusion is given by \(a_{jk}\).  Each patient can be in at most one of the two curves, but we also allow for a patient to be in neither.  (This is useful, for example, when stratifying patients into low, middle, and high categories based on a parameter\@.  \(p\) values are computed pairwise between the curves, and in each pairwise comparison, some patients are in neither curve.)  Each patient has a positive or negative penalty, \(-\log\mathcal{L}_{jk}^\text{patient}\), to be included in each curve.
+
+Each curve has its probabilities of dying \(p^\text{died}_{ik}\).  In the log-rank test, we take the proportional hazard model,
+\begin{equation}
+p^\text{died}_{i0} = H p^\text{died}_{i1},
+\label{eq:logrank-hazard}
+\end{equation}
+for a constant hazard ratio \(H\) across all time points.  The null hypothesis is that \(H=1\), meaning that the two curves are identical.  The alternative hypothesis allows \(H\) to float.
+
+In the conventional approach, we define the residual for each time point as
+\begin{align}
+\begin{aligned}
+U_i&=d_{i1} - d_{i1}^\text{exp} \\
+&=d_{i1} - (d_{i0} + d_{i1})\frac{n_{i1}}{n_{i0}+n_{i1}}.
+\end{aligned}
+\end{align}
+By symmetry, if we swapped the two curves, \(U_i\rightarrow-U_i\).  Summing the residuals and dividing by the variance gives us the test statistic,
+\begin{align}
+U&=\sum_i U_i \\
+Q&=\frac{U^2}{\text{Var}(U)},
+\end{align}
+which follows a \(\chi^2\) distribution with one degree of freedom~\citep[pp.~45--47]{mantel1966evaluation,peto1972asymptotically,appliedsurvivalanalysis}.
+
+In the likelihood approach, we instead compute the full NLL, similar to \cref{eq:total-nll} but with two curves:
+\begin{equation}
+-\log \mathcal{L}_{\text{total}}(a_{jk}, p_{ik}^\text{survived}) = -\sum_{k}\log\mathcal{L}_\text{binomial}(a_{jk}, p_{ik}^\text{survived}) - \sum_{k}\log\mathcal{L}_\text{patient-wise}(a_{jk}).
+\label{eq:two-curve-nll}
+\end{equation}
+We apply the proportional hazard model, \cref{eq:logrank-hazard}, as a constraint.  For the alternate hypothesis, we minimize the NLL over \(H\) as well as the other parameters, while for the null hypothesis we fix \(H=1\) and minimize over only the other parameters.  The NLL difference again follows a \(\chi^2\) distribution with one degree of freedom.
+
 \section{Implementation}
 
 \pkg{KoMbine} is implemented in \proglang{Python} and uses \pkg{Gurobi} \citep{gurobi} to minimize the NLL for a given value of \(S\).
