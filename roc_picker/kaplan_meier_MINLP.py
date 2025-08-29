@@ -21,6 +21,7 @@ from .kaplan_meier import (
   KaplanMeierPatientBase,
   KaplanMeierPatient,
 )
+from .utilities import LOG_ZERO_EPSILON_DEFAULT
 
 def n_choose_d_term_table(n_patients) -> dict[tuple[int, int], float]:
   """
@@ -440,7 +441,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     parameter_max: float,
     time_point: float,
     endpoint_epsilon: float = 1e-6,
-    log_zero_epsilon: float = 1e-10, # New parameter for log arguments
+    log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT, # New parameter for log arguments
   ):
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min

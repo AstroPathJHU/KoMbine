@@ -16,6 +16,7 @@ import scipy.optimize
 import scipy.stats
 
 from .kaplan_meier_MINLP import KaplanMeierPatientNLL, MINLPForKM, n_choose_d_term_table
+from .utilities import LOG_ZERO_EPSILON_DEFAULT
 
 class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-instance-attributes
   """
@@ -29,7 +30,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     parameter_threshold: float,
     parameter_max: float = np.inf,
     endpoint_epsilon: float = 1e-6,
-    log_zero_epsilon: float = 1e-10,
+    log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
   ):
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min
@@ -600,10 +601,17 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       model.addConstr(s_j == r[j,0] + omega_r1,
                       name=f"s_def_{j}")
 
+      # Helper variable for log argument (s_j + epsilon)
+      s_j_plus_epsilon = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                                     lb=self.__log_zero_epsilon,
+                                     name=f"s_plus_epsilon_{j}")
+      model.addConstr(s_j_plus_epsilon == s_j + self.__log_zero_epsilon,
+                      name=f"s_plus_epsilon_constr_{j}")
+
       # log(s_j)
       log_s_j = model.addVar(vtype=gp.GRB.CONTINUOUS,
                             name=f"log_s_{j}")
-      model.addGenConstrLog(s_j, log_s_j, name=f"log_s_def_{j}")
+      model.addGenConstrLog(s_j_plus_epsilon, log_s_j, name=f"log_s_def_{j}")
 
       # NLL contribution: -d1*beta + d_total*log(s_j)
       term = model.addVar(vtype=gp.GRB.CONTINUOUS,
