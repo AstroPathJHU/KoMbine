@@ -568,13 +568,10 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     
     try:
       # Three 2D table lookups instead of one 4D lookup
-      log_c_r_group0_d_group0 = n_choose_d_table.get((r_group0, d_group0), -np.inf)
-      log_c_r_group1_d_group1 = n_choose_d_table.get((r_total - r_group0, d_total - d_group0), -np.inf)
-      log_c_r_total_d_total = n_choose_d_table.get((r_total, d_total), -np.inf)
+      log_c_r_group0_d_group0 = n_choose_d_table[(r_group0, d_group0)]
+      log_c_r_group1_d_group1 = n_choose_d_table[(r_total - r_group0, d_total - d_group0)]
+      log_c_r_total_d_total = n_choose_d_table[(r_total, d_total)]
       
-      if any(x == -np.inf for x in [log_c_r_group0_d_group0, log_c_r_group1_d_group1, log_c_r_total_d_total]):
-        return -np.inf
-        
       return log_c_r_group0_d_group0 + log_c_r_group1_d_group1 - log_c_r_total_d_total
       
     except (ValueError, OverflowError, KeyError):
@@ -1120,7 +1117,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     # Extract hazard ratio for null hypothesis (should be 1.0)
     log_hazard_ratio_var = model.getVarByName("log_hazard_ratio")
-    hazard_ratio_null = np.exp(log_hazard_ratio_var.X) if log_hazard_ratio_var else 1.0
+    assert log_hazard_ratio_var is not None
+    hazard_ratio_null = np.exp(log_hazard_ratio_var.X)
 
     result_null = scipy.optimize.OptimizeResult(
       x=model.ObjVal,
@@ -1164,7 +1162,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     )
 
     # Extract hazard ratio for alternative hypothesis (can be any value)
-    hazard_ratio_alt = np.exp(log_hazard_ratio_var.X) if log_hazard_ratio_var else 1.0
+    hazard_ratio_alt = np.exp(log_hazard_ratio_var.X)
 
     result_alt = scipy.optimize.OptimizeResult(
       x=model.ObjVal,
