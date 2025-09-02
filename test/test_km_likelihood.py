@@ -199,7 +199,7 @@ def runtest(
   p_value, _, _ = km_p_value_minlp.solve_and_pvalue()
   p_value_binomial, _, _ = km_p_value_minlp.solve_and_pvalue(binomial_only=True)
   try:
-    p_value_patient_wise, _, _ = km_p_value_minlp.solve_and_pvalue(patient_wise_only=True)
+    _, _, _ = km_p_value_minlp.solve_and_pvalue(patient_wise_only=True)
   except NotImplementedError:
     pass
   else:
