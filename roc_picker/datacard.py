@@ -951,7 +951,6 @@ class Datacard:
     parameter_min: float = -np.inf,
     parameter_threshold: float,
     parameter_max: float = np.inf,
-    endpoint_epsilon: float = 1e-6,
     log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
   ) -> MINLPforKMPValue:
     """
@@ -967,7 +966,6 @@ class Datacard:
       parameter_min=parameter_min,
       parameter_threshold=parameter_threshold,
       parameter_max=parameter_max,
-      endpoint_epsilon=endpoint_epsilon,
       log_zero_epsilon=log_zero_epsilon,
     )
 
@@ -1230,12 +1228,14 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   kml_low = datacard.km_likelihood(
     parameter_min=parameter_min,
     parameter_max=threshold,
-    log_zero_epsilon=log_zero_epsilon
+    log_zero_epsilon=log_zero_epsilon,
+    endpoint_epsilon=endpoint_epsilon,
   )
   kml_high = datacard.km_likelihood(
     parameter_min=threshold,
     parameter_max=parameter_max,
-    log_zero_epsilon=log_zero_epsilon
+    log_zero_epsilon=log_zero_epsilon,
+    endpoint_epsilon=endpoint_epsilon,
   )
 
   common_plot_kwargs = _extract_common_plot_config_args(args)
@@ -1278,7 +1278,6 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
       parameter_min=parameter_min,
       parameter_threshold=threshold,
       parameter_max=parameter_max,
-      endpoint_epsilon=endpoint_epsilon,
       log_zero_epsilon=log_zero_epsilon,
     )
 
