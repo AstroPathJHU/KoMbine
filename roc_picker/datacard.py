@@ -1289,9 +1289,10 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
       p_value_binomial, *_ = p_value_minlp.solve_and_pvalue(binomial_only=True)
       p_value_texts.append(f"p (binomial only) = {p_value_binomial:{pvalue_format}}")
 
-    if common_plot_kwargs["include_patient_wise_only"]:
-      p_value_patient_wise, *_ = p_value_minlp.solve_and_pvalue(patient_wise_only=True)
-      p_value_texts.append(f"p (patient-wise only) = {p_value_patient_wise:{pvalue_format}}")
+    #Patient-wise p value is not implemented
+    #if common_plot_kwargs["include_patient_wise_only"]:
+    #  p_value_patient_wise, *_ = p_value_minlp.solve_and_pvalue(patient_wise_only=True)
+    #  p_value_texts.append(f"p (patient-wise only) = {p_value_patient_wise:{pvalue_format}}")
 
   # Add logrank p-value if requested
   if include_logrank_pvalue:

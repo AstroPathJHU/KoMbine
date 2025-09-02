@@ -43,7 +43,6 @@ def runtest(
     reffile = here / "reference" / "km_likelihood.json"
 
   tolerance: Tolerance = {"atol": 2e-4, "rtol": 2e-4}
-  p_value_patient_wise_tolerance: Tolerance = {"atol": 1e-8, "rtol": 1e-4}
 
   # Calculate precision for JSON output based on rtol
   rtol_value = tolerance["rtol"]
@@ -199,7 +198,15 @@ def runtest(
   nominal_hazard_ratio = km_p_value_minlp.nominal_hazard_ratio
   p_value, _, _ = km_p_value_minlp.solve_and_pvalue()
   p_value_binomial, _, _ = km_p_value_minlp.solve_and_pvalue(binomial_only=True)
-  p_value_patient_wise, _, _ = km_p_value_minlp.solve_and_pvalue(patient_wise_only=True)
+  try:
+    p_value_patient_wise, _, _ = km_p_value_minlp.solve_and_pvalue(patient_wise_only=True)
+  except NotImplementedError:
+    pass
+  else:
+    raise AssertionError(
+      "Patient-wise p-value is not implemented "
+      "and should have raised a NotImplementedError"
+    )
 
   # Test mutual exclusion of options
   try:
@@ -358,7 +365,7 @@ def runtest(
     "nominal_hazard_ratio": np.array([nominal_hazard_ratio]),
     "p_value": np.array([p_value]),
     "p_value_binomial": np.array([p_value_binomial]),
-    "p_value_patient_wise": np.array([p_value_patient_wise]),
+    #"p_value_patient_wise": np.array([p_value_patient_wise]),
     "p_value_logrank": np.array([p_value_logrank]),
   }
   for name, alt_data in alt_results.items():
@@ -389,7 +396,7 @@ def runtest(
       np.testing.assert_allclose(
         array,
         ref,
-        **(p_value_patient_wise_tolerance if name == "p_value_patient_wise" else tolerance),
+        **tolerance,
         err_msg=f"Array '{name}' does not match the reference."
       )
   except Exception:
