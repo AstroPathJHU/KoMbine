@@ -196,6 +196,7 @@ def runtest(
     parameter_threshold=parameter_threshold,
     parameter_max=parameter_max,
   )
+  nominal_hazard_ratio = km_p_value_minlp.nominal_hazard_ratio
   p_value, _, _ = km_p_value_minlp.solve_and_pvalue()
   p_value_binomial, _, _ = km_p_value_minlp.solve_and_pvalue(binomial_only=True)
   p_value_patient_wise, _, _ = km_p_value_minlp.solve_and_pvalue(patient_wise_only=True)
@@ -354,10 +355,11 @@ def runtest(
     "CL_probabilities_binomial": CL_probabilities_binomial,
     "best_probabilities_patient_wise": best_probabilities_patient_wise,
     "CL_probabilities_patient_wise": CL_probabilities_patient_wise,
-    "p_value": np.array([p_value]),  # Convert scalar to array for consistency
+    "nominal_hazard_ratio": np.array([nominal_hazard_ratio]),
+    "p_value": np.array([p_value]),
     "p_value_binomial": np.array([p_value_binomial]),
     "p_value_patient_wise": np.array([p_value_patient_wise]),
-    "p_value_logrank": np.array([p_value_logrank]),  # Convert scalar to array for consistency
+    "p_value_logrank": np.array([p_value_logrank]),
   }
   for name, alt_data in alt_results.items():
     ordered_array_data[f"nominal_probabilities_{name}"] = alt_data["nominal_probabilities"]

@@ -411,6 +411,9 @@
     1e-07,
     1e-07
   ],
+  "nominal_hazard_ratio": [
+    0.4191
+  ],
   "nominal_probabilities": [
     1.0,
     0.9,

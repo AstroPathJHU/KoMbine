@@ -882,6 +882,18 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     model.update()
 
+  @functools.cached_property
+  def nominal_hazard_ratio(self):
+    """
+    Returns the nominal hazard ratio.
+    This is calculated by running the binomial only model under the alternate hypothesis.
+    """
+    _, _, result_alt = self.solve_and_pvalue(
+      binomial_only=True,
+      patient_wise_only=False
+    )
+    return result_alt.hazard_ratio
+
   def update_model_with_patient_wise_only_constraints( #pylint: disable=too-many-arguments
     self,
     model: gp.Model,
