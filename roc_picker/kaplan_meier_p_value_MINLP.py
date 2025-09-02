@@ -610,7 +610,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
       # log(s_j)
       log_s_j = model.addVar(vtype=gp.GRB.CONTINUOUS,
-                            name=f"log_s_{j}")
+                            name=f"log_s_{j}",
+                            lb=-GRB.INFINITY, ub=GRB.INFINITY)
       model.addGenConstrLog(s_j_plus_epsilon, log_s_j, name=f"log_s_def_{j}")
 
       # NLL contribution: -d1*beta + d_total*log(s_j)
