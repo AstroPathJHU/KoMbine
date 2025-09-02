@@ -25,6 +25,7 @@ from .kaplan_meier_likelihood import (
 )
 from .kaplan_meier_p_value_MINLP import MINLPforKMPValue
 from .systematics_mc import DistributionBase, DummyDistribution, ROCDistributions, ScipyDistribution
+from .utilities import LOG_ZERO_EPSILON_DEFAULT
 
 class Response:
   """
@@ -926,7 +927,7 @@ class Datacard:
     parameter_max: float,
     *,
     endpoint_epsilon: float = 1e-6,
-    log_zero_epsilon: float = 1e-10,
+    log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
   ) -> KaplanMeierLikelihood:
     """
     Generate a KaplanMeierLikelihood object for generating Kaplan-Meier
@@ -951,7 +952,7 @@ class Datacard:
     parameter_threshold: float,
     parameter_max: float = np.inf,
     endpoint_epsilon: float = 1e-6,
-    log_zero_epsilon: float = 1e-10,
+    log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
   ) -> MINLPforKMPValue:
     """
     Generate a MINLPforKMPValue object for calculating p-values for Kaplan-Meier curves
@@ -1118,7 +1119,7 @@ def _make_common_parser(description: str) -> argparse.ArgumentParser:
   parser.add_argument("--include-median-survival", action="store_true", dest="include_median_survival", help="Include the median survival line in the plot.")
   parser.add_argument("--print-progress", action="store_true", dest="print_progress", help="Print progress messages during the computation.")
   parser.add_argument("--endpoint-epsilon", type=float, dest="endpoint_epsilon", default=1e-6, help="Endpoint epsilon for the likelihood calculation.")
-  parser.add_argument("--log-zero-epsilon", type=float, dest="log_zero_epsilon", default=1e-10, help="Log zero epsilon for the likelihood calculation.")
+  parser.add_argument("--log-zero-epsilon", type=float, dest="log_zero_epsilon", default=LOG_ZERO_EPSILON_DEFAULT, help="Log zero epsilon for the likelihood calculation.")
   parser.add_argument("--figsize", nargs=2, type=float, metavar=("WIDTH", "HEIGHT"), help="Figure size in inches.", default=KaplanMeierPlotConfig.figsize)
   parser.add_argument("--legend-fontsize", type=float, help="Font size for legend text.", default=KaplanMeierPlotConfig.legend_fontsize)
   parser.add_argument("--label-fontsize", type=float, help="Font size for axis labels.", default=KaplanMeierPlotConfig.label_fontsize)

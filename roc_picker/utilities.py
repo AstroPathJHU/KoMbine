@@ -3,6 +3,10 @@ Miscellaneous utilities for ROC Picker
 """
 import typing
 
+# Default log zero epsilon value used across Kaplan-Meier likelihood methods
+# Set to be larger than compile_plots.sh value (1e-7) so explicit specification not needed
+LOG_ZERO_EPSILON_DEFAULT = 1e-6
+
 T = typing.TypeVar("T")
 R = typing.TypeVar("R")
 

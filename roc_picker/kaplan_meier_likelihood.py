@@ -24,7 +24,7 @@ from .kaplan_meier import (
   KaplanMeierInstance,
 )
 from .kaplan_meier_MINLP import MINLPForKM, KaplanMeierPatientNLL
-from .utilities import InspectableCache
+from .utilities import InspectableCache, LOG_ZERO_EPSILON_DEFAULT
 
 @dataclasses.dataclass
 class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
@@ -170,7 +170,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     parameter_min: float,
     parameter_max: float,
     endpoint_epsilon: float = 1e-6,
-    log_zero_epsilon: float = 1e-10,
+    log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
   ):
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min

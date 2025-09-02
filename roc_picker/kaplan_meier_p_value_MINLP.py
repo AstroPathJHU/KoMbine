@@ -16,6 +16,7 @@ import scipy.optimize
 import scipy.stats
 
 from .kaplan_meier_MINLP import KaplanMeierPatientNLL, MINLPForKM, n_choose_d_term_table
+from .utilities import LOG_ZERO_EPSILON_DEFAULT
 
 class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-instance-attributes
   """
@@ -29,7 +30,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     parameter_threshold: float,
     parameter_max: float = np.inf,
     endpoint_epsilon: float = 1e-6,
-    log_zero_epsilon: float = 1e-10,
+    log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
   ):
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min
@@ -541,196 +542,94 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     """
     return n_choose_d_term_table(n_patients=self.n_patients)
 
-  def add_binomial_penalty(  # pylint: disable=too-many-locals
+  def add_hypergeometric_penalty_with_hazard_ratio(  #pylint: disable=too-many-locals
     self,
     model: gp.Model,
     *,
     r: gp.tupledict[tuple[int, ...], gp.Var],
     d: gp.tupledict[tuple[int, ...], gp.Var],
-    n_survived: gp.tupledict[tuple[int, ...], gp.Var],
   ):
     """
-    Add the binomial penalty to the model.
+    Add Cox partial likelihood–style penalty using exact exponential form.
+
+    Under null (HR = 1): beta = 0, omega = exp(beta) = 1
+    Under alternative: beta free in bounds, omega = exp(beta)
+
+    For each time j:
+      NLL_j = -d[j,1] * beta + d_total[j] * log(r[j,0] + omega * r[j,1])
     """
-    p_survived = model.addVars(
-      len(self.all_death_times), 2,
-      vtype=gp.GRB.CONTINUOUS, name="p_survived", lb=0, ub=1
-    )
-    p_died = model.addVars(
-      len(self.all_death_times), 2,
-      vtype=gp.GRB.CONTINUOUS, name="p_died", lb=0, ub=1
-    )
-    log_p_bounds = np.array([
-      np.log(self.__endpoint_epsilon / len(self.all_death_times) / 2),
-      np.log(1 - self.__endpoint_epsilon / len(self.all_death_times) / 2),
-    ])
-    log_p_survived = model.addVars(
-      len(self.all_death_times), 2,
-      vtype=gp.GRB.CONTINUOUS, name="log_p_survived",
-      lb=log_p_bounds[0], ub=log_p_bounds[1]
-    )
-    # Expand bounds for log_p_died to accommodate hazard ratio constraint
-    # log_p_died[i, 0] = log_hazard_ratio + log_p_died[i, 1] where log_hazard_ratio in [-3, 3]
-    log_p_died_bounds = np.array([
-      log_p_bounds[0] - 3.0,  # Allow for negative hazard ratio
-      log_p_bounds[1] + 3.0,  # Allow for positive hazard ratio
-    ])
-    log_p_died = model.addVars(
-      len(self.all_death_times), 2,
-      vtype=gp.GRB.CONTINUOUS, name="log_p_died",
-      lb=log_p_died_bounds[0], ub=log_p_died_bounds[1]
-    )
-    for i in range(len(self.all_death_times)):
-      for j in range(2):
-        model.addGenConstrExp(
-          log_p_survived[i, j], p_survived[i, j], name=f"log_p_survived_constr_{i}_{j}",
-        )
-        model.addGenConstrExp(
-          log_p_died[i, j], p_died[i, j], name=f"log_p_died_constr_{i}_{j}",
-        )
-        model.addConstr(
-          p_survived[i, j] + p_died[i, j] == 1,
-          name=f"survived_died_constraint_{i}_{j}",
-        )
+    # total deaths and risk at each time
+    d_total = model.addVars(len(self.all_death_times),
+                            vtype=gp.GRB.INTEGER,
+                            name="d_total")
+    r_total = model.addVars(len(self.all_death_times),
+                            vtype=gp.GRB.INTEGER,
+                            name="r_total")
 
-    n_choose_d_table = self.n_choose_d_term_table
-    n_choose_d_indicator_vars = model.addVars(
-      len(self.all_death_times), 2, len(n_choose_d_table),
-      vtype=gp.GRB.BINARY, name="n_choose_d_indicator",
-    )
-    d_indicator_vars = model.addVars(
-      len(self.all_death_times), 2, self.n_patients + 1,
-      vtype=gp.GRB.BINARY, name="d_indicator",
-    )
-    n_survived_indicator_vars = model.addVars(
-      len(self.all_death_times), 2, self.n_patients + 1,
-      vtype=gp.GRB.BINARY, name="n_survived_indicator",
-    )
-    binomial_terms_low = []  # Terms for curve 0 (j=0)
-    binomial_terms_high = []  # Terms for curve 1 (j=1)
-    for i in range(len(self.all_death_times)):
-      for j in range(2):
-        #make sure that exactly one of each indicator is selected
-        model.addConstr(
-          gp.quicksum(
-            n_choose_d_indicator_vars[i, j, k]
-            for k in range(len(n_choose_d_table))
-          ) == 1,
-          name=f"n_choose_d_indicator_unique_{i}_{j}",
-        )
-        model.addConstr(
-          gp.quicksum(d_indicator_vars[i, j, k] for k in range(self.n_patients + 1)) == 1,
-          name=f"d_indicator_unique_{i}_{j}",
-        )
-        model.addConstr(
-          gp.quicksum(n_survived_indicator_vars[i, j, k] for k in range(self.n_patients + 1)) == 1,
-          name=f"n_survived_indicator_unique_{i}_{j}",
-        )
+    for j in range(len(self.all_death_times)):
+      model.addConstr(d_total[j] == d[j, 0] + d[j, 1],
+                      name=f"d_total_constraint_{j}")
+      model.addConstr(r_total[j] == r[j, 0] + r[j, 1],
+                      name=f"r_total_constraint_{j}")
 
-        # Choose the appropriate list for this curve
-        binomial_terms = binomial_terms_low if j == 0 else binomial_terms_high
+    # log hazard ratio (beta) and its exp (omega)
+    beta = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                        lb=-6.0, ub=6.0,
+                        name="log_hazard_ratio")
+    omega = model.addVar(vtype=gp.GRB.CONTINUOUS, lb=1e-6,
+                        name="hazard_ratio")
+    model.addGenConstrExp(beta, omega, name="omega_def")
 
-        #Add the n choose d term
-        for k, ((n, d_value), penalty) in enumerate(n_choose_d_table.items()):
-          indicator = n_choose_d_indicator_vars[i, j, k]
-          binomial_terms.append(-penalty * indicator)
-          model.addGenConstrIndicator(
-            indicator,
-            True,
-            r[i,j],
-            GRB.EQUAL,
-            n,
-            name=f"n_choose_d_indicator_n_{i}_{j}_{n}",
-          )
-          model.addGenConstrIndicator(
-            indicator,
-            True,
-            d[i,j],
-            GRB.EQUAL,
-            d_value,
-            name=f"n_choose_d_indicator_d_{i}_{j}_{d_value}",
-          )
+    # null indicator: if 1 then force beta=0
+    null_hypothesis_indicator = model.addVar(vtype=gp.GRB.BINARY,
+                                            name="null_hypothesis_indicator")
+    model.addGenConstrIndicator(null_hypothesis_indicator, True,
+                                beta, gp.GRB.EQUAL, 0.0,
+                                name="hazard_ratio_constraint")
 
-        #Add the p_died term
-        for d_value in range(self.n_patients + 1):
-          binomial_terms.append(
-            -d_value * log_p_died[i, j] * d_indicator_vars[i, j, d_value]
-          )
-          model.addGenConstrIndicator(
-            d_indicator_vars[i, j, d_value],
-            True,
-            d[i, j],
-            GRB.EQUAL,
-            d_value,
-            name=f"d_indicator_{i}_{j}_{d_value}",
-          )
+    nll_terms = []
 
-        #Add the p_survived term
-        for s in range(self.n_patients + 1):
-          binomial_terms.append(
-            -s * log_p_survived[i, j] * n_survived_indicator_vars[i, j, s]
-          )
-          model.addGenConstrIndicator(
-            n_survived_indicator_vars[i, j, s],
-            True,
-            n_survived[i, j],
-            GRB.EQUAL,
-            s,
-            name=f"n_survived_indicator_{i}_{j}_{s}",
-          )
+    for j in range(len(self.all_death_times)):
+      # affine risk set: s_j = r0 + omega*r1
+      omega_r1 = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                              name=f"omega_r1_{j}")
+      model.addQConstr(omega_r1 == omega * r[j,1],
+                      name=f"omega_r1_prod_{j}")
 
-    # Create separate penalty variables for each curve
-    binomial_penalty_low = model.addVar(
-      vtype=gp.GRB.CONTINUOUS,
-      name="binomial_penalty_low",
-    )
-    binomial_penalty_high = model.addVar(
-      vtype=gp.GRB.CONTINUOUS,
-      name="binomial_penalty_high",
-    )
+      s_j = model.addVar(vtype=gp.GRB.CONTINUOUS, lb=1e-6,
+                        name=f"s_{j}")
+      model.addConstr(s_j == r[j,0] + omega_r1,
+                      name=f"s_def_{j}")
 
-    # Set the penalty values
-    binomial_penalty_low_expr = gp.quicksum(binomial_terms_low)
-    binomial_penalty_high_expr = gp.quicksum(binomial_terms_high)
+      # Helper variable for log argument (s_j + epsilon)
+      s_j_plus_epsilon = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                                     lb=self.__log_zero_epsilon,
+                                     name=f"s_plus_epsilon_{j}")
+      model.addConstr(s_j_plus_epsilon == s_j + self.__log_zero_epsilon,
+                      name=f"s_plus_epsilon_constr_{j}")
 
-    model.addConstr(
-      binomial_penalty_low == binomial_penalty_low_expr,
-      name="binomial_penalty_low_constraint"
-    )
-    model.addConstr(
-      binomial_penalty_high == binomial_penalty_high_expr,
-      name="binomial_penalty_high_constraint"
-    )
+      # log(s_j)
+      log_s_j = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                            name=f"log_s_{j}",
+                            lb=-GRB.INFINITY, ub=GRB.INFINITY)
+      model.addGenConstrLog(s_j_plus_epsilon, log_s_j, name=f"log_s_def_{j}")
 
-    # Add log hazard ratio variable for constant hazard ratio constraint
-    # Range should allow for reasonable hazard ratios (e.g., 0.05 to 20)
-    # log(0.05) ≈ -3.0, log(20) ≈ 3.0
-    log_hazard_ratio = model.addVar(
-      vtype=gp.GRB.CONTINUOUS,
-      name="log_hazard_ratio",
-      lb=-3.0,
-      ub=3.0,
-    )
+      # NLL contribution: -d1*beta + d_total*log(s_j)
+      term = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                          name=f"nll_term_{j}")
+      model.addConstr(term == -d[j,1]*beta + d_total[j]*log_s_j,
+                      name=f"nll_term_def_{j}")
 
-    # Constant hazard ratio constraint: applies unconditionally
-    # (both under null and alternative hypothesis)
-    # This constrains: p_died[i, 0] = hazard_ratio * p_died[i, 1]
-    # In log scale: log_p_died[i, 0] = log_hazard_ratio + log_p_died[i, 1]
-    for i in range(len(self.all_death_times)):
-      model.addConstr(
-        log_p_died[i, 0] - log_p_died[i, 1] - log_hazard_ratio == 0,
-        name=f"constant_hazard_ratio_{i}",
-      )
+      nll_terms.append(term)
 
-    # Null hypothesis indicator for constraining log_hazard_ratio = 0
-    null_hypothesis_indicator = model.addVar(vtype=gp.GRB.BINARY, name="null_hypothesis_indicator")
-    model.addGenConstrIndicator(
-      null_hypothesis_indicator, True,
-      log_hazard_ratio, GRB.EQUAL, 0,
-      name="null_hypothesis_constraint",
-    )
+    # overall negative log-likelihood penalty
+    hypergeometric_penalty = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                                          lb=0,
+                                          name="hypergeometric_penalty")
+    model.addConstr(hypergeometric_penalty == gp.quicksum(nll_terms),
+                    name="hypergeometric_penalty_constraint")
 
-    return binomial_penalty_low, binomial_penalty_high, null_hypothesis_indicator
+    return hypergeometric_penalty, null_hypothesis_indicator
 
   def add_patient_wise_penalty(
     self,
@@ -795,8 +694,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     Extract statistics for each curve from the optimized model.
 
     Returns:
-        tuple: (n_total_low, n_alive_low, km_prob_low, p_survived_low,
-                n_total_high, n_alive_high, km_prob_high, p_survived_high)
+        tuple: (n_total_low, n_alive_low, km_prob_low,
+                n_total_high, n_alive_high, km_prob_high)
     """
     # Extract KM probabilities for each curve
     km_prob_low = [
@@ -812,22 +711,16 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     n_alive_low = 0
     n_total_high = 0
     n_alive_high = 0
-    p_survived_low = []
-    p_survived_high = []
 
     for i in range(len(self.all_death_times)):
       r_low = model.getVarByName(f"r[{i},0]")
       r_high = model.getVarByName(f"r[{i},1]")
       d_low = model.getVarByName(f"d[{i},0]")
       d_high = model.getVarByName(f"d[{i},1]")
-      p_survived_low_var = model.getVarByName(f"p_survived[{i},0]")
-      p_survived_high_var = model.getVarByName(f"p_survived[{i},1]")
       assert r_low is not None
       assert r_high is not None
       assert d_low is not None
       assert d_high is not None
-      assert p_survived_low_var is not None
-      assert p_survived_high_var is not None
 
       if i == 0:  # Use first time point as representative
         n_total_low = int(np.rint(r_low.X))
@@ -837,12 +730,9 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       n_alive_low = n_total_low - int(np.rint(d_low.X))
       n_alive_high = n_total_high - int(np.rint(d_high.X))
 
-      p_survived_low.append(p_survived_low_var.X)
-      p_survived_high.append(p_survived_high_var.X)
-
     return (
-      n_total_low, n_alive_low, km_prob_low, p_survived_low,
-      n_total_high, n_alive_high, km_prob_high, p_survived_high,
+      n_total_low, n_alive_low, km_prob_low,
+      n_total_high, n_alive_high, km_prob_high,
     )
 
   def _compute_patient_wise_penalty_value(self, a: gp.tupledict[tuple[int, ...], gp.Var]):
@@ -862,24 +752,20 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
           penalty += contribution
     return penalty
 
-  def _compute_binomial_penalty_per_curve(self, model: gp.Model):
+  def _compute_hypergeometric_penalty(self, model: gp.Model):
     """
-    Compute the binomial penalty for each curve separately.
+    Compute the hypergeometric penalty.
 
     Returns:
-        tuple: (total_binomial_penalty, binomial_penalty_low, binomial_penalty_high)
+        float: The hypergeometric penalty value
     """
-    binomial_penalty_low_var = model.getVarByName("binomial_penalty_low")
-    binomial_penalty_high_var = model.getVarByName("binomial_penalty_high")
+    hypergeometric_penalty_var = model.getVarByName("hypergeometric_penalty")
 
-    assert binomial_penalty_low_var is not None
-    assert binomial_penalty_high_var is not None
+    assert hypergeometric_penalty_var is not None
 
-    penalty_low = binomial_penalty_low_var.X
-    penalty_high = binomial_penalty_high_var.X
-    total_penalty = penalty_low + penalty_high
+    penalty = hypergeometric_penalty_var.X
 
-    return total_penalty, penalty_low, penalty_high
+    return penalty
 
   def _make_gurobi_model(self):
     """
@@ -901,19 +787,17 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     )
 
     (
-      binomial_penalty_low,
-      binomial_penalty_high,
+      hypergeometric_penalty,
       null_hypothesis_indicator
-    ) = self.add_binomial_penalty(
+    ) = self.add_hypergeometric_penalty_with_hazard_ratio(
       model,
       d=d,
       r=r,
-      n_survived=n_survived
     )
     patient_penalty = self.add_patient_wise_penalty(model, a)
 
     model.setObjective(
-      2 * (binomial_penalty_low + binomial_penalty_high + patient_penalty),
+      2 * (hypergeometric_penalty + patient_penalty),
       GRB.MINIMIZE,
     )
     model.update()
@@ -1119,13 +1003,11 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     # Extract detailed information for null hypothesis result
     patients_low_null, patients_high_null = self._extract_patients_per_curve(a)
     patient_penalty_null = self._compute_patient_wise_penalty_value(a)
-    binomial_penalty_total_null, binomial_penalty_low_null, binomial_penalty_high_null = (
-      self._compute_binomial_penalty_per_curve(model)
-    )
+    hypergeometric_penalty_null = self._compute_hypergeometric_penalty(model)
 
     # Extract curve statistics for null hypothesis
-    (n_total_low_null, n_alive_low_null, km_prob_low_null, p_survived_low_null,
-     n_total_high_null, n_alive_high_null, km_prob_high_null, p_survived_high_null) = (
+    (n_total_low_null, n_alive_low_null, km_prob_low_null,
+     n_total_high_null, n_alive_high_null, km_prob_high_null) = (
       self._extract_curve_statistics(
         model, km_probability_at_time_low, km_probability_at_time_high
       )
@@ -1133,7 +1015,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     # Extract hazard ratio for null hypothesis (should be 1.0)
     log_hazard_ratio_var = model.getVarByName("log_hazard_ratio")
-    hazard_ratio_null = np.exp(log_hazard_ratio_var.X) if log_hazard_ratio_var else 1.0
+    assert log_hazard_ratio_var is not None
+    hazard_ratio_null = np.exp(log_hazard_ratio_var.X)
 
     result_null = scipy.optimize.OptimizeResult(
       x=model.ObjVal,
@@ -1146,15 +1029,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       n_alive_high=n_alive_high_null,
       km_probability_low=km_prob_low_null,
       km_probability_high=km_prob_high_null,
-      p_survived_low=p_survived_low_null,
-      p_survived_high=p_survived_high_null,
-      binomial_2NLL=2*binomial_penalty_total_null,
-      binomial_2NLL_low=(
-        2*binomial_penalty_low_null if binomial_penalty_low_null is not None else None
-      ),
-      binomial_2NLL_high=(
-        2*binomial_penalty_high_null if binomial_penalty_high_null is not None else None
-      ),
+      hypergeometric_2NLL=2*hypergeometric_penalty_null,
       patient_2NLL=2*patient_penalty_null,
       patient_penalties=self.nll_penalty_for_patient_in_range,
       hazard_ratio=hazard_ratio_null,
@@ -1170,20 +1045,18 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     # Extract detailed information for alternative hypothesis result
     patients_low_alt, patients_high_alt = self._extract_patients_per_curve(a)
     patient_penalty_alt = self._compute_patient_wise_penalty_value(a)
-    binomial_penalty_total_alt, binomial_penalty_low_alt, binomial_penalty_high_alt = (
-      self._compute_binomial_penalty_per_curve(model)
-    )
+    hypergeometric_penalty_alt = self._compute_hypergeometric_penalty(model)
 
     # Extract curve statistics for alternative hypothesis
-    (n_total_low_alt, n_alive_low_alt, km_prob_low_alt, p_survived_low_alt,
-     n_total_high_alt, n_alive_high_alt, km_prob_high_alt, p_survived_high_alt) = (
+    (n_total_low_alt, n_alive_low_alt, km_prob_low_alt,
+     n_total_high_alt, n_alive_high_alt, km_prob_high_alt) = (
       self._extract_curve_statistics(
         model, km_probability_at_time_low, km_probability_at_time_high
       )
     )
 
     # Extract hazard ratio for alternative hypothesis (can be any value)
-    hazard_ratio_alt = np.exp(log_hazard_ratio_var.X) if log_hazard_ratio_var else 1.0
+    hazard_ratio_alt = np.exp(log_hazard_ratio_var.X)
 
     result_alt = scipy.optimize.OptimizeResult(
       x=model.ObjVal,
@@ -1196,15 +1069,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       n_alive_high=n_alive_high_alt,
       km_probability_low=km_prob_low_alt,
       km_probability_high=km_prob_high_alt,
-      p_survived_low=p_survived_low_alt,
-      p_survived_high=p_survived_high_alt,
-      binomial_2NLL=2*binomial_penalty_total_alt,
-      binomial_2NLL_low=(
-        2*binomial_penalty_low_alt if binomial_penalty_low_alt is not None else None
-      ),
-      binomial_2NLL_high=(
-        2*binomial_penalty_high_alt if binomial_penalty_high_alt is not None else None
-      ),
+      hypergeometric_2NLL=2*hypergeometric_penalty_alt,
       patient_2NLL=2*patient_penalty_alt,
       patient_penalties=self.nll_penalty_for_patient_in_range,
       hazard_ratio=hazard_ratio_alt,
