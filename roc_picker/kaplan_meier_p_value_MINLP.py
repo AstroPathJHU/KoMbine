@@ -863,6 +863,16 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
           0,
           name="patient_wise_only_hazard_ratio_ge_1",
         )
+
+        raise NotImplementedError(
+          "p value for patient-wise only is not implemented. "
+          "The challenge is to compute the hazard ratio as a function "
+          "of the patients included and excluded. "
+          "Naively, this would require a sub-problem with binomial_only=True for each combination "
+          "of included and excluded patients (similar to self.nominal_hazard_ratio). "
+          "There may be a more clever way to do this within a single Gurobi model, but I will "
+          "leave that to a later release."
+        )
     else:
       # Enable hypergeometric penalty when patient_wise_only is False
       self.__hypergeometric_penalty_constraint = model.addConstr(
