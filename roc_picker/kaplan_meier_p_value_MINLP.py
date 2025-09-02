@@ -841,6 +841,11 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     if binomial_only and patient_wise_only:
       raise ValueError("binomial_only and patient_wise_only cannot both be True")
 
+    if patient_wise_only:
+      #make sure the nominal hazard ratio is cached before doing anything with the Gurobi model
+      #because this causes the model to be updated.
+      self.nominal_hazard_ratio
+
     (
       model,
       null_hypothesis_indicator,
