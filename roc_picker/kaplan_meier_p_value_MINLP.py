@@ -39,6 +39,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     self.__null_hypothesis_constraint = None
     self.__patient_constraints_for_binomial_only = None
     self.__patient_wise_only_constraint = None
+    self.__hypergeometric_penalty_constraint = None
 
   @property
   def all_patients(self) -> list[KaplanMeierPatientNLL]:
@@ -494,14 +495,49 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
       nll_terms.append(term)
 
+    # Indicator variable to control whether the hypergeometric penalty is used
+    use_hypergeometric_penalty_indicator = model.addVar(
+      vtype=GRB.BINARY,
+      name="use_hypergeometric_penalty_indicator",
+    )
+
     # overall negative log-likelihood penalty
+    hypergeometric_penalty_expr = gp.quicksum(nll_terms)
     hypergeometric_penalty = model.addVar(vtype=gp.GRB.CONTINUOUS,
                                           lb=0,
                                           name="hypergeometric_penalty")
-    model.addConstr(hypergeometric_penalty == gp.quicksum(nll_terms),
-                    name="hypergeometric_penalty_constraint")
 
-    return hypergeometric_penalty, null_hypothesis_indicator, beta
+    # When use_hypergeometric_penalty_indicator is False, set penalty to 0
+    model.addGenConstrIndicator(
+      use_hypergeometric_penalty_indicator,
+      False,
+      hypergeometric_penalty,
+      GRB.EQUAL,
+      0.0
+    )
+
+    # Big M constraint to ensure hypergeometric penalty is only used when indicator is set
+    # Calculate a reasonable big M value based on the problem size
+    big_M = 1000.0 * len(self.all_death_times)  # Conservative upper bound
+    model.addConstr(
+      hypergeometric_penalty <= (
+        hypergeometric_penalty_expr + big_M * (1 - use_hypergeometric_penalty_indicator)
+      ),
+      name="hypergeometric_penalty_expr_upper_bound"
+    )
+    model.addConstr(
+      hypergeometric_penalty >= (
+        hypergeometric_penalty_expr - big_M * (1 - use_hypergeometric_penalty_indicator)
+      ),
+      name="hypergeometric_penalty_expr_lower_bound"
+    )
+
+    return (
+      hypergeometric_penalty,
+      null_hypothesis_indicator,
+      beta,
+      use_hypergeometric_penalty_indicator,
+    )
 
   def add_patient_wise_penalty(
     self,
@@ -662,6 +698,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       hypergeometric_penalty,
       null_hypothesis_indicator,
       beta,
+      use_hypergeometric_penalty_indicator,
     ) = self.add_hypergeometric_penalty_with_hazard_ratio(
       model,
       d=d,
@@ -682,6 +719,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       km_probability_at_time_low,
       km_probability_at_time_high,
       beta,
+      use_hypergeometric_penalty_indicator,
     )
 
   @functools.cached_property
@@ -775,18 +813,30 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     beta: gp.Var,
     null_hypothesis_indicator: gp.Var,
     patient_wise_only: bool,
+    use_hypergeometric_penalty_indicator: gp.Var,
   ):
     """
     Update the model with patient_wise_only constraint.
     When patient_wise_only=True, we constrain the hazard to be flipped
-    relative to the nominal under the null hypothesis.
+    relative to the nominal under the null hypothesis, and disable the
+    hypergeometric penalty.
     """
     # Remove existing constraints if they exist
     if self.__patient_wise_only_constraint is not None:
       model.remove(self.__patient_wise_only_constraint)
       self.__patient_wise_only_constraint = None
 
+    if self.__hypergeometric_penalty_constraint is not None:
+      model.remove(self.__hypergeometric_penalty_constraint)
+      self.__hypergeometric_penalty_constraint = None
+
     if patient_wise_only:
+      # Disable hypergeometric penalty when patient_wise_only is True
+      self.__hypergeometric_penalty_constraint = model.addConstr(
+        use_hypergeometric_penalty_indicator == 0,
+        name="disable_hypergeometric_penalty_patient_wise_only"
+      )
+      
       self.__patient_wise_only_constraint = []
 
       # Get nominal hazard ratio
@@ -813,6 +863,12 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
           0,
           name="patient_wise_only_hazard_ratio_ge_1",
         )
+    else:
+      # Enable hypergeometric penalty when patient_wise_only is False
+      self.__hypergeometric_penalty_constraint = model.addConstr(
+        use_hypergeometric_penalty_indicator == 1,
+        name="enable_hypergeometric_penalty"
+      )
 
     model.update()
 
@@ -853,6 +909,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       km_probability_at_time_low,
       km_probability_at_time_high,
       beta,
+      use_hypergeometric_penalty_indicator,
     ) = self.gurobi_model
 
     # Apply binomial_only constraints if specified
@@ -864,6 +921,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       beta=beta,
       null_hypothesis_indicator=null_hypothesis_indicator,
       patient_wise_only=patient_wise_only,
+      use_hypergeometric_penalty_indicator=use_hypergeometric_penalty_indicator,
     )
 
     # Set Gurobi verbose output parameter
