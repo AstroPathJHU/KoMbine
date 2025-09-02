@@ -15,7 +15,7 @@ import numpy.typing as npt
 import scipy.optimize
 import scipy.stats
 
-from .kaplan_meier_MINLP import KaplanMeierPatientNLL, MINLPForKM, n_choose_d_term_table
+from .kaplan_meier_MINLP import KaplanMeierPatientNLL, n_choose_d_term_table
 from .utilities import LOG_ZERO_EPSILON_DEFAULT
 
 class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-instance-attributes
@@ -29,18 +29,16 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     parameter_min: float = -np.inf,
     parameter_threshold: float,
     parameter_max: float = np.inf,
-    endpoint_epsilon: float = 1e-6,
     log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
   ):
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min
     self.__parameter_threshold = parameter_threshold
     self.__parameter_max = parameter_max
-    self.__endpoint_epsilon = endpoint_epsilon
     self.__log_zero_epsilon = log_zero_epsilon
     self.__null_hypothesis_constraint = None
     self.__patient_constraints_for_binomial_only = None
-    self.__patient_wise_only_constraints = None
+    self.__patient_wise_only_constraint = None
 
   @property
   def all_patients(self) -> list[KaplanMeierPatientNLL]:
@@ -116,132 +114,6 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       (self.observed_parameters >= self.parameter_threshold)
       & (self.observed_parameters < self.parameter_max)
     ))).T
-
-  @functools.cached_property
-  def nominal_curves_probabilities(self) -> tuple[float, float]:
-    """
-    Calculate the nominal Kaplan-Meier probabilities for both low and high curves.
-    Uses the observed parameters to assign patients to their nominal curves.
-    Returns (low_curve_prob, high_curve_prob).
-    """
-    # Patients in low curve (parameter < threshold)
-    low_curve_patients = [
-      i for i in range(self.n_patients)
-      if self.observed_parameters[i] < self.parameter_threshold
-    ]
-
-    # Patients in high curve (parameter >= threshold)
-    high_curve_patients = [
-      i for i in range(self.n_patients)
-      if self.observed_parameters[i] >= self.parameter_threshold
-    ]
-
-    # Calculate probabilities for each curve using the static method from MINLP
-    def calculate_curve_probability(patient_indices):
-      if not patient_indices:
-        return 1.0
-
-      # Group patients by their death times
-      times_died = []
-      times_censored = []
-
-      for i in patient_indices:
-        patient = self.all_patients[i]
-        if patient.censored:
-          times_censored.append(patient.time)
-        else:
-          times_died.append(patient.time)
-
-      # Get unique death times in order
-      unique_death_times = sorted(set(times_died))
-      if not unique_death_times:
-        return 1.0
-
-      # Count deaths and censored patients at each death time
-      died_counts = []
-      censored_counts = []
-
-      for t in unique_death_times:
-        # Count deaths at this time
-        deaths_at_t = sum(1 for i in patient_indices
-                         if not self.all_patients[i].censored and self.all_patients[i].time == t)
-        died_counts.append(deaths_at_t)
-
-        # Count censored patients before this time
-        # (who are no longer at risk at time t)
-        censored_before_t = sum(1 for i in patient_indices
-                               if self.all_patients[i].censored and self.all_patients[i].time < t)
-        censored_counts.append(censored_before_t)
-
-      return MINLPForKM.calculate_KM_probability(
-        total_count=len(patient_indices),
-        censored_counts=tuple(censored_counts),
-        died_counts=tuple(died_counts),
-      )
-
-    low_prob = calculate_curve_probability(low_curve_patients)
-    high_prob = calculate_curve_probability(high_curve_patients)
-
-    return low_prob, high_prob
-
-  @functools.cached_property
-  def nominal_curves_probabilities_at_each_time(
-    self
-  ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-    """
-    Calculate the nominal Kaplan-Meier probabilities at each death time for both curves.
-    Returns (low_curve_probs_at_times, high_curve_probs_at_times) where each is an array
-    with length equal to the number of death times.
-    """
-    # Patients in low curve (parameter < threshold)
-    low_curve_patients = [
-      i for i in range(self.n_patients)
-      if self.observed_parameters[i] < self.parameter_threshold
-    ]
-
-    # Patients in high curve (parameter >= threshold)
-    high_curve_patients = [
-      i for i in range(self.n_patients)
-      if self.observed_parameters[i] >= self.parameter_threshold
-    ]
-
-    def calculate_curve_probabilities_at_times(patient_indices):
-      """Calculate KM probabilities at each death time for given patients."""
-      if not patient_indices:
-        return np.ones(len(self.all_death_times))
-
-      probabilities_at_times = []
-
-      for death_time_idx, death_time in enumerate(self.all_death_times):
-        # Count patients at risk at this death time
-        at_risk_count = sum(1 for i in patient_indices
-                           if self.all_patients[i].time >= death_time)
-
-        # Count deaths at this death time
-        deaths_at_time = sum(1 for i in patient_indices
-                            if (not self.all_patients[i].censored
-                                and self.all_patients[i].time == death_time))
-
-        # Calculate survival probability at this time point
-        if at_risk_count == 0:
-          survival_prob = 1.0  # No patients at risk means no deaths
-        else:
-          survival_prob = (at_risk_count - deaths_at_time) / at_risk_count
-
-        # Calculate cumulative KM probability up to this time
-        if death_time_idx == 0:
-          km_prob_at_time = survival_prob
-        else:
-          km_prob_at_time = probabilities_at_times[-1] * survival_prob
-
-        probabilities_at_times.append(km_prob_at_time)
-
-      return np.array(probabilities_at_times)
-
-    low_probs = calculate_curve_probabilities_at_times(low_curve_patients)
-    high_probs = calculate_curve_probabilities_at_times(high_curve_patients)
-
-    return low_probs, high_probs
 
   @functools.cached_property
   def nll_penalty_for_patient_in_range(self) -> npt.NDArray[np.float64]:
@@ -629,7 +501,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     model.addConstr(hypergeometric_penalty == gp.quicksum(nll_terms),
                     name="hypergeometric_penalty_constraint")
 
-    return hypergeometric_penalty, null_hypothesis_indicator
+    return hypergeometric_penalty, null_hypothesis_indicator, beta
 
   def add_patient_wise_penalty(
     self,
@@ -788,7 +660,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     (
       hypergeometric_penalty,
-      null_hypothesis_indicator
+      null_hypothesis_indicator,
+      beta,
     ) = self.add_hypergeometric_penalty_with_hazard_ratio(
       model,
       d=d,
@@ -807,7 +680,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       null_hypothesis_indicator,
       a,
       km_probability_at_time_low,
-      km_probability_at_time_high
+      km_probability_at_time_high,
+      beta,
     )
 
   @functools.cached_property
@@ -894,67 +768,51 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     )
     return result_alt.hazard_ratio
 
-  def update_model_with_patient_wise_only_constraints( #pylint: disable=too-many-arguments
+  def update_model_with_patient_wise_only_constraint( #pylint: disable=too-many-arguments
     self,
     model: gp.Model,
     *,
-    km_probability_at_time_low: gp.tupledict,
-    km_probability_at_time_high: gp.tupledict,
+    beta: gp.Var,
     null_hypothesis_indicator: gp.Var,
     patient_wise_only: bool,
   ):
     """
-    Update the model with patient_wise_only constraints.
-    When patient_wise_only=True, we constrain the curves to be flipped
-    relative to their nominal probabilities at each death time point under the null hypothesis.
+    Update the model with patient_wise_only constraint.
+    When patient_wise_only=True, we constrain the hazard to be flipped
+    relative to the nominal under the null hypothesis.
     """
     # Remove existing constraints if they exist
-    if self.__patient_wise_only_constraints is not None:
-      for constr in self.__patient_wise_only_constraints:
-        model.remove(constr)
-      self.__patient_wise_only_constraints = None
+    if self.__patient_wise_only_constraint is not None:
+      model.remove(self.__patient_wise_only_constraint)
+      self.__patient_wise_only_constraint = None
 
     if patient_wise_only:
-      self.__patient_wise_only_constraints = []
+      self.__patient_wise_only_constraint = []
 
-      # Get nominal probabilities at each death time for both curves
-      nominal_low_probs_at_times, nominal_high_probs_at_times = \
-        self.nominal_curves_probabilities_at_each_time
+      # Get nominal hazard ratio
+      nominal_log_hazard_ratio = np.log(self.nominal_hazard_ratio)
 
-      # For the null hypothesis, constrain the curves to be flipped at each time point:
-      # If nominal low > nominal high at time i, constrain actual low <= actual high at time i
-      # If nominal low < nominal high at time i, constrain actual low >= actual high at time i
-      # If they're equal, no additional constraint needed for that time point
+      # For the null hypothesis, constrain the hazard ratio to be flipped:
+      # If nominal < 1, constraint actual >= 1
+      # If nominal > 1, constraint actual <= 1
+      # If nominal = 1, no additional constraint needed
 
-      for i in range(len(self.all_death_times)):
-        nominal_low_at_i = nominal_low_probs_at_times[i]
-        nominal_high_at_i = nominal_high_probs_at_times[i]
-
-        if abs(nominal_low_at_i - nominal_high_at_i) > self.__endpoint_epsilon:
-          if nominal_low_at_i > nominal_high_at_i:
-            # Under null hypothesis: low curve should be <= high curve at time i
-            # (flipped from nominal where low > high)
-            self.__patient_wise_only_constraints.append(
-              model.addGenConstrIndicator(
-                null_hypothesis_indicator, True,
-                km_probability_at_time_low[i] - km_probability_at_time_high[i],
-                GRB.LESS_EQUAL,
-                self.__endpoint_epsilon,
-                name=f"patient_wise_only_low_le_high_time_{i}",
-              )
-            )
-          else:
-            # Under null hypothesis: low curve should be >= high curve at time i
-            # (flipped from nominal where low < high)
-            self.__patient_wise_only_constraints.append(
-              model.addGenConstrIndicator(
-                null_hypothesis_indicator, True,
-                km_probability_at_time_low[i] - km_probability_at_time_high[i],
-                GRB.GREATER_EQUAL,
-                -self.__endpoint_epsilon,
-                name=f"patient_wise_only_low_ge_high_time_{i}",
-              )
-            )
+      if nominal_log_hazard_ratio > 0:
+        self.__patient_wise_only_constraint = model.addGenConstrIndicator(
+          null_hypothesis_indicator, True,
+          beta,
+          GRB.LESS_EQUAL,
+          0,
+          name="patient_wise_only_hazard_ratio_le_1",
+        )
+      elif nominal_log_hazard_ratio < 0:
+        self.__patient_wise_only_constraint = model.addGenConstrIndicator(
+          null_hypothesis_indicator, True,
+          beta,
+          GRB.GREATER_EQUAL,
+          0,
+          name="patient_wise_only_hazard_ratio_ge_1",
+        )
 
     model.update()
 
@@ -988,17 +846,17 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       null_hypothesis_indicator,
       a,
       km_probability_at_time_low,
-      km_probability_at_time_high
+      km_probability_at_time_high,
+      beta,
     ) = self.gurobi_model
 
     # Apply binomial_only constraints if specified
     self.update_model_with_binomial_only_constraints(model, a, binomial_only)
 
     # Apply patient_wise_only constraints if specified
-    self.update_model_with_patient_wise_only_constraints(
+    self.update_model_with_patient_wise_only_constraint(
       model,
-      km_probability_at_time_low=km_probability_at_time_low,
-      km_probability_at_time_high=km_probability_at_time_high,
+      beta=beta,
       null_hypothesis_indicator=null_hypothesis_indicator,
       patient_wise_only=patient_wise_only,
     )
