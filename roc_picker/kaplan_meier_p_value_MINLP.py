@@ -836,7 +836,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
         use_hypergeometric_penalty_indicator == 0,
         name="disable_hypergeometric_penalty_patient_wise_only"
       )
-      
+
       self.__patient_wise_only_constraint = []
 
       # Get nominal hazard ratio
@@ -900,7 +900,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     if patient_wise_only:
       #make sure the nominal hazard ratio is cached before doing anything with the Gurobi model
       #because this causes the model to be updated.
-      self.nominal_hazard_ratio
+      self.nominal_hazard_ratio # pylint: disable=pointless-statement
 
     (
       model,
