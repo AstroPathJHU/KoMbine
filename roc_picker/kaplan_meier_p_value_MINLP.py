@@ -30,12 +30,17 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     parameter_threshold: float,
     parameter_max: float = np.inf,
     log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
+    tie_handling: str = "noties",
   ):
+    if tie_handling not in ["noties", "breslow"]:
+      raise ValueError(f"tie_handling must be 'noties' or 'breslow', got '{tie_handling}'")
+
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min
     self.__parameter_threshold = parameter_threshold
     self.__parameter_max = parameter_max
     self.__log_zero_epsilon = log_zero_epsilon
+    self.__tie_handling = tie_handling
     self.__null_hypothesis_constraint = None
     self.__patient_constraints_for_binomial_only = None
     self.__patient_wise_only_constraint = None
@@ -72,6 +77,14 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     The maximum parameter value to be included in the "high" Kaplan-Meier curve.
     """
     return self.__parameter_max
+
+  @property
+  def tie_handling(self) -> str:
+    """
+    The method used for handling ties in the hypergeometric penalty.
+    Can be "noties" (default, assumes no ties) or "breslow" (Breslow approximation).
+    """
+    return self.__tie_handling
 
   @functools.cached_property
   def patient_times(self) -> npt.NDArray[np.float64]:
@@ -415,6 +428,169 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     """
     return n_choose_d_term_table(n_patients=self.n_patients)
 
+  def _add_breslow_nll_terms(  #pylint: disable=too-many-locals,too-many-statements
+    self,
+    model,
+    *,
+    omega,
+    beta,
+    r,
+    d,
+    d_total,
+  ):
+    """
+    Add NLL terms for Breslow approximation.
+    Returns a list of NLL terms.
+    """
+    nll_terms = []
+    max_d_total = self.n_patients
+
+    for j in range(len(self.all_death_times)):
+      # affine risk set base: s_j = r0 + omega*r1
+      omega_r1 = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                              name=f"omega_r1_{j}")
+      model.addQConstr(omega_r1 == omega * r[j,1],
+                      name=f"omega_r1_prod_{j}")
+
+      s_j_base = model.addVar(vtype=gp.GRB.CONTINUOUS, lb=1e-6,
+                             name=f"s_base_{j}")
+      model.addConstr(s_j_base == r[j,0] + omega_r1,
+                      name=f"s_base_def_{j}")
+
+      # Binary indicators for each possible value of d_total[j]
+      d_total_indicators = model.addVars(
+        max_d_total + 1,
+        vtype=gp.GRB.BINARY,
+        name=f"d_total_indicator_{j}"
+      )
+
+      # Exactly one d_total indicator must be active
+      model.addConstr(
+        gp.quicksum(d_total_indicators[k] for k in range(max_d_total + 1)) == 1,
+        name=f"d_total_indicator_sum_{j}"
+      )
+
+      # Link d_total[j] to the indicators
+      model.addConstr(
+        d_total[j] == gp.quicksum(k * d_total_indicators[k] for k in range(max_d_total + 1)),
+        name=f"d_total_value_{j}"
+      )
+
+      # For each possible value of d_total, create the corresponding sum
+      breslow_sum_terms = []
+      for k in range(max_d_total + 1):
+        if k == 0:
+          # If d_total = 0, the sum is empty, so contribution is 0
+          breslow_sum_terms.append(0)
+        else:
+          # Sum over m from 0 to k-1
+          sum_terms_for_k = []
+          for m in range(k):
+            # s_j_m = s_j_base - m (with bounds checking)
+            s_j_m = model.addVar(vtype=gp.GRB.CONTINUOUS, lb=1e-6,
+                                name=f"s_{j}_m{m}_k{k}")
+            model.addConstr(s_j_m == s_j_base - m,
+                           name=f"s_m_def_{j}_{m}_{k}")
+
+            # Helper variable for log argument (s_j_m + epsilon)
+            s_j_m_plus_epsilon = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                                             lb=self.__log_zero_epsilon,
+                                             name=f"s_plus_epsilon_{j}_{m}_{k}")
+            model.addConstr(s_j_m_plus_epsilon == s_j_m + self.__log_zero_epsilon,
+                           name=f"s_plus_epsilon_constr_{j}_{m}_{k}")
+
+            # log(s_j_m)
+            log_s_j_m = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                                    name=f"log_s_{j}_{m}_{k}",
+                                    lb=-gp.GRB.INFINITY, ub=gp.GRB.INFINITY)
+            model.addGenConstrLog(s_j_m_plus_epsilon, log_s_j_m,
+                                 name=f"log_s_def_{j}_{m}_{k}")
+
+            sum_terms_for_k.append(log_s_j_m)
+
+          if sum_terms_for_k:
+            breslow_sum_terms.append(gp.quicksum(sum_terms_for_k))
+          else:
+            breslow_sum_terms.append(0)
+
+      # Create the conditional sum based on d_total indicators
+      breslow_sum_var = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                                    name=f"breslow_sum_{j}",
+                                    lb=-gp.GRB.INFINITY, ub=gp.GRB.INFINITY)
+
+      # Use big-M constraints to implement the conditional sum
+      big_M = 1000.0  # Large enough constant
+      for k in range(max_d_total + 1):
+        if isinstance(breslow_sum_terms[k], (int, float)) and breslow_sum_terms[k] == 0:
+          # If the term is 0, constrain breslow_sum_var to be 0 when this indicator is active
+          model.addGenConstrIndicator(
+            d_total_indicators[k], True,
+            breslow_sum_var, gp.GRB.EQUAL, 0.0,
+            name=f"breslow_sum_zero_{j}_{k}"
+          )
+        else:
+          # Use big-M constraints for non-zero terms
+          model.addConstr(
+            breslow_sum_var <= breslow_sum_terms[k] + big_M * (1 - d_total_indicators[k]),
+            name=f"breslow_sum_upper_{j}_{k}"
+          )
+          model.addConstr(
+            breslow_sum_var >= breslow_sum_terms[k] - big_M * (1 - d_total_indicators[k]),
+            name=f"breslow_sum_lower_{j}_{k}"
+          )
+
+      # NLL contribution: -d1*beta + breslow_sum
+      term = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                          name=f"nll_term_{j}")
+      model.addConstr(term == -d[j,1]*beta + breslow_sum_var,
+                      name=f"nll_term_def_{j}")
+
+      nll_terms.append(term)
+
+    return nll_terms
+
+  def _add_noties_nll_terms(self, model, *, omega, beta, r, d, d_total):
+    """
+    Add NLL terms for no-ties approximation.
+    Returns a list of NLL terms.
+    """
+    nll_terms = []
+
+    for j in range(len(self.all_death_times)):
+      # affine risk set: s_j = r0 + omega*r1
+      omega_r1 = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                              name=f"omega_r1_{j}")
+      model.addQConstr(omega_r1 == omega * r[j,1],
+                      name=f"omega_r1_prod_{j}")
+
+      s_j = model.addVar(vtype=gp.GRB.CONTINUOUS, lb=1e-6,
+                        name=f"s_{j}")
+      model.addConstr(s_j == r[j,0] + omega_r1,
+                      name=f"s_def_{j}")
+
+      # Helper variable for log argument (s_j + epsilon)
+      s_j_plus_epsilon = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                                     lb=self.__log_zero_epsilon,
+                                     name=f"s_plus_epsilon_{j}")
+      model.addConstr(s_j_plus_epsilon == s_j + self.__log_zero_epsilon,
+                      name=f"s_plus_epsilon_constr_{j}")
+
+      # log(s_j)
+      log_s_j = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                            name=f"log_s_{j}",
+                            lb=-gp.GRB.INFINITY, ub=gp.GRB.INFINITY)
+      model.addGenConstrLog(s_j_plus_epsilon, log_s_j, name=f"log_s_def_{j}")
+
+      # NLL contribution: -d1*beta + d_total*log(s_j)
+      term = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                          name=f"nll_term_{j}")
+      model.addConstr(term == -d[j,1]*beta + d_total[j]*log_s_j,
+                      name=f"nll_term_def_{j}")
+
+      nll_terms.append(term)
+
+    return nll_terms
+
   def add_hypergeometric_penalty_with_hazard_ratio(  #pylint: disable=too-many-locals
     self,
     model: gp.Model,
@@ -428,8 +604,11 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     Under null (HR = 1): beta = 0, omega = exp(beta) = 1
     Under alternative: beta free in bounds, omega = exp(beta)
 
-    For each time j:
+    For "noties" tie handling (current implementation):
       NLL_j = -d[j,1] * beta + d_total[j] * log(r[j,0] + omega * r[j,1])
+
+    For "breslow" tie handling (Breslow approximation):
+      NLL_j = -d[j,1] * beta + sum_{m=0}^{d_total[j]-1} log(r[j,0] + omega * r[j,1] - m)
     """
     # total deaths and risk at each time
     d_total = model.addVars(len(self.all_death_times),
@@ -462,38 +641,16 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     nll_terms = []
 
-    for j in range(len(self.all_death_times)):
-      # affine risk set: s_j = r0 + omega*r1
-      omega_r1 = model.addVar(vtype=gp.GRB.CONTINUOUS,
-                              name=f"omega_r1_{j}")
-      model.addQConstr(omega_r1 == omega * r[j,1],
-                      name=f"omega_r1_prod_{j}")
-
-      s_j = model.addVar(vtype=gp.GRB.CONTINUOUS, lb=1e-6,
-                        name=f"s_{j}")
-      model.addConstr(s_j == r[j,0] + omega_r1,
-                      name=f"s_def_{j}")
-
-      # Helper variable for log argument (s_j + epsilon)
-      s_j_plus_epsilon = model.addVar(vtype=gp.GRB.CONTINUOUS,
-                                     lb=self.__log_zero_epsilon,
-                                     name=f"s_plus_epsilon_{j}")
-      model.addConstr(s_j_plus_epsilon == s_j + self.__log_zero_epsilon,
-                      name=f"s_plus_epsilon_constr_{j}")
-
-      # log(s_j)
-      log_s_j = model.addVar(vtype=gp.GRB.CONTINUOUS,
-                            name=f"log_s_{j}",
-                            lb=-GRB.INFINITY, ub=GRB.INFINITY)
-      model.addGenConstrLog(s_j_plus_epsilon, log_s_j, name=f"log_s_def_{j}")
-
-      # NLL contribution: -d1*beta + d_total*log(s_j)
-      term = model.addVar(vtype=gp.GRB.CONTINUOUS,
-                          name=f"nll_term_{j}")
-      model.addConstr(term == -d[j,1]*beta + d_total[j]*log_s_j,
-                      name=f"nll_term_def_{j}")
-
-      nll_terms.append(term)
+    if self.tie_handling == "noties":
+      nll_terms = self._add_noties_nll_terms(
+        model, omega=omega, beta=beta, r=r, d=d, d_total=d_total
+      )
+    elif self.tie_handling == "breslow":
+      nll_terms = self._add_breslow_nll_terms(
+        model, omega=omega, beta=beta, r=r, d=d, d_total=d_total
+      )
+    else:
+      raise ValueError(f"Unknown tie_handling: {self.tie_handling}")
 
     # Indicator variable to control whether the hypergeometric penalty is used
     use_hypergeometric_penalty_indicator = model.addVar(
