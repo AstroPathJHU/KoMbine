@@ -516,20 +516,12 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       0.0
     )
 
-    # Big M constraint to ensure hypergeometric penalty is only used when indicator is set
-    # Calculate a reasonable big M value based on the problem size
-    big_M = 1000.0 * len(self.all_death_times)  # Conservative upper bound
-    model.addConstr(
-      hypergeometric_penalty <= (
-        hypergeometric_penalty_expr + big_M * (1 - use_hypergeometric_penalty_indicator)
-      ),
-      name="hypergeometric_penalty_expr_upper_bound"
-    )
-    model.addConstr(
-      hypergeometric_penalty >= (
-        hypergeometric_penalty_expr - big_M * (1 - use_hypergeometric_penalty_indicator)
-      ),
-      name="hypergeometric_penalty_expr_lower_bound"
+    model.addGenConstrIndicator(
+      use_hypergeometric_penalty_indicator,
+      True,
+      hypergeometric_penalty - hypergeometric_penalty_expr,
+      GRB.EQUAL,
+      0.0
     )
 
     return (
