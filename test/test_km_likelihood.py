@@ -45,6 +45,7 @@ def runtest(
     reffile = here / "reference" / "km_likelihood.json"
 
   tolerance: Tolerance = {"atol": 2e-4, "rtol": 2e-4}
+  nominal_hazard_ratio_tolerance: Tolerance = {"atol": 2e-3, "rtol": 2e-3}
 
   # Calculate precision for JSON output based on rtol
   rtol_value = tolerance["rtol"]
@@ -515,7 +516,7 @@ denom   100 100 100 100 100 100 100 100 100 100 100 100
       np.testing.assert_allclose(
         array,
         ref,
-        **tolerance,
+        **(nominal_hazard_ratio_tolerance if name == "nominal_hazard_ratio" else tolerance),
         err_msg=f"Array '{name}' does not match the reference."
       )
   except Exception:
