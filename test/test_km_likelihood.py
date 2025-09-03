@@ -6,6 +6,8 @@ import argparse
 import pathlib
 import json
 import math
+import os
+import tempfile
 import warnings
 
 import numpy as np
@@ -190,16 +192,66 @@ def runtest(
   parameter_min = 0.0001
   parameter_max = 100
   parameter_threshold = 0.45
-  km_p_value_minlp = datacard.km_p_value(
+
+  # Test both tie handling modes
+  km_p_value_minlp_no_ties = datacard.km_p_value(
     parameter_min=parameter_min,
     parameter_threshold=parameter_threshold,
     parameter_max=parameter_max,
+    tie_handling="noties",
   )
-  nominal_hazard_ratio = km_p_value_minlp.nominal_hazard_ratio
-  p_value, _, _ = km_p_value_minlp.solve_and_pvalue()
-  p_value_binomial, _, _ = km_p_value_minlp.solve_and_pvalue(binomial_only=True)
+  km_p_value_minlp_breslow = datacard.km_p_value(
+    parameter_min=parameter_min,
+    parameter_threshold=parameter_threshold,
+    parameter_max=parameter_max,
+    tie_handling="breslow",
+  )
+
+  # Verify that both have the same nominal hazard ratio
+  nominal_hazard_ratio_no_ties = km_p_value_minlp_no_ties.nominal_hazard_ratio
+  nominal_hazard_ratio_breslow = km_p_value_minlp_breslow.nominal_hazard_ratio
+  np.testing.assert_allclose(
+    nominal_hazard_ratio_no_ties,
+    nominal_hazard_ratio_breslow,
+    **tolerance
+  )
+  nominal_hazard_ratio = nominal_hazard_ratio_no_ties  # Use either one
+
+  # Calculate p-values for both tie handling modes
+  p_value_no_ties, _, _ = km_p_value_minlp_no_ties.solve_and_pvalue()
+  p_value_binomial_no_ties, _, _ = km_p_value_minlp_no_ties.solve_and_pvalue(binomial_only=True)
+
+  p_value_breslow, _, _ = km_p_value_minlp_breslow.solve_and_pvalue()
+  p_value_binomial_breslow, _, _ = km_p_value_minlp_breslow.solve_and_pvalue(binomial_only=True)
+
+  # Since the test datacard has tied death times, the p-values should be different
   try:
-    _, _, _ = km_p_value_minlp.solve_and_pvalue(patient_wise_only=True)
+    np.testing.assert_allclose(
+      p_value_no_ties,
+      p_value_breslow,
+      **tolerance
+    )
+  except AssertionError:
+    pass  # Expected - they should be different when ties exist
+  else:
+    raise AssertionError(
+      "p-values for no-ties and breslow should be different when ties exist"
+    )
+
+  try:
+    np.testing.assert_allclose(
+      p_value_binomial_no_ties,
+      p_value_binomial_breslow,
+      **tolerance
+    )
+  except AssertionError:
+    pass  # Expected - they should be different when ties exist
+  else:
+    raise AssertionError(
+      "Binomial p-values for no-ties and breslow should be different when ties exist"
+    )
+  try:
+    _, _, _ = km_p_value_minlp_no_ties.solve_and_pvalue(patient_wise_only=True)
   except NotImplementedError:
     pass
   else:
@@ -210,7 +262,7 @@ def runtest(
 
   # Test mutual exclusion of options
   try:
-    km_p_value_minlp.solve_and_pvalue(binomial_only=True, patient_wise_only=True)
+    km_p_value_minlp_no_ties.solve_and_pvalue(binomial_only=True, patient_wise_only=True)
     raise AssertionError(
       "Should have raised ValueError for both binomial_only and patient_wise_only being True"
     )
@@ -363,8 +415,10 @@ def runtest(
     "best_probabilities_patient_wise": best_probabilities_patient_wise,
     "CL_probabilities_patient_wise": CL_probabilities_patient_wise,
     "nominal_hazard_ratio": np.array([nominal_hazard_ratio]),
-    "p_value": np.array([p_value]),
-    "p_value_binomial": np.array([p_value_binomial]),
+    "p_value_no_ties": np.array([p_value_no_ties]),
+    "p_value_binomial_no_ties": np.array([p_value_binomial_no_ties]),
+    "p_value_breslow": np.array([p_value_breslow]),
+    "p_value_binomial_breslow": np.array([p_value_binomial_breslow]),
     #"p_value_patient_wise": np.array([p_value_patient_wise]),
     "p_value_logrank": np.array([p_value_logrank]),
   }
@@ -372,6 +426,71 @@ def runtest(
     ordered_array_data[f"nominal_probabilities_{name}"] = alt_data["nominal_probabilities"]
     ordered_array_data[f"best_probabilities_{name}"] = alt_data["best_probabilities"]
     ordered_array_data[f"CL_probabilities_{name}"] = alt_data["CL_probabilities"]
+
+  # Test case with no ties: create synthetic data with unique death times
+  # This tests that both tie handling methods give the same result when there are no ties
+
+  # Create a temporary datacard with no tied death times
+  no_ties_datacard_content = """observable_type poisson_ratio
+------------
+# List of patients with no tied death times
+------------
+survival_time	1	2	3	4	7	8	9	11	12	13	15	16
+censored    0   0   0   0   0   0   0   0    0    0    0    0
+num	10	20	30	40	50	60	30	40	50	60	70	80
+denom   100 100 100 100 100 100 100 100 100 100 100 100
+"""
+
+  with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+    f.write(no_ties_datacard_content)
+    no_ties_datacard_path = f.name
+
+  try:
+    no_ties_datacard = roc_picker.datacard.Datacard.parse_datacard(
+      pathlib.Path(no_ties_datacard_path)
+    )
+
+    # Test p-values with both tie handling methods on data with no ties
+    km_p_value_no_ties_test = no_ties_datacard.km_p_value(
+      parameter_min=parameter_min,
+      parameter_threshold=parameter_threshold,
+      parameter_max=parameter_max,
+      tie_handling="noties",
+    )
+    km_p_value_breslow_test = no_ties_datacard.km_p_value(
+      parameter_min=parameter_min,
+      parameter_threshold=parameter_threshold,
+      parameter_max=parameter_max,
+      tie_handling="breslow",
+    )
+
+    p_value_no_ties_test, _, _ = km_p_value_no_ties_test.solve_and_pvalue()
+    p_value_breslow_test, _, _ = km_p_value_breslow_test.solve_and_pvalue()
+    p_value_binomial_no_ties_test, _, _ = (
+      km_p_value_no_ties_test.solve_and_pvalue(binomial_only=True)
+    )
+    p_value_binomial_breslow_test, _, _ = (
+      km_p_value_breslow_test.solve_and_pvalue(binomial_only=True)
+    )
+
+    # When there are no ties, both methods should give the same result
+    np.testing.assert_allclose(
+      p_value_no_ties_test,
+      p_value_breslow_test,
+      **tolerance,
+      err_msg="p-values for no-ties and breslow should be the same when there are no ties"
+    )
+
+    np.testing.assert_allclose(
+      p_value_binomial_no_ties_test,
+      p_value_binomial_breslow_test,
+      **tolerance,
+      err_msg="Binomial p-values for no-ties and breslow should be same when no ties"
+    )
+
+  finally:
+    # Clean up temporary file
+    os.unlink(no_ties_datacard_path)
 
   try:
     with open(reffile, "r", encoding="utf-8") as f:

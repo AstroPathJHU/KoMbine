@@ -952,6 +952,7 @@ class Datacard:
     parameter_threshold: float,
     parameter_max: float = np.inf,
     log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
+    tie_handling: str = "noties",
   ) -> MINLPforKMPValue:
     """
     Generate a MINLPforKMPValue object for calculating p-values for Kaplan-Meier curves
@@ -967,6 +968,7 @@ class Datacard:
       parameter_threshold=parameter_threshold,
       parameter_max=parameter_max,
       log_zero_epsilon=log_zero_epsilon,
+      tie_handling=tie_handling,
     )
 
   def km_p_value_logrank(
@@ -1209,6 +1211,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   parser.add_argument("--parameter-min", type=float, dest="parameter_min", default=-np.inf, help="The minimum parameter value for the low group.")
   parser.add_argument("--parameter-max", type=float, dest="parameter_max", default=np.inf, help="The maximum parameter value for the high group.")
   parser.add_argument("--include-logrank-pvalue", action="store_true", dest="include_logrank_pvalue", help="Include conventional logrank p-value for comparison with likelihood method.")
+  parser.add_argument("--p-value-tie-handling", type=str, dest="p_value_tie_handling", choices=["noties", "breslow"], default="noties", help="Method for handling ties in p-value calculation: 'noties' (no ties approximation) or 'breslow' (Breslow approximation).")
   parser.add_argument("--pvalue-fontsize", type=float, dest="pvalue_fontsize", default=KaplanMeierPlotConfig.pvalue_fontsize, help="Font size for p-value text.")
   parser.add_argument("--pvalue-format", type=str, dest="pvalue_format", default=KaplanMeierPlotConfig.pvalue_format, help="Format string for p-value display (e.g., '.3g', '.2f').")
   # pylint: enable=C0301
@@ -1222,6 +1225,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   log_zero_epsilon = args.__dict__.pop("log_zero_epsilon")
   endpoint_epsilon = args.__dict__.pop("endpoint_epsilon")
   include_logrank_pvalue = args.__dict__.pop("include_logrank_pvalue")
+  p_value_tie_handling = args.__dict__.pop("p_value_tie_handling")
   pvalue_fontsize = args.__dict__.pop("pvalue_fontsize")
   pvalue_format = args.__dict__.pop("pvalue_format")
 
@@ -1279,6 +1283,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
       parameter_threshold=threshold,
       parameter_max=parameter_max,
       log_zero_epsilon=log_zero_epsilon,
+      tie_handling=p_value_tie_handling,
     )
 
     if common_plot_kwargs["include_full_NLL"]:
