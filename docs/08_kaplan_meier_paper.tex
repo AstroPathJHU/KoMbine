@@ -229,12 +229,19 @@ Q&=\frac{U^2}{\text{Var}(U)},
 \end{align}
 which follows a \(\chi^2\) distribution with one degree of freedom~\citep[pp.~45--47]{mantel1966evaluation,peto1972asymptotically,appliedsurvivalanalysis}.
 
-In the likelihood approach, we instead compute the full NLL, similar to \cref{eq:total-nll} but with two curves:
+In the likelihood approach, we instead compute the full NLL, similar to \cref{eq:total-nll}.  We have two separate patient-wise NLL penalties, one for each curve.  The probability distribution representing the relationship between the curves is modeled with the Cox partial likelihood distribution (using the Breslow approximation) with \(\beta=\log{H}\), which reduces to the hypergeometric distribution under the null hypothesis when \(H=1\)~\citep{cox1972regression,breslow1974covariance}:
 \begin{equation}
--\log \mathcal{L}_{\text{total}}(a_{jk}, p_{ik}^\text{survived}) = -\sum_{k}\log\mathcal{L}_\text{binomial}(a_{jk}, p_{ik}^\text{survived}) - \sum_{k}\log\mathcal{L}_\text{patient-wise}(a_{jk}).
-\label{eq:two-curve-nll}
+-\log \mathcal{L}_{\text{hypergeometric}}(a_{jk}, H)=-\sum_i \left[d_{i1} \log{H} - \sum_{m=0}^{d_{i0}+d_{i1}-1} \log\left(r_{i0} + H r_{i1} - m\right)\right]
+\label{eq:hypergeometric-nll}
 \end{equation}
-We apply the proportional hazard model, \cref{eq:logrank-hazard}, as a constraint.  For the alternate hypothesis, we minimize the NLL over \(H\) as well as the other parameters, while for the null hypothesis we fix \(H=1\) and minimize over only the other parameters.  The NLL difference again follows a \(\chi^2\) distribution with one degree of freedom.
+
+The total NLL is then given by
+\begin{equation}
+-\log \mathcal{L}_{\text{total}}(a_{jk}, H) = -\sum_{k}\log\mathcal{L}_\text{hypergeometric}(H) - \sum_{k}\log\mathcal{L}_k^{\text{patient-wise}}(a_{jk}).
+\label{eq:p-value-nll}
+\end{equation}
+
+We evaluate the NLL for the null hypothesis by minimizing \cref{eq:p-value-nll} with the constraint \(H=1\).  For the alternate hypothesis, we minimize \cref{eq:p-value-nll} unconstrained.  The difference between the two NLLs is used to compute the \(p\) value using a \(\chi^2\) distribution with one degree of freedom.
 
 \section{Implementation}
 
