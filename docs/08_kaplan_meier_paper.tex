@@ -229,11 +229,21 @@ Q&=\frac{U^2}{\text{Var}(U)},
 \end{align}
 which follows a \(\chi^2\) distribution with one degree of freedom~\citep[pp.~45--47]{mantel1966evaluation,peto1972asymptotically,appliedsurvivalanalysis}.
 
-In the likelihood approach, we instead compute the full NLL, similar to \cref{eq:total-nll}.  We have two separate patient-wise NLL penalties, one for each curve.  The probability distribution representing the relationship between the curves is modeled with the Cox partial likelihood distribution (using the Breslow approximation) with \(\beta=\log{H}\), which reduces to the hypergeometric distribution under the null hypothesis when \(H=1\)~\citep{cox1972regression,breslow1974covariance}:
+In the likelihood approach, we instead compute the full NLL, similar to \cref{eq:total-nll}.  We have two separate patient-wise NLL penalties, one for each curve.  The probability distribution representing the relationship between the curves is modeled with the Cox partial likelihood distribution with \(\beta=\log{H}\), which reduces to the hypergeometric distribution under the null hypothesis when \(H=1\)~\citep{cox1972regression,breslow1974covariance}:
+\begin{align}
+-\log \mathcal{L}_{\text{hypergeometric}}(a_{jk}, H)&=-\sum_i\left[\log\binom{r_{i0}}{d_{i0}}+\log\binom{r_{i1}}{d_{i1}}+d_{i1}\log H-\log Z_j(H)\right] \label{eq:hypergeometric-nll-exact}\\
+&\approx-\sum_i \left[d_{i1} \log{H} - \sum_{m=0}^{d_{i0}+d_{i1}-1} \log\left(r_{i0} + H r_{i1} - m\right)\right] \label{eq:hypergeometric-nll-breslow}\\
+&\approx-\sum_i \left[d_{i1} \log{H} - \log\left(r_{i0}+H r_{i1}\right)\right].
+\label{eq:hypergeometric-nll-noties}
+\end{align}
+\Cref{eq:hypergeometric-nll-exact} gives the exact formula, with the normalization factor \(Z_j(H)\) given by
 \begin{equation}
--\log \mathcal{L}_{\text{hypergeometric}}(a_{jk}, H)=-\sum_i \left[d_{i1} \log{H} - \sum_{m=0}^{d_{i0}+d_{i1}-1} \log\left(r_{i0} + H r_{i1} - m\right)\right]
-\label{eq:hypergeometric-nll}
+Z_j(H) = \sum_{m}\binom{r_{i0}}{m}\binom{r_{i1}}{d_{i0}+d_{i1}-m}H^m,
+\label{eq:hypergeometric-normalization}
 \end{equation}
+where the sum is over all feasible values of \(m\) that allow both binomial coefficients to be finite.
+
+\Cref{eq:hypergeometric-nll-breslow} applies the Breslow approximation~\citep{breslow1974covariance}.  Both reduce to \cref{eq:hypergeometric-nll-noties} when no more than one patient dies at each time point.  Since our biomedical analyses typically do not involve many patients, ties are rare, and we therefore use \cref{eq:hypergeometric-nll-noties} in \pkg{KoMbine}.  We explore the effect of this approximation in \cref{sec:compare-to-conventional-p-value}.
 
 The total NLL is then given by
 \begin{equation}
@@ -302,7 +312,7 @@ One striking difference in both cases is that the Greenwood method cannot calcul
 
 Our method, by contrast, calculates the binomial likelihood (and hence the uncertainty) using the \emph{true} survival probability, which we can do despite not knowing it in advance, because it is a parameter in the likelihood fit.  This is the fundamental tradeoff of the likelihood method: we can be more precise, but the likelihood fit is more computationally intensive.
 
-\subsubsection[Conventional log-rank p value estimation]{Conventional log-rank \(p\) value estimation}
+\subsubsection[Conventional log-rank p value estimation]{Conventional log-rank \(p\) value estimation}\label{sec:compare-to-conventional-p-value}
 
 \subsection{Lung cancer dataset}
 
