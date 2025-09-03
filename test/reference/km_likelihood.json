@@ -412,7 +412,7 @@
     1e-07
   ],
   "nominal_hazard_ratio": [
-    0.4191
+    0.4147
   ],
   "nominal_probabilities": [
     1.0,
@@ -440,7 +440,7 @@
     0.0202
   ],
   "p_value_binomial": [
-    0.1751
+    0.175
   ],
   "p_value_logrank": [
     0.125

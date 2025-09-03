@@ -22,6 +22,10 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
   """
   MINLP solver for calculating p-values for two Kaplan-Meier curves.
   """
+
+  __default_MIPGap = 1e-6
+  __default_MIPGapAbs = 1e-8
+
   def __init__( # pylint: disable=too-many-arguments
     self,
     all_patients: list[KaplanMeierPatientNLL],
@@ -673,20 +677,12 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       0.0
     )
 
-    # Big M constraint to ensure hypergeometric penalty is only used when indicator is set
-    # Calculate a reasonable big M value based on the problem size
-    big_M = 1000.0 * len(self.all_death_times)  # Conservative upper bound
-    model.addConstr(
-      hypergeometric_penalty <= (
-        hypergeometric_penalty_expr + big_M * (1 - use_hypergeometric_penalty_indicator)
-      ),
-      name="hypergeometric_penalty_expr_upper_bound"
-    )
-    model.addConstr(
-      hypergeometric_penalty >= (
-        hypergeometric_penalty_expr - big_M * (1 - use_hypergeometric_penalty_indicator)
-      ),
-      name="hypergeometric_penalty_expr_lower_bound"
+    model.addGenConstrIndicator(
+      use_hypergeometric_penalty_indicator,
+      True,
+      hypergeometric_penalty - hypergeometric_penalty_expr,
+      GRB.EQUAL,
+      0.0
     )
 
     return (
@@ -1044,7 +1040,9 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     *,
     binomial_only: bool = False,
     patient_wise_only: bool = False,
-    gurobi_verbose: bool = False
+    gurobi_verbose: bool = False,
+    MIPGap: float | None = None,
+    MIPGapAbs: float | None = None,
   ):
     """
     Solve the MINLP and return the p value.
@@ -1068,6 +1066,11 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       #make sure the nominal hazard ratio is cached before doing anything with the Gurobi model
       #because this causes the model to be updated.
       self.nominal_hazard_ratio # pylint: disable=pointless-statement
+
+    if MIPGap is None:
+      MIPGap = self.__default_MIPGap
+    if MIPGapAbs is None:
+      MIPGapAbs = self.__default_MIPGapAbs
 
     (
       model,
@@ -1093,6 +1096,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     # Set Gurobi verbose output parameter
     model.setParam('OutputFlag', 1 if gurobi_verbose else 0)
+    model.setParam('MIPGap', MIPGap)
+    model.setParam('MIPGapAbs', MIPGapAbs)
 
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, True)
     model.optimize()
