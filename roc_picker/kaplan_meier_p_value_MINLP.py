@@ -432,7 +432,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     """
     return n_choose_d_term_table(n_patients=self.n_patients)
 
-  def _add_breslow_nll_terms(  #pylint: disable=too-many-locals,too-many-statements
+  def _add_breslow_nll_terms(  #pylint: disable=too-many-locals,too-many-statements,too-many-arguments
     self,
     model,
     *,
@@ -553,7 +553,16 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     return nll_terms
 
-  def _add_noties_nll_terms(self, model, *, omega, beta, r, d, d_total):
+  def _add_noties_nll_terms(  #pylint: disable=too-many-arguments
+    self,
+    model,
+    *,
+    omega,
+    beta,
+    r,
+    d,
+    d_total
+  ):
     """
     Add NLL terms for no-ties approximation.
     Returns a list of NLL terms.
@@ -1035,7 +1044,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     model.update()
 
-  def solve_and_pvalue( # pylint: disable=too-many-locals
+  def solve_and_pvalue( # pylint: disable=too-many-locals, too-many-arguments
     self,
     *,
     binomial_only: bool = False,
