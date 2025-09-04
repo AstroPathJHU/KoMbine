@@ -436,11 +436,11 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     self,
     model: gp.Model,
     *,
-    omega,
-    beta,
-    r,
-    d,
-    d_total,
+    omega: gp.Var,
+    beta: gp.Var,
+    r: gp.tupledict[tuple[int, ...], gp.Var],
+    d: gp.tupledict[tuple[int, ...], gp.Var],
+    d_total: gp.tupledict[int, gp.Var],
   ):
     """
     Add NLL terms for Breslow approximation.
@@ -532,13 +532,13 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
   def _add_noties_nll_terms(  #pylint: disable=too-many-arguments
     self,
-    model,
+    model: gp.Model,
     *,
-    omega,
-    beta,
-    r,
-    d,
-    d_total
+    omega: gp.Var,
+    beta: gp.Var,
+    r: gp.tupledict[tuple[int, ...], gp.Var],
+    d: gp.tupledict[tuple[int, ...], gp.Var],
+    d_total: gp.tupledict[int, gp.Var],
   ):
     """
     Add NLL terms for no-ties approximation.
