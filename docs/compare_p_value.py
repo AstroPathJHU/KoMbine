@@ -142,7 +142,7 @@ def plot_pvalue_comparison( #pylint: disable=too-many-arguments
   inlay_left = 0.55
   inlay_bottom = 0.05
 
-  inlay_ax = plt.axes([inlay_left, inlay_bottom, inlay_width, inlay_height])
+  inlay_ax = plt.axes((inlay_left, inlay_bottom, inlay_width, inlay_height))
 
   # Plot the same data in the inlay but with zoomed limits
   inlay_ax.scatter(logrank_vals, minlp_vals, alpha=0.6, s=10)  # Smaller points for inlay
