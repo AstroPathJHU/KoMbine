@@ -455,11 +455,10 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     """
     nll_terms = []
 
-    for j in range(len(self.all_death_times)):
-      death_time = self.all_death_times[j]
+    for j, death_time in enumerate(self.all_death_times):
       # Calculate the actual number of deaths at this time point, regardless of parameter values
       max_d_total = self.deaths_at_time(death_time)
-      
+
       # affine risk set base: s_j = r0 + omega*r1
       omega_r1 = model.addVar(vtype=gp.GRB.CONTINUOUS,
                               name=f"omega_r1_{j}")

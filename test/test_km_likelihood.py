@@ -422,7 +422,7 @@ def runtest(
     ordered_array_data[f"best_probabilities_{name}"] = alt_data["best_probabilities"]
     ordered_array_data[f"CL_probabilities_{name}"] = alt_data["CL_probabilities"]
 
-  # Test case with no ties: use datacard with unique death times  
+  # Test case with no ties: use datacard with unique death times
   # This tests that both tie handling methods give the same result when there are no ties
   no_ties_datacard_path = datacards / "poisson_ratio_km_no_ties.txt"
   no_ties_datacard = roc_picker.datacard.Datacard.parse_datacard(no_ties_datacard_path)
