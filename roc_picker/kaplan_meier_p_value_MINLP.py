@@ -36,8 +36,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
     tie_handling: str = "breslow",
   ):
-    if tie_handling not in ["noties", "breslow"]:
-      raise ValueError(f"tie_handling must be 'noties' or 'breslow', got '{tie_handling}'")
+    if tie_handling not in ["breslow"]:
+      raise ValueError(f"tie_handling must be 'breslow', got '{tie_handling}'")
 
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min
@@ -86,7 +86,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
   def tie_handling(self) -> str:
     """
     The method used for handling ties in the hypergeometric penalty.
-    Can be "noties" (default, assumes no ties) or "breslow" (Breslow approximation).
+    Currently the only option is "breslow" (Breslow approximation).
     """
     return self.__tie_handling
 
@@ -439,7 +439,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     """
     return n_choose_d_term_table(n_patients=self.n_patients)
 
-  def _add_breslow_nll_terms(  #pylint: disable=too-many-locals,too-many-statements,too-many-arguments
+  def _add_breslow_nll_terms(  #pylint: disable=too-many-arguments
     self,
     model: gp.Model,
     *,
@@ -451,106 +451,6 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
   ):
     """
     Add NLL terms for Breslow approximation.
-    Returns a list of NLL terms.
-    """
-    nll_terms = []
-
-    for j, death_time in enumerate(self.all_death_times):
-      # Calculate the actual number of deaths at this time point, regardless of parameter values
-      max_d_total = self.deaths_at_time(death_time)
-
-      # affine risk set base: s_j = r0 + omega*r1
-      omega_r1 = model.addVar(vtype=gp.GRB.CONTINUOUS,
-                              name=f"omega_r1_{j}")
-      model.addQConstr(omega_r1 == omega * r[j,1],
-                      name=f"omega_r1_prod_{j}")
-
-      s_j_base = model.addVar(vtype=gp.GRB.CONTINUOUS, lb=1e-6,
-                             name=f"s_base_{j}")
-      model.addConstr(s_j_base == r[j,0] + omega_r1,
-                      name=f"s_base_def_{j}")
-
-      # Binary indicators for d_total[j] >= each possible value
-      d_total_indicators = model.addVars(
-        max_d_total + 1,
-        vtype=gp.GRB.BINARY,
-        name=f"d_total_{j}_at_least_indicator"
-      )
-
-      # Link d_total[j] to the indicators
-      # First: d_total[j] == the number of activated indicators minus 1
-      model.addConstr(
-        d_total[j] == gp.quicksum(d_total_indicators.values()) - 1,
-        name=f"d_total_value_{j}"
-      )
-      # Second: if a later indicator is activated, all the earlier ones are too
-      for k in range(max_d_total):
-        model.addConstr(
-          d_total_indicators[k] >= d_total_indicators[k + 1],
-          name=f"d_total_indicator_monotonic_{j}_{k}"
-        )
-
-      # For each possible value of d_total, create the corresponding sum
-      # The sum goes from 0 to d_total - 1
-      breslow_sum_terms = []
-      for m in range(max_d_total):
-        s_j_m = model.addVar(vtype=gp.GRB.CONTINUOUS, lb=0,
-                            name=f"s_{j}_m{m}")
-        model.addGenConstrIndicator(
-          d_total_indicators[m+1], True,
-          s_j_m - (s_j_base - m),
-          GRB.EQUAL,
-          0,
-          name=f"s_m_def_{j}_{m}",
-        )
-        model.addGenConstrIndicator(
-          d_total_indicators[m+1], False,
-          s_j_m,
-          GRB.EQUAL,
-          1,  # s_j_m gets logged in the sum, so 1 means no contribution
-          name=f"s_m_def_{j}_{m}_inactive"
-        )
-
-        # Helper variable for log argument (s_j_m + epsilon)
-        s_j_m_plus_epsilon = model.addVar(vtype=gp.GRB.CONTINUOUS,
-                                          lb=self.__log_zero_epsilon,
-                                          name=f"s_plus_epsilon_{j}_{m}")
-        model.addConstr(s_j_m_plus_epsilon == s_j_m + self.__log_zero_epsilon,
-                        name=f"s_plus_epsilon_constr_{j}_{m}")
-
-        # log(s_j_m)
-        log_s_j_m = model.addVar(vtype=gp.GRB.CONTINUOUS,
-                                name=f"log_s_{j}_{m}",
-                                lb=-gp.GRB.INFINITY, ub=gp.GRB.INFINITY)
-        model.addGenConstrLog(s_j_m_plus_epsilon, log_s_j_m,
-                             name=f"log_s_def_{j}_{m}")
-
-        breslow_sum_terms.append(log_s_j_m)
-
-      breslow_sum = gp.quicksum(breslow_sum_terms)
-
-      # NLL contribution: -d_{i1}*beta + breslow_sum
-      term = model.addVar(vtype=gp.GRB.CONTINUOUS,
-                          name=f"nll_term_{j}")
-      model.addConstr(term == -d[j,1]*beta + breslow_sum,
-                      name=f"nll_term_def_{j}")
-
-      nll_terms.append(term)
-
-    return nll_terms
-
-  def _add_noties_nll_terms(  #pylint: disable=too-many-arguments
-    self,
-    model: gp.Model,
-    *,
-    omega: gp.Var,
-    beta: gp.Var,
-    r: gp.tupledict[tuple[int, ...], gp.Var],
-    d: gp.tupledict[tuple[int, ...], gp.Var],
-    d_total: gp.tupledict[int, gp.Var],
-  ):
-    """
-    Add NLL terms for no-ties approximation.
     Returns a list of NLL terms.
     """
     nll_terms = []
@@ -603,12 +503,9 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     Under null (HR = 1): beta = 0, omega = exp(beta) = 1
     Under alternative: beta free in bounds, omega = exp(beta)
 
-    For "noties" tie handling (current implementation):
+    For "breslow" tie handling (Breslow approximation):
       NLL_i = -d_{i1} * beta + d_total[i] * log(r_{i0} + omega * r_{i1})
 
-    For "breslow" tie handling (Breslow approximation):
-      NLL_i = -d_{i1} * beta + sum_{m=0}^{d_total[i]-1} log(r_{i0} + omega * r_{i1} - m)
-      
     Note: In the implementation, time index i corresponds to loop variable j,
     and r[j,0] corresponds to r_{i0}, r[j,1] to r_{i1}, etc.
     """
@@ -643,11 +540,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     nll_terms = []
 
-    if self.tie_handling == "noties":
-      nll_terms = self._add_noties_nll_terms(
-        model, omega=omega, beta=beta, r=r, d=d, d_total=d_total
-      )
-    elif self.tie_handling == "breslow":
+    if self.tie_handling == "breslow":
       nll_terms = self._add_breslow_nll_terms(
         model, omega=omega, beta=beta, r=r, d=d, d_total=d_total
       )
