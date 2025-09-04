@@ -51,9 +51,9 @@ COMMON_P_VALUE_ARGS=(--exclude-nominal --include-binomial-only --exclude-full-nl
 kombine_twogroups ../test/datacards/simple_examples/fixed_km_censoring.txt comparison_to_conventional_p_value_small_n.pdf "${COMMON_P_VALUE_ARGS[@]}" --title 'Comparison to conventional $p$ value method, $N=12$'
 kombine_twogroups ../test/datacards/simple_examples/fixed_km_censoring_many_patients.txt comparison_to_conventional_p_value_large_n.pdf "${COMMON_P_VALUE_ARGS[@]}" --title 'Comparison to conventional $p$ value method, $N=100$'
 
-python compare_p_value.py --n-patients 10 --n-trials 100 --allow-ties --save-as p_value_comparison_10_patients.pdf
-python compare_p_value.py --n-patients 100 --n-trials 100 --allow-ties --save-as p_value_comparison_100_patients.pdf
-python compare_p_value.py --n-patients 1000 --n-trials 100 --allow-ties --save-as p_value_comparison_1000_patients.pdf
-python compare_p_value.py --n-patients 10 --n-trials 100 --no-ties --save-as p_value_comparison_10_patients_no_ties.pdf
-python compare_p_value.py --n-patients 100 --n-trials 100 --no-ties --save-as p_value_comparison_100_patients_no_ties.pdf
-python compare_p_value.py --n-patients 1000 --n-trials 100 --no-ties --save-as p_value_comparison_1000_patients_no_ties.pdf
+python compare_p_value.py --n-patients 10 --n-trials 100 --allow-ties --save-as p_value_comparison_10_patients.pdf "${COMMON_ARGS[@]}"
+python compare_p_value.py --n-patients 100 --n-trials 100 --allow-ties --save-as p_value_comparison_100_patients.pdf "${COMMON_ARGS[@]}"
+python compare_p_value.py --n-patients 1000 --n-trials 100 --allow-ties --save-as p_value_comparison_1000_patients.pdf "${COMMON_ARGS[@]}"
+python compare_p_value.py --n-patients 10 --n-trials 100 --no-ties --save-as p_value_comparison_10_patients_no_ties.pdf "${COMMON_ARGS[@]}"
+python compare_p_value.py --n-patients 100 --n-trials 100 --no-ties --save-as p_value_comparison_100_patients_no_ties.pdf "${COMMON_ARGS[@]}"
+python compare_p_value.py --n-patients 1000 --n-trials 100 --no-ties --save-as p_value_comparison_1000_patients_no_ties.pdf "${COMMON_ARGS[@]}"
