@@ -34,7 +34,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     parameter_threshold: float,
     parameter_max: float = np.inf,
     log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
-    tie_handling: str = "noties",
+    tie_handling: str = "breslow",
   ):
     if tie_handling not in ["noties", "breslow"]:
       raise ValueError(f"tie_handling must be 'noties' or 'breslow', got '{tie_handling}'")
