@@ -312,6 +312,41 @@ Our method, by contrast, calculates the binomial likelihood (and hence the uncer
 
 \subsubsection[Conventional log-rank p value estimation]{Conventional log-rank \(p\) value estimation}\label{sec:compare-to-conventional-p-value}
 
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.32\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{p_value_comparison_10_patients.pdf}
+  \caption{\label{fig:compare-p-value-10-patients}}
+\end{subfigure}
+\begin{subfigure}[t]{0.32\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{p_value_comparison_100_patients.pdf}
+  \caption{\label{fig:compare-p-value-100-patients}}
+\end{subfigure}
+\begin{subfigure}[t]{0.32\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{p_value_comparison_1000_patients.pdf}
+  \caption{\label{fig:compare-p-value-1000-patients}}
+\end{subfigure}
+\begin{subfigure}[t]{0.32\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{p_value_comparison_10_patients_no_ties.pdf}
+  \caption{\label{fig:compare-p-value-10-patients-no-ties}}
+\end{subfigure}
+\begin{subfigure}[t]{0.32\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{p_value_comparison_100_patients_no_ties.pdf}
+  \caption{\label{fig:compare-p-value-100-patients-no-ties}}
+\end{subfigure}
+\begin{subfigure}[t]{0.32\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{p_value_comparison_1000_patients_no_ties.pdf}
+  \caption{\label{fig:compare-p-value-1000-patients-no-ties}}
+\end{subfigure}
+\caption{\label{fig:compare-p-value} Scatter plot showing the \(p\) values computed using the conventional log-rank method (horizontal axis) and the likelihood method using only the hypergeometric penalty (vertical axis).  Each point represents a trial with randomly simulated patients.  The left, middle, and right columns show cohorts of 10, 100, and 1000 patients, respectively.  The top row allows patients to die at the same time, while the bottom row does not.}
+\end{figure}
+
 \subsection{Lung cancer dataset}
 
 This example is taken from \citet{DONUTS}, in which we analyzed pre-treatment biopsies from a cohort of patients with non-small-cell lung cancer (NSCLC) treated with neoadjuvant anti-PD-1 immunotherapy.  We identified CD8+FoxP3+ cells, which are associated with good outcomes, but are extremely rare: a patient may have only one or two in their biopsy.  We also developed a probabilistic biomarker, called DONUTS, which resemble the niche of the CD8+FoxP3+ cells but are much more abundant.
