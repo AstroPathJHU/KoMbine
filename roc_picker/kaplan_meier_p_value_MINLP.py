@@ -530,7 +530,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
       breslow_sum = gp.quicksum(breslow_sum_terms)
 
-      # NLL contribution: -d1*beta + breslow_sum
+      # NLL contribution: -d_{i1}*beta + breslow_sum
       term = model.addVar(vtype=gp.GRB.CONTINUOUS,
                           name=f"nll_term_{j}")
       model.addConstr(term == -d[j,1]*beta + breslow_sum,
@@ -581,7 +581,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
                             lb=-gp.GRB.INFINITY, ub=gp.GRB.INFINITY)
       model.addGenConstrLog(s_j_plus_epsilon, log_s_j, name=f"log_s_def_{j}")
 
-      # NLL contribution: -d1*beta + d_total*log(s_j)
+      # NLL contribution: -d_{i1}*beta + d_total[i]*log(s_i)
       term = model.addVar(vtype=gp.GRB.CONTINUOUS,
                           name=f"nll_term_{j}")
       model.addConstr(term == -d[j,1]*beta + d_total[j]*log_s_j,
@@ -605,10 +605,13 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     Under alternative: beta free in bounds, omega = exp(beta)
 
     For "noties" tie handling (current implementation):
-      NLL_j = -d[j,1] * beta + d_total[j] * log(r[j,0] + omega * r[j,1])
+      NLL_i = -d_{i1} * beta + d_total[i] * log(r_{i0} + omega * r_{i1})
 
     For "breslow" tie handling (Breslow approximation):
-      NLL_j = -d[j,1] * beta + sum_{m=0}^{d_total[j]-1} log(r[j,0] + omega * r[j,1] - m)
+      NLL_i = -d_{i1} * beta + sum_{m=0}^{d_total[i]-1} log(r_{i0} + omega * r_{i1} - m)
+      
+    Note: In the implementation, time index i corresponds to loop variable j,
+    and r[j,0] corresponds to r_{i0}, r[j,1] to r_{i1}, etc.
     """
     # total deaths and risk at each time
     d_total = model.addVars(len(self.all_death_times),
