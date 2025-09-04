@@ -73,15 +73,37 @@ def simulate_pvalues( #pylint: disable=too-many-locals
 
   return results
 
-def plot_pvalue_comparison(
+def plot_pvalue_comparison( #pylint: disable=too-many-arguments
   pvalues: np.ndarray,
   title: str = "Comparison of p-value methods",
+  *,
   saveas: os.PathLike | str | None = None,
   show: bool | None = None,
   config: PlotConfig | None = None,
+  inlay_upper_limit: float = 0.1,
 ) -> float:
   """
   Make scatter plot and compute correlation coefficient.
+  
+  Parameters
+  ----------
+  pvalues : np.ndarray
+    Array of shape (n_trials, 2) with p-values from MINLP and log-rank methods
+  title : str
+    Plot title
+  saveas : os.PathLike | str | None
+    Filename to save plot
+  show : bool | None  
+    Whether to show plot
+  config : PlotConfig | None
+    Plot styling configuration
+  inlay_upper_limit : float
+    Upper limit for the zoomed inlay (default 0.1)
+    
+  Returns
+  -------
+  float
+    Correlation coefficient
   """
   if show is None:
     show = saveas is None
@@ -111,6 +133,34 @@ def plot_pvalue_comparison(
   plt.legend(fontsize=config.legend_fontsize)
 
   plt.grid(True)
+
+  # Add zoomed inlay
+  # Create inset axes positioned at (0.55, 0.45) to (0.95, 0.05) in figure coordinates
+  inlay_width = 0.95 - 0.55  # 0.4
+  inlay_height = 0.45 - 0.05  # 0.4
+  # Note: matplotlib axes coordinates have origin at bottom-left, so we need to adjust
+  inlay_left = 0.55
+  inlay_bottom = 0.05
+
+  inlay_ax = plt.axes([inlay_left, inlay_bottom, inlay_width, inlay_height])
+
+  # Plot the same data in the inlay but with zoomed limits
+  inlay_ax.scatter(logrank_vals, minlp_vals, alpha=0.6, s=10)  # Smaller points for inlay
+  inlay_ax.plot([0, inlay_upper_limit], [0, inlay_upper_limit], "r--", linewidth=0.8)
+
+  # Set zoomed limits
+  inlay_ax.set_xlim(0, inlay_upper_limit)
+  inlay_ax.set_ylim(0, inlay_upper_limit)
+  inlay_ax.set_aspect('equal', adjustable='box')
+
+  # Style the inlay
+  inlay_ax.tick_params(axis='both', which='major', labelsize=config.tick_fontsize * 0.8)
+  inlay_ax.grid(True, alpha=0.5)
+
+  # Add border to make inlay stand out
+  for spine in inlay_ax.spines.values():
+    spine.set_edgecolor('black')
+    spine.set_linewidth(1.5)
   if saveas is not None:
     plt.savefig(saveas)
   if show:
@@ -139,6 +189,7 @@ def main(args=None):
   p.add_argument("--title-fontsize", type=float, default=14, help="Font size for the plot title")
   p.add_argument("--label-fontsize", type=float, default=12, help="Font size for axis labels")
   p.add_argument("--tick-fontsize", type=float, default=10, help="Font size for the tick labels")
+  p.add_argument("--inlay-upper-limit", type=float, default=0.1, help="Upper limit for the zoomed inlay (default: 0.1)")
   # pylint: enable=C0301
 
   args = p.parse_args(args=args)
@@ -170,6 +221,7 @@ def main(args=None):
     show=False,
     title=title,
     config=config,
+    inlay_upper_limit=args.inlay_upper_limit,
   )
   print(f"Correlation coefficient (n_patients={n_patients}): r = {r:.3f}\n")
 
