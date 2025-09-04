@@ -434,7 +434,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
   def _add_breslow_nll_terms(  #pylint: disable=too-many-locals,too-many-statements,too-many-arguments
     self,
-    model,
+    model: gp.Model,
     *,
     omega,
     beta,
@@ -461,92 +461,69 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       model.addConstr(s_j_base == r[j,0] + omega_r1,
                       name=f"s_base_def_{j}")
 
-      # Binary indicators for each possible value of d_total[j]
+      # Binary indicators for d_total[j] >= each possible value
       d_total_indicators = model.addVars(
         max_d_total + 1,
         vtype=gp.GRB.BINARY,
-        name=f"d_total_indicator_{j}"
-      )
-
-      # Exactly one d_total indicator must be active
-      model.addConstr(
-        gp.quicksum(d_total_indicators[k] for k in range(max_d_total + 1)) == 1,
-        name=f"d_total_indicator_sum_{j}"
+        name=f"d_total_{j}_at_least_indicator"
       )
 
       # Link d_total[j] to the indicators
+      # First: d_total[j] == the number of activated indicators minus 1
       model.addConstr(
-        d_total[j] == gp.quicksum(k * d_total_indicators[k] for k in range(max_d_total + 1)),
+        d_total[j] == gp.quicksum(d_total_indicators.values()) - 1,
         name=f"d_total_value_{j}"
       )
+      # Second: if a later indicator is activated, all the earlier ones are too
+      for k in range(max_d_total):
+        model.addConstr(
+          d_total_indicators[k] >= d_total_indicators[k + 1],
+          name=f"d_total_indicator_monotonic_{j}_{k}"
+        )
 
       # For each possible value of d_total, create the corresponding sum
+      # The sum goes from 0 to d_total - 1
       breslow_sum_terms = []
-      for k in range(max_d_total + 1):
-        if k == 0:
-          # If d_total = 0, the sum is empty, so contribution is 0
-          breslow_sum_terms.append(0)
-        else:
-          # Sum over m from 0 to k-1
-          sum_terms_for_k = []
-          for m in range(k):
-            # s_j_m = s_j_base - m (with bounds checking)
-            s_j_m = model.addVar(vtype=gp.GRB.CONTINUOUS, lb=1e-6,
-                                name=f"s_{j}_m{m}_k{k}")
-            model.addConstr(s_j_m == s_j_base - m,
-                           name=f"s_m_def_{j}_{m}_{k}")
+      for m in range(max_d_total):
+        s_j_m = model.addVar(vtype=gp.GRB.CONTINUOUS, lb=0,
+                            name=f"s_{j}_m{m}")
+        model.addGenConstrIndicator(
+          d_total_indicators[m+1], True,
+          s_j_m - (s_j_base - m),
+          GRB.EQUAL,
+          0,
+          name=f"s_m_def_{j}_{m}",
+        )
+        model.addGenConstrIndicator(
+          d_total_indicators[m+1], False,
+          s_j_m,
+          GRB.EQUAL,
+          1,  # s_j_m gets logged in the sum, so 1 means no contribution
+          name=f"s_m_def_{j}_{m}_inactive"
+        )
 
-            # Helper variable for log argument (s_j_m + epsilon)
-            s_j_m_plus_epsilon = model.addVar(vtype=gp.GRB.CONTINUOUS,
-                                             lb=self.__log_zero_epsilon,
-                                             name=f"s_plus_epsilon_{j}_{m}_{k}")
-            model.addConstr(s_j_m_plus_epsilon == s_j_m + self.__log_zero_epsilon,
-                           name=f"s_plus_epsilon_constr_{j}_{m}_{k}")
+        # Helper variable for log argument (s_j_m + epsilon)
+        s_j_m_plus_epsilon = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                                          lb=self.__log_zero_epsilon,
+                                          name=f"s_plus_epsilon_{j}_{m}")
+        model.addConstr(s_j_m_plus_epsilon == s_j_m + self.__log_zero_epsilon,
+                        name=f"s_plus_epsilon_constr_{j}_{m}")
 
-            # log(s_j_m)
-            log_s_j_m = model.addVar(vtype=gp.GRB.CONTINUOUS,
-                                    name=f"log_s_{j}_{m}_{k}",
-                                    lb=-gp.GRB.INFINITY, ub=gp.GRB.INFINITY)
-            model.addGenConstrLog(s_j_m_plus_epsilon, log_s_j_m,
-                                 name=f"log_s_def_{j}_{m}_{k}")
+        # log(s_j_m)
+        log_s_j_m = model.addVar(vtype=gp.GRB.CONTINUOUS,
+                                name=f"log_s_{j}_{m}",
+                                lb=-gp.GRB.INFINITY, ub=gp.GRB.INFINITY)
+        model.addGenConstrLog(s_j_m_plus_epsilon, log_s_j_m,
+                             name=f"log_s_def_{j}_{m}")
 
-            sum_terms_for_k.append(log_s_j_m)
+        breslow_sum_terms.append(log_s_j_m)
 
-          if sum_terms_for_k:
-            breslow_sum_terms.append(gp.quicksum(sum_terms_for_k))
-          else:
-            breslow_sum_terms.append(0)
-
-      # Create the conditional sum based on d_total indicators
-      breslow_sum_var = model.addVar(vtype=gp.GRB.CONTINUOUS,
-                                    name=f"breslow_sum_{j}",
-                                    lb=-gp.GRB.INFINITY, ub=gp.GRB.INFINITY)
-
-      # Use big-M constraints to implement the conditional sum
-      big_M = 1000.0  # Large enough constant
-      for k in range(max_d_total + 1):
-        if isinstance(breslow_sum_terms[k], (int, float)) and breslow_sum_terms[k] == 0:
-          # If the term is 0, constrain breslow_sum_var to be 0 when this indicator is active
-          model.addGenConstrIndicator(
-            d_total_indicators[k], True,
-            breslow_sum_var, gp.GRB.EQUAL, 0.0,
-            name=f"breslow_sum_zero_{j}_{k}"
-          )
-        else:
-          # Use big-M constraints for non-zero terms
-          model.addConstr(
-            breslow_sum_var <= breslow_sum_terms[k] + big_M * (1 - d_total_indicators[k]),
-            name=f"breslow_sum_upper_{j}_{k}"
-          )
-          model.addConstr(
-            breslow_sum_var >= breslow_sum_terms[k] - big_M * (1 - d_total_indicators[k]),
-            name=f"breslow_sum_lower_{j}_{k}"
-          )
+      breslow_sum = gp.quicksum(breslow_sum_terms)
 
       # NLL contribution: -d1*beta + breslow_sum
       term = model.addVar(vtype=gp.GRB.CONTINUOUS,
                           name=f"nll_term_{j}")
-      model.addConstr(term == -d[j,1]*beta + breslow_sum_var,
+      model.addConstr(term == -d[j,1]*beta + breslow_sum,
                       name=f"nll_term_def_{j}")
 
       nll_terms.append(term)

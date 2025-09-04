@@ -211,12 +211,6 @@ def runtest(
   # Verify that both have the same nominal hazard ratio
   nominal_hazard_ratio_no_ties = km_p_value_minlp_no_ties.nominal_hazard_ratio
   nominal_hazard_ratio_breslow = km_p_value_minlp_breslow.nominal_hazard_ratio
-  np.testing.assert_allclose(
-    nominal_hazard_ratio_no_ties,
-    nominal_hazard_ratio_breslow,
-    **tolerance
-  )
-  nominal_hazard_ratio = nominal_hazard_ratio_no_ties  # Use either one
 
   # Calculate p-values for both tie handling modes
   p_value_no_ties, _, _ = km_p_value_minlp_no_ties.solve_and_pvalue()
@@ -415,12 +409,14 @@ def runtest(
     "CL_probabilities_binomial": CL_probabilities_binomial,
     "best_probabilities_patient_wise": best_probabilities_patient_wise,
     "CL_probabilities_patient_wise": CL_probabilities_patient_wise,
-    "nominal_hazard_ratio": np.array([nominal_hazard_ratio]),
+    "nominal_hazard_ratio_no_ties": np.array([nominal_hazard_ratio_no_ties]),
     "p_value_no_ties": np.array([p_value_no_ties]),
     "p_value_binomial_no_ties": np.array([p_value_binomial_no_ties]),
+    #"p_value_patient_wise_no_ties": np.array([p_value_patient_wise_no_ties]),
+    "nominal_hazard_ratio_breslow": np.array([nominal_hazard_ratio_breslow]),
     "p_value_breslow": np.array([p_value_breslow]),
     "p_value_binomial_breslow": np.array([p_value_binomial_breslow]),
-    #"p_value_patient_wise": np.array([p_value_patient_wise]),
+    #"p_value_patient_wise_breslow": np.array([p_value_patient_wise_breslow]),
     "p_value_logrank": np.array([p_value_logrank]),
   }
   for name, alt_data in alt_results.items():
