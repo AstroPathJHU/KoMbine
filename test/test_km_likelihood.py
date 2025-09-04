@@ -488,7 +488,7 @@ def runtest(
       np.testing.assert_allclose(
         array,
         ref,
-        **(nominal_hazard_ratio_tolerance if name == "nominal_hazard_ratio" else tolerance),
+        **(nominal_hazard_ratio_tolerance if "nominal_hazard_ratio" in name else tolerance),
         err_msg=f"Array '{name}' does not match the reference."
       )
   except Exception:
