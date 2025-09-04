@@ -828,9 +828,6 @@
     0.0
   ],
   "nominal_hazard_ratio_breslow": [
-    0.2663
-  ],
-  "nominal_hazard_ratio_no_ties": [
     0.4162
   ],
   "nominal_probabilities": [
@@ -904,18 +901,12 @@
     0.0
   ],
   "p_value_binomial_breslow": [
-    0.0568
-  ],
-  "p_value_binomial_no_ties": [
     0.175
   ],
   "p_value_breslow": [
-    0.0127
+    0.0202
   ],
   "p_value_logrank": [
     0.125
-  ],
-  "p_value_no_ties": [
-    0.0202
   ]
 }
