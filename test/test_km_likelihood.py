@@ -6,8 +6,6 @@ import argparse
 import pathlib
 import json
 import math
-import os
-import tempfile
 import warnings
 
 import numpy as np
@@ -424,70 +422,48 @@ def runtest(
     ordered_array_data[f"best_probabilities_{name}"] = alt_data["best_probabilities"]
     ordered_array_data[f"CL_probabilities_{name}"] = alt_data["CL_probabilities"]
 
-  # Test case with no ties: create synthetic data with unique death times
+  # Test case with no ties: use datacard with unique death times  
   # This tests that both tie handling methods give the same result when there are no ties
+  no_ties_datacard_path = datacards / "poisson_ratio_km_no_ties.txt"
+  no_ties_datacard = roc_picker.datacard.Datacard.parse_datacard(no_ties_datacard_path)
 
-  # Create a temporary datacard with no tied death times
-  no_ties_datacard_content = """observable_type poisson_ratio
-------------
-# List of patients with no tied death times
-------------
-survival_time	1	2	3	4	7	8	9	11	12	13	15	16
-censored    0   0   0   0   0   0   0   0    0    0    0    0
-num	10	20	30	40	50	60	30	40	50	60	70	80
-denom   100 100 100 100 100 100 100 100 100 100 100 100
-"""
+  # Test p-values with both tie handling methods on data with no ties
+  km_p_value_no_ties_test = no_ties_datacard.km_p_value(
+    parameter_min=parameter_min,
+    parameter_threshold=parameter_threshold,
+    parameter_max=parameter_max,
+    tie_handling="noties",
+  )
+  km_p_value_breslow_test = no_ties_datacard.km_p_value(
+    parameter_min=parameter_min,
+    parameter_threshold=parameter_threshold,
+    parameter_max=parameter_max,
+    tie_handling="breslow",
+  )
 
-  with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-    f.write(no_ties_datacard_content)
-    no_ties_datacard_path = f.name
+  p_value_no_ties_test, _, _ = km_p_value_no_ties_test.solve_and_pvalue()
+  p_value_breslow_test, _, _ = km_p_value_breslow_test.solve_and_pvalue()
+  p_value_binomial_no_ties_test, _, _ = (
+    km_p_value_no_ties_test.solve_and_pvalue(binomial_only=True)
+  )
+  p_value_binomial_breslow_test, _, _ = (
+    km_p_value_breslow_test.solve_and_pvalue(binomial_only=True)
+  )
 
-  try:
-    no_ties_datacard = roc_picker.datacard.Datacard.parse_datacard(
-      pathlib.Path(no_ties_datacard_path)
-    )
+  # When there are no ties, both methods should give the same result
+  np.testing.assert_allclose(
+    p_value_no_ties_test,
+    p_value_breslow_test,
+    **tolerance,
+    err_msg="p-values for no-ties and breslow should be the same when there are no ties"
+  )
 
-    # Test p-values with both tie handling methods on data with no ties
-    km_p_value_no_ties_test = no_ties_datacard.km_p_value(
-      parameter_min=parameter_min,
-      parameter_threshold=parameter_threshold,
-      parameter_max=parameter_max,
-      tie_handling="noties",
-    )
-    km_p_value_breslow_test = no_ties_datacard.km_p_value(
-      parameter_min=parameter_min,
-      parameter_threshold=parameter_threshold,
-      parameter_max=parameter_max,
-      tie_handling="breslow",
-    )
-
-    p_value_no_ties_test, _, _ = km_p_value_no_ties_test.solve_and_pvalue()
-    p_value_breslow_test, _, _ = km_p_value_breslow_test.solve_and_pvalue()
-    p_value_binomial_no_ties_test, _, _ = (
-      km_p_value_no_ties_test.solve_and_pvalue(binomial_only=True)
-    )
-    p_value_binomial_breslow_test, _, _ = (
-      km_p_value_breslow_test.solve_and_pvalue(binomial_only=True)
-    )
-
-    # When there are no ties, both methods should give the same result
-    np.testing.assert_allclose(
-      p_value_no_ties_test,
-      p_value_breslow_test,
-      **tolerance,
-      err_msg="p-values for no-ties and breslow should be the same when there are no ties"
-    )
-
-    np.testing.assert_allclose(
-      p_value_binomial_no_ties_test,
-      p_value_binomial_breslow_test,
-      **tolerance,
-      err_msg="Binomial p-values for no-ties and breslow should be same when no ties"
-    )
-
-  finally:
-    # Clean up temporary file
-    os.unlink(no_ties_datacard_path)
+  np.testing.assert_allclose(
+    p_value_binomial_no_ties_test,
+    p_value_binomial_breslow_test,
+    **tolerance,
+    err_msg="Binomial p-values for no-ties and breslow should be same when no ties"
+  )
 
   try:
     with open(reffile, "r", encoding="utf-8") as f:
