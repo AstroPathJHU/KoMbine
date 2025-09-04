@@ -114,6 +114,13 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     """
     return self.patient_times >= t
 
+  def deaths_at_time(self, t: float) -> int:
+    """
+    The number of patients who died at exactly time t.
+    """
+    return sum(1 for p in self.all_patients
+               if p.time == t and not p.censored)
+
   @functools.cached_property
   def observed_parameters(self) -> npt.NDArray[np.float64]:
     """
@@ -447,9 +454,12 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     Returns a list of NLL terms.
     """
     nll_terms = []
-    max_d_total = self.n_patients
 
     for j in range(len(self.all_death_times)):
+      death_time = self.all_death_times[j]
+      # Calculate the actual number of deaths at this time point, regardless of parameter values
+      max_d_total = self.deaths_at_time(death_time)
+      
       # affine risk set base: s_j = r0 + omega*r1
       omega_r1 = model.addVar(vtype=gp.GRB.CONTINUOUS,
                               name=f"omega_r1_{j}")
