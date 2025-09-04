@@ -56,4 +56,5 @@ python compare_p_value.py --n-patients 100 --n-trials 100 --allow-ties --save-as
 python compare_p_value.py --n-patients 1000 --n-trials 100 --allow-ties --save-as p_value_comparison_1000_patients.pdf "${COMMON_ARGS[@]}"
 python compare_p_value.py --n-patients 10 --n-trials 100 --no-ties --save-as p_value_comparison_10_patients_no_ties.pdf "${COMMON_ARGS[@]}"
 python compare_p_value.py --n-patients 100 --n-trials 100 --no-ties --save-as p_value_comparison_100_patients_no_ties.pdf "${COMMON_ARGS[@]}"
-python compare_p_value.py --n-patients 1000 --n-trials 100 --no-ties --save-as p_value_comparison_1000_patients_no_ties.pdf "${COMMON_ARGS[@]}"
+#exclude this plot - it takes too long and doesn't add much value
+#python compare_p_value.py --n-patients 1000 --n-trials 100 --no-ties --save-as p_value_comparison_1000_patients_no_ties.pdf "${COMMON_ARGS[@]}"

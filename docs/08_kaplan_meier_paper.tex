@@ -312,6 +312,8 @@ Our method, by contrast, calculates the binomial likelihood (and hence the uncer
 
 \subsubsection[Conventional log-rank p value estimation]{Conventional log-rank \(p\) value estimation}\label{sec:compare-to-conventional-p-value}
 
+In order to compare the \(p\) values, we generate Monte Carlo cohorts of patients.  We calculate the \(p\) values using our method, disabling the patient-wise penalties, and with the conventional log-rank test.  We plot the results in \cref{fig:compare-p-value}.  The top row allows patients to die at the same time, which means that we rely on the Breslow approximation in \cref{eq:hypergeometric-nll-breslow}.  In the bottom row, no two patients die at the same time, so the Breslow approximation is identical to the exact formula in \cref{eq:hypergeometric-nll-exact}.
+
 \begin{figure}
 \centering
 \begin{subfigure}[t]{0.32\textwidth}
@@ -339,13 +341,19 @@ Our method, by contrast, calculates the binomial likelihood (and hence the uncer
   \includegraphics[width=\linewidth]{p_value_comparison_100_patients_no_ties.pdf}
   \caption{\label{fig:compare-p-value-100-patients-no-ties}}
 \end{subfigure}
+%dummy subfigure for alignment
 \begin{subfigure}[t]{0.32\textwidth}
   \centering
-  \includegraphics[width=\linewidth]{p_value_comparison_1000_patients_no_ties.pdf}
-  \caption{\label{fig:compare-p-value-1000-patients-no-ties}}
+  \mbox{} % invisible box
 \end{subfigure}
 \caption{\label{fig:compare-p-value} Scatter plot showing the \(p\) values computed using the conventional log-rank method (horizontal axis) and the likelihood method using only the hypergeometric penalty (vertical axis).  Each point represents a trial with randomly simulated patients.  The left, middle, and right columns show cohorts of 10, 100, and 1000 patients, respectively.  The top row allows patients to die at the same time, while the bottom row does not.}
 \end{figure}
+
+When there are no ties, the points scatter along the diagonal line \(y=x\), meaning that, on average, the two methods give identical results.  When ties are allowed, the diagonal line is slightly altered to a curve.  The Breslow approximation gives more conservative \(p\) values, and the effect is most pronounced for small \(p\) values.
+
+The Monte Carlo patients for the top row are simulated with integer survival times from \(1\) to \(10\), which means that we expect a tie rate of about \(10\%\).  The error introduced by the Breslow approximation will increase with a higher tie rate.
+
+The scatter from the line or curve, which shrinks with larger cohort sizes, is because the full likelihood method avoids the asymptotic approximations used in the conventional method, similar to the difference between the \pkg{KoMbine} and Greenwood confidence intervals in \cref{sec:compare-to-greenwood}.
 
 \subsection{Lung cancer dataset}
 
