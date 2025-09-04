@@ -49,7 +49,7 @@ def simulate_pvalues( #pylint: disable=too-many-locals
     while not all(any_patients.values()):
       any_patients = {1: False, 2: False}
       for _ in range(n_patients):
-        time = rng.integers(1, 11) if time_is_integer else rng.uniform(1, 11)
+        time = float(rng.integers(1, 11)) if time_is_integer else rng.uniform(1, 11)
         censored = rng.random() < 0.1
         parameter = 1 if rng.random() < 0.5 else 2
         any_patients[parameter] = True
