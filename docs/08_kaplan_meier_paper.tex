@@ -105,7 +105,7 @@ We denote the inclusion of patient \(j\) by \(a_j\), which is \(1\) if the patie
 r_i &= \sum_{t_j \geq t_i} a_j, \\
 d_i &= \sum_{\substack{t_j = t_i \\ \neg c_j}} a_j.
 \end{align}
-We will allow \(a_i\) to vary, so that \(r_i\) and \(d_i\) may differ from their nominal values \(\hat{r}_i\) and \(\hat{d}_i\).
+We will allow \(a_j\) to vary, so that \(r_i\) and \(d_i\) may differ from their nominal values \(\hat{r}_i\) and \(\hat{d}_i\).
 
 The survival probability at time \(t_n\) is given by the \KM{} formula:
 \begin{equation}
@@ -141,11 +141,11 @@ For clarity, we will distinguish the two types of uncertainty: the statistical u
 
 The binomial contribution to the \KM{} curve is computed from the number of patients at risk and the number of patients who died at each time point:
 \begin{equation}
-\mathcal{L}_{\text{binomial}}(p_i^\text{survived}, a_i) = \prod_{i=1}^{n} \binom{r_i}{d_i} {\left(p_i^\text{died}\right)}^{d_i} {\left(p_i^\text{survived}\right)}^{r_i-d_i},
+\mathcal{L}_{\text{binomial}}(p_i^\text{survived}, a_j) = \prod_{i=1}^{n} \binom{r_i}{d_i} {\left(p_i^\text{died}\right)}^{d_i} {\left(p_i^\text{survived}\right)}^{r_i-d_i},
 \end{equation}
 where \(p_i^\text{died} = 1 - p_i^\text{survived}\).  The negative log likelihood (NLL) is
 \begin{equation}
--\log \mathcal{L}_{\text{binomial}}(p_i^\text{survived}, a_i) = -\left[\sum_{i=1}^{n} \left( \log\binom{r_i}{d_i} + d_i \log p_i^\text{died} + (r_i-d_i) \log p_i^\text{survived} \right)\right]. \label{eq:binomial-nll}
+-\log \mathcal{L}_{\text{binomial}}(p_i^\text{survived}, a_j) = -\left[\sum_{i=1}^{n} \left( \log\binom{r_i}{d_i} + d_i \log p_i^\text{died} + (r_i-d_i) \log p_i^\text{survived} \right)\right]. \label{eq:binomial-nll}
 \end{equation}
 
 We are not interested in the individual \(p_i^\text{survived}\) values, but rather the overall survival probability \(S_n\).  We therefore use the constraint
@@ -195,7 +195,7 @@ p_i^\text{survived}(a_j) = 1 - \frac{d_i(a_j)}{r_i(a_j)}.
 
 With this definition, \(S\) can only take on certain fixed, discrete values.  Furthermore, depending on the order that patients were censored or died, values of \(S\) that are close together may actually only be reachable by very different combinations of patients included in the analysis, with correspondingly different NLL values.  A scatter plot of \(-\log\mathcal{L}\) as a function of \(S\) would be useless.
 
-Instead, we use a continuous variable \(S'\).  We calculate \(\hat{S}\) using the nominal values of the patient parameters, as in \cref{eq:km-nominal}.  Then, for any value of \(S'\), we minimize the NLL over \(a_i\) with the constraint that \(S\) is at least as far from \(\hat{S}\) as \(S'\):
+Instead, we use a continuous variable \(S'\).  We calculate \(\hat{S}\) using the nominal values of the patient parameters, as in \cref{eq:km-nominal}.  Then, for any value of \(S'\), we minimize the NLL over \(a_j\) with the constraint that \(S\) is at least as far from \(\hat{S}\) as \(S'\):
 \begin{align}
 S \ge S' & \text{ if } S' > \hat{S} \\
 S \le S' & \text{ if } S' < \hat{S}
