@@ -231,21 +231,21 @@ which follows a \(\chi^2\) distribution with one degree of freedom~\citep[pp.~45
 
 In the likelihood approach, we instead compute the full NLL, similar to \cref{eq:total-nll}.  We have two separate patient-wise NLL penalties, one for each curve.  The probability distribution representing the relationship between the curves is modeled with the Cox partial likelihood distribution with \(\beta=\log{H}\), which reduces to the hypergeometric distribution under the null hypothesis when \(H=1\)~\citep{cox1972regression,breslow1974covariance}:
 \begin{align}
--\log \mathcal{L}_{\text{hypergeometric}}(a_{jk}, H)&=-\sum_i\left[\log\binom{r_{i0}}{d_{i0}}+\log\binom{r_{i1}}{d_{i1}}+d_{i1}\log H-\log Z_j(H)\right] \label{eq:hypergeometric-nll-exact}\\
-&\approx-\sum_i \left[d_{i1} \log H - d_i \log\left(r_{i0} + H r_{i1}\right)\right] \label{eq:hypergeometric-nll-breslow}\\
+-\log \mathcal{L}_{\text{Cox}}(a_{jk}, H)&=-\sum_i\left[\log\binom{r_{i0}}{d_{i0}}+\log\binom{r_{i1}}{d_{i1}}+d_{i1}\log H-\log Z_j(H)\right] \label{eq:cox-nll-exact}\\
+&\approx-\sum_i \left[d_{i1} \log H - d_i \log\left(r_{i0} + H r_{i1}\right)\right] \label{eq:cox-nll-breslow}\\
 \end{align}
-\Cref{eq:hypergeometric-nll-exact} gives the exact formula, with the normalization factor \(Z_j(H)\) given by
+\Cref{eq:cox-nll-exact} gives the exact formula, with the normalization factor \(Z_j(H)\) given by
 \begin{equation}
 Z_j(H) = \sum_{m}\binom{r_{i0}}{m}\binom{r_{i1}}{d_{i0}+d_{i1}-m}H^m,
-\label{eq:hypergeometric-normalization}
+\label{eq:cox-normalization}
 \end{equation}
 where the sum is over all feasible values of \(m\) that allow both binomial coefficients to be finite.
 
-\Cref{eq:hypergeometric-nll-breslow} applies the Breslow approximation~\citep{breslow1974covariance}.  Both give identical results when there no two patients die at the same time.  Since our biomedical analyses typically do not involve many patients, ties are rare, and we therefore use \cref{eq:hypergeometric-nll-breslow} in \pkg{KoMbine}.  We explore the effect of this approximation in \cref{sec:compare-to-conventional-p-value}.
+\Cref{eq:cox-nll-breslow} applies the Breslow approximation~\citep{breslow1974covariance}.  Both give identical results when there no two patients die at the same time.  Since our biomedical analyses typically do not involve many patients, ties are rare, and we therefore use \cref{eq:cox-nll-breslow} in \pkg{KoMbine}.  We explore the effect of this approximation in \cref{sec:compare-to-conventional-p-value}.
 
 The total NLL is then given by
 \begin{equation}
--\log \mathcal{L}_{\text{total}}(a_{jk}, H) = -\sum_{k}\log\mathcal{L}_\text{hypergeometric}(H) - \sum_{k}\log\mathcal{L}_k^{\text{patient-wise}}(a_{jk}).
+-\log \mathcal{L}_{\text{total}}(a_{jk}, H) = -\sum_{k}\log\mathcal{L}_\text{Cox}(H) - \sum_{k}\log\mathcal{L}_k^{\text{patient-wise}}(a_{jk}).
 \label{eq:p-value-nll}
 \end{equation}
 
@@ -312,7 +312,7 @@ Our method, by contrast, calculates the binomial likelihood (and hence the uncer
 
 \subsubsection[Conventional log-rank p value estimation]{Conventional log-rank \(p\) value estimation}\label{sec:compare-to-conventional-p-value}
 
-In order to compare the \(p\) values, we generate Monte Carlo cohorts of patients.  We calculate the \(p\) values using our method, disabling the patient-wise penalties, and with the conventional log-rank test.  We plot the results in \cref{fig:compare-p-value}.  The top row allows patients to die at the same time, which means that we rely on the Breslow approximation in \cref{eq:hypergeometric-nll-breslow}.  In the bottom row, no two patients die at the same time, so the Breslow approximation is identical to the exact formula in \cref{eq:hypergeometric-nll-exact}.
+In order to compare the \(p\) values, we generate Monte Carlo cohorts of patients.  We calculate the \(p\) values using our method, disabling the patient-wise penalties, and with the conventional log-rank test.  We plot the results in \cref{fig:compare-p-value}.  The top row allows patients to die at the same time, which means that we rely on the Breslow approximation in \cref{eq:cox-nll-breslow}.  In the bottom row, no two patients die at the same time, so the Breslow approximation is identical to the exact formula in \cref{eq:cox-nll-exact}.
 
 \begin{figure}
 \centering

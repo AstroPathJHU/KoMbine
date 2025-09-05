@@ -1,5 +1,5 @@
 """
-Compare p-values from custom MINLP method (binomial-only) and conventional log-rank test
+Compare p-values from MINLP method (Cox-only) and conventional log-rank test
 by generating many Monte Carlo trials.
 """
 
@@ -29,8 +29,8 @@ def simulate_pvalues( #pylint: disable=too-many-locals
   verbose: bool = False,
 ) -> np.ndarray:
   """
-  Generate synthetic patients and compare p-values from custom MINLP method
-  (binomial-only) and conventional log-rank test.
+  Generate synthetic patients and compare p-values from MINLP method
+  (Cox-only) and conventional log-rank test.
 
   Returns
   -------
