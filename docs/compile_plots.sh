@@ -23,7 +23,7 @@ python ../test/test_continuous_distributions.py
 
 COMMON_ARGS=(--figsize 7 7 --legend-fontsize 16 --title-fontsize 16 --label-fontsize 16 --tick-fontsize 16)
 
-kombine ../test/datacards/simple_examples/poisson_ratio_km_censoring.txt km_example.pdf --parameter-min 0.45 "${COMMON_ARGS[@]}" --title "Kaplan-Meier Example"
+kombine ../test/datacards/simple_examples/poisson_ratio_km_censoring.txt km_example.pdf --parameter-min 0.45 "${COMMON_ARGS[@]}" --title "Kaplan–Meier Example"
 
 SURVIVAL_TYPE=RFS
 if [ $SURVIVAL_TYPE = RFS ]; then
