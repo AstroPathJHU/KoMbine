@@ -977,7 +977,7 @@ class Datacard:
     parameter_threshold: float,
     parameter_min: float = -np.inf,
     parameter_max: float = np.inf,
-    binomial_only: bool = True,
+    cox_only: bool = True,
   ) -> float:
     """
     Calculate p-value for comparing two Kaplan-Meier curves using the conventional
@@ -994,7 +994,7 @@ class Datacard:
         The minimum parameter value to include in the analysis. Default is -inf.
     parameter_max : float, optional
         The maximum parameter value to include in the analysis. Default is +inf.
-    binomial_only : bool, optional
+    cox_only : bool, optional
         If True, only include patients whose observed parameter is within the
         specified ranges. Default is True.
 
@@ -1010,7 +1010,7 @@ class Datacard:
     )
 
     return minlp_pvalue.survival_curves_pvalue_logrank(
-      binomial_only=binomial_only,
+      cox_only=cox_only,
     )
 
   def clear_distributions(self):
@@ -1291,7 +1291,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
       p_value_texts.append(f"p = {p_value:{pvalue_format}}")
 
     if common_plot_kwargs["include_binomial_only"]:
-      p_value_binomial, *_ = p_value_minlp.solve_and_pvalue(binomial_only=True)
+      p_value_binomial, *_ = p_value_minlp.solve_and_pvalue(cox_only=True)
       p_value_texts.append(f"p (Cox only) = {p_value_binomial:{pvalue_format}}")
 
     #Patient-wise p value is not implemented
@@ -1305,7 +1305,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
       parameter_threshold=threshold,
       parameter_min=parameter_min,
       parameter_max=parameter_max,
-      binomial_only=True,
+      cox_only=True,
     )
     p_value_texts.append(f"p (logrank) = {p_value_logrank:{pvalue_format}}")
 

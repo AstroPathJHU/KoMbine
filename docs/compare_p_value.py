@@ -63,7 +63,7 @@ def simulate_pvalues( #pylint: disable=too-many-locals
 
     # custom MINLP p-value
     minlp_breslow = MINLPforKMPValue(patients, parameter_threshold=1.5, tie_handling="breslow")
-    pval_breslow, _, _ = minlp_breslow.solve_and_pvalue(binomial_only=True)
+    pval_breslow, _, _ = minlp_breslow.solve_and_pvalue(cox_only=True)
 
     # log-rank p-value
     pval_logrank = minlp_breslow.survival_curves_pvalue_logrank()

@@ -46,7 +46,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     self.__log_zero_epsilon = log_zero_epsilon
     self.__tie_handling = tie_handling
     self.__null_hypothesis_constraint = None
-    self.__patient_constraints_for_binomial_only = None
+    self.__patient_constraints_for_cox_only = None
     self.__patient_wise_only_constraint = None
     self.__cox_penalty_constraint = None
 
@@ -798,41 +798,41 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     model.update()
 
-  def update_model_with_binomial_only_constraints(
+  def update_model_with_cox_only_constraints(
     self,
     model: gp.Model,
     a: gp.tupledict[tuple[int, ...], gp.Var],
-    binomial_only: bool,
+    cox_only: bool,
   ):
     """
-    Update the model with binomial_only constraints.
-    If binomial_only is True, we add constraints for a[i, j] to be either 0 or 1,
+    Update the model with cox_only constraints.
+    If cox_only is True, we add constraints for a[i, j] to be either 0 or 1,
     based on parameter_in_range.
     """
     # Remove existing constraints if they exist
-    if self.__patient_constraints_for_binomial_only is not None:
-      for constr in self.__patient_constraints_for_binomial_only:
+    if self.__patient_constraints_for_cox_only is not None:
+      for constr in self.__patient_constraints_for_cox_only:
         model.remove(constr)
-      self.__patient_constraints_for_binomial_only = None
+      self.__patient_constraints_for_cox_only = None
 
-    if binomial_only:
-      self.__patient_constraints_for_binomial_only = []
+    if cox_only:
+      self.__patient_constraints_for_cox_only = []
       for i in range(self.n_patients):
         for j in range(2):  # j=0 for low curve, j=1 for high curve
           if self.parameter_in_range[i, j]:
             # The patient must be selected for this curve
-            self.__patient_constraints_for_binomial_only.append(
+            self.__patient_constraints_for_cox_only.append(
               model.addConstr(
                 a[i, j] == 1,
-                name=f"patient_{i}_must_be_selected_curve_{j}_binomial_only",
+                name=f"patient_{i}_must_be_selected_curve_{j}_cox_only",
               )
             )
           else:
             # The patient must not be selected for this curve
-            self.__patient_constraints_for_binomial_only.append(
+            self.__patient_constraints_for_cox_only.append(
               model.addConstr(
                 a[i, j] == 0,
-                name=f"patient_{i}_must_not_be_selected_curve_{j}_binomial_only",
+                name=f"patient_{i}_must_not_be_selected_curve_{j}_cox_only",
               )
             )
 
@@ -842,10 +842,10 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
   def nominal_hazard_ratio(self):
     """
     Returns the nominal hazard ratio.
-    This is calculated by running the binomial only model under the alternate hypothesis.
+    This is calculated by running the cox only model under the alternate hypothesis.
     """
     _, _, result_alt = self.solve_and_pvalue(
-      binomial_only=True,
+      cox_only=True,
       patient_wise_only=False
     )
     return result_alt.hazard_ratio
@@ -912,7 +912,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
           "p value for patient-wise only is not implemented. "
           "The challenge is to compute the hazard ratio as a function "
           "of the patients included and excluded. "
-          "Naively, this would require a sub-problem with binomial_only=True for each combination "
+          "Naively, this would require a sub-problem with cox_only=True for each combination "
           "of included and excluded patients (similar to self.nominal_hazard_ratio). "
           "There may be a more clever way to do this within a single Gurobi model, but I will "
           "leave that to a later release."
@@ -929,7 +929,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
   def solve_and_pvalue( # pylint: disable=too-many-locals, too-many-arguments
     self,
     *,
-    binomial_only: bool = False,
+    cox_only: bool = False,
     patient_wise_only: bool = False,
     gurobi_verbose: bool = False,
     MIPGap: float | None = None,
@@ -940,7 +940,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     Parameters
     ----------
-    binomial_only : bool, optional
+    cox_only : bool, optional
         If True, add constraints for a[i, j] to be either 0 or 1,
         based on parameter_in_range. Default is False.
     patient_wise_only : bool, optional
@@ -950,8 +950,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     gurobi_verbose : bool, optional
         If True, enable verbose output from Gurobi solver. Default is False.
     """
-    if binomial_only and patient_wise_only:
-      raise ValueError("binomial_only and patient_wise_only cannot both be True")
+    if cox_only and patient_wise_only:
+      raise ValueError("cox_only and patient_wise_only cannot both be True")
 
     if patient_wise_only:
       #make sure the nominal hazard ratio is cached before doing anything with the Gurobi model
@@ -973,8 +973,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       use_cox_penalty_indicator,
     ) = self.gurobi_model
 
-    # Apply binomial_only constraints if specified
-    self.update_model_with_binomial_only_constraints(model, a, binomial_only)
+    # Apply cox_only constraints if specified
+    self.update_model_with_cox_only_constraints(model, a, cox_only)
 
     # Apply patient_wise_only constraints if specified
     self.update_model_with_patient_wise_only_constraint(
@@ -1084,7 +1084,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
   def survival_curves_pvalue_logrank(  #pylint: disable=too-many-locals, too-many-branches
     self,
     *,
-    binomial_only: bool = True,
+    cox_only: bool = True,
   ) -> float:
     """
     Calculate p-value for comparing two Kaplan-Meier curves using the conventional
@@ -1099,11 +1099,11 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     Parameters
     ----------
-    binomial_only : bool, optional
+    cox_only : bool, optional
         If True, only include patients whose observed parameter is within the
         specified range [parameter_min, parameter_threshold) for low group or
         [parameter_threshold, parameter_max) for high group. This matches the
-        behavior of binomial_only in the likelihood method. Default is True.
+        behavior of cox_only in the likelihood method. Default is True.
 
     Returns
     -------
@@ -1120,12 +1120,12 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     The test statistic follows a chi-square distribution with 1 degree of freedom
     under the null hypothesis.
 
-    This implementation only supports binomial_only=True, which restricts analysis
+    This implementation only supports cox_only=True, which restricts analysis
     to patients whose parameters fall within the specified ranges.
     """
-    if not binomial_only:
+    if not cox_only:
       raise ValueError(
-        "survival_curves_pvalue_logrank only supports binomial_only=True, "
+        "survival_curves_pvalue_logrank only supports cox_only=True, "
         "which restricts analysis to patients within the specified parameter ranges."
       )
 
@@ -1140,7 +1140,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
         group1_patients.append(patient)
       elif self.parameter_threshold <= param_value < self.parameter_max:
         group2_patients.append(patient)
-      # Patients outside the ranges are excluded when binomial_only=True
+      # Patients outside the ranges are excluded when cox_only=True
 
     if not group1_patients or not group2_patients:
       raise ValueError(
