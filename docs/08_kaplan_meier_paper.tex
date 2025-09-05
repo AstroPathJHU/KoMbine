@@ -346,7 +346,7 @@ In order to compare the \(p\) values, we generate Monte Carlo cohorts of patient
   \centering
   \mbox{} % invisible box
 \end{subfigure}
-\caption{\label{fig:compare-p-value} Scatter plot showing the \(p\) values computed using the conventional log-rank method (horizontal axis) and the likelihood method using only the hypergeometric penalty (vertical axis).  Each point represents a trial with randomly simulated patients.  The left, middle, and right columns show cohorts of 10, 100, and 1000 patients, respectively.  The top row allows patients to die at the same time, while the bottom row does not.}
+\caption{\label{fig:compare-p-value} Scatter plot showing the \(p\) values computed using the conventional log-rank method (horizontal axis) and the likelihood method using only the Cox penalty (vertical axis).  Each point represents a trial with randomly simulated patients.  The left, middle, and right columns show cohorts of 10, 100, and 1000 patients, respectively.  The top row allows patients to die at the same time, while the bottom row does not.}
 \end{figure}
 
 When there are no ties, the points scatter along the diagonal line \(y=x\), meaning that, on average, the two methods give identical results.  When ties are allowed, the diagonal line is slightly altered to a curve.  The Breslow approximation gives more conservative \(p\) values, and the effect is most pronounced for small \(p\) values.

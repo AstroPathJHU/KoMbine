@@ -1292,7 +1292,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
 
     if common_plot_kwargs["include_binomial_only"]:
       p_value_binomial, *_ = p_value_minlp.solve_and_pvalue(binomial_only=True)
-      p_value_texts.append(f"p (binomial only) = {p_value_binomial:{pvalue_format}}")
+      p_value_texts.append(f"p (Cox only) = {p_value_binomial:{pvalue_format}}")
 
     #Patient-wise p value is not implemented
     #if common_plot_kwargs["include_patient_wise_only"]:

@@ -118,7 +118,7 @@ def plot_pvalue_comparison( #pylint: disable=too-many-arguments
   ax.plot([0, 1], [0, 1], "r--", label="y = x")
 
   ax.set_xlabel("Conventional log-rank p-value", fontsize=config.label_fontsize)
-  ax.set_ylabel("MINLP (hypergeometric penalty only) p-value", fontsize=config.label_fontsize)
+  ax.set_ylabel("MINLP (Cox penalty only) p-value", fontsize=config.label_fontsize)
   ax.set_title(f"{title} (r={r:.3f})", fontsize=config.title_fontsize)
 
   # Set limits to [0,1] and ensure square aspect ratio

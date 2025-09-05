@@ -48,7 +48,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     self.__null_hypothesis_constraint = None
     self.__patient_constraints_for_binomial_only = None
     self.__patient_wise_only_constraint = None
-    self.__hypergeometric_penalty_constraint = None
+    self.__cox_penalty_constraint = None
 
   @property
   def all_patients(self) -> list[KaplanMeierPatientNLL]:
@@ -85,7 +85,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
   @property
   def tie_handling(self) -> str:
     """
-    The method used for handling ties in the hypergeometric penalty.
+    The method used for handling ties in the Cox penalty.
     Currently the only option is "breslow" (Breslow approximation).
     """
     return self.__tie_handling
@@ -490,7 +490,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     return nll_terms
 
-  def add_hypergeometric_penalty_with_hazard_ratio(  #pylint: disable=too-many-locals
+  def add_cox_penalty_with_hazard_ratio(  #pylint: disable=too-many-locals
     self,
     model: gp.Model,
     *,
@@ -547,40 +547,40 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     else:
       raise ValueError(f"Unknown tie_handling: {self.tie_handling}")
 
-    # Indicator variable to control whether the hypergeometric penalty is used
-    use_hypergeometric_penalty_indicator = model.addVar(
+    # Indicator variable to control whether the Cox penalty is used
+    use_cox_penalty_indicator = model.addVar(
       vtype=GRB.BINARY,
-      name="use_hypergeometric_penalty_indicator",
+      name="use_cox_penalty_indicator",
     )
 
     # overall negative log-likelihood penalty
-    hypergeometric_penalty_expr = gp.quicksum(nll_terms)
-    hypergeometric_penalty = model.addVar(vtype=gp.GRB.CONTINUOUS,
+    cox_penalty_expr = gp.quicksum(nll_terms)
+    cox_penalty = model.addVar(vtype=gp.GRB.CONTINUOUS,
                                           lb=0,
-                                          name="hypergeometric_penalty")
+                                          name="cox_penalty")
 
-    # When use_hypergeometric_penalty_indicator is False, set penalty to 0
+    # When use_cox_penalty_indicator is False, set penalty to 0
     model.addGenConstrIndicator(
-      use_hypergeometric_penalty_indicator,
+      use_cox_penalty_indicator,
       False,
-      hypergeometric_penalty,
+      cox_penalty,
       GRB.EQUAL,
       0.0
     )
 
     model.addGenConstrIndicator(
-      use_hypergeometric_penalty_indicator,
+      use_cox_penalty_indicator,
       True,
-      hypergeometric_penalty - hypergeometric_penalty_expr,
+      cox_penalty - cox_penalty_expr,
       GRB.EQUAL,
       0.0
     )
 
     return (
-      hypergeometric_penalty,
+      cox_penalty,
       null_hypothesis_indicator,
       beta,
-      use_hypergeometric_penalty_indicator,
+      use_cox_penalty_indicator,
     )
 
   def add_patient_wise_penalty(
@@ -704,18 +704,18 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
           penalty += contribution
     return penalty
 
-  def _compute_hypergeometric_penalty(self, model: gp.Model):
+  def _compute_cox_penalty(self, model: gp.Model):
     """
-    Compute the hypergeometric penalty.
+    Compute the Cox penalty.
 
     Returns:
-        float: The hypergeometric penalty value
+        float: The Cox penalty value
     """
-    hypergeometric_penalty_var = model.getVarByName("hypergeometric_penalty")
+    cox_penalty_var = model.getVarByName("cox_penalty")
 
-    assert hypergeometric_penalty_var is not None
+    assert cox_penalty_var is not None
 
-    penalty = hypergeometric_penalty_var.X
+    penalty = cox_penalty_var.X
 
     return penalty
 
@@ -739,11 +739,11 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     )
 
     (
-      hypergeometric_penalty,
+      cox_penalty,
       null_hypothesis_indicator,
       beta,
-      use_hypergeometric_penalty_indicator,
-    ) = self.add_hypergeometric_penalty_with_hazard_ratio(
+      use_cox_penalty_indicator,
+    ) = self.add_cox_penalty_with_hazard_ratio(
       model,
       d=d,
       r=r,
@@ -751,7 +751,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     patient_penalty = self.add_patient_wise_penalty(model, a)
 
     model.setObjective(
-      2 * (hypergeometric_penalty + patient_penalty),
+      2 * (cox_penalty + patient_penalty),
       GRB.MINIMIZE,
     )
     model.update()
@@ -763,7 +763,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       km_probability_at_time_low,
       km_probability_at_time_high,
       beta,
-      use_hypergeometric_penalty_indicator,
+      use_cox_penalty_indicator,
     )
 
   @functools.cached_property
@@ -857,28 +857,28 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     beta: gp.Var,
     null_hypothesis_indicator: gp.Var,
     patient_wise_only: bool,
-    use_hypergeometric_penalty_indicator: gp.Var,
+    use_cox_penalty_indicator: gp.Var,
   ):
     """
     Update the model with patient_wise_only constraint.
     When patient_wise_only=True, we constrain the hazard to be flipped
     relative to the nominal under the null hypothesis, and disable the
-    hypergeometric penalty.
+    Cox penalty.
     """
     # Remove existing constraints if they exist
     if self.__patient_wise_only_constraint is not None:
       model.remove(self.__patient_wise_only_constraint)
       self.__patient_wise_only_constraint = None
 
-    if self.__hypergeometric_penalty_constraint is not None:
-      model.remove(self.__hypergeometric_penalty_constraint)
-      self.__hypergeometric_penalty_constraint = None
+    if self.__cox_penalty_constraint is not None:
+      model.remove(self.__cox_penalty_constraint)
+      self.__cox_penalty_constraint = None
 
     if patient_wise_only:
-      # Disable hypergeometric penalty when patient_wise_only is True
-      self.__hypergeometric_penalty_constraint = model.addConstr(
-        use_hypergeometric_penalty_indicator == 0,
-        name="disable_hypergeometric_penalty_patient_wise_only"
+      # Disable Cox penalty when patient_wise_only is True
+      self.__cox_penalty_constraint = model.addConstr(
+        use_cox_penalty_indicator == 0,
+        name="disable_cox_penalty_patient_wise_only"
       )
 
       self.__patient_wise_only_constraint = []
@@ -918,10 +918,10 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
           "leave that to a later release."
         )
     else:
-      # Enable hypergeometric penalty when patient_wise_only is False
-      self.__hypergeometric_penalty_constraint = model.addConstr(
-        use_hypergeometric_penalty_indicator == 1,
-        name="enable_hypergeometric_penalty"
+      # Enable Cox penalty when patient_wise_only is False
+      self.__cox_penalty_constraint = model.addConstr(
+        use_cox_penalty_indicator == 1,
+        name="enable_cox_penalty"
       )
 
     model.update()
@@ -970,7 +970,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       km_probability_at_time_low,
       km_probability_at_time_high,
       beta,
-      use_hypergeometric_penalty_indicator,
+      use_cox_penalty_indicator,
     ) = self.gurobi_model
 
     # Apply binomial_only constraints if specified
@@ -982,7 +982,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       beta=beta,
       null_hypothesis_indicator=null_hypothesis_indicator,
       patient_wise_only=patient_wise_only,
-      use_hypergeometric_penalty_indicator=use_hypergeometric_penalty_indicator,
+      use_cox_penalty_indicator=use_cox_penalty_indicator,
     )
 
     # Set Gurobi verbose output parameter
@@ -999,7 +999,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     # Extract detailed information for null hypothesis result
     patients_low_null, patients_high_null = self._extract_patients_per_curve(a)
     patient_penalty_null = self._compute_patient_wise_penalty_value(a)
-    hypergeometric_penalty_null = self._compute_hypergeometric_penalty(model)
+    cox_penalty_null = self._compute_cox_penalty(model)
 
     # Extract curve statistics for null hypothesis
     (n_total_low_null, n_alive_low_null, km_prob_low_null,
@@ -1025,7 +1025,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       n_alive_high=n_alive_high_null,
       km_probability_low=km_prob_low_null,
       km_probability_high=km_prob_high_null,
-      hypergeometric_2NLL=2*hypergeometric_penalty_null,
+      cox_2NLL=2*cox_penalty_null,
       patient_2NLL=2*patient_penalty_null,
       patient_penalties=self.nll_penalty_for_patient_in_range,
       hazard_ratio=hazard_ratio_null,
@@ -1041,7 +1041,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     # Extract detailed information for alternative hypothesis result
     patients_low_alt, patients_high_alt = self._extract_patients_per_curve(a)
     patient_penalty_alt = self._compute_patient_wise_penalty_value(a)
-    hypergeometric_penalty_alt = self._compute_hypergeometric_penalty(model)
+    cox_penalty_alt = self._compute_cox_penalty(model)
 
     # Extract curve statistics for alternative hypothesis
     (n_total_low_alt, n_alive_low_alt, km_prob_low_alt,
@@ -1065,7 +1065,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       n_alive_high=n_alive_high_alt,
       km_probability_low=km_prob_low_alt,
       km_probability_high=km_prob_high_alt,
-      hypergeometric_2NLL=2*hypergeometric_penalty_alt,
+      cox_2NLL=2*cox_penalty_alt,
       patient_2NLL=2*patient_penalty_alt,
       patient_penalties=self.nll_penalty_for_patient_in_range,
       hazard_ratio=hazard_ratio_alt,
