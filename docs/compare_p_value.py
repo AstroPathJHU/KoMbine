@@ -113,36 +113,31 @@ def plot_pvalue_comparison( #pylint: disable=too-many-arguments
   minlp_vals, logrank_vals = pvalues[:, 0], pvalues[:, 1]
   r = np.corrcoef(minlp_vals, logrank_vals)[0, 1]
 
-  plt.figure(figsize=config.figsize)
-  plt.scatter(logrank_vals, minlp_vals, alpha=0.6, label="Data points")
-  plt.plot([0, 1], [0, 1], "r--", label="y = x")
+  _, ax = plt.subplots(figsize=config.figsize)
+  ax.scatter(logrank_vals, minlp_vals, alpha=0.6, label="Data points")
+  ax.plot([0, 1], [0, 1], "r--", label="y = x")
 
-  plt.xlabel("Conventional log-rank p-value", fontsize=config.label_fontsize)
-  plt.ylabel("MINLP (hypergeometric penalty only) p-value", fontsize=config.label_fontsize)
-  plt.title(f"{title} (r={r:.3f})", fontsize=config.title_fontsize)
+  ax.set_xlabel("Conventional log-rank p-value", fontsize=config.label_fontsize)
+  ax.set_ylabel("MINLP (hypergeometric penalty only) p-value", fontsize=config.label_fontsize)
+  ax.set_title(f"{title} (r={r:.3f})", fontsize=config.title_fontsize)
 
   # Set limits to [0,1] and ensure square aspect ratio
-  plt.xlim(0, 1)
-  plt.ylim(0, 1)
-  plt.gca().set_aspect('equal', adjustable='box')
+  ax.set_xlim(0, 1)
+  ax.set_ylim(0, 1)
+  ax.set_aspect('equal', adjustable='box')
 
   # Configure tick labels
-  plt.tick_params(axis='both', which='major', labelsize=config.tick_fontsize)
+  ax.tick_params(axis='both', which='major', labelsize=config.tick_fontsize)
 
   # Add legend
-  plt.legend(fontsize=config.legend_fontsize)
+  ax.legend(fontsize=config.legend_fontsize)
 
-  plt.grid(True)
+  ax.grid(True)
 
   # Add zoomed inlay
-  # Create inset axes positioned at (0.55, 0.45) to (0.95, 0.05) in figure coordinates
-  inlay_width = 0.95 - 0.55  # 0.4
-  inlay_height = 0.45 - 0.05  # 0.4
-  # Note: matplotlib axes coordinates have origin at bottom-left, so we need to adjust
-  inlay_left = 0.55
-  inlay_bottom = 0.05
-
-  inlay_ax = plt.axes((inlay_left, inlay_bottom, inlay_width, inlay_height))
+  # Create inset axes using Axes.inset_axes method
+  # [left, bottom, width, height] in axes coordinates
+  inlay_ax = ax.inset_axes((0.57, 0.05, 0.4, 0.4))
 
   # Plot the same data in the inlay but with zoomed limits
   inlay_ax.scatter(logrank_vals, minlp_vals, alpha=0.6, s=10)  # Smaller points for inlay
@@ -152,6 +147,9 @@ def plot_pvalue_comparison( #pylint: disable=too-many-arguments
   inlay_ax.set_xlim(0, inlay_upper_limit)
   inlay_ax.set_ylim(0, inlay_upper_limit)
   inlay_ax.set_aspect('equal', adjustable='box')
+  inlay_ticks = np.linspace(0, inlay_upper_limit, 6) # Generates 6 ticks from 0 to the upper limit
+  inlay_ax.set_xticks(inlay_ticks)
+  inlay_ax.set_yticks(inlay_ticks)
 
   # Style the inlay
   inlay_ax.tick_params(axis='both', which='major', labelsize=config.tick_fontsize * 0.8)
@@ -161,6 +159,7 @@ def plot_pvalue_comparison( #pylint: disable=too-many-arguments
   for spine in inlay_ax.spines.values():
     spine.set_edgecolor('black')
     spine.set_linewidth(1.5)
+
   if saveas is not None:
     plt.savefig(saveas)
   if show:
