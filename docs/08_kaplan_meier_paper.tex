@@ -249,7 +249,7 @@ The total NLL is then given by
 \label{eq:p-value-nll}
 \end{equation}
 
-We evaluate the NLL for the null hypothesis by minimizing \cref{eq:p-value-nll} with the constraint \(H=1\).  For the alternate hypothesis, we minimize \cref{eq:p-value-nll} unconstrained.  The difference between the two NLLs is used to compute the \(p\) value using a \(\chi^2\) distribution with one degree of freedom.
+We evaluate the NLL for the null hypothesis by minimizing \cref{eq:p-value-nll} with the constraint \(H=1\).  For the alternate hypothesis, we minimize \cref{eq:p-value-nll} unconstrained.  The difference between the two NLLs is used to compute the \(p\) value using a \(\chi^2\) distribution with one degree of freedom.  We also allow fixing \(a_{jk}\) and using only the Cox penalty.  \Cref{sec:compare-to-conventional-p-value} compares this method to the conventional log-rank test.
 
 \section{Implementation}
 
