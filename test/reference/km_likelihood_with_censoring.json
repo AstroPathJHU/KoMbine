@@ -900,11 +900,11 @@
     0.0,
     0.0
   ],
-  "p_value_binomial_breslow": [
-    0.175
-  ],
   "p_value_breslow": [
     0.0202
+  ],
+  "p_value_cox_breslow": [
+    0.175
   ],
   "p_value_logrank": [
     0.125

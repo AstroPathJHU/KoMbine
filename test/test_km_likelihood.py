@@ -201,7 +201,7 @@ def runtest(
 
   nominal_hazard_ratio_breslow = km_p_value_minlp_breslow.nominal_hazard_ratio
   p_value_breslow, _, _ = km_p_value_minlp_breslow.solve_and_pvalue()
-  p_value_binomial_breslow, _, _ = km_p_value_minlp_breslow.solve_and_pvalue(binomial_only=True)
+  p_value_cox_breslow, _, _ = km_p_value_minlp_breslow.solve_and_pvalue(cox_only=True)
 
   try:
     _, _, _ = km_p_value_minlp_breslow.solve_and_pvalue(patient_wise_only=True)
@@ -215,12 +215,12 @@ def runtest(
 
   # Test mutual exclusion of options
   try:
-    km_p_value_minlp_breslow.solve_and_pvalue(binomial_only=True, patient_wise_only=True)
+    km_p_value_minlp_breslow.solve_and_pvalue(cox_only=True, patient_wise_only=True)
     raise AssertionError(
-      "Should have raised ValueError for both binomial_only and patient_wise_only being True"
+      "Should have raised ValueError for both cox_only and patient_wise_only being True"
     )
   except ValueError as e:
-    if "binomial_only and patient_wise_only cannot both be True" not in str(e):
+    if "cox_only and patient_wise_only cannot both be True" not in str(e):
       raise AssertionError("Wrong error message") from e
 
   # Calculate p-value using the conventional logrank method for comparison
@@ -228,7 +228,7 @@ def runtest(
     parameter_threshold=parameter_threshold,
     parameter_min=parameter_min,
     parameter_max=parameter_max,
-    binomial_only=True,
+    cox_only=True,
   )
 
   # Test that logrank method requires binomial_only=True
@@ -237,12 +237,12 @@ def runtest(
       parameter_threshold=parameter_threshold,
       parameter_min=parameter_min,
       parameter_max=parameter_max,
-      binomial_only=False,
+      cox_only=False,
     )
-    raise AssertionError("Should have raised ValueError for binomial_only=False")
+    raise AssertionError("Should have raised ValueError for cox_only=False")
   except ValueError as e:
-    if "only supports binomial_only=True" not in str(e):
-      raise AssertionError("Wrong error message for binomial_only=False") from e
+    if "only supports cox_only=True" not in str(e):
+      raise AssertionError("Wrong error message for cox_only=False") from e
 
   alt_results = {}
   if alt_datacards is not None:
@@ -369,7 +369,7 @@ def runtest(
     "CL_probabilities_patient_wise": CL_probabilities_patient_wise,
     "nominal_hazard_ratio_breslow": np.array([nominal_hazard_ratio_breslow]),
     "p_value_breslow": np.array([p_value_breslow]),
-    "p_value_binomial_breslow": np.array([p_value_binomial_breslow]),
+    "p_value_cox_breslow": np.array([p_value_cox_breslow]),
     #"p_value_patient_wise_breslow": np.array([p_value_patient_wise_breslow]),
     "p_value_logrank": np.array([p_value_logrank]),
   }
