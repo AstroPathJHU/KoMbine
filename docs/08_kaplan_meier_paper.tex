@@ -259,7 +259,9 @@ The total NLL is then given by
 \label{eq:p-value-nll}
 \end{equation}
 
-We evaluate the NLL for the null hypothesis by minimizing \cref{eq:p-value-nll} with the constraint \(H=1\).  For the alternate hypothesis, we minimize \cref{eq:p-value-nll} unconstrained.  The difference between the two NLLs is used to compute the \(p\) value using a \(\chi^2\) distribution with one degree of freedom.  We also allow fixing \(a_{jk}\) and using only the Cox penalty.  \Cref{sec:compare-to-conventional-p-value} compares this method to the conventional log-rank test.
+We evaluate the NLL for the null hypothesis by minimizing \cref{eq:p-value-nll} over \(a_{jk}\) with the constraint \(H=1\).  For the alternate hypothesis, we minimize \cref{eq:p-value-nll} over both \(a_{jk}\) and \(H\).  The difference between the two NLLs is used to compute the \(p\) value using a \(\chi^2\) distribution with one degree of freedom.
+
+We also allow fixing \(a_{jk}\) and using only the Cox penalty.  Because floating \(a_{jk}\) can decrease the NLL for both the null and alternate hypotheses, the \(p\) value may be either larger or smaller than the \(p\) value with fixed \(a_{jk}\).  \Cref{sec:compare-to-conventional-p-value} compares our Cox-only \(p\) value to the conventional log-rank test.
 
 \section{Implementation}
 
