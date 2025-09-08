@@ -1184,7 +1184,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       name="binomial_penalty_expr_lower_bound"
     )
 
-    return binom_penalty, expected_probability_var, use_binomial_penalty_indicator
+    return binom_penalty, expected_probability_var, use_binomial_penalty_indicator, p_survived
 
   def add_patient_wise_penalty(
     self,
@@ -1260,6 +1260,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       binom_penalty,
       expected_probability_var,
       use_binomial_penalty_indicator,
+      p_survived,
     ) = self.add_binomial_penalty(
       model=model,
       r=r,
@@ -1620,6 +1621,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
           success=False,
           n_total=0,
           n_alive=0,
+          p_survived=[np.nan] * self.n_times_to_consider,
           binomial_2NLL=np.inf,
           patient_2NLL=np.inf,
           patient_penalties=nll_penalty_for_patient_in_range,
@@ -1651,6 +1653,11 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     binom_penalty_var = model.getVarByName("binom_penalty")
     assert binom_penalty_var is not None
     binomial_penalty_val = binom_penalty_var.X
+    p_survived_val = []
+    for i in range(self.n_times_to_consider):
+      var = model.getVarByName(f"p_survived[{i}]")
+      assert var is not None
+      p_survived_val.append(var.X)
     if verbose:
       print("Selected patients:", selected)
       print("n_total:          ", int(n_total_val))
@@ -1663,6 +1670,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       success=model.status == GRB.OPTIMAL,
       n_total=n_total_val,
       n_alive=n_alive_val,
+      p_survived=p_survived_val,
       binomial_2NLL=2*binomial_penalty_val,
       patient_2NLL=2*patient_penalty_val,
       patient_penalties=nll_penalty_for_patient_in_range,
