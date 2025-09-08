@@ -500,18 +500,23 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     """
     return np.array([p.censored for p in self.all_patients])
   @functools.cached_property
-  def all_death_times(self) -> npt.NDArray[np.float64]:
+  def times_to_consider(self) -> npt.NDArray[np.float64]:
     """
-    The unique sorted death times of all patients.
+    The unique sorted death times of all patients, plus the current time point.
     """
-    death_times = np.unique(self.patient_times[(~self.patient_censored) & (self.patient_times <= self.time_point)])
+    death_times = np.unique(
+      list(self.patient_times[(~self.patient_censored) & (self.patient_times <= self.time_point)])
+      + [self.time_point]
+    )
     return np.sort(death_times)
   @functools.cached_property
-  def n_death_times(self) -> int:
+  def n_times_to_consider(self) -> int:
     """
-    The number of unique death times.
+    The number of times to include in the calculation, which is
+    the number of death times plus one if the time point is not
+    itself a death time.
     """
-    return len(self.all_death_times)
+    return len(self.times_to_consider)
   def patient_died(self, t) -> npt.NDArray[np.bool_]:
     """
     True if the patient died at time t.
@@ -542,20 +547,20 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
   @functools.cached_property
   def n_died_obs(self) -> npt.NDArray[np.int_]:
     """
-    The number of patients who died at each death time using the observed parameters.
+    The number of patients who died at each time to consider using the observed parameters.
     """
     n_died = np.array([
       np.count_nonzero(
         self.patient_died(dt)
         & self.parameter_in_range
       )
-      for dt in self.all_death_times
+      for dt in self.times_to_consider
     ], dtype=np.int_)
     return n_died
   @functools.cached_property
   def n_at_risk_obs(self) -> npt.NDArray[np.int_]:
     """
-    The number of patients who were still at risk at each death time
+    The number of patients who were still at risk at each time to consider
     using the observed parameters.
     """
     n_at_risk = np.array([
@@ -563,7 +568,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
         self.patient_still_at_risk(dt)
         & self.parameter_in_range
       )
-      for dt in self.all_death_times
+      for dt in self.times_to_consider
     ], dtype=np.int_)
     return n_at_risk
   @functools.cached_property
@@ -574,7 +579,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     """
     n_died = np.array([
       np.count_nonzero(self.patient_died(dt))
-      for dt in self.all_death_times
+      for dt in self.times_to_consider
     ], dtype=np.int_)
     return n_died
   @functools.cached_property
@@ -585,9 +590,24 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     """
     n_at_risk = np.array([
       np.count_nonzero(self.patient_still_at_risk(dt))
-      for dt in self.all_death_times
+      for dt in self.times_to_consider
     ], dtype=np.int_)
     return n_at_risk
+  @functools.cached_property
+  def n_censored_between_times_max(self) -> npt.NDArray[np.int_]:
+    """
+    The maximum number of patients who could have been censored between each pair of times.
+    (regardless of parameter value)
+    """
+    n_censored = np.array([
+      np.count_nonzero(
+        (self.patient_times >= self.times_to_consider[i-1])
+        & (self.patient_times < self.times_to_consider[i])
+        & self.patient_censored
+      )
+      for i in range(1, self.n_times_to_consider)
+    ], dtype=np.int_)
+    return n_censored
 
   @classmethod
   def calculate_KM_probability(
@@ -623,8 +643,9 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
   @functools.cache
   def calculate_possible_probabilities(
     cls,
-    n_at_risk_max: tuple[int],
+    n_total_max: int,
     n_died_max: tuple[int],
+    n_censored_between_times_max: tuple[int],
   ) -> set[float]:
     """
     Calculate possible probabilities based on the total number of patients
@@ -632,23 +653,36 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     The probabilities are calculated by iterating over all possible combinations
     of patients to be included or excluded.
     """
-    if len(n_at_risk_max) != len(n_died_max):
-      raise ValueError("n_at_risk_max and n_died_max must have the same length")
+    if len(n_died_max) != len(n_censored_between_times_max)+1:
+      raise ValueError("Died counts must be one more than censored counts")
 
     result = set()
-    # For each group, possible number of censored and died patients included: 0..n_censored/died
-    at_risk_ranges = [range(nr + 1) for nr in n_at_risk_max]
+    total_range = range(n_total_max)
     died_ranges = [range(nd + 1) for nd in n_died_max]
+    censored_ranges = [range(nc + 1) for nc in n_censored_between_times_max]
 
-    for at_risk_counts in itertools.product(*at_risk_ranges):
+    for total_count in total_range:
       for died_counts in itertools.product(*died_ranges):
-        if any(d > r for d, r in zip(died_counts, at_risk_counts, strict=True)):
-          continue
-        km_probability = cls.calculate_KM_probability(
-          n_at_risk=np.array(at_risk_counts, dtype=np.int_),
-          n_died=np.array(died_counts, dtype=np.int_),
-        )
-        result.add(km_probability)
+        for censored_counts in itertools.product(*censored_ranges):
+          at_risk_counts = [total_count]
+          for i in range(1, len(n_died_max)):
+            at_risk = (
+              at_risk_counts[i-1]
+              - died_counts[i-1]
+              - censored_counts[i-1]
+            )
+            at_risk_counts.append(at_risk)
+          if any(ar < 0 for ar in at_risk_counts):
+            continue
+          if total_count < sum(died_counts) + sum(censored_counts):
+            continue
+          km_probability = cls.calculate_KM_probability(
+            n_at_risk=np.array(at_risk_counts, dtype=np.int_),
+            n_died=np.array(died_counts, dtype=np.int_),
+          )
+          if not 0 <= km_probability <= 1:
+            raise RuntimeError(f"Calculated KM probability {km_probability} is out of range [0,1] for counts: total={total_count}, died={died_counts}, censored={censored_counts}")
+          result.add(km_probability)
     return result
 
   @functools.cached_property
@@ -658,8 +692,9 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     and the total number who were censored or died in each group.
     """
     return self.calculate_possible_probabilities(
-      n_at_risk_max=tuple(self.n_at_risk_max),
+      n_total_max=self.n_patients,
       n_died_max=tuple(self.n_died_max),
+      n_censored_between_times_max=tuple(self.n_censored_between_times_max),
     )
 
   @functools.cached_property
@@ -727,23 +762,23 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     )
 
     d = model.addVars(
-      self.n_death_times,
+      self.n_times_to_consider,
       vtype=GRB.INTEGER,
       name="d",
     )
     r = model.addVars(
-      self.n_death_times,
+      self.n_times_to_consider,
       vtype=GRB.INTEGER,
       name="r",
     )
     s = model.addVars(
-      self.n_death_times,
+      self.n_times_to_consider,
       vtype=GRB.INTEGER,
       name="s",
     )
 
     # Constraints to link to totals
-    for i, dt in enumerate(self.all_death_times):
+    for i, dt in enumerate(self.times_to_consider):
       model.addConstr(
         d[i] == gp.quicksum(
           a[j] for j in range(self.n_patients) if self.patient_died(dt)[j]
@@ -781,14 +816,14 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     """
     # Variables for log of counts
     log_r_vars = model.addVars(
-      self.n_death_times,
+      self.n_times_to_consider,
       vtype=GRB.CONTINUOUS,
       name="log_r",
       lb=-GRB.INFINITY,
       ub=np.log(self.n_patients + self.__log_zero_epsilon), # Max possible log(count)
     )
     log_n_survived_vars = model.addVars(
-      self.n_death_times,
+      self.n_times_to_consider,
       vtype=GRB.CONTINUOUS,
       name="log_n_survived",
       lb=-GRB.INFINITY,
@@ -797,20 +832,20 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
     # Helper variables for log arguments (r + epsilon, n_survived + epsilon)
     r_plus_epsilon = model.addVars(
-      self.n_death_times,
+      self.n_times_to_consider,
       vtype=GRB.CONTINUOUS,
       name="r_plus_epsilon",
       lb=self.__log_zero_epsilon, # Ensure strictly positive
     )
     n_survived_plus_epsilon = model.addVars(
-      self.n_death_times,
+      self.n_times_to_consider,
       vtype=GRB.CONTINUOUS,
       name="n_survived_plus_epsilon",
       lb=self.__log_zero_epsilon, # Ensure strictly positive
     )
 
     # Constraints to link original counts to epsilon-added variables
-    for i in range(self.n_death_times):
+    for i in range(self.n_times_to_consider):
       model.addConstr(
         r_plus_epsilon[i] == r[i] + self.__log_zero_epsilon,
         name=f"r_plus_epsilon_constr_{i}"
@@ -834,13 +869,13 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
     # Binary indicator for whether r for a group is zero
     is_r_zero = model.addVars(
-        self.n_death_times,
+        self.n_times_to_consider,
         vtype=GRB.BINARY,
         name="is_r_zero"
     )
 
     # Link is_r_zero to r using indicator constraint
-    for i in range(self.n_death_times):
+    for i in range(self.n_times_to_consider):
       # If r[i] == 0, then is_r_zero[i] must be 1
       # If r[i] > 0, then is_r_zero[i] must be 0
       model.addGenConstrIndicator(
@@ -851,7 +886,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     # Kaplan-Meier log probability for each group term
     # This term will be 0 if r[i] is 0
     km_log_probability_per_group_terms = model.addVars(
-      self.n_death_times,
+      self.n_times_to_consider,
       vtype=GRB.CONTINUOUS,
       name="km_log_prob_group_term",
       lb=-GRB.INFINITY,
@@ -859,7 +894,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     )
 
     # Use indicator constraints to set km_log_probability_per_group_terms[i]
-    for i in range(self.n_death_times):
+    for i in range(self.n_times_to_consider):
       # If is_r_zero[i] is 0 (i.e., r[i] > 0)
       model.addGenConstrIndicator(
         is_r_zero[i], False,
@@ -925,39 +960,39 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
     #p_i = probability of dying at death time i
     p_died = model.addVars(
-      self.n_death_times,
+      self.n_times_to_consider,
       vtype=GRB.CONTINUOUS,
       name="p_died",
       lb=0,
       ub=1,
     )
     p_survived = model.addVars(
-      self.n_death_times,
+      self.n_times_to_consider,
       vtype=GRB.CONTINUOUS,
       name="p_survived",
       lb=0,
       ub=1,
     )
-    divide = max(self.n_death_times, 1) * 2
+    divide = self.n_times_to_consider * 2
     log_p_bounds = np.array([
       np.log(self.__endpoint_epsilon / divide),
       np.log(1 - self.__endpoint_epsilon / divide),
     ])
     log_p_died = model.addVars(
-      self.n_death_times,
+      self.n_times_to_consider,
       vtype=GRB.CONTINUOUS,
       name="log_p_died",
       lb=log_p_bounds[0],
       ub=log_p_bounds[1],
     )
     log_p_survived = model.addVars(
-      self.n_death_times,
+      self.n_times_to_consider,
       vtype=GRB.CONTINUOUS,
       name="log_p_survived",
       lb=log_p_bounds[0],
       ub=log_p_bounds[1],
     )
-    for i in range(self.n_death_times):
+    for i in range(self.n_times_to_consider):
       model.addGenConstrExp(log_p_died[i], p_died[i], name=f"log_p_died_constr_{i}")
       model.addGenConstrExp(log_p_survived[i], p_survived[i], name=f"log_p_survived_constr_{i}")
       model.addConstr(
@@ -1008,29 +1043,29 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     #n_at_risk choose n_died term
     n_choose_d_table = self.n_choose_d_term_table
     all_n_choose_d_indicator_vars = model.addVars(
-      self.n_death_times, len(n_choose_d_table),
+      self.n_times_to_consider, len(n_choose_d_table),
       vtype=GRB.BINARY,
       name="n_choose_d_indicator",
     )
     n_choose_d_indicator_vars = {
       (i, n, d): all_n_choose_d_indicator_vars[i, idx]
-      for i in range(self.n_death_times)
+      for i in range(self.n_times_to_consider)
       for idx, (n, d) in enumerate(n_choose_d_table.keys())
     }
     n_died_indicator_vars = model.addVars(
-      self.n_death_times, max(self.n_died_max)+1,
+      self.n_times_to_consider, int(max(self.n_died_max)+1),
       vtype=GRB.BINARY,
       name="n_died_indicator",
     )
     n_survived_indicator_vars = model.addVars(
-      self.n_death_times, self.n_patients + 1,
+      self.n_times_to_consider, self.n_patients + 1,
       #could probably have somewhat fewer of these: the maximum is n_patients,
       #but the minimum is not 0.
       vtype=GRB.BINARY,
       name="n_survived_indicator",
     )
     binomial_terms = []
-    for i in range(self.n_death_times):
+    for i in range(self.n_times_to_consider):
       for (r_value, d_value), penalty in n_choose_d_table.items():
         if r_value > self.n_at_risk_max[i]:
           #Can't possibly have this many at risk in this group
@@ -1126,13 +1161,27 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       0.0,
       name="binomial_penalty_inactive",
     )
-    model.addGenConstrIndicator(
-      use_binomial_penalty_indicator,
-      True,
-      binom_penalty - binom_penalty_expr,
-      GRB.EQUAL,
-      0.0,
-      name="binomial_penalty_active",
+
+    #big M constraint to ensure binomial penalty is only used when the indicator is set
+    max_penalty_term = max(
+      abs(penalty) for penalty in self.n_choose_d_term_table.values()
+    )
+    max_d = max(self.n_died_max)
+    max_s = self.n_patients
+    max_log_p = max(np.abs(log_p_bounds))
+    safety_factor = 2
+    big_M = safety_factor * self.n_times_to_consider * (
+      max_penalty_term
+      + max_d * max_log_p
+      + max_s * max_log_p
+    )
+    model.addConstr(
+      binom_penalty <= binom_penalty_expr + big_M * (1 - use_binomial_penalty_indicator),
+      name="binomial_penalty_expr_upper_bound"
+    )
+    model.addConstr(
+      binom_penalty >= binom_penalty_expr - big_M * (1 - use_binomial_penalty_indicator),
+      name="binomial_penalty_expr_lower_bound"
     )
 
     return binom_penalty, expected_probability_var, use_binomial_penalty_indicator
@@ -1583,14 +1632,14 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
         "This may indicate an issue with the MINLP formulation or the input data."
       )
 
-    n_total = model.getVarByName("n_total")
-    n_alive = model.getVarByName("n_alive")
-    assert n_total is not None
-    assert n_alive is not None
     assert all(var is not None for var in a)
     selected = [j for j in range(self.n_patients) if a[j].X > 0.5]
-    n_alive_val = np.rint(n_alive.X)
-    n_total_val = np.rint(n_total.X)
+    n_total_val = sum(selected)
+    n_alive_val = sum(
+      1 for j in selected
+      if self.patient_still_at_risk(self.time_point)[j]
+      and not self.patient_died(self.time_point)[j]
+    )
 
     patient_penalty_val = sum(
       nll_penalty_for_patient_in_range[j] * (
@@ -1605,7 +1654,6 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     if verbose:
       print("Selected patients:", selected)
       print("n_total:          ", int(n_total_val))
-      print("n_alive:          ", int(n_alive_val))
       print("Binomial penalty: ", 2*binomial_penalty_val)
       print("Patient penalty:  ", 2*patient_penalty_val)
       print("Total penalty:    ", model.ObjVal)
