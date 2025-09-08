@@ -114,13 +114,6 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     """
     return self.patient_times >= t
 
-  def deaths_at_time(self, t: float) -> int:
-    """
-    The number of patients who died at exactly time t.
-    """
-    return sum(1 for p in self.all_patients
-               if p.time == t and not p.censored)
-
   @functools.cached_property
   def observed_parameters(self) -> npt.NDArray[np.float64]:
     """
