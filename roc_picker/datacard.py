@@ -928,6 +928,7 @@ class Datacard:
     *,
     endpoint_epsilon: float = 1e-6,
     log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
+    collapse_consecutive_deaths: bool = True,
   ) -> KaplanMeierLikelihood:
     """
     Generate a KaplanMeierLikelihood object for generating Kaplan-Meier
@@ -943,6 +944,7 @@ class Datacard:
       parameter_max=parameter_max,
       endpoint_epsilon=endpoint_epsilon,
       log_zero_epsilon=log_zero_epsilon,
+      collapse_consecutive_deaths=collapse_consecutive_deaths,
     )
 
   def km_p_value( #pylint: disable=too-many-arguments
@@ -1179,6 +1181,7 @@ def plot_km_likelihood():
   parser = _make_common_parser("Run Kaplan-Meier likelihood method from a datacard.")
   parser.add_argument("--parameter-min", type=float, dest="parameter_min", default=-np.inf)
   parser.add_argument("--parameter-max", type=float, dest="parameter_max", default=np.inf)
+  parser.add_argument("--dont-collapse-consecutive-deaths", action="store_true", dest="dont_collapse_consecutive_deaths", help="Disable collapsing of consecutive death times with no intervening censoring (slower but may be more accurate)")
   args = parser.parse_args()
   _validate_plot_args(args, parser)
 
@@ -1188,6 +1191,7 @@ def plot_km_likelihood():
     parameter_max=args.__dict__.pop("parameter_max"),
     endpoint_epsilon=args.__dict__.pop("endpoint_epsilon"),
     log_zero_epsilon=args.__dict__.pop("log_zero_epsilon"),
+    collapse_consecutive_deaths=not args.__dict__.pop("dont_collapse_consecutive_deaths"),
   )
 
   plot_config = KaplanMeierPlotConfig(
@@ -1214,6 +1218,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   parser.add_argument("--p-value-tie-handling", type=str, dest="p_value_tie_handling", choices=["breslow"], default="breslow", help="Method for handling ties in p-value calculation: currently only option is 'breslow' (Breslow approximation).")
   parser.add_argument("--pvalue-fontsize", type=float, dest="pvalue_fontsize", default=KaplanMeierPlotConfig.pvalue_fontsize, help="Font size for p-value text.")
   parser.add_argument("--pvalue-format", type=str, dest="pvalue_format", default=KaplanMeierPlotConfig.pvalue_format, help="Format string for p-value display (e.g., '.3g', '.2f').")
+  parser.add_argument("--dont-collapse-consecutive-deaths", action="store_true", dest="dont_collapse_consecutive_deaths", help="Disable collapsing of consecutive death times with no intervening censoring (slower but may be more accurate)")
   # pylint: enable=C0301
   args = parser.parse_args()
   _validate_plot_args(args, parser)
@@ -1224,6 +1229,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   parameter_max = args.__dict__.pop("parameter_max")
   log_zero_epsilon = args.__dict__.pop("log_zero_epsilon")
   endpoint_epsilon = args.__dict__.pop("endpoint_epsilon")
+  collapse_consecutive_deaths = not args.__dict__.pop("dont_collapse_consecutive_deaths")
   include_logrank_pvalue = args.__dict__.pop("include_logrank_pvalue")
   p_value_tie_handling = args.__dict__.pop("p_value_tie_handling")
   pvalue_fontsize = args.__dict__.pop("pvalue_fontsize")
@@ -1234,12 +1240,14 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
     parameter_max=threshold,
     log_zero_epsilon=log_zero_epsilon,
     endpoint_epsilon=endpoint_epsilon,
+    collapse_consecutive_deaths=collapse_consecutive_deaths,
   )
   kml_high = datacard.km_likelihood(
     parameter_min=threshold,
     parameter_max=parameter_max,
     log_zero_epsilon=log_zero_epsilon,
     endpoint_epsilon=endpoint_epsilon,
+    collapse_consecutive_deaths=collapse_consecutive_deaths,
   )
 
   common_plot_kwargs = _extract_common_plot_config_args(args)

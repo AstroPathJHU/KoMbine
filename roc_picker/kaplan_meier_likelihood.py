@@ -171,12 +171,14 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     parameter_max: float,
     endpoint_epsilon: float = 1e-6,
     log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
+    collapse_consecutive_deaths: bool = True,
   ):
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min
     self.__parameter_max = parameter_max
     self.__endpoint_epsilon = endpoint_epsilon
     self.__log_zero_epsilon = log_zero_epsilon
+    self.__collapse_consecutive_deaths = collapse_consecutive_deaths
 
   @property
   def all_patients(self) -> list[KaplanMeierPatientNLL]:
@@ -238,6 +240,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       time_point=time_point,
       endpoint_epsilon=self.__endpoint_epsilon,
       log_zero_epsilon=self.__log_zero_epsilon,
+      collapse_consecutive_deaths=self.__collapse_consecutive_deaths,
     )
 
   def get_twoNLL_function( # pylint: disable=too-many-arguments

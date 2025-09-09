@@ -442,6 +442,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     time_point: float,
     endpoint_epsilon: float = 1e-6,
     log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT, # New parameter for log arguments
+    collapse_consecutive_deaths: bool = True,
   ):
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min
@@ -449,6 +450,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     self.__time_point = time_point
     self.__endpoint_epsilon = endpoint_epsilon
     self.__log_zero_epsilon = log_zero_epsilon # Store the epsilon
+    self.__collapse_consecutive_deaths = collapse_consecutive_deaths
     self.__expected_probability_constraint = None
     self.__binomial_penalty_constraint = None
     self.__patient_constraints_for_binomial_only = None
@@ -487,6 +489,12 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     The time point for the Kaplan-Meier curve.
     """
     return self.__time_point
+  @property
+  def collapse_consecutive_deaths(self) -> bool:
+    """
+    Whether to collapse consecutive deaths with no intervening censoring.
+    """
+    return self.__collapse_consecutive_deaths
   @functools.cached_property
   def patient_times(self) -> npt.NDArray[np.float64]:
     """
@@ -503,12 +511,61 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
   def times_to_consider(self) -> npt.NDArray[np.float64]:
     """
     The unique sorted death times of all patients, plus the current time point.
+    If collapse_consecutive_deaths is True, consecutive death times with no
+    intervening censored patients are collapsed to reduce the number of 
+    survival probability variables in the MINLP.
     """
-    death_times = np.unique(
-      list(self.patient_times[(~self.patient_censored) & (self.patient_times <= self.time_point)])
-      + [self.time_point]
-    )
-    return np.sort(death_times)
+    # Get all death times up to the time point
+    death_mask = (~self.patient_censored) & (self.patient_times <= self.time_point)
+    death_times = self.patient_times[death_mask]
+    
+    # Always include the time point itself
+    all_times = list(death_times) + [self.time_point]
+    unique_times = np.unique(all_times)
+    
+    if not self.collapse_consecutive_deaths:
+      # Original behavior: return all unique times
+      return np.sort(unique_times)
+    
+    # Collapse consecutive deaths logic
+    # For each death time, check if there are any censored patients between
+    # the previous death time and this one
+    collapsed_times = []
+    
+    for i, current_time in enumerate(unique_times):
+      if i == 0:
+        # Always include the first time
+        collapsed_times.append(current_time)
+      else:
+        prev_time = unique_times[i-1]
+        
+        # Check if there are any censored patients between prev_time and current_time
+        # Note: censoring at the same time as death is handled by KM convention 
+        # (death happens first), so we use strict inequality
+        censored_between = np.any(
+          self.patient_censored & 
+          (self.patient_times > prev_time) & 
+          (self.patient_times < current_time)
+        )
+        
+        # Check if there's a censored patient at current_time
+        censored_at_current = np.any(
+          self.patient_censored & (self.patient_times == current_time)
+        )
+        
+        if censored_between or censored_at_current:
+          # There's intervening censoring, so we can't collapse
+          collapsed_times.append(current_time)
+        else:
+          # No intervening censoring, so we can collapse this death time
+          # with the previous one (i.e., don't add current_time)
+          pass
+    
+    # Always ensure the time_point itself is included if not already
+    if self.time_point not in collapsed_times:
+      collapsed_times.append(self.time_point)
+    
+    return np.sort(np.array(collapsed_times))
   @functools.cached_property
   def n_times_to_consider(self) -> int:
     """
