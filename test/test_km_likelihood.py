@@ -57,7 +57,7 @@ def runtest(
   patient_wise_precision = 8
 
   datacard = roc_picker.datacard.Datacard.parse_datacard(dcfile)
-  kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf, collapse_consecutive_deaths=False)
+  kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
   times_for_plot = kml.times_for_plot
 
   # Test with no parameter limits
@@ -77,7 +77,7 @@ def runtest(
   )
 
   # Now test with parameter limits
-  kml2 = datacard.km_likelihood(parameter_min=0.19, parameter_max=0.79, endpoint_epsilon=1e-4, collapse_consecutive_deaths=False)
+  kml2 = datacard.km_likelihood(parameter_min=0.19, parameter_max=0.79, endpoint_epsilon=1e-4)
   nominal_probabilities = kml2.nominalkm.survival_probabilities(times_for_plot=times_for_plot)
   best_probabilities, CL_probabilities = kml2.survival_probabilities_likelihood(
     CLs=CLs,
@@ -192,9 +192,7 @@ def runtest(
   parameter_max = 100
   parameter_threshold = 0.45
 
-  # Test collapse_consecutive_deaths parameter
-  # This tests that both collapse modes can be created without error
-  # and that they produce different numbers of times to consider when appropriate
+  # Test collapse_consecutive_deaths parameter with comprehensive testing
   print("Testing collapse_consecutive_deaths parameter...")
 
   # Test with a time point that should show a difference
@@ -209,6 +207,7 @@ def runtest(
   )
   minlp_with_collapse = kml_with_collapse.minlp_for_km(time_point=test_time_point)
   n_times_with_collapse = minlp_with_collapse.n_times_to_consider
+  times_with_collapse = minlp_with_collapse.times_to_consider
 
   # Test with collapse=False (old behavior)
   kml_without_collapse = datacard.km_likelihood(
@@ -219,11 +218,14 @@ def runtest(
   )
   minlp_without_collapse = kml_without_collapse.minlp_for_km(time_point=test_time_point)
   n_times_without_collapse = minlp_without_collapse.n_times_to_consider
+  times_without_collapse = minlp_without_collapse.times_to_consider
 
   print(
     f"Time point {test_time_point}: {n_times_with_collapse} times with collapse, "
     f"{n_times_without_collapse} times without collapse"
   )
+  print(f"Times with collapse: {times_with_collapse}")
+  print(f"Times without collapse: {times_without_collapse}")
 
   # Basic sanity checks
   assert n_times_with_collapse > 0, "Should have at least one time to consider with collapse"
@@ -231,6 +233,16 @@ def runtest(
     "Should have at least one time to consider without collapse"
   assert n_times_with_collapse <= n_times_without_collapse, \
     "Collapsing should not increase the number of times"
+
+  # Verify that collapsed times are a subset of uncollapsed times
+  # (allowing for floating point precision)
+  for collapsed_time in times_with_collapse:
+    found_match = False
+    for uncollapsed_time in times_without_collapse:
+      if abs(collapsed_time - uncollapsed_time) < 1e-10:
+        found_match = True
+        break
+    assert found_match, f"Collapsed time {collapsed_time} not found in uncollapsed times"
 
   print("collapse_consecutive_deaths parameter test passed!")
 
@@ -292,7 +304,6 @@ def runtest(
       parameter_min=0.25,
       parameter_max=0.75,
       endpoint_epsilon=1e-4,
-      collapse_consecutive_deaths=False
     )
     nominal_probabilities_noboundary = kml3.nominalkm.survival_probabilities(
       times_for_plot=times_for_plot,
@@ -326,7 +337,6 @@ def runtest(
         parameter_min=0.25*factor,
         parameter_max=0.75*factor,
         endpoint_epsilon=1e-4,
-        collapse_consecutive_deaths=False
       )
       nominal_probabilities_noboundary_alt = kml3_alt.nominalkm.survival_probabilities(
         times_for_plot=times_for_plot,
@@ -464,10 +474,207 @@ def runtest(
       )
     raise
 
+def runtest_collapse_false():
+  """
+  Test the Kaplan-Meier likelihood method with collapse_consecutive_deaths=False.
+  This uses a simple datacard with only a few distinct death times to create
+  a reference for the non-collapsed behavior.
+  """
+  dcfile = datacards / "simple_km_few_deaths.txt"
+  reffile = here / "reference" / "km_likelihood_collapse_false.json"
+  
+  tolerance: Tolerance = {"atol": 2e-4, "rtol": 2e-4}
+  
+  # Calculate precision for JSON output based on rtol
+  rtol_value = tolerance["rtol"]
+  if rtol_value > 0:
+    json_precision = int(abs(math.log10(rtol_value))) + 1
+  else:
+    json_precision = 4
+
+  datacard = roc_picker.datacard.Datacard.parse_datacard(dcfile)
+  kml = datacard.km_likelihood(
+    parameter_min=0.1, 
+    parameter_max=0.9, 
+    endpoint_epsilon=1e-4, 
+    collapse_consecutive_deaths=False
+  )
+  times_for_plot = kml.times_for_plot
+
+  # Get survival probabilities
+  nominal_probabilities = kml.nominalkm.survival_probabilities(times_for_plot=times_for_plot)
+  CLs = [0.68, 0.95]
+  best_probabilities, CL_probabilities = kml.survival_probabilities_likelihood(
+    CLs=CLs,
+    times_for_plot=times_for_plot,
+  )
+
+  # Store the results for reference
+  ordered_array_data = {
+    "nominal_probabilities": nominal_probabilities,
+    "best_probabilities": best_probabilities, 
+    "CL_probabilities": CL_probabilities,
+  }
+
+  try:
+    with open(reffile, "r", encoding="utf-8") as f:
+      loaded_data = json.load(f)
+      reference_data = {k: np.asarray(v) for k, v in loaded_data.items()}
+
+    # Check for missing or extra keys
+    testing_keys = set(ordered_array_data.keys())
+    reference_keys = set(reference_data.keys())
+
+    missing_keys = testing_keys - reference_keys
+    extra_keys = reference_keys - testing_keys
+
+    if missing_keys:
+      raise AssertionError(f"Keys missing in reference file: {', '.join(sorted(missing_keys))}")
+    if extra_keys:
+      raise AssertionError(f"Extra keys found in reference file: {', '.join(sorted(extra_keys))}")
+
+    # Compare arrays
+    for name, array in ordered_array_data.items():
+      ref = reference_data[name]
+      np.testing.assert_allclose(
+        array,
+        ref,
+        **tolerance,
+        err_msg=f"Array '{name}' does not match the reference."
+      )
+  except Exception:
+    with open(here / "test_output" / reffile.name, "w", encoding="utf-8") as f:
+      formatted_data_for_json = {}
+      for k, v in ordered_array_data.items():
+        formatted_data_for_json[k] = format_value_for_json(v.tolist(), json_precision)
+
+      json.dump(
+        formatted_data_for_json,
+        f,
+        indent=2,
+        sort_keys=True,
+      )
+    raise
+
+def test_times_to_consider_collapse_logic():
+  """
+  Comprehensive tests for the times_to_consider collapsing logic.
+  Tests various scenarios to ensure the collapsing algorithm works correctly.
+  """
+  print("Testing times_to_consider collapse logic...")
+  
+  # Test 1: Simple consecutive deaths without censoring
+  # Should collapse all consecutive deaths
+  from roc_picker.kaplan_meier_MINLP import KaplanMeierPatientNLL
+  
+  # Create test patients with consecutive deaths
+  patients = [
+    KaplanMeierPatientNLL(time=1.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
+    KaplanMeierPatientNLL(time=2.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
+    KaplanMeierPatientNLL(time=3.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
+    KaplanMeierPatientNLL(time=4.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
+  ]
+  
+  from roc_picker.kaplan_meier_MINLP import MINLPForKM
+  
+  # Test with collapse=True
+  minlp_collapse = MINLPForKM(
+    patients, 
+    parameter_min=0.1, 
+    parameter_max=0.9, 
+    time_point=5.0,
+    collapse_consecutive_deaths=True
+  )
+  times_collapsed = minlp_collapse.times_to_consider
+  
+  # Test with collapse=False  
+  minlp_no_collapse = MINLPForKM(
+    patients,
+    parameter_min=0.1,
+    parameter_max=0.9, 
+    time_point=5.0,
+    collapse_consecutive_deaths=False
+  )
+  times_no_collapse = minlp_no_collapse.times_to_consider
+  
+  print("Test 1 - Consecutive deaths:")
+  print(f"  Without collapse: {times_no_collapse}")
+  print(f"  With collapse: {times_collapsed}")
+  
+  # Should have fewer times with collapse
+  assert len(times_collapsed) <= len(times_no_collapse)
+  # For consecutive deaths, should collapse to just the final time
+  expected_collapsed = np.array([5.0])  # Only the time_point
+  np.testing.assert_allclose(times_collapsed, expected_collapsed, rtol=1e-10)
+  
+  # Test 2: Deaths with intervening censoring
+  patients_with_censoring = [
+    KaplanMeierPatientNLL(time=1.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
+    KaplanMeierPatientNLL(time=2.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
+    KaplanMeierPatientNLL(time=2.5, censored=True, parameter_nll=lambda x: 0, observed_parameter=0.5),  # Censoring between 2 and 3
+    KaplanMeierPatientNLL(time=3.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
+    KaplanMeierPatientNLL(time=4.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
+  ]
+  
+  minlp_censoring_collapse = MINLPForKM(
+    patients_with_censoring,
+    parameter_min=0.1,
+    parameter_max=0.9,
+    time_point=5.0,
+    collapse_consecutive_deaths=True
+  )
+  times_censoring_collapsed = minlp_censoring_collapse.times_to_consider
+  
+  minlp_censoring_no_collapse = MINLPForKM(
+    patients_with_censoring,
+    parameter_min=0.1,
+    parameter_max=0.9,
+    time_point=5.0,
+    collapse_consecutive_deaths=False
+  )
+  times_censoring_no_collapse = minlp_censoring_no_collapse.times_to_consider
+  
+  print("Test 2 - Deaths with intervening censoring:")
+  print(f"  Without collapse: {times_censoring_no_collapse}")
+  print(f"  With collapse: {times_censoring_collapsed}")
+  
+  # Should have more times due to censoring preventing collapse
+  # Expected: deaths at 1,2 can be collapsed to 2, then censoring at 2.5 prevents
+  # collapsing with deaths at 3,4, so we get [2.0, 5.0] (deaths 3,4 collapse with time_point)
+  expected_with_censoring = np.array([2.0, 5.0])
+  np.testing.assert_allclose(times_censoring_collapsed, expected_with_censoring, rtol=1e-10)
+  
+  # Test 3: Censoring at same time as death (death should happen first per KM convention)
+  patients_same_time = [
+    KaplanMeierPatientNLL(time=1.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
+    KaplanMeierPatientNLL(time=2.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
+    KaplanMeierPatientNLL(time=2.0, censored=True, parameter_nll=lambda x: 0, observed_parameter=0.5),   # Censoring at same time as death
+    KaplanMeierPatientNLL(time=3.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
+  ]
+  
+  minlp_same_time_collapse = MINLPForKM(
+    patients_same_time,
+    parameter_min=0.1,
+    parameter_max=0.9,
+    time_point=4.0,
+    collapse_consecutive_deaths=True
+  )
+  times_same_time_collapsed = minlp_same_time_collapse.times_to_consider
+  
+  print("Test 3 - Censoring at same time as death:")
+  print(f"  With collapse: {times_same_time_collapsed}")
+  
+  # Deaths at 1,2 can be collapsed, but censoring at 2.0 affects subsequent deaths
+  # So death at 3 should be separate
+  expected_same_time = np.array([2.0, 4.0])  # 1,2 collapse to 2.0; 3 collapses with time_point 4.0
+  np.testing.assert_allclose(times_same_time_collapsed, expected_same_time, rtol=1e-10)
+  
+  print("times_to_consider collapse logic tests passed!")
+
 def main(args=None):
   """
   Main function to run the test.
-  By default, it runs both with and without censoring.
+  By default, it runs both with and without censoring, plus additional tests.
   You can specify --censoring or --no-censoring to run only one of them.
   """
   p = argparse.ArgumentParser(
@@ -484,7 +691,25 @@ def main(args=None):
     action="store_true",
     help="Test without censoring.",
   )
+  g.add_argument(
+    "--collapse-false-only",
+    action="store_true",
+    help="Test only the collapse_consecutive_deaths=False case.",
+  )
+  g.add_argument(
+    "--collapse-logic-only",
+    action="store_true",
+    help="Test only the collapse logic.",
+  )
   args = p.parse_args(args)
+
+  if args.collapse_false_only:
+    runtest_collapse_false()
+    return
+    
+  if args.collapse_logic_only:
+    test_times_to_consider_collapse_logic()
+    return
 
   if not args.censoring and not args.no_censoring:
     args.censoring = args.no_censoring = True
@@ -493,6 +718,10 @@ def main(args=None):
     runtest(censoring=False)
   if args.censoring:
     runtest(censoring=True)
+    
+  # Run additional tests
+  runtest_collapse_false()
+  test_times_to_consider_collapse_logic()
 
 if __name__ == "__main__":
   main()
