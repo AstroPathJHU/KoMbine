@@ -118,7 +118,36 @@ def binary_search_sign_change(
   atol: float = 1e-3,
   rtol: float = 1e-3,
 ) -> float:
-  """Binary search for first sign change across adjacent values."""
+  """Binary search for first sign change across adjacent values.
+  
+  Parameters
+  ----------
+  objective_function : callable
+      Function to evaluate at each probability value
+  probs : np.ndarray
+      Array of probability values to search over
+  lo : int
+      Starting index for the search
+  hi : int
+      Ending index for the search
+  verbose : bool, default False
+      If True, print detailed search progress
+  atol : float, default 1e-3
+      Absolute tolerance for probability convergence
+  rtol : float, default 1e-3
+      Relative tolerance for probability convergence
+      
+  Returns
+  -------
+  float
+      Probability value where the sign change occurs
+      
+  Notes
+  -----
+  The search stops when either:
+  1. Adjacent indices are reached (hi - lo <= 1), or
+  2. The difference between probs[lo] and probs[hi] is within tolerance
+  """
   evaluated = extract_inspectable_cache_values(objective_function, probs)
 
   def eval_or_get(i: int) -> float:
