@@ -109,17 +109,18 @@ def smart_trisect(left, right, evaluated):
     mid1 = smart_bisect(left, mid2, evaluated)
   return mid1, mid2
 
-def binary_search_sign_change(
+def binary_search_sign_change( #pylint: disable=too-many-arguments, too-many-branches
   objective_function: collections.abc.Callable[[float], float],
   probs: np.ndarray,
   lo: int,
   hi: int,
+  *,
   verbose: bool = False,
-  MIPGap: float = None,
-  MIPGapAbs: float = None,
+  MIPGap: float | None = None,
+  MIPGapAbs: float | None = None,
 ) -> float:
   """Binary search for first sign change across adjacent values.
-  
+
   Parameters
   ----------
   objective_function : callable
@@ -136,12 +137,12 @@ def binary_search_sign_change(
       Relative tolerance for probability convergence
   MIPGapAbs : float, optional
       Absolute tolerance for probability convergence
-      
+
   Returns
   -------
   float
       Probability value where the sign change occurs
-      
+
   Notes
   -----
   The search stops when either:
@@ -153,7 +154,7 @@ def binary_search_sign_change(
     MIPGapAbs = 1e-7  # Default absolute tolerance
   if MIPGap is None:
     MIPGap = 1e-4  # Default relative tolerance
-    
+
   evaluated = extract_inspectable_cache_values(objective_function, probs)
 
   def eval_or_get(i: int) -> float:
