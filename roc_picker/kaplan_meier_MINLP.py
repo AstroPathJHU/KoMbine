@@ -620,14 +620,14 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     """
     if len(n_at_risk) != len(n_died):
       raise ValueError("At risk and died counts must have the same length")
-    
+
     probability = 1.0
     for at_risk, died in zip(n_at_risk, n_died, strict=True):
       if at_risk > 0:
         probability *= (at_risk - died) / at_risk
 
     return probability
-  
+
   @functools.cached_property
   def observed_KM_probability(self) -> float:
     """
@@ -681,7 +681,10 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
             n_died=np.array(died_counts, dtype=np.int_),
           )
           if not 0 <= km_probability <= 1:
-            raise RuntimeError(f"Calculated KM probability {km_probability} is out of range [0,1] for counts: total={total_count}, died={died_counts}, censored={censored_counts}")
+            raise RuntimeError(
+              f"Calculated KM probability {km_probability} is out of range [0,1]"
+              f"for counts: total={total_count}, died={died_counts}, censored={censored_counts}"
+            )
           result.add(km_probability)
     return result
 
@@ -797,7 +800,6 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       )
 
     return (
-      n_total,
       d,
       r,
       s,
@@ -1193,7 +1195,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       name="binomial_penalty_expr_lower_bound"
     )
 
-    return binom_penalty, expected_probability_var, use_binomial_penalty_indicator, p_survived
+    return binom_penalty, expected_probability_var, use_binomial_penalty_indicator
 
   def add_patient_wise_penalty(
     self,
@@ -1249,7 +1251,6 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     a = model.addVars(self.n_patients, vtype=GRB.BINARY, name="a")
 
     (
-      n_total,
       d,
       r,
       s,
@@ -1269,7 +1270,6 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       binom_penalty,
       expected_probability_var,
       use_binomial_penalty_indicator,
-      p_survived,
     ) = self.add_binomial_penalty(
       model=model,
       r=r,

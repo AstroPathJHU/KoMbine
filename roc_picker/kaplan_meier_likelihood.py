@@ -397,7 +397,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       MIPGap = self.__default_MIPGap
     if MIPGapAbs is None:
       MIPGapAbs = self.__default_MIPGapAbs
-      
+
     best_probabilities = []
     survival_probabilities = []
     for i, t in enumerate(times_for_plot, start=1):
@@ -524,7 +524,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               self.__endpoint_epsilon,
               best_prob_clipped,
               xtol=MIPGapAbs,
-              rtol=MIPGap,
+              rtol=np.float64(MIPGap),
             )
           if (
             best_prob >= 1 - self.__endpoint_epsilon
@@ -539,7 +539,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               best_prob_clipped,
               1 - self.__endpoint_epsilon,
               xtol=MIPGapAbs,
-              rtol=MIPGap,
+              rtol=np.float64(MIPGap),
             )
 
         survival_probabilities_time_point.append((lower_bound, upper_bound))
