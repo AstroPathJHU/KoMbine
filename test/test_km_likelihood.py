@@ -196,53 +196,45 @@ def runtest(
   # This tests that both collapse modes can be created without error
   # and that they produce different numbers of times to consider when appropriate
   print("Testing collapse_consecutive_deaths parameter...")
-  
+
   # Test with a time point that should show a difference
   test_time_point = times_for_plot[-2] if len(times_for_plot) > 1 else times_for_plot[0]
-  
-  try:
-    # Test with collapse=True (new default)
-    kml_with_collapse = datacard.km_likelihood(
-      parameter_min=0.19, 
-      parameter_max=0.79, 
-      endpoint_epsilon=1e-4,
-      collapse_consecutive_deaths=True
-    )
-    minlp_with_collapse = kml_with_collapse.minlp_for_km(time_point=test_time_point)
-    n_times_with_collapse = minlp_with_collapse.n_times_to_consider
-    
-    # Test with collapse=False (old behavior)  
-    kml_without_collapse = datacard.km_likelihood(
-      parameter_min=0.19, 
-      parameter_max=0.79, 
-      endpoint_epsilon=1e-4,
-      collapse_consecutive_deaths=False
-    )
-    minlp_without_collapse = kml_without_collapse.minlp_for_km(time_point=test_time_point)
-    n_times_without_collapse = minlp_without_collapse.n_times_to_consider
-    
-    print(f"Time point {test_time_point}: {n_times_with_collapse} times with collapse, {n_times_without_collapse} times without collapse")
-    
-    # Basic sanity checks
-    assert n_times_with_collapse > 0, "Should have at least one time to consider with collapse"
-    assert n_times_without_collapse > 0, "Should have at least one time to consider without collapse"
-    assert n_times_with_collapse <= n_times_without_collapse, "Collapsing should not increase the number of times"
-    
-    print("collapse_consecutive_deaths parameter test passed!")
-    
-  except Exception as e:
-    if "size-limited license" in str(e):
-      print("collapse_consecutive_deaths test skipped due to Gurobi license limitation")
-    else:
-      print(f"collapse_consecutive_deaths test failed: {e}")
-      # Don't raise the exception since the main test should continue
+
+  # Test with collapse=True (new default)
+  kml_with_collapse = datacard.km_likelihood(
+    parameter_min=0.19,
+    parameter_max=0.79,
+    endpoint_epsilon=1e-4,
+    collapse_consecutive_deaths=True
+  )
+  minlp_with_collapse = kml_with_collapse.minlp_for_km(time_point=test_time_point)
+  n_times_with_collapse = minlp_with_collapse.n_times_to_consider
+
+  # Test with collapse=False (old behavior)
+  kml_without_collapse = datacard.km_likelihood(
+    parameter_min=0.19,
+    parameter_max=0.79,
+    endpoint_epsilon=1e-4,
+    collapse_consecutive_deaths=False
+  )
+  minlp_without_collapse = kml_without_collapse.minlp_for_km(time_point=test_time_point)
+  n_times_without_collapse = minlp_without_collapse.n_times_to_consider
+
+  print(
+    f"Time point {test_time_point}: {n_times_with_collapse} times with collapse, "
+    f"{n_times_without_collapse} times without collapse"
+  )
+
+  # Basic sanity checks
+  assert n_times_with_collapse > 0, "Should have at least one time to consider with collapse"
+  assert n_times_without_collapse > 0, \
+    "Should have at least one time to consider without collapse"
+  assert n_times_with_collapse <= n_times_without_collapse, \
+    "Collapsing should not increase the number of times"
+
+  print("collapse_consecutive_deaths parameter test passed!")
 
   km_p_value_minlp_breslow = datacard.km_p_value(
-    parameter_min=parameter_min,
-    parameter_threshold=parameter_threshold,
-    parameter_max=parameter_max,
-    tie_handling="breslow",
-  )
     parameter_min=parameter_min,
     parameter_threshold=parameter_threshold,
     parameter_max=parameter_max,
@@ -281,7 +273,7 @@ def runtest(
     cox_only=True,
   )
 
-  # Test that logrank method requires binomial_only=True
+  # Test that logrank method requires cox_only=True
   try:
     datacard.km_p_value_logrank(
       parameter_threshold=parameter_threshold,
