@@ -115,8 +115,8 @@ def binary_search_sign_change(
   lo: int,
   hi: int,
   verbose: bool = False,
-  atol: float = 1e-3,
-  rtol: float = 1e-3,
+  MIPGap: float = None,
+  MIPGapAbs: float = None,
 ) -> float:
   """Binary search for first sign change across adjacent values.
   
@@ -132,10 +132,10 @@ def binary_search_sign_change(
       Ending index for the search
   verbose : bool, default False
       If True, print detailed search progress
-  atol : float, default 1e-3
-      Absolute tolerance for probability convergence
-  rtol : float, default 1e-3
+  MIPGap : float, optional
       Relative tolerance for probability convergence
+  MIPGapAbs : float, optional
+      Absolute tolerance for probability convergence
       
   Returns
   -------
@@ -148,6 +148,12 @@ def binary_search_sign_change(
   1. Adjacent indices are reached (hi - lo <= 1), or
   2. The difference between probs[lo] and probs[hi] is within tolerance
   """
+  # Set default tolerance values if not provided
+  if MIPGapAbs is None:
+    MIPGapAbs = 1e-7  # Default absolute tolerance
+  if MIPGap is None:
+    MIPGap = 1e-4  # Default relative tolerance
+    
   evaluated = extract_inspectable_cache_values(objective_function, probs)
 
   def eval_or_get(i: int) -> float:
@@ -166,7 +172,7 @@ def binary_search_sign_change(
     print(lo, probs[lo], v_lo)
     print(hi, probs[hi], v_hi)
 
-  while hi - lo > 1 and not _is_close(probs[lo], probs[hi], atol, rtol):
+  while hi - lo > 1 and not _is_close(probs[lo], probs[hi], MIPGapAbs, MIPGap):
     mid = smart_bisect(lo, hi, evaluated)
     v_mid = eval_or_get(mid)
 

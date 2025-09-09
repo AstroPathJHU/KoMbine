@@ -362,8 +362,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     print_progress=False,
     MIPGap=None,
     MIPGapAbs=None,
-    atol=1e-3,
-    rtol=1e-3,
   ) -> tuple[np.ndarray, np.ndarray]:
     """
     Get the survival probabilities for the given quantiles.
@@ -385,25 +383,20 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     print_progress : bool, default False
         If True, print progress information
     MIPGap : float, optional
-        Gurobi MIP gap tolerance (reused for objective function tolerance)
+        Gurobi MIP gap tolerance (used for objective function tolerance)
     MIPGapAbs : float, optional
-        Gurobi absolute MIP gap tolerance (reused for objective function tolerance)
-    atol : float, default 1e-3
-        Absolute tolerance for probability optimization convergence
-    rtol : float, default 1e-3
-        Relative tolerance for probability optimization convergence
+        Gurobi absolute MIP gap tolerance (used for objective function tolerance)
         
     Returns
     -------
     tuple[np.ndarray, np.ndarray]
         Best probabilities and survival probabilities for each confidence level
     """
-    # Reuse MIPGap/MIPGapAbs for tolerance in objective function if provided
-    # and tolerance parameters are at their defaults
-    if MIPGapAbs is not None and atol == 1e-3:
-      atol = MIPGapAbs
-    if MIPGap is not None and rtol == 1e-3:
-      rtol = MIPGap
+    # Set default tolerance values if not provided
+    if MIPGap is None:
+      MIPGap = self.__default_MIPGap
+    if MIPGapAbs is None:
+      MIPGapAbs = self.__default_MIPGapAbs
       
     best_probabilities = []
     survival_probabilities = []
@@ -493,8 +486,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               lo=i_best,
               hi=len(probs) - 1,
               verbose=optimize_verbose,
-              atol=atol,
-              rtol=rtol,
+              MIPGap=MIPGap,
+              MIPGapAbs=MIPGapAbs,
             )
             if upper is None:
               raise RuntimeError("No upper sign change found")
@@ -510,8 +503,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               lo=0,
               hi=i_best,
               verbose=optimize_verbose,
-              atol=atol,
-              rtol=rtol,
+              MIPGap=MIPGap,
+              MIPGapAbs=MIPGapAbs,
             )
             if lower is None:
               raise RuntimeError("No lower sign change found")
@@ -530,8 +523,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               objective_function,
               self.__endpoint_epsilon,
               best_prob_clipped,
-              xtol=atol,
-              rtol=rtol,
+              xtol=MIPGapAbs,
+              rtol=MIPGap,
             )
           if (
             best_prob >= 1 - self.__endpoint_epsilon
@@ -545,8 +538,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               objective_function,
               best_prob_clipped,
               1 - self.__endpoint_epsilon,
-              xtol=atol,
-              rtol=rtol,
+              xtol=MIPGapAbs,
+              rtol=MIPGap,
             )
 
         survival_probabilities_time_point.append((lower_bound, upper_bound))
