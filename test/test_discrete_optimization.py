@@ -7,7 +7,7 @@ import unittest
 
 import numpy as np
 
-from roc_picker.discrete_optimization import minimize_discrete_single_minimum
+from roc_picker.discrete_optimization import minimize_discrete_single_minimum, binary_search_sign_change
 
 class TestMinimizeDiscreteSingleMinimum(unittest.TestCase):
   """
@@ -271,6 +271,171 @@ class TestMinimizeDiscreteSingleMinimum(unittest.TestCase):
         func_factory,
         expected_range_factory
     )
+
+
+class TestBinarySearchSignChange(unittest.TestCase):
+  """
+  Tests for binary_search_sign_change function.
+  """
+
+  def test_simple_sign_change_positive_to_negative(self):
+    """
+    Test a simple function that goes from positive to negative.
+    """
+    probs = np.linspace(0, 10, 11)  # [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    
+    def func(x):
+      return 5 - x  # Positive for x < 5, zero at x=5, negative for x > 5
+    
+    # Search the entire range where sign change occurs
+    result = binary_search_sign_change(func, probs, 0, 10)
+    
+    # Should find the first x where func(x) <= 0, which is x=5 or higher
+    self.assertGreaterEqual(result, 5.0)
+    self.assertLessEqual(func(result), 0.0)
+
+  def test_simple_sign_change_negative_to_positive(self):
+    """
+    Test a simple function that goes from negative to positive.
+    """
+    probs = np.linspace(0, 10, 21)  # More resolution
+    
+    def func(x):
+      return x - 3  # Negative for x < 3, zero at x=3, positive for x > 3
+    
+    # Search around the sign change
+    lo_idx = 0  # x = 0
+    hi_idx = 20  # x = 10
+    result = binary_search_sign_change(func, probs, lo_idx, hi_idx)
+    
+    # Should find the first x where func(x) <= 0, which is x=3
+    self.assertGreaterEqual(result, 3.0)
+    self.assertLessEqual(func(result), 0.0)
+
+  def test_exact_zero_at_endpoint(self):
+    """
+    Test case where the function is exactly zero at one of the endpoints.
+    """
+    probs = np.array([0, 1, 2, 3, 4, 5])
+    
+    def func(x):
+      if x <= 3:
+        return 1  # Positive
+      else:
+        return -1  # Negative
+    
+    result = binary_search_sign_change(func, probs, 0, 5)
+    
+    # Should return a value where func <= 0 (which is x >= 4)
+    self.assertGreaterEqual(result, 4.0)
+    self.assertLessEqual(func(result), 0.0)
+
+  def test_with_mip_tolerances(self):
+    """
+    Test that MIPGap and MIPGapAbs parameters work correctly.
+    """
+    # Create a more refined array
+    probs = np.linspace(0, 1, 1001)  # Very fine resolution
+    
+    def func(x):
+      return x - 0.5  # Sign change at x=0.5
+    
+    # Test with tight tolerances
+    result_tight = binary_search_sign_change(
+      func, probs, 0, 1000, 
+      MIPGap=1e-8, MIPGapAbs=1e-8
+    )
+    
+    # Test with loose tolerances  
+    result_loose = binary_search_sign_change(
+      func, probs, 0, 1000,
+      MIPGap=1e-2, MIPGapAbs=1e-2
+    )
+    
+    # Both should return a value where func <= 0
+    self.assertLessEqual(func(result_tight), 0.0)
+    self.assertLessEqual(func(result_loose), 0.0)
+    
+    # Both should be close to 0.5, but loose tolerance might terminate earlier
+    self.assertAlmostEqual(result_tight, 0.5, places=2)
+    self.assertAlmostEqual(result_loose, 0.5, places=1)
+
+  def test_no_sign_change_raises_error(self):
+    """
+    Test that the function raises an error when there's no sign change.
+    """
+    probs = np.array([0, 1, 2, 3, 4, 5])
+    
+    def func_all_positive(x):
+      return x + 1  # Always positive
+    
+    def func_all_negative(x):
+      return -(x + 1)  # Always negative
+    
+    # Both should raise ValueError
+    with self.assertRaises(ValueError):
+      binary_search_sign_change(func_all_positive, probs, 0, 5)
+      
+    with self.assertRaises(ValueError):
+      binary_search_sign_change(func_all_negative, probs, 0, 5)
+
+  def test_single_interval_sign_change(self):
+    """
+    Test when the sign change is in a single interval (adjacent indices).
+    """
+    probs = np.array([0, 1, 2, 3, 4])
+    
+    def func(x):
+      return 1.5 - x  # Sign change between x=1 and x=2
+    
+    result = binary_search_sign_change(func, probs, 0, 4)
+    
+    # Should return a value where func <= 0 (x >= 2)
+    self.assertGreaterEqual(result, 2.0)
+    self.assertLessEqual(func(result), 0.0)
+
+  def test_function_with_cached_calls(self):
+    """
+    Test that the function works correctly with cached function calls.
+    """
+    call_count = [0]  # Use list to allow modification in nested function
+    probs = np.linspace(0, 10, 21)
+    
+    def expensive_func(x):
+      call_count[0] += 1
+      return x - 5  # Sign change at x=5
+    
+    result = binary_search_sign_change(expensive_func, probs, 0, 20)
+    
+    # Should find a value where func <= 0
+    self.assertLessEqual(expensive_func(result), 0.0)
+    self.assertAlmostEqual(result, 5.0, places=2)
+    
+    # Should have made fewer calls than the total number of points
+    # (exact number depends on the bisection algorithm)
+    self.assertLess(call_count[0], len(probs))
+
+  def test_early_termination_with_tolerance(self):
+    """
+    Test that the function terminates early when tolerance is reached.
+    """
+    # Create a case where probability differences become small
+    probs = np.array([0.0, 0.1, 0.101, 0.102, 0.103, 0.2, 1.0])
+    
+    def func(x):
+      return x - 0.1015  # Sign change around x=0.1015
+    
+    # With loose absolute tolerance, should terminate when prob differences are small
+    result = binary_search_sign_change(
+      func, probs, 0, 6,
+      MIPGapAbs=0.01,  # Large tolerance
+      MIPGap=0.1
+    )
+    
+    # Should terminate early and return a reasonable result near the sign change
+    self.assertGreaterEqual(result, 0.1)
+    self.assertLessEqual(result, 0.2)
+
 
 if __name__ == "__main__":
   unittest.main()
