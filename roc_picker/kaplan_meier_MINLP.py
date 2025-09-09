@@ -528,42 +528,55 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       return np.sort(unique_times)
     
     # Collapse consecutive deaths logic
-    # For each death time, check if there are any censored patients between
-    # the previous death time and this one
+    # The key insight: we can collapse death times if no censoring occurs
+    # between them (censoring at the same time doesn't count due to KM convention)
     collapsed_times = []
     
-    for i, current_time in enumerate(unique_times):
-      if i == 0:
-        # Always include the first time
-        collapsed_times.append(current_time)
-      else:
-        prev_time = unique_times[i-1]
+    i = 0
+    while i < len(unique_times):
+      current_time = unique_times[i]
+      
+      # Start a new group with the current time
+      group_end = current_time
+      
+      # Look ahead to see if we can include more times in this group
+      j = i + 1
+      while j < len(unique_times):
+        next_time = unique_times[j]
         
-        # Check if there are any censored patients between prev_time and current_time
-        # Note: censoring at the same time as death is handled by KM convention 
-        # (death happens first), so we use strict inequality
+        # Check if there are any censored patients in the interval (group_end, next_time)
+        # We use strict inequalities because:
+        # - Censoring at group_end doesn't affect the next_time death (already processed)
+        # - Censoring at next_time doesn't prevent the next_time death (death happens first)
         censored_between = np.any(
           self.patient_censored & 
-          (self.patient_times > prev_time) & 
-          (self.patient_times < current_time)
+          (self.patient_times > group_end) & 
+          (self.patient_times < next_time)
         )
         
-        # Check if there's a censored patient at current_time
-        censored_at_current = np.any(
-          self.patient_censored & (self.patient_times == current_time)
-        )
+        # However, we need to check if there's censoring at group_end that would
+        # affect the risk set for subsequent deaths
+        if group_end != current_time:  # Not the first death in the group
+          censored_at_group_end = np.any(
+            self.patient_censored & (self.patient_times == group_end)
+          )
+          if censored_at_group_end:
+            # Censoring at the end of the current group affects subsequent deaths
+            break
         
-        if censored_between or censored_at_current:
-          # There's intervening censoring, so we can't collapse
-          collapsed_times.append(current_time)
+        if censored_between:
+          # Can't include next_time in this group due to intervening censoring
+          break
         else:
-          # No intervening censoring, so we can collapse this death time
-          # with the previous one (i.e., don't add current_time)
-          pass
-    
-    # Always ensure the time_point itself is included if not already
-    if self.time_point not in collapsed_times:
-      collapsed_times.append(self.time_point)
+          # No intervening censoring, extend the group
+          group_end = next_time
+          j += 1
+      
+      # Add the representative time for this group (use the last time in the group)
+      collapsed_times.append(group_end)
+      
+      # Move to the next ungrouped time
+      i = j
     
     return np.sort(np.array(collapsed_times))
   @functools.cached_property
@@ -574,11 +587,80 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     itself a death time.
     """
     return len(self.times_to_consider)
+  @functools.cached_property
+  def _collapsed_time_groups(self) -> dict[float, list[float]]:
+    """
+    Map from representative time to list of original times in the collapsed group.
+    Only used when collapse_consecutive_deaths is True.
+    """
+    if not self.collapse_consecutive_deaths:
+      return {}
+    
+    # Get all death times up to the time point
+    death_mask = (~self.patient_censored) & (self.patient_times <= self.time_point)
+    death_times = self.patient_times[death_mask]
+    all_times = list(death_times) + [self.time_point]
+    unique_times = np.unique(all_times)
+    
+    groups = {}
+    i = 0
+    while i < len(unique_times):
+      current_time = unique_times[i]
+      group_end = current_time
+      
+      # Look ahead to see if we can include more times in this group
+      j = i + 1
+      while j < len(unique_times):
+        next_time = unique_times[j]
+        
+        # Check if there are any censored patients in the interval (group_end, next_time)
+        censored_between = np.any(
+          self.patient_censored & 
+          (self.patient_times > group_end) & 
+          (self.patient_times < next_time)
+        )
+        
+        # Check for censoring at group_end that would affect subsequent deaths
+        if group_end != current_time:  # Not the first death in the group
+          censored_at_group_end = np.any(
+            self.patient_censored & (self.patient_times == group_end)
+          )
+          if censored_at_group_end:
+            break
+        
+        if censored_between:
+          break
+        else:
+          group_end = next_time
+          j += 1
+      
+      # Store the group
+      group_times = unique_times[i:j].tolist()
+      groups[group_end] = group_times
+      
+      # Move to the next ungrouped time
+      i = j
+    
+    return groups
+
   def patient_died(self, t) -> npt.NDArray[np.bool_]:
     """
     True if the patient died at time t.
+    If collapse_consecutive_deaths is True, this accounts for all patients
+    who died in the collapsed group represented by time t.
     """
-    return (self.patient_times == t) & (~self.patient_censored)
+    if not self.collapse_consecutive_deaths:
+      # Original behavior: exact time match
+      return (self.patient_times == t) & (~self.patient_censored)
+    
+    # When collapsing is enabled, find all patients who died in the group represented by t
+    groups = self._collapsed_time_groups
+    if t in groups:
+      group_times = groups[t]
+      return np.isin(self.patient_times, group_times) & (~self.patient_censored)
+    else:
+      # Fallback to exact match if t is not a representative time
+      return (self.patient_times == t) & (~self.patient_censored)
   def patient_still_at_risk(self, t) -> npt.NDArray[np.bool_]:
     """
     The at-risk status of all patients at time t.
