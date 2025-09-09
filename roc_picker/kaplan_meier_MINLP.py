@@ -1067,17 +1067,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     binomial_terms = []
     for i in range(self.n_times_to_consider):
       for (r_value, d_value), penalty in n_choose_d_table.items():
-        if r_value > self.n_at_risk_max[i]:
-          #Can't possibly have this many at risk in this group
-          continue
-        if d_value > self.n_died_max[i]:
-          #Can't possibly have this many died in this group
-          continue
-        if d_value > r_value:
-          #Can't have more died than at risk
-          continue
         indicator = n_choose_d_indicator_vars[i, r_value, d_value]
-        binomial_terms.append(-penalty * indicator)
         model.addGenConstrIndicator(
           indicator,
           True,
@@ -1094,7 +1084,16 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
           d_value,
           name=f"n_choose_d_indicator_d_{i}_{r_value}_{d_value}",
         )
-
+        if (
+          r_value > self.n_at_risk_max[i]
+          or d_value > self.n_died_max[i]
+          or d_value > r_value
+        ):
+          model.addConstr(
+            indicator == 0,
+            name=f"n_choose_d_indicator_impossible_{i}_{r_value}_{d_value}",
+          )
+        binomial_terms.append(-penalty * indicator)
       # Ensure that exactly one n_choose_d_indicator is selected for each death time
       indicators = [
         all_n_choose_d_indicator_vars[i, idx]
@@ -1105,7 +1104,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
         name=f"one_n_choose_d_indicator_per_death_time_{i}",
       )
 
-      for d_value in range(self.n_died_max[i] + 1):
+      for d_value in range(max(self.n_died_max) + 1):
         model.addGenConstrIndicator(
           n_died_indicator_vars[i, d_value],
           True,
@@ -1114,6 +1113,11 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
           d_value,
           name=f"n_died_indicator_{i}_{d_value}",
         )
+        if d_value > self.n_died_max[i]:
+          model.addConstr(
+            n_died_indicator_vars[i, d_value] == 0,
+            name=f"n_died_indicator_impossible_{i}_{d_value}",
+          )
         binomial_terms.append(
           -d_value * log_p_died[i] * n_died_indicator_vars[i, d_value]
         )
@@ -1123,10 +1127,10 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
           n_died_indicator_vars[i, d_value]
           for d_value in range(max(self.n_died_max)+1)
         ) == 1,
-        name=f"one_n_died_indicator_per_group_{i}",
+        name=f"one_n_died_indicator_per_death_time_{i}",
       )
 
-      for s_value in range(self.n_at_risk_max[i] + 1):
+      for s_value in range(self.n_patients + 1):
         model.addGenConstrIndicator(
           n_survived_indicator_vars[i, s_value],
           True,
@@ -1135,6 +1139,11 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
           s_value,
           name=f"n_survived_indicator_{i}_{s_value}",
         )
+        if s_value > self.n_at_risk_max[i]:
+          model.addConstr(
+            n_survived_indicator_vars[i, s_value] == 0,
+            name=f"n_survived_indicator_impossible_{i}_{s_value}",
+          )
         binomial_terms.append(
           -s_value * log_p_survived[i] * n_survived_indicator_vars[i, s_value]
         )
@@ -1145,7 +1154,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
           n_survived_indicator_vars[i, s_value]
           for s_value in range(self.n_patients + 1)
         ) == 1,
-        name=f"one_n_survived_indicator_per_group_{i}",
+        name=f"one_n_survived_indicator_per_death_time_{i}",
       )
 
     binom_penalty_expr = gp.quicksum(binomial_terms)
