@@ -115,6 +115,8 @@ def binary_search_sign_change(
   lo: int,
   hi: int,
   verbose: bool = False,
+  atol: float = 1e-3,
+  rtol: float = 1e-3,
 ) -> float:
   """Binary search for first sign change across adjacent values."""
   evaluated = extract_inspectable_cache_values(objective_function, probs)
@@ -135,7 +137,7 @@ def binary_search_sign_change(
     print(lo, probs[lo], v_lo)
     print(hi, probs[hi], v_hi)
 
-  while hi - lo > 1:
+  while hi - lo > 1 and not _is_close(probs[lo], probs[hi], atol, rtol):
     mid = smart_bisect(lo, hi, evaluated)
     v_mid = eval_or_get(mid)
 
