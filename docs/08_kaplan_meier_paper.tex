@@ -212,6 +212,12 @@ S \le S' & \text{ if } S' < \hat{S}
 \end{align}
 This gives an interpretable visualization of the patient-wise uncertainty: we obtain the NLL that the survival probability is at least as far from the nominal probability as \(S'\). By construction, \(-\log\mathcal{L}(S')\) has a single minimum (either a single point or, if some patients are exactly on the boundary, a flat region) at \(\hat{S}\) and increases as \(S'\) moves away in either direction.
 
+\subsection{Collapsing consecutive deaths}
+
+The binomial term in the NLL [\cref{eq:binomial-nll}] requires a sum over all time points where at least one patient died, which can be slow when there are many such time points.  For that reason, \pkg{KoMbine} can collapse consecutive deaths into a single time point, as long as no patients were censored in between.  For example, if a patient dies at time \(t_i\) from a risk set of \(r_i\), and then another two patients die at time \(t_{i+1}\) from a risk set of \(r_{i+1}=r_i-1\), the two death times can be combined into a single death of three patients at time \(t_{i+1}\) from a risk set of \(r_i\) for the purpose of calculating the likelihood at \(t_{i+1}\).  (When calculating the likelihood at \(t_i\), we do not include the deaths at \(t_{i+1}\).)
+
+This speeds up the calculation without significantly affecting the likelihood and is enabled by default.  The size of the effect is explored in \cref{sec:compare-effect-of-collapsing}.
+
 \subsection[p values]{\(p\) values}
 
 \pkg{KoMbine} also provides a method to compute the \(p\) value to reject the null hypothesis that two survival curves are identical.  We use a log-rank approach, similar to the conventional approach used in \pkg{lifelines} and similar packages.  However, as in the case of the \KM{} error bars, our likelihood modeling does not rely on approximating the binomial distribution as normal, and we also include the patient-wise errors.
@@ -366,6 +372,10 @@ When there are no ties, the points scatter along the diagonal line \(y=x\), mean
 The Monte Carlo patients for the top row are simulated with integer survival times from \(1\) to \(10\), which means that we expect a tie rate of about \(10\%\).  The error introduced by the Breslow approximation will increase with a higher tie rate.
 
 The scatter from the line or curve, which shrinks with larger cohort sizes, is because the full likelihood method avoids the asymptotic approximations used in the conventional method, similar to the difference between the \pkg{KoMbine} and Greenwood confidence intervals in \cref{sec:compare-to-greenwood}.
+
+\subsection{Effect of collapsing consecutive deaths}\label{sec:compare-effect-of-collapsing}
+
+
 
 \subsection{Lung cancer dataset}
 
