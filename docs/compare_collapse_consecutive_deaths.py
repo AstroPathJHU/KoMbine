@@ -48,31 +48,28 @@ def main():
                      help="Legend location")
 
   # Options for confidence interval methods
-  parser.add_argument("--include-full-nll", action="store_true",
-                     help="Include full negative log-likelihood confidence bands "
-                     "(requires full Gurobi license)")
-  parser.add_argument("--include-binomial-only", action="store_true", default=True,
-                     help="Include binomial-only confidence bands "
-                     "(default, works with restricted Gurobi license)")
-  parser.add_argument("--no-confidence-bands", action="store_true",
-                     help="Use only Greenwood method "
-                     "(minimal confidence bands for large datasets)")
+  g = parser.add_mutually_exclusive_group()
+  g.add_argument("--full-nll", action="store_true",
+                 help="Use the full negative log-likelihood confidence bands (default)")
+  g.add_argument("--binomial-only", action="store_true",
+                 help="Use the binomial-only confidence bands.")
+  g.add_argument("--patient-wise-only", action="store_true",
+                 help="Use the patient-wise only confidence bands.")
+  g.add_argument("--greenwood", action="store_true",
+                 help="Use the Greenwood method.")
 
   args = parser.parse_args()
 
+  if not (args.full_nll or args.binomial_only or args.patient_wise_only or args.greenwood):
+    args.full_nll = True  # Default to full NLL if no option specified
+
+  include_best_fit = False  # Don't show best fit either if no bands
+
   # Handle confidence band options
-  if args.no_confidence_bands:
-    # Use Greenwood method as fallback when no other methods are wanted
-    # This is the least computationally intensive method
-    include_full_nll = False
-    include_binomial_only = False
-    include_exponential_greenwood = True
-    include_best_fit = False  # Don't show best fit either if no bands
-  else:
-    include_full_nll = args.include_full_nll
-    include_binomial_only = args.include_binomial_only
-    include_exponential_greenwood = False
-    include_best_fit = False  # Only show one curve per setting to avoid clutter
+  include_full_nll = args.full_nll
+  include_binomial_only = args.binomial_only
+  include_patient_wise_only = args.patient_wise_only
+  include_exponential_greenwood = args.greenwood
 
   # Load the datacard
   datacard = Datacard.parse_datacard(args.datacard)
@@ -104,6 +101,7 @@ def main():
     CL_colors=["dodgerblue", "skyblue"],
     include_full_NLL=include_full_nll,
     include_binomial_only=include_binomial_only,
+    include_patient_wise_only=include_patient_wise_only,
     include_exponential_greenwood=include_exponential_greenwood,
     include_nominal=True,
     include_best_fit=include_best_fit,  # Only show one curve per setting to avoid clutter
@@ -134,6 +132,7 @@ def main():
     CL_colors=["orangered", "lightcoral"],
     include_full_NLL=include_full_nll,
     include_binomial_only=include_binomial_only,
+    include_patient_wise_only=include_patient_wise_only,
     include_exponential_greenwood=include_exponential_greenwood,
     include_nominal=True,
     include_best_fit=include_best_fit,  # Only show one curve per setting to avoid clutter
