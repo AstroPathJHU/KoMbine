@@ -669,6 +669,34 @@ def test_times_to_consider_collapse_logic():
   expected_same_time = np.array([2.0, 4.0])  # 1,2 collapse to 2.0; 3 collapses with time_point 4.0
   np.testing.assert_allclose(times_same_time_collapsed, expected_same_time, rtol=1e-10)
   
+  # Additional test: patient_died and patient_still_at_risk logic for collapse
+  print("\nTesting patient_died and patient_still_at_risk logic for collapse...")
+  # Example from user prompt
+  patient_times = [1, 1, 2, 3, 3, 4, 5, 5, 6, 7]
+  patient_censored = [True, False, True, False, False, False, False, True, False, True]
+  patients = [KaplanMeierPatientNLL(time=t, censored=c, parameter_nll=lambda x: 0, observed_parameter=0.5) for t, c in zip(patient_times, patient_censored)]
+  minlp = MINLPForKM(
+    patients,
+    parameter_min=0.1,
+    parameter_max=0.9,
+    time_point=8.0,
+    collapse_consecutive_deaths=True
+  )
+  # Test cases
+  test_cases = [
+    (3, [False, False, False, True, True, True, True, True, True, True], [False, False, False, True, True, False, False, False, False, False]),
+    (3.5, [False, False, False, True, True, True, True, True, True, True], [False, False, False, True, True, False, False, False, False, False]),
+    (4, [False, False, False, True, True, True, True, True, True, True], [False, False, False, True, True, True, False, False, False, False]),
+    (4.5, [False, False, False, True, True, True, True, True, True, True], [False, False, False, True, True, True, False, False, False, False]),
+    (5, [False, False, False, True, True, True, True, True, True, True], [False, False, False, True, True, True, True, False, False, False]),
+  ]
+  for t, expected_at_risk, expected_died in test_cases:
+    at_risk = minlp.patient_still_at_risk(t).tolist()
+    died = minlp.patient_died(t).tolist()
+    print(f"t={t}: at_risk={at_risk}, died={died}")
+    assert at_risk == expected_at_risk, f"patient_still_at_risk({t}) failed: {at_risk} != {expected_at_risk}"
+    assert died == expected_died, f"patient_died({t}) failed: {died} != {expected_died}"
+  print("patient_died and patient_still_at_risk logic for collapse passed!")
   print("times_to_consider collapse logic tests passed!")
 
 def main(args=None):

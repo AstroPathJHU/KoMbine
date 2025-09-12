@@ -645,27 +645,39 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
   def patient_died(self, t) -> npt.NDArray[np.bool_]:
     """
-    True if the patient died at time t.
-    If collapse_consecutive_deaths is True, this accounts for all patients
-    who died in the collapsed group represented by time t.
+    Returns a boolean array indicating which patients died at time t.
+    If collapse_consecutive_deaths is True, for any t in a collapsed interval, anyone who died during the interval and before t is considered to have died at t.
+    For any time t, a patient is considered to have died at t if:
+    - Their time == t and not censored (no collapse)
+    - If t is in a collapsed interval, their time is >= interval_start and < t, and not censored
     """
     if not self.collapse_consecutive_deaths:
-      # Original behavior: exact time match
       return (self.patient_times == t) & (~self.patient_censored)
-    
-    # When collapsing is enabled, find all patients who died in the group represented by t
     groups = self._collapsed_time_groups
-    if t in groups:
-      group_times = groups[t]
-      return np.isin(self.patient_times, group_times) & (~self.patient_censored)
-    else:
-      # Fallback to exact match if t is not a representative time
-      return (self.patient_times == t) & (~self.patient_censored)
+    for group_end, group_times in groups.items():
+      interval_start = min(group_times)
+      if interval_start <= t <= group_end:
+        return (self.patient_times >= interval_start) & (self.patient_times <= t) & (~self.patient_censored)
+    return (self.patient_times == t) & (~self.patient_censored)
+
   def patient_still_at_risk(self, t) -> npt.NDArray[np.bool_]:
     """
-    The at-risk status of all patients at time t.
+    Returns a boolean array indicating which patients are still at risk at time t.
+    If collapse_consecutive_deaths is True, anyone who died in the collapsed interval is considered at risk at any t in the interval.
+    For any time t, a patient is at risk if:
+    - Their time >= t (regardless of censored status)
+    - If t is in a collapsed interval, their time is >= interval_start
     """
-    return self.patient_times >= t
+    if not self.collapse_consecutive_deaths:
+      return self.patient_times >= t
+    groups = self._collapsed_time_groups
+    relevant_start_time = t
+    for group_end, group_times in groups.items():
+      interval_start = min(group_times)
+      if interval_start <= t <= group_end:
+        # Anyone who died in [interval_start, group_end) is at risk at any t in the interval
+        relevant_start_time = interval_start
+    return self.patient_times >= relevant_start_time
 
   @functools.cached_property
   def observed_parameters(self) -> npt.NDArray[np.float64]:
