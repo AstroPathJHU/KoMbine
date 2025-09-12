@@ -921,7 +921,7 @@ class Datacard:
 
     return DeltaFunctionsROC(responders=responders, nonresponders=nonresponders, **kwargs)
 
-  def km_likelihood(
+  def km_likelihood( # pylint: disable=too-many-arguments
     self,
     parameter_min: float,
     parameter_max: float,
@@ -1030,14 +1030,14 @@ def plot_systematics_mc_roc():
   """
   Run MC method from a datacard.
   """
-  # pylint: disable=C0301
+  # pylint: disable=line-too-long
   parser = argparse.ArgumentParser(description="Run MC method from a datacard.")
   parser.add_argument("datacard", type=pathlib.Path, help="Path to the datacard file.")
   parser.add_argument("output_file", type=pathlib.Path, help="Path to the output file for the plot.")
   parser.add_argument("--nrocs", type=int, help="Number of MC samples to generate.", default=10000, dest="size")
   parser.add_argument("--random-seed", type=int, help="Random seed for generation", dest="random_state", default=123456)
   parser.add_argument("--flip-sign", action="store_true", help="flip the sign of the observable (use this if AUC is < 0.5 and you want it to be > 0.5)")
-  # pylint: enable=C0301
+  # pylint: enable=line-too-long
 
   args = parser.parse_args()
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
@@ -1051,7 +1051,7 @@ def plot_discrete_roc():
   """
   Run discrete method from a datacard.
   """
-  # pylint: disable=C0301
+  # pylint: disable=line-too-long
   parser = argparse.ArgumentParser(description="Run discrete method from a datacard.")
   parser.add_argument("datacard", type=pathlib.Path, help="Path to the datacard file.")
   parser.add_argument("--roc-filename", type=pathlib.Path, help="Path to the output file for the ROC curve.", dest="rocfilename")
@@ -1060,7 +1060,7 @@ def plot_discrete_roc():
   parser.add_argument("--y-upper-limit", type=float, help="y axis upper limit of the likelihood scan plot", dest="yupperlim")
   parser.add_argument("--npoints", type=int, help="number of points in the likelihood scan", dest="npoints")
   parser.add_argument("--flip-sign", action="store_true", help="flip the sign of the observable (use this if AUC is < 0.5 and you want it to be > 0.5)")
-  # pylint: enable=C0301
+  # pylint: enable=line-too-long
 
   args = parser.parse_args()
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
@@ -1081,7 +1081,7 @@ def plot_delta_functions_roc():
   """
   Run delta functions method from a datacard.
   """
-  # pylint: disable=C0301
+  # pylint: disable=line-too-long
   parser = argparse.ArgumentParser(description="Run delta functions method from a datacard.")
   parser.add_argument("datacard", type=pathlib.Path, help="Path to the datacard file.")
   parser.add_argument("--roc-filename", type=pathlib.Path, help="Path to the output file for the ROC curve.", dest="rocfilename")
@@ -1090,7 +1090,7 @@ def plot_delta_functions_roc():
   parser.add_argument("--y-upper-limit", type=float, help="y axis upper limit of the likelihood scan plot", dest="yupperlim")
   parser.add_argument("--npoints", type=int, help="number of points in the likelihood scan", dest="npoints")
   parser.add_argument("--flip-sign", action="store_true", help="flip the sign of the observable (use this if AUC is < 0.5 and you want it to be > 0.5)")
-  # pylint: enable=C0301
+  # pylint: enable=line-too-long
 
   args = parser.parse_args()
   datacard = Datacard.parse_datacard(args.__dict__.pop("datacard"))
@@ -1108,7 +1108,7 @@ def plot_delta_functions_roc():
     raise ValueError(f"Unused arguments: {args.__dict__}")
 
 def _make_common_parser(description: str) -> argparse.ArgumentParser:
-  # pylint: disable=C0301
+  # pylint: disable=line-too-long
   parser = argparse.ArgumentParser(description=description)
   parser.add_argument("datacard", type=pathlib.Path, help="Path to the datacard file.")
   parser.add_argument("output_file", type=pathlib.Path, help="Path to the output file for the plot.")
@@ -1135,7 +1135,7 @@ def _make_common_parser(description: str) -> argparse.ArgumentParser:
   parser.add_argument("--binomial-only-suffix", type=str, help="Suffix to add to the binomial-only label in the legend.", default=KaplanMeierPlotConfig.binomial_only_suffix)
   parser.add_argument("--full-nll-suffix", type=str, help="Suffix to add to the full NLL label in the legend.", default=KaplanMeierPlotConfig.full_NLL_suffix)
   parser.add_argument("--exponential-greenwood-suffix", type=str, help="Suffix to add to the exponential Greenwood label in the legend.", default=KaplanMeierPlotConfig.exponential_greenwood_suffix)
-  # pylint: enable=C0301
+  # pylint: enable=line-too-long
   return parser
 
 def _validate_plot_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
@@ -1178,10 +1178,12 @@ def plot_km_likelihood():
   """
   Run Kaplan-Meier likelihood method from a datacard.
   """
+  # pylint: disable=line-too-long
   parser = _make_common_parser("Run Kaplan-Meier likelihood method from a datacard.")
   parser.add_argument("--parameter-min", type=float, dest="parameter_min", default=-np.inf)
   parser.add_argument("--parameter-max", type=float, dest="parameter_max", default=np.inf)
   parser.add_argument("--dont-collapse-consecutive-deaths", action="store_true", dest="dont_collapse_consecutive_deaths", help="Disable collapsing of consecutive death times with no intervening censoring (slower but may be more accurate)")
+  # pylint: enable=line-too-long
   args = parser.parse_args()
   _validate_plot_args(args, parser)
 
@@ -1209,7 +1211,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   Run Kaplan-Meier likelihood method from a datacard, and plot Kaplan-Meier
   curves for two groups separated into high and low values of the parameter.
   """
-  # pylint: disable=C0301
+  # pylint: disable=line-too-long
   parser = _make_common_parser("Run Kaplan-Meier likelihood method from a datacard, and plot Kaplan-Meier curves for two groups separated into high and low values of the parameter.")
   parser.add_argument("--parameter-threshold", type=float, dest="parameter_threshold", required=True, help="The parameter threshold for separating high and low groups.")
   parser.add_argument("--parameter-min", type=float, dest="parameter_min", default=-np.inf, help="The minimum parameter value for the low group.")
@@ -1219,7 +1221,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   parser.add_argument("--pvalue-fontsize", type=float, dest="pvalue_fontsize", default=KaplanMeierPlotConfig.pvalue_fontsize, help="Font size for p-value text.")
   parser.add_argument("--pvalue-format", type=str, dest="pvalue_format", default=KaplanMeierPlotConfig.pvalue_format, help="Format string for p-value display (e.g., '.3g', '.2f').")
   parser.add_argument("--dont-collapse-consecutive-deaths", action="store_true", dest="dont_collapse_consecutive_deaths", help="Disable collapsing of consecutive death times with no intervening censoring (slower but may be more accurate)")
-  # pylint: enable=C0301
+  # pylint: enable=line-too-long
   args = parser.parse_args()
   _validate_plot_args(args, parser)
 
