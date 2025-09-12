@@ -5,12 +5,14 @@ collapse_consecutive_deaths=False.
 
 This script compares the Kaplan-Meier likelihood method with different settings for
 the collapse_consecutive_deaths parameter, plotting both curves on the same figure.
+Uses the likelihood method for confidence intervals instead of Greenwood.
 """
 
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from roc_picker.datacard import Datacard
+from roc_picker.kaplan_meier_likelihood import KaplanMeierPlotConfig
 
 
 def main():
@@ -45,7 +47,32 @@ def main():
   parser.add_argument("--legend-loc", type=str, default="lower right",
                      help="Legend location")
 
+  # Options for confidence interval methods
+  parser.add_argument("--include-full-nll", action="store_true",
+                     help="Include full negative log-likelihood confidence bands "
+                     "(requires full Gurobi license)")
+  parser.add_argument("--include-binomial-only", action="store_true", default=True,
+                     help="Include binomial-only confidence bands "
+                     "(default, works with restricted Gurobi license)")
+  parser.add_argument("--no-confidence-bands", action="store_true",
+                     help="Use only Greenwood method "
+                     "(minimal confidence bands for large datasets)")
+
   args = parser.parse_args()
+
+  # Handle confidence band options
+  if args.no_confidence_bands:
+    # Use Greenwood method as fallback when no other methods are wanted
+    # This is the least computationally intensive method
+    include_full_nll = False
+    include_binomial_only = False
+    include_exponential_greenwood = True
+    include_best_fit = False  # Don't show best fit either if no bands
+  else:
+    include_full_nll = args.include_full_nll
+    include_binomial_only = args.include_binomial_only
+    include_exponential_greenwood = False
+    include_best_fit = False  # Only show one curve per setting to avoid clutter
 
   # Load the datacard
   datacard = Datacard.parse_datacard(args.datacard)
@@ -63,106 +90,68 @@ def main():
     collapse_consecutive_deaths=False
   )
 
-  # Set up the plot with styling consistent with compile_plots.sh
-  _, ax = plt.subplots(figsize=tuple(args.figsize))
+  # Create plot configurations matching plot_km_likelihood_two_groups approach
+  # First plot (with collapse_consecutive_deaths=True) - similar to "high" group
+  config_true = KaplanMeierPlotConfig(
+    create_figure=True,
+    close_figure=False,
+    show=False,
+    saveas=None,
+    best_label=f"With consecutive deaths collapsed (n={len(kml_true.nominalkm.patients)})",
+    best_color="blue",
+    nominal_label=f"With consecutive deaths collapsed (n={len(kml_true.nominalkm.patients)})",
+    nominal_color="blue",
+    CL_colors=["dodgerblue", "skyblue"],
+    include_full_NLL=include_full_nll,
+    include_binomial_only=include_binomial_only,
+    include_exponential_greenwood=include_exponential_greenwood,
+    include_nominal=True,
+    include_best_fit=include_best_fit,  # Only show one curve per setting to avoid clutter
+    figsize=tuple(args.figsize),
+    legend_fontsize=args.legend_fontsize,
+    title_fontsize=args.title_fontsize,
+    label_fontsize=args.label_fontsize,
+    tick_fontsize=args.tick_fontsize,
+    title=args.title,
+    xlabel=args.xlabel,
+    ylabel=args.ylabel,
+    legend_loc=args.legend_loc,
+  )
 
-  # Get the maximum time for plotting
-  all_times = []
-  for patient in kml_true.nominalkm.patients:
-    all_times.append(patient.time)
-  max_time = max(all_times) if all_times else 10
-  times_for_plot = np.linspace(0, max_time * 1.1, 100)
+  # Plot first curve with create_figure=True
+  kml_true.plot(config=config_true)
 
-  # Get the nominal KM curve points for both settings
-  x_true, y_true = kml_true.nominalkm.points_for_plot(times_for_plot=times_for_plot)
-  x_false, y_false = kml_false.nominalkm.points_for_plot(times_for_plot=times_for_plot)
+  # Second plot (with collapse_consecutive_deaths=False) - similar to "low" group
+  config_false = KaplanMeierPlotConfig(
+    create_figure=False,  # Add to existing figure
+    close_figure=False,
+    show=False,
+    saveas=None,
+    best_label=f"Without consecutive deaths collapsed (n={len(kml_false.nominalkm.patients)})",
+    best_color="red",
+    nominal_label=f"Without consecutive deaths collapsed (n={len(kml_false.nominalkm.patients)})",
+    nominal_color="red",
+    CL_colors=["orangered", "lightcoral"],
+    include_full_NLL=include_full_nll,
+    include_binomial_only=include_binomial_only,
+    include_exponential_greenwood=include_exponential_greenwood,
+    include_nominal=True,
+    include_best_fit=include_best_fit,  # Only show one curve per setting to avoid clutter
+    figsize=tuple(args.figsize),
+    legend_fontsize=args.legend_fontsize,
+    title_fontsize=args.title_fontsize,
+    label_fontsize=args.label_fontsize,
+    tick_fontsize=args.tick_fontsize,
+    title=args.title,
+    xlabel=args.xlabel,
+    ylabel=args.ylabel,
+    legend_loc=args.legend_loc,
+  )
 
-  # Try to get error bands using Greenwood method (analytical, doesn't require Gurobi license)
-  try:
-    _, CL_prob_true = kml_true.survival_probabilities_exponential_greenwood(
-      CLs=[0.68, 0.95],
-      times_for_plot=times_for_plot,
-      binomial_only=True
-    )
-    _, CL_prob_false = kml_false.survival_probabilities_exponential_greenwood(
-      CLs=[0.68, 0.95],
-      times_for_plot=times_for_plot,
-      binomial_only=True
-    )
-    has_error_bands = True
-  except Exception:
-    # If error bands fail, continue with just the nominal curves
-    has_error_bands = False
-    CL_prob_true = CL_prob_false = None
-
-  # Plot the curves with colors matching plot_km_likelihood_two_groups
-  # Use blue for collapse_consecutive_deaths=True (like "high" group)
-  ax.plot(x_true, y_true, color="blue", linewidth=2,
-         label="With consecutive deaths collapsed")
-
-  # Use red for collapse_consecutive_deaths=False (like "low" group)
-  ax.plot(x_false, y_false, color="red", linewidth=2,
-         label="Without consecutive deaths collapsed")
-
-  # Add error bands if available
-  if has_error_bands and CL_prob_true is not None and CL_prob_false is not None:
-    # Extract confidence bands for plotting
-    # CL_prob structure: CL_prob[time_index][confidence_level][lower/upper_bound]
-
-    # Get 68% confidence bounds (first confidence level)
-    lower_68_true = [CL_prob_true[i][0][0] for i in range(len(CL_prob_true))]
-    upper_68_true = [CL_prob_true[i][0][1] for i in range(len(CL_prob_true))]
-    lower_68_false = [CL_prob_false[i][0][0] for i in range(len(CL_prob_false))]
-    upper_68_false = [CL_prob_false[i][0][1] for i in range(len(CL_prob_false))]
-
-    ax.fill_between(times_for_plot, lower_68_true, upper_68_true,
-                   color="dodgerblue", alpha=0.3, label="68% CI (with collapse)")
-    ax.fill_between(times_for_plot, lower_68_false, upper_68_false,
-                   color="orangered", alpha=0.3, label="68% CI (without collapse)")
-
-    # Add 95% confidence bands (second confidence level)
-    if len(CL_prob_true[0]) > 1:  # Check if 95% CI is available
-      lower_95_true = [CL_prob_true[i][1][0] for i in range(len(CL_prob_true))]
-      upper_95_true = [CL_prob_true[i][1][1] for i in range(len(CL_prob_true))]
-      lower_95_false = [CL_prob_false[i][1][0] for i in range(len(CL_prob_false))]
-      upper_95_false = [CL_prob_false[i][1][1] for i in range(len(CL_prob_false))]
-
-      ax.fill_between(times_for_plot, lower_95_true, upper_95_true,
-                     color="skyblue", alpha=0.2, label="95% CI (with collapse)")
-      ax.fill_between(times_for_plot, lower_95_false, upper_95_false,
-                     color="lightcoral", alpha=0.2, label="95% CI (without collapse)")
-
-  # Add censored patient markers
-  for patient in kml_true.nominalkm.patients:
-    if patient.censored:
-      # Find the survival probability at the censoring time
-      idx = np.searchsorted(x_true, patient.time)
-      if idx < len(y_true):
-        survival_prob = y_true[idx]
-        ax.plot(patient.time, survival_prob, 'o', color='blue', markersize=4)
-
-  for patient in kml_false.nominalkm.patients:
-    if patient.censored:
-      # Find the survival probability at the censoring time
-      idx = np.searchsorted(x_false, patient.time)
-      if idx < len(y_false):
-        survival_prob = y_false[idx]
-        ax.plot(patient.time, survival_prob, 'o', color='red', markersize=4)
-
-  # Apply styling consistent with compile_plots.sh
-  ax.set_xlabel(args.xlabel, fontsize=args.label_fontsize)
-  ax.set_ylabel(args.ylabel, fontsize=args.label_fontsize)
-  ax.set_title(args.title, fontsize=args.title_fontsize)
-  ax.tick_params(labelsize=args.tick_fontsize)
-  ax.grid(True)
-  ax.legend(loc=args.legend_loc, fontsize=args.legend_fontsize)
-
-  # Set reasonable axis limits
-  ax.set_xlim(0, max_time * 1.1)
-  ax.set_ylim(0, 1.05)
+  # Plot second curve on the same figure
+  kml_false.plot(config=config_false)
 
   # Save the plot
-  plt.tight_layout()
   plt.savefig(args.output)
   print(f"Plot saved to {args.output}")
 

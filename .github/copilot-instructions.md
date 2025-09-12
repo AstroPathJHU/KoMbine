@@ -256,6 +256,27 @@ observable 1 2 3 ...
 **Documentation**: `docs/` (LaTeX + Jupyter notebooks)
 **Build artifacts**: Excluded by `.gitignore` (build/, *.pdf, *.html, *.ipynb)
 
+## Kaplan-Meier Likelihood Testing with Limited Gurobi License
+
+**Working datacards for likelihood method testing**:
+- `simple_km_few_deaths.txt` - Works with full likelihood method (4 patients, few deaths)
+- Other `test/datacards/simple_examples/` - May work with binomial-only confidence bands
+
+**Experience with different confidence interval methods**:
+- **Full NLL**: Requires optimization, hits Gurobi license limits on larger datasets
+- **Binomial-only**: More computationally intensive than Greenwood but works with restricted license
+- **Greenwood method**: Least intensive, works with all datasets, good fallback option
+
+**Recommended testing strategy**:
+1. Start with `simple_km_few_deaths.txt` for full likelihood testing
+2. Use `--include-binomial-only` for medium datasets (works with restricted license)
+3. Use `--no-confidence-bands` (Greenwood fallback) for large datasets that hit license limits
+
+**Empirical observations**:
+- Datasets with <10 patients typically work with full likelihood method
+- Datasets with 10-100 patients may work with binomial-only method
+- Datasets with >100 patients typically require Greenwood fallback with restricted license
+
 ## Trust These Instructions
 
 These instructions have been validated by running the build, test, and linting processes. Only search for additional information if these instructions are incomplete or found to be incorrect.
