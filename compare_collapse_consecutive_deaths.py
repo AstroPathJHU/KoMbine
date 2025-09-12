@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Compare Kaplan-Meier error bands with collapse_consecutive_deaths=True and 
+Compare Kaplan-Meier error bands with collapse_consecutive_deaths=True and
 collapse_consecutive_deaths=False.
 
-This script compares the Kaplan-Meier likelihood method with different settings for 
+This script compares the Kaplan-Meier likelihood method with different settings for
 the collapse_consecutive_deaths parameter, plotting both curves on the same figure.
 """
 
@@ -92,6 +92,24 @@ def main():
   x_true, y_true = kml_true.nominalkm.points_for_plot(times_for_plot=times_for_plot)
   x_false, y_false = kml_false.nominalkm.points_for_plot(times_for_plot=times_for_plot)
 
+  # Try to get error bands using Greenwood method (analytical, doesn't require Gurobi license)
+  try:
+    _, CL_prob_true = kml_true.survival_probabilities_exponential_greenwood(
+      CLs=[0.68, 0.95],
+      times_for_plot=times_for_plot,
+      binomial_only=True
+    )
+    _, CL_prob_false = kml_false.survival_probabilities_exponential_greenwood(
+      CLs=[0.68, 0.95],
+      times_for_plot=times_for_plot,
+      binomial_only=True
+    )
+    has_error_bands = True
+  except Exception:
+    # If error bands fail, continue with just the nominal curves
+    has_error_bands = False
+    CL_prob_true = CL_prob_false = None
+
   # Plot the curves with colors matching plot_km_likelihood_two_groups
   # Use blue for collapse_consecutive_deaths=True (like "high" group)
   ax.plot(x_true, y_true, color="blue", linewidth=2,
@@ -100,6 +118,34 @@ def main():
   # Use red for collapse_consecutive_deaths=False (like "low" group)
   ax.plot(x_false, y_false, color="red", linewidth=2,
          label="Without consecutive deaths collapsed")
+
+  # Add error bands if available
+  if has_error_bands and CL_prob_true is not None and CL_prob_false is not None:
+    # Extract confidence bands for plotting
+    # CL_prob structure: CL_prob[time_index][confidence_level][lower/upper_bound]
+
+    # Get 68% confidence bounds (first confidence level)
+    lower_68_true = [CL_prob_true[i][0][0] for i in range(len(CL_prob_true))]
+    upper_68_true = [CL_prob_true[i][0][1] for i in range(len(CL_prob_true))]
+    lower_68_false = [CL_prob_false[i][0][0] for i in range(len(CL_prob_false))]
+    upper_68_false = [CL_prob_false[i][0][1] for i in range(len(CL_prob_false))]
+
+    ax.fill_between(times_for_plot, lower_68_true, upper_68_true,
+                   color="dodgerblue", alpha=0.3, label="68% CI (with collapse)")
+    ax.fill_between(times_for_plot, lower_68_false, upper_68_false,
+                   color="orangered", alpha=0.3, label="68% CI (without collapse)")
+
+    # Add 95% confidence bands (second confidence level)
+    if len(CL_prob_true[0]) > 1:  # Check if 95% CI is available
+      lower_95_true = [CL_prob_true[i][1][0] for i in range(len(CL_prob_true))]
+      upper_95_true = [CL_prob_true[i][1][1] for i in range(len(CL_prob_true))]
+      lower_95_false = [CL_prob_false[i][1][0] for i in range(len(CL_prob_false))]
+      upper_95_false = [CL_prob_false[i][1][1] for i in range(len(CL_prob_false))]
+
+      ax.fill_between(times_for_plot, lower_95_true, upper_95_true,
+                     color="skyblue", alpha=0.2, label="95% CI (with collapse)")
+      ax.fill_between(times_for_plot, lower_95_false, upper_95_false,
+                     color="lightcoral", alpha=0.2, label="95% CI (without collapse)")
 
   # Add censored patient markers
   for patient in kml_true.nominalkm.patients:
