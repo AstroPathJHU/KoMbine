@@ -20,9 +20,9 @@ def main():
   parser = argparse.ArgumentParser(description=main.__doc__)
   parser.add_argument("datacard", help="Path to datacard file")
   parser.add_argument("output", help="Output PDF file")
-  parser.add_argument("--parameter-min", type=str, default="-inf",
+  parser.add_argument("--parameter-min", type=float, default=-np.inf,
                      help="Minimum parameter value (default: -inf)")
-  parser.add_argument("--parameter-max", type=str, default="inf",
+  parser.add_argument("--parameter-max", type=float, default=np.inf,
                      help="Maximum parameter value (default: inf)")
   parser.add_argument("--title", type=str, default="Collapse Consecutive Deaths Comparison",
                      help="Plot title")
@@ -47,34 +47,19 @@ def main():
 
   args = parser.parse_args()
 
-  # Convert string infinity values to float
-  if args.parameter_min == "-inf":
-    parameter_min = -np.inf
-  elif args.parameter_min == "inf":
-    parameter_min = np.inf
-  else:
-    parameter_min = float(args.parameter_min)
-
-  if args.parameter_max == "-inf":
-    parameter_max = -np.inf
-  elif args.parameter_max == "inf":
-    parameter_max = np.inf
-  else:
-    parameter_max = float(args.parameter_max)
-
   # Load the datacard
   datacard = Datacard.parse_datacard(args.datacard)
 
   # Create KM likelihood objects with different collapse_consecutive_deaths settings
   kml_true = datacard.km_likelihood(
-    parameter_min=parameter_min,
-    parameter_max=parameter_max,
+    parameter_min=args.parameter_min,
+    parameter_max=args.parameter_max,
     collapse_consecutive_deaths=True
   )
 
   kml_false = datacard.km_likelihood(
-    parameter_min=parameter_min,
-    parameter_max=parameter_max,
+    parameter_min=args.parameter_min,
+    parameter_max=args.parameter_max,
     collapse_consecutive_deaths=False
   )
 
