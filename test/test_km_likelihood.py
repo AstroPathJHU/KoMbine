@@ -626,6 +626,9 @@ def test_times_to_consider_collapse_logic(): # pylint: disable=too-many-locals
   expected_with_censoring = np.array([2.0, 5.0])
   np.testing.assert_allclose(times_censoring_collapsed, expected_with_censoring, rtol=1e-10)
 
+  expected_no_collapse = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+  np.testing.assert_allclose(times_censoring_no_collapse, expected_no_collapse, rtol=1e-10)
+
   # Test 3: Censoring at same time as death (death should happen first per KM convention)
   # pylint: disable=line-too-long
   patients_same_time = [
