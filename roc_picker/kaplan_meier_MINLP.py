@@ -512,48 +512,48 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     """
     The unique sorted death times of all patients, plus the current time point.
     If collapse_consecutive_deaths is True, consecutive death times with no
-    intervening censored patients are collapsed to reduce the number of 
+    intervening censored patients are collapsed to reduce the number of
     survival probability variables in the MINLP.
     """
     # Get all death times up to the time point
     death_mask = (~self.patient_censored) & (self.patient_times <= self.time_point)
     death_times = self.patient_times[death_mask]
-    
+
     # Always include the time point itself
     all_times = list(death_times) + [self.time_point]
     unique_times = np.unique(all_times)
-    
+
     if not self.collapse_consecutive_deaths:
       # Original behavior: return all unique times
       return np.sort(unique_times)
-    
+
     # Collapse consecutive deaths logic
     # The key insight: we can collapse death times if no censoring occurs
     # between them (censoring at the same time doesn't count due to KM convention)
     collapsed_times = []
-    
+
     i = 0
     while i < len(unique_times):
       current_time = unique_times[i]
-      
+
       # Start a new group with the current time
       group_end = current_time
-      
+
       # Look ahead to see if we can include more times in this group
       j = i + 1
       while j < len(unique_times):
         next_time = unique_times[j]
-        
+
         # Check if there are any censored patients in the interval (group_end, next_time)
         # We use strict inequalities because:
         # - Censoring at group_end doesn't affect the next_time death (already processed)
         # - Censoring at next_time doesn't prevent the next_time death (death happens first)
         censored_between = np.any(
-          self.patient_censored & 
-          (self.patient_times > group_end) & 
+          self.patient_censored &
+          (self.patient_times > group_end) &
           (self.patient_times < next_time)
         )
-        
+
         # However, we need to check if there's censoring at group_end that would
         # affect the risk set for subsequent deaths
         if group_end != current_time:  # Not the first death in the group
@@ -563,21 +563,20 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
           if censored_at_group_end:
             # Censoring at the end of the current group affects subsequent deaths
             break
-        
+
         if censored_between:
           # Can't include next_time in this group due to intervening censoring
           break
-        else:
-          # No intervening censoring, extend the group
-          group_end = next_time
-          j += 1
-      
+        # No intervening censoring, extend the group
+        group_end = next_time
+        j += 1
+
       # Add the representative time for this group (use the last time in the group)
       collapsed_times.append(group_end)
-      
+
       # Move to the next ungrouped time
       i = j
-    
+
     return np.sort(np.array(collapsed_times))
   @functools.cached_property
   def n_times_to_consider(self) -> int:
@@ -595,31 +594,31 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     """
     if not self.collapse_consecutive_deaths:
       return {}
-    
+
     # Get all death times up to the time point
     death_mask = (~self.patient_censored) & (self.patient_times <= self.time_point)
     death_times = self.patient_times[death_mask]
     all_times = list(death_times) + [self.time_point]
     unique_times = np.unique(all_times)
-    
+
     groups = {}
     i = 0
     while i < len(unique_times):
       current_time = unique_times[i]
       group_end = current_time
-      
+
       # Look ahead to see if we can include more times in this group
       j = i + 1
       while j < len(unique_times):
         next_time = unique_times[j]
-        
+
         # Check if there are any censored patients in the interval (group_end, next_time)
         censored_between = np.any(
-          self.patient_censored & 
-          (self.patient_times > group_end) & 
+          self.patient_censored &
+          (self.patient_times > group_end) &
           (self.patient_times < next_time)
         )
-        
+
         # Check for censoring at group_end that would affect subsequent deaths
         if group_end != current_time:  # Not the first death in the group
           censored_at_group_end = np.any(
@@ -627,26 +626,26 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
           )
           if censored_at_group_end:
             break
-        
+
         if censored_between:
           break
-        else:
-          group_end = next_time
-          j += 1
-      
+        group_end = next_time
+        j += 1
+
       # Store the group
       group_times = unique_times[i:j].tolist()
       groups[group_end] = group_times
-      
+
       # Move to the next ungrouped time
       i = j
-    
+
     return groups
 
   def patient_died(self, t) -> npt.NDArray[np.bool_]:
     """
     Returns a boolean array indicating which patients died at time t.
-    If collapse_consecutive_deaths is True, for any t in a collapsed interval, anyone who died during the interval and before t is considered to have died at t.
+    If collapse_consecutive_deaths is True, for any t in a collapsed interval,
+      anyone who died during the interval and before t is considered to have died at t.
     For any time t, a patient is considered to have died at t if:
     - Their time == t and not censored (no collapse)
     - If t is in a collapsed interval, their time is >= interval_start and < t, and not censored
@@ -657,13 +656,18 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     for group_end, group_times in groups.items():
       interval_start = min(group_times)
       if interval_start <= t <= group_end:
-        return (self.patient_times >= interval_start) & (self.patient_times <= t) & (~self.patient_censored)
+        return (
+          (self.patient_times >= interval_start)
+          & (self.patient_times <= t)
+          & (~self.patient_censored)
+        )
     return (self.patient_times == t) & (~self.patient_censored)
 
   def patient_still_at_risk(self, t) -> npt.NDArray[np.bool_]:
     """
     Returns a boolean array indicating which patients are still at risk at time t.
-    If collapse_consecutive_deaths is True, anyone who died in the collapsed interval is considered at risk at any t in the interval.
+    If collapse_consecutive_deaths is True, anyone who died in the collapsed interval
+      is considered at risk at any t in the interval.
     For any time t, a patient is at risk if:
     - Their time >= t (regardless of censored status)
     - If t is in a collapsed interval, their time is >= interval_start

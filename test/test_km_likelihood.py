@@ -11,6 +11,7 @@ import warnings
 import numpy as np
 
 import roc_picker.datacard
+from roc_picker.kaplan_meier_MINLP import KaplanMeierPatientNLL, MINLPForKM
 from .utility_testing_functions import format_value_for_json, Tolerance
 
 warnings.simplefilter("error")
@@ -474,7 +475,7 @@ def runtest(
       )
     raise
 
-def runtest_collapse_false():
+def runtest_collapse_false(): # pylint: disable=too-many-locals
   """
   Test the Kaplan-Meier likelihood method with collapse_consecutive_deaths=False.
   This uses a simple datacard with only a few distinct death times to create
@@ -482,9 +483,9 @@ def runtest_collapse_false():
   """
   dcfile = datacards / "simple_km_few_deaths.txt"
   reffile = here / "reference" / "km_likelihood_collapse_false.json"
-  
+
   tolerance: Tolerance = {"atol": 2e-4, "rtol": 2e-4}
-  
+
   # Calculate precision for JSON output based on rtol
   rtol_value = tolerance["rtol"]
   if rtol_value > 0:
@@ -494,9 +495,9 @@ def runtest_collapse_false():
 
   datacard = roc_picker.datacard.Datacard.parse_datacard(dcfile)
   kml = datacard.km_likelihood(
-    parameter_min=0.1, 
-    parameter_max=0.9, 
-    endpoint_epsilon=1e-4, 
+    parameter_min=0.1,
+    parameter_max=0.9,
+    endpoint_epsilon=1e-4,
     collapse_consecutive_deaths=False
   )
   times_for_plot = kml.times_for_plot
@@ -512,7 +513,7 @@ def runtest_collapse_false():
   # Store the results for reference
   ordered_array_data = {
     "nominal_probabilities": nominal_probabilities,
-    "best_probabilities": best_probabilities, 
+    "best_probabilities": best_probabilities,
     "CL_probabilities": CL_probabilities,
   }
 
@@ -556,58 +557,58 @@ def runtest_collapse_false():
       )
     raise
 
-def test_times_to_consider_collapse_logic():
+def test_times_to_consider_collapse_logic(): # pylint: disable=too-many-locals
   """
   Comprehensive tests for the times_to_consider collapsing logic.
   Tests various scenarios to ensure the collapsing algorithm works correctly.
   """
   print("Testing times_to_consider collapse logic...")
-  
+
   # Test 1: Simple consecutive deaths without censoring
   # Should collapse all consecutive deaths
-  from roc_picker.kaplan_meier_MINLP import KaplanMeierPatientNLL
-  
+
   # Create test patients with consecutive deaths
+  # pylint: disable=line-too-long
   patients = [
     KaplanMeierPatientNLL(time=1.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
     KaplanMeierPatientNLL(time=2.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
     KaplanMeierPatientNLL(time=3.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
     KaplanMeierPatientNLL(time=4.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
   ]
-  
-  from roc_picker.kaplan_meier_MINLP import MINLPForKM
-  
+  # pylint: enable=line-too-long
+
   # Test with collapse=True
   minlp_collapse = MINLPForKM(
-    patients, 
-    parameter_min=0.1, 
-    parameter_max=0.9, 
+    patients,
+    parameter_min=0.1,
+    parameter_max=0.9,
     time_point=5.0,
     collapse_consecutive_deaths=True
   )
   times_collapsed = minlp_collapse.times_to_consider
-  
-  # Test with collapse=False  
+
+  # Test with collapse=False
   minlp_no_collapse = MINLPForKM(
     patients,
     parameter_min=0.1,
-    parameter_max=0.9, 
+    parameter_max=0.9,
     time_point=5.0,
     collapse_consecutive_deaths=False
   )
   times_no_collapse = minlp_no_collapse.times_to_consider
-  
+
   print("Test 1 - Consecutive deaths:")
   print(f"  Without collapse: {times_no_collapse}")
   print(f"  With collapse: {times_collapsed}")
-  
+
   # Should have fewer times with collapse
   assert len(times_collapsed) <= len(times_no_collapse)
   # For consecutive deaths, should collapse to just the final time
   expected_collapsed = np.array([5.0])  # Only the time_point
   np.testing.assert_allclose(times_collapsed, expected_collapsed, rtol=1e-10)
-  
+
   # Test 2: Deaths with intervening censoring
+  # pylint: disable=line-too-long
   patients_with_censoring = [
     KaplanMeierPatientNLL(time=1.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
     KaplanMeierPatientNLL(time=2.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
@@ -615,7 +616,8 @@ def test_times_to_consider_collapse_logic():
     KaplanMeierPatientNLL(time=3.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
     KaplanMeierPatientNLL(time=4.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
   ]
-  
+  # pylint: enable=line-too-long
+
   minlp_censoring_collapse = MINLPForKM(
     patients_with_censoring,
     parameter_min=0.1,
@@ -624,7 +626,7 @@ def test_times_to_consider_collapse_logic():
     collapse_consecutive_deaths=True
   )
   times_censoring_collapsed = minlp_censoring_collapse.times_to_consider
-  
+
   minlp_censoring_no_collapse = MINLPForKM(
     patients_with_censoring,
     parameter_min=0.1,
@@ -633,25 +635,27 @@ def test_times_to_consider_collapse_logic():
     collapse_consecutive_deaths=False
   )
   times_censoring_no_collapse = minlp_censoring_no_collapse.times_to_consider
-  
+
   print("Test 2 - Deaths with intervening censoring:")
   print(f"  Without collapse: {times_censoring_no_collapse}")
   print(f"  With collapse: {times_censoring_collapsed}")
-  
+
   # Should have more times due to censoring preventing collapse
   # Expected: deaths at 1,2 can be collapsed to 2, then censoring at 2.5 prevents
   # collapsing with deaths at 3,4, so we get [2.0, 5.0] (deaths 3,4 collapse with time_point)
   expected_with_censoring = np.array([2.0, 5.0])
   np.testing.assert_allclose(times_censoring_collapsed, expected_with_censoring, rtol=1e-10)
-  
+
   # Test 3: Censoring at same time as death (death should happen first per KM convention)
+  # pylint: disable=line-too-long
   patients_same_time = [
     KaplanMeierPatientNLL(time=1.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
     KaplanMeierPatientNLL(time=2.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
     KaplanMeierPatientNLL(time=2.0, censored=True, parameter_nll=lambda x: 0, observed_parameter=0.5),   # Censoring at same time as death
     KaplanMeierPatientNLL(time=3.0, censored=False, parameter_nll=lambda x: 0, observed_parameter=0.5),
   ]
-  
+  # pylint: enable=line-too-long
+
   minlp_same_time_collapse = MINLPForKM(
     patients_same_time,
     parameter_min=0.1,
@@ -660,21 +664,24 @@ def test_times_to_consider_collapse_logic():
     collapse_consecutive_deaths=True
   )
   times_same_time_collapsed = minlp_same_time_collapse.times_to_consider
-  
+
   print("Test 3 - Censoring at same time as death:")
   print(f"  With collapse: {times_same_time_collapsed}")
-  
+
   # Deaths at 1,2 can be collapsed, but censoring at 2.0 affects subsequent deaths
   # So death at 3 should be separate
   expected_same_time = np.array([2.0, 4.0])  # 1,2 collapse to 2.0; 3 collapses with time_point 4.0
   np.testing.assert_allclose(times_same_time_collapsed, expected_same_time, rtol=1e-10)
-  
+
   # Additional test: patient_died and patient_still_at_risk logic for collapse
   print("\nTesting patient_died and patient_still_at_risk logic for collapse...")
   # Example from user prompt
   patient_times = [1, 1, 2, 3, 3, 4, 5, 5, 6, 7]
   patient_censored = [True, False, True, False, False, False, False, True, False, True]
-  patients = [KaplanMeierPatientNLL(time=t, censored=c, parameter_nll=lambda x: 0, observed_parameter=0.5) for t, c in zip(patient_times, patient_censored)]
+  patients = [
+    KaplanMeierPatientNLL(time=t, censored=c, parameter_nll=lambda x: 0, observed_parameter=0.5)
+    for t, c in zip(patient_times, patient_censored)
+  ]
   minlp = MINLPForKM(
     patients,
     parameter_min=0.1,
@@ -683,6 +690,7 @@ def test_times_to_consider_collapse_logic():
     collapse_consecutive_deaths=True
   )
   # Test cases
+  # pylint: disable=line-too-long
   test_cases = [
     (3, [False, False, False, True, True, True, True, True, True, True], [False, False, False, True, True, False, False, False, False, False]),
     (3.5, [False, False, False, True, True, True, True, True, True, True], [False, False, False, True, True, False, False, False, False, False]),
@@ -690,11 +698,13 @@ def test_times_to_consider_collapse_logic():
     (4.5, [False, False, False, True, True, True, True, True, True, True], [False, False, False, True, True, True, False, False, False, False]),
     (5, [False, False, False, True, True, True, True, True, True, True], [False, False, False, True, True, True, True, False, False, False]),
   ]
+  # pylint: enable=line-too-long
   for t, expected_at_risk, expected_died in test_cases:
     at_risk = minlp.patient_still_at_risk(t).tolist()
     died = minlp.patient_died(t).tolist()
     print(f"t={t}: at_risk={at_risk}, died={died}")
-    assert at_risk == expected_at_risk, f"patient_still_at_risk({t}) failed: {at_risk} != {expected_at_risk}"
+    assert at_risk == expected_at_risk, \
+      f"patient_still_at_risk({t}) failed: {at_risk} != {expected_at_risk}"
     assert died == expected_died, f"patient_died({t}) failed: {died} != {expected_died}"
   print("patient_died and patient_still_at_risk logic for collapse passed!")
   print("times_to_consider collapse logic tests passed!")
@@ -734,7 +744,7 @@ def main(args=None):
   if args.collapse_false_only:
     runtest_collapse_false()
     return
-    
+
   if args.collapse_logic_only:
     test_times_to_consider_collapse_logic()
     return
@@ -746,7 +756,7 @@ def main(args=None):
     runtest(censoring=False)
   if args.censoring:
     runtest(censoring=True)
-    
+
   # Run additional tests
   runtest_collapse_false()
   test_times_to_consider_collapse_logic()
