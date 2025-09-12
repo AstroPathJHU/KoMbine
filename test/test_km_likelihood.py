@@ -194,7 +194,6 @@ def runtest(
   parameter_threshold = 0.45
 
   # Test collapse_consecutive_deaths parameter with comprehensive testing
-  print("Testing collapse_consecutive_deaths parameter...")
 
   # Test with a time point that should show a difference
   test_time_point = times_for_plot[-2] if len(times_for_plot) > 1 else times_for_plot[0]
@@ -221,13 +220,6 @@ def runtest(
   n_times_without_collapse = minlp_without_collapse.n_times_to_consider
   times_without_collapse = minlp_without_collapse.times_to_consider
 
-  print(
-    f"Time point {test_time_point}: {n_times_with_collapse} times with collapse, "
-    f"{n_times_without_collapse} times without collapse"
-  )
-  print(f"Times with collapse: {times_with_collapse}")
-  print(f"Times without collapse: {times_without_collapse}")
-
   # Basic sanity checks
   assert n_times_with_collapse > 0, "Should have at least one time to consider with collapse"
   assert n_times_without_collapse > 0, \
@@ -244,8 +236,6 @@ def runtest(
         found_match = True
         break
     assert found_match, f"Collapsed time {collapsed_time} not found in uncollapsed times"
-
-  print("collapse_consecutive_deaths parameter test passed!")
 
   km_p_value_minlp_breslow = datacard.km_p_value(
     parameter_min=parameter_min,
@@ -562,8 +552,6 @@ def test_times_to_consider_collapse_logic(): # pylint: disable=too-many-locals
   Comprehensive tests for the times_to_consider collapsing logic.
   Tests various scenarios to ensure the collapsing algorithm works correctly.
   """
-  print("Testing times_to_consider collapse logic...")
-
   # Test 1: Simple consecutive deaths without censoring
   # Should collapse all consecutive deaths
 
@@ -596,10 +584,6 @@ def test_times_to_consider_collapse_logic(): # pylint: disable=too-many-locals
     collapse_consecutive_deaths=False
   )
   times_no_collapse = minlp_no_collapse.times_to_consider
-
-  print("Test 1 - Consecutive deaths:")
-  print(f"  Without collapse: {times_no_collapse}")
-  print(f"  With collapse: {times_collapsed}")
 
   # Should have fewer times with collapse
   assert len(times_collapsed) <= len(times_no_collapse)
@@ -636,10 +620,6 @@ def test_times_to_consider_collapse_logic(): # pylint: disable=too-many-locals
   )
   times_censoring_no_collapse = minlp_censoring_no_collapse.times_to_consider
 
-  print("Test 2 - Deaths with intervening censoring:")
-  print(f"  Without collapse: {times_censoring_no_collapse}")
-  print(f"  With collapse: {times_censoring_collapsed}")
-
   # Should have more times due to censoring preventing collapse
   # Expected: deaths at 1,2 can be collapsed to 2, then censoring at 2.5 prevents
   # collapsing with deaths at 3,4, so we get [2.0, 5.0] (deaths 3,4 collapse with time_point)
@@ -665,17 +645,12 @@ def test_times_to_consider_collapse_logic(): # pylint: disable=too-many-locals
   )
   times_same_time_collapsed = minlp_same_time_collapse.times_to_consider
 
-  print("Test 3 - Censoring at same time as death:")
-  print(f"  With collapse: {times_same_time_collapsed}")
-
   # Deaths at 1,2 can be collapsed, but censoring at 2.0 affects subsequent deaths
   # So death at 3 should be separate
   expected_same_time = np.array([2.0, 4.0])  # 1,2 collapse to 2.0; 3 collapses with time_point 4.0
   np.testing.assert_allclose(times_same_time_collapsed, expected_same_time, rtol=1e-10)
 
   # Additional test: patient_died and patient_still_at_risk logic for collapse
-  print("\nTesting patient_died and patient_still_at_risk logic for collapse...")
-  # Example from user prompt
   patient_times = [1, 1, 2, 3, 3, 4, 5, 5, 6, 7]
   patient_censored = [True, False, True, False, False, False, False, True, False, True]
   patients = [
@@ -702,12 +677,9 @@ def test_times_to_consider_collapse_logic(): # pylint: disable=too-many-locals
   for t, expected_at_risk, expected_died in test_cases:
     at_risk = minlp.patient_still_at_risk(t).tolist()
     died = minlp.patient_died(t).tolist()
-    print(f"t={t}: at_risk={at_risk}, died={died}")
     assert at_risk == expected_at_risk, \
       f"patient_still_at_risk({t}) failed: {at_risk} != {expected_at_risk}"
     assert died == expected_died, f"patient_died({t}) failed: {died} != {expected_died}"
-  print("patient_died and patient_still_at_risk logic for collapse passed!")
-  print("times_to_consider collapse logic tests passed!")
 
 def main(args=None):
   """
