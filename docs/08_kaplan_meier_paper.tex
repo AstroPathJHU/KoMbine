@@ -212,12 +212,6 @@ S \le S' & \text{ if } S' < \hat{S}
 \end{align}
 This gives an interpretable visualization of the patient-wise uncertainty: we obtain the NLL that the survival probability is at least as far from the nominal probability as \(S'\). By construction, \(-\log\mathcal{L}(S')\) has a single minimum (either a single point or, if some patients are exactly on the boundary, a flat region) at \(\hat{S}\) and increases as \(S'\) moves away in either direction.
 
-\subsection{Collapsing consecutive deaths}
-
-The binomial term in the NLL [\cref{eq:binomial-nll}] requires a sum over all time points where at least one patient died, which can be slow when there are many such time points.  For that reason, \pkg{KoMbine} can collapse consecutive deaths into a single time point, as long as no patients were censored in between.  For example, if a patient dies at time \(t_i\) from a risk set of \(r_i\), and then another two patients die at time \(t_{i+1}\) from a risk set of \(r_{i+1}=r_i-1\), the two death times can be combined into a single death of three patients at time \(t_{i+1}\) from a risk set of \(r_i\) for the purpose of calculating the likelihood at \(t_{i+1}\).  (When calculating the likelihood at \(t_i\), we do not include the deaths at \(t_{i+1}\).)
-
-This speeds up the calculation without significantly affecting the likelihood and is enabled by default.  The size of the effect is explored in \cref{sec:compare-effect-of-collapsing}.
-
 \subsection[p values]{\(p\) values}
 
 \pkg{KoMbine} also provides a method to compute the \(p\) value to reject the null hypothesis that two survival curves are identical.  We use a log-rank approach, similar to the conventional approach used in \pkg{lifelines} and similar packages.  However, as in the case of the \KM{} error bars, our likelihood modeling does not rely on approximating the binomial distribution as normal, and we also include the patient-wise errors.
@@ -278,6 +272,41 @@ We first minimize \(-\log \mathcal{L}_{\text{total}}\) without the constraint on
 For the patient-wise-only error, there is no need to minimize the NLL over \(S'\), as by construction it minimizes at \(S'=S_\text{nominal}\). To find the confidence intervals, we use a simple binary search that only looks at the possible discrete values of \(S\): intermediate values of \(S'\) cannot return anything different.
 
 To compute the \(p\) value, \pkg{KoMbine} similarly uses \pkg{Gurobi} to minimize the NLL for the null and alternate hypotheses.  The \(p\) value is computed from the difference between the NLLs, which follows a \(\chi^2\) distribution, using standard functions in \pkg{scipy}.
+
+\subsection{Collapsing consecutive deaths}
+
+The binomial term in the NLL [\cref{eq:binomial-nll}] requires a sum over all time points where at least one patient died, which can be slow when there are many such time points. A mathematical trick allows us to collapse multiple time points into one, as long as no patients are censored in between, without changing the results.
+
+Take the case of two consecutive time points, \(t_1\) and \(t_{2}\), with death counts \(d_1\) and \(d_{2}\) and risk sets \(r_1\) and \(r_{2}=r_1-d_1\)\@.  The contribution to the NLL from these two time points is
+\begin{align}
+\begin{aligned}
+-\log \mathcal{L}_{\text{binomial},1,2} =&-\left[\log\binom{r_1}{d_1} + d_1 \log \left(1-p_1^\text{survived}\right) + (r_1-d_1) \log p_1^\text{survived}\right] \\
+&-\left[\log\binom{r_{1}-d_{1}}{d_{2}} + d_{2} \log \left(1-p_{2}^\text{survived}\right) + (r_{1}-d_{1}-d_{2}) \log p_{2}^\text{survived}\right]
+\end{aligned}
+\label{eq:two-timepoints-nll}
+\end{align}
+The key observation is that \(p_1^\text{survived}\) and \(p_2^\text{survived}\) only enter the NLL in this term and in the constraint \cref{eq:km-survival}, which only depends on their product \(p_{1,2}^\text{survived}=p_1^\text{survived} p_2^\text{survived}\)\@. We can therefore minimize \cref{eq:two-timepoints-nll} over \(p_1^\text{survived}\) and \(p_2^\text{survived}\) with the constraint \(p_{1,2}^\text{survived}=p_1^\text{survived} p_2^\text{survived}\)\@.  The result is
+\begin{align}
+p_1^\text{survived} &= \frac{d_1 p_{1,2}^\text{survived}+d_2}{d_1+d_2}, \\
+p_2^\text{survived} &= \frac{(d_1+d_2) p_{1,2}^\text{survived}}{d_1 p_{1,2}^\text{survived} + d_2}.
+\end{align}
+
+We plug into \cref{eq:two-timepoints-nll} to obtain:
+\begin{align}
+\begin{aligned}
+-\log \mathcal{L}_{\text{binomial},1,2} =&-\left[\log\binom{r_1}{d_1+d_2} + (d_1+d_2) \log \left(1-p_{1,2}^\text{survived}\right) + (r_1-d_1-d_2) \log p_{1,2}^\text{survived}\right] \\
+&-\left[\log\binom{d_1+d_2}{d_1} + d_1 \log \left(\frac{d_1}{d_1+d_2}\right) + d_2 \log \left(\frac{d_2}{d_1+d_2}\right)\right],
+\end{aligned}
+\label{eq:two-timepoints-collapsed-nll}
+\end{align}
+making use of the binomial coefficient identity
+\begin{equation}
+\binom{r_1}{d_1}\binom{r_1-d_1}{d_2} = \binom{r_1}{d_1+d_2}\binom{d_1+d_2}{d_1}.
+\end{equation}
+
+The first line of \cref{eq:two-timepoints-collapsed-nll} is identical to the NLL contribution from a single time point with \(d_1+d_2\) deaths and risk set \(r_1\)\@. The second line does not depend on \(p_{1,2}^\text{survived}\). When applying binomial-only errors, the second line only contributes a constant offset to the NLL\@. Although it does affect the NLL when patient-wise errors are included, it can be precomputed for the various possible values of \(d_1\) and \(d_2\) and implemented in \pkg{Gurobi} using indicator variables, thereby reducing the number of continuous variables.
+
+This procedure can be applied recursively to collapse any number of consecutive time points with no censoring in between.  \pkg{KoMbine} automatically collapses such time points before performing the NLL minimization.
 
 \section{Examples and discussion}
 
@@ -372,10 +401,6 @@ When there are no ties, the points scatter along the diagonal line \(y=x\), mean
 The Monte Carlo patients for the top row are simulated with integer survival times from \(1\) to \(10\), which means that we expect a tie rate of about \(10\%\).  The error introduced by the Breslow approximation will increase with a higher tie rate.
 
 The scatter from the line or curve, which shrinks with larger cohort sizes, is because the full likelihood method avoids the asymptotic approximations used in the conventional method, similar to the difference between the \pkg{KoMbine} and Greenwood confidence intervals in \cref{sec:compare-to-greenwood}.
-
-\subsection{Effect of collapsing consecutive deaths}\label{sec:compare-effect-of-collapsing}
-
-
 
 \subsection{Lung cancer dataset}
 
