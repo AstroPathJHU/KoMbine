@@ -43,7 +43,7 @@
 %% - \Keywords{} with LaTeX markup, at least one required
 %% - \Plainkeywords{} without LaTeX markup (if necessary)
 %% - Should be comma-separated and in sentence case.
-\Keywords{kaplan--meier curve, uncertainty}
+\Keywords{kaplan--meier curve, uncertainty} %chktex 8
 \Plainkeywords{kaplan-meier curve, uncertainty}
 
 %% - \Address{} of at least one author
@@ -123,9 +123,9 @@ where \(c_j\) indicates whether the patient was censored or not. We will allow \
 
 The survival probability at time \(t_n\) is given by the \KM{} formula:
 \begin{equation}
-S_n = \prod_{i=1}^{n} p_i^\text{survived}, \label{eq:km-survival}
+S_n = \prod_{i=1}^{n} p_i^\text{s}, \label{eq:km-survival}
 \end{equation}
-where \(p_i^\text{survived}\) is the probability that a patient who has survived until a given time point continues to live. The nominal probability is calculated from the observed survival probabilities:
+where \(p_i^\text{s}\) is the probability that a patient who has survived until time point \(t_i\) continues to live. The nominal probability is calculated from the observed survival probabilities:
 \begin{equation}
 \hat{S}_n = \prod_{i=1}^{n} \left(1 - \frac{\hat{d}_i}{\hat{r}_i}\right). \label{eq:km-nominal}
 \end{equation}
@@ -155,14 +155,14 @@ For clarity, we will distinguish the two types of uncertainty: the statistical u
 
 The binomial contribution to the \KM{} curve is computed from the number of patients at risk and the number of patients who died at each time point:
 \begin{equation}
-\mathcal{L}_{\text{binomial}}(p_i^\text{survived}, a_j) = \prod_{i=1}^{n} \binom{r_i}{d_i} {\left(p_i^\text{died}\right)}^{d_i} {\left(p_i^\text{survived}\right)}^{r_i-d_i},
+\mathcal{L}_{\text{binomial}}(p_i^\text{s}, a_j) = \prod_{i=1}^{n} \binom{r_i}{d_i} {\left(p_i^\text{d}\right)}^{d_i} {\left(p_i^\text{s}\right)}^{r_i-d_i},
 \end{equation}
-where \(p_i^\text{died} = 1 - p_i^\text{survived}\). The negative log likelihood (NLL) is
+where \(p_i^\text{d} = 1 - p_i^\text{s}\). The negative log likelihood (NLL) is
 \begin{equation}
--\log \mathcal{L}_{\text{binomial}}(p_i^\text{survived}, a_j) = -\left[\sum_{i=1}^{n} \left( \log\binom{r_i}{d_i} + d_i \log p_i^\text{died} + (r_i-d_i) \log p_i^\text{survived} \right)\right]. \label{eq:binomial-nll}
+-\log \mathcal{L}_{\text{binomial}}(p_i^\text{s}, a_j) = -\left[\sum_{i=1}^{n} \left( \log\binom{r_i}{d_i} + d_i \log p_i^\text{d} + (r_i-d_i) \log p_i^\text{s} \right)\right]. \label{eq:binomial-nll}
 \end{equation}
 
-We are not interested in the individual \(p_i^\text{survived}\) values, but rather the overall survival probability \(S_n\). We therefore use \cref{eq:km-survival} as a constraint when we minimize the NLL\@.
+We are not interested in the individual \(p_i^\text{s}\) values, but rather the overall survival probability \(S_n\). We therefore use \cref{eq:km-survival} as a constraint when we minimize the NLL\@.
 
 \subsubsection{Patient-wise uncertainty}\label{sec:patient-wise-uncertainty}
 
@@ -183,10 +183,10 @@ For the purpose of the math here, all that is important is that the penalty is a
 
 The total NLL is the sum of the binomial NLL and the patient-wise NLL\@:
 \begin{equation}
--\log \mathcal{L}_{\text{total}}(p_i^\text{survived}, a_j) = -\log \mathcal{L}_{\text{binomial}}(p_i^\text{survived}, a_j) - \log \mathcal{L}_{\text{patient}}(a_j). \label{eq:total-nll}
+-\log \mathcal{L}_{\text{total}}(p_i^\text{s}, a_j) = -\log \mathcal{L}_{\text{binomial}}(p_i^\text{s}, a_j) - \log \mathcal{L}_{\text{patient}}(a_j). \label{eq:total-nll}
 \end{equation}
 
-We minimize the overall NLL (\ref{eq:total-nll}) over the \(p_i^\text{survived}\) and \(a_j\), with the constraint (\ref{eq:km-survival}). This is a mixed integer nonlinear programming (MINLP) problem.
+We minimize the overall NLL (\ref{eq:total-nll}) over the \(p_i^\text{s}\) and \(a_j\), with the constraint (\ref{eq:km-survival}). This is a mixed integer nonlinear programming (MINLP) problem.
 
 \subsection{Isolating the binomial and patient-wise uncertainties}\label{sec:isolating-uncertainties}
 
@@ -198,9 +198,9 @@ To examine the binomial uncertainty, we can fix the parameters to their nominal 
 
 \subsubsection{Patient-wise uncertainty}
 
-Isolating the patient-wise uncertainty is somewhat nontrivial. We cannot allow the survival probabilities \(p_i^\text{survived}\) to vary freely, as we would need the binomial term to constrain them. Instead, we fix
+Isolating the patient-wise uncertainty is somewhat nontrivial. We cannot allow the survival probabilities \(p_i^\text{s}\) to vary freely, as we would need the binomial term to constrain them. Instead, we fix
 \begin{equation}
-p_i^\text{survived}(a_j) = 1 - \frac{d_i(a_j)}{r_i(a_j)}.
+p_i^\text{s}(a_j) = 1 - \frac{d_i(a_j)}{r_i(a_j)}.
 \end{equation}
 
 With this definition, \(S\) can only take on certain fixed, discrete values. Furthermore, depending on the order that patients were censored or died, values of \(S\) that are close together may actually only be reachable by very different combinations of patients included in the analysis, with correspondingly different NLL values. A scatter plot of \(-\log\mathcal{L}\) as a function of \(S\) would be useless.
@@ -218,9 +218,9 @@ This gives an interpretable visualization of the patient-wise uncertainty: we ob
 
 We have two curves, labeled \(k=0\) and \(k=1\), and we add this index to all relevant quantities.  For example, each patient may be in one of the curves, and this inclusion is given by \(a_{jk}\).  Each patient can be in at most one of the two curves, but we also allow for a patient to be in neither.  (This is useful, for example, when stratifying patients into low, middle, and high categories based on a parameter\@.  \(p\) values are computed pairwise between the curves, and in each pairwise comparison, some patients are in neither curve.)  Each patient has a positive or negative penalty, \(-\log\mathcal{L}_{jk}^\text{patient}\), to be included in each curve.
 
-Each curve has its probabilities of dying \(p^\text{died}_{ik}\).  In the log-rank test, we take the proportional hazard model,
+Each curve has its probabilities of dying \(p^\text{d}_{ik}\).  In the log-rank test, we take the proportional hazard model,
 \begin{equation}
-p^\text{died}_{i0} = H p^\text{died}_{i1},
+p^\text{d}_{i0} = H p^\text{d}_{i1},
 \label{eq:logrank-hazard}
 \end{equation}
 for a constant hazard ratio \(H\) across all time points.  The null hypothesis is that \(H=1\), meaning that the two curves are identical.  The alternative hypothesis allows \(H\) to float.
@@ -273,30 +273,29 @@ For the patient-wise-only error, there is no need to minimize the NLL over \(S'\
 
 To compute the \(p\) value, \pkg{KoMbine} similarly uses \pkg{Gurobi} to minimize the NLL for the null and alternate hypotheses.  The \(p\) value is computed from the difference between the NLLs, which follows a \(\chi^2\) distribution, using standard functions in \pkg{scipy}.
 
-\subsection{Collapsing consecutive deaths}
-\label{sec:collapsing-consecutive-deaths}
+\subsection{Collapsing consecutive deaths}\label{sec:collapsing-consecutive-deaths}
 
 The binomial term in the NLL [\cref{eq:binomial-nll}] requires a sum over all time points where at least one patient died, which can be slow when there are many such time points. A mathematical trick allows us to collapse multiple time points into one, as long as no patients are censored in between, without changing the results.
 
 Take the case of two consecutive time points, \(t_1\) and \(t_{2}\), with death counts \(d_1\) and \(d_{2}\) and risk sets \(r_1\) and \(r_{2}=r_1-d_1\)\@.  The contribution to the NLL from these two time points is
 \begin{align}
 \begin{aligned}
--\log \mathcal{L}_{\text{binomial},1,2} =&-\left[\log\binom{r_1}{d_1} + d_1 \log \left(1-p_1^\text{survived}\right) + (r_1-d_1) \log p_1^\text{survived}\right] \\
-&-\left[\log\binom{r_{1}-d_{1}}{d_{2}} + d_{2} \log \left(1-p_{2}^\text{survived}\right) + (r_{1}-d_{1}-d_{2}) \log p_{2}^\text{survived}\right].
+-\log \mathcal{L}_{\text{binomial},1,2} =&-\left[\log\binom{r_1}{d_1} + d_1 \log \left(1-p_1^\text{s}\right) + (r_1-d_1) \log p_1^\text{s}\right] \\
+&-\left[\log\binom{r_{1}-d_{1}}{d_{2}} + d_{2} \log \left(1-p_{2}^\text{s}\right) + (r_{1}-d_{1}-d_{2}) \log p_{2}^\text{s}\right].
 \end{aligned}
 \label{eq:two-timepoints-nll}
 \end{align}
 
-The key observation is that \(p_1^\text{survived}\) and \(p_2^\text{survived}\) only enter the NLL in this term and in the constraint \cref{eq:km-survival}, which only depends on their product \(p_{1,2}^\text{survived}=p_1^\text{survived} p_2^\text{survived}\)\@. We can therefore minimize \cref{eq:two-timepoints-nll} over \(p_1^\text{survived}\) and \(p_2^\text{survived}\) with the constraint \(p_{1,2}^\text{survived}=p_1^\text{survived} p_2^\text{survived}\)\@.  The result is
+The key observation is that \(p_1^\text{s}\) and \(p_2^\text{s}\) only enter the NLL in this term and in the constraint \cref{eq:km-survival}, which only depends on their product \(p_{1,2}^\text{s}=p_1^\text{s} p_2^\text{s}\)\@. We can therefore minimize \cref{eq:two-timepoints-nll} over \(p_1^\text{s}\) and \(p_2^\text{s}\) with the constraint \(p_{1,2}^\text{s}=p_1^\text{s} p_2^\text{s}\)\@.  The result is
 \begin{align}
-p_1^\text{survived} &= \frac{d_1 p_{1,2}^\text{survived}+d_2}{d_1+d_2}, \\
-p_2^\text{survived} &= \frac{(d_1+d_2) p_{1,2}^\text{survived}}{d_1 p_{1,2}^\text{survived} + d_2}.
+p_1^\text{s} &= \frac{d_1 p_{1,2}^\text{s}+d_2}{d_1+d_2}, \\
+p_2^\text{s} &= \frac{(d_1+d_2) p_{1,2}^\text{s}}{d_1 p_{1,2}^\text{s} + d_2}.
 \end{align}
 
 We plug into \cref{eq:two-timepoints-nll} to obtain:
 \begin{align}
 \begin{aligned}
--\log \mathcal{L}_{\text{binomial},1,2} =&-\left[\log\binom{r_1}{d_1+d_2} + (d_1+d_2) \log \left(1-p_{1,2}^\text{survived}\right) + (r_1-d_1-d_2) \log p_{1,2}^\text{survived}\right] \\
+-\log \mathcal{L}_{\text{binomial},1,2} =&-\left[\log\binom{r_1}{d_1+d_2} + (d_1+d_2) \log \left(1-p_{1,2}^\text{s}\right) + (r_1-d_1-d_2) \log p_{1,2}^\text{s}\right] \\
 &-\left[\log\binom{d_1+d_2}{d_1} + d_1 \log \left(\frac{d_1}{d_1+d_2}\right) + d_2 \log \left(\frac{d_2}{d_1+d_2}\right)\right],
 \end{aligned}
 \label{eq:two-timepoints-collapsed-nll}
@@ -306,16 +305,16 @@ making use of the binomial coefficient identity
 \binom{r_1}{d_1}\binom{r_1-d_1}{d_2} = \binom{r_1}{d_1+d_2}\binom{d_1+d_2}{d_1}.
 \end{equation}
 
-The first line of \cref{eq:two-timepoints-collapsed-nll} is identical to the NLL contribution from a single time point with \(d_1+d_2\) deaths and risk set \(r_1\)\@. The second line does not depend on \(p_{1,2}^\text{survived}\). When applying binomial-only errors, the second line only contributes a constant offset to the NLL\@. Although it does affect the NLL when patient-wise errors are included, it can be precomputed for the various possible values of \(d_1\) and \(d_2\) and implemented in \pkg{Gurobi} using indicator variables, thereby reducing the number of continuous variables.
+The first line of \cref{eq:two-timepoints-collapsed-nll} is identical to the NLL contribution from a single time point with \(d_1+d_2\) deaths and risk set \(r_1\)\@. The second line does not depend on \(p_{1,2}^\text{s}\). When applying binomial-only errors, the second line only contributes a constant offset to the NLL\@. Although it does affect the NLL when patient-wise errors are included, it can be precomputed for the various possible values of \(d_1\) and \(d_2\) and implemented in \pkg{Gurobi} using indicator variables, thereby reducing the number of continuous variables.
 
 This procedure can be applied recursively to collapse any number of consecutive time points with no censoring in between. The result is a single binomial term for the collapsed time points, plus a multinomial NLL term for the number of patients who died at each of the original time points out of the total number of patients who died in the group:
 \begin{align}
 \begin{aligned}
--\log \mathcal{L}_{\text{binomial},1 \cdots n} =&-\left[\log\binom{r_1}{d_{1 \cdots n}} + d_{1 \cdots n} \log \left(1-p_{1 \cdots n}^\text{survived}\right) + (r_1-d_{1 \cdots n}) \log p_{1 \cdots n}^\text{survived}\right] \\
+-\log \mathcal{L}_{\text{binomial},1 \cdots n} =&-\left[\log\binom{r_1}{d_{1 \cdots n}} + d_{1 \cdots n} \log \left(1-p_{1 \cdots n}^\text{s}\right) + (r_1-d_{1 \cdots n}) \log p_{1 \cdots n}^\text{s}\right] \\
 &-\left[\log{(d_{1 \cdots n}!)}-d_{1 \cdots n}\log d_{1 \cdots n} - \left(\sum_{i=1}^n \left[\log{(d_i!)} - d_i \log d_i\right]\right)\right],
 \end{aligned}
 \end{align}
-with \(d_{1 \cdots n} = d_1 + d_2 + \cdots + d_n\) and \(p_{1 \cdots n}^\text{survived} = p_1^\text{survived} p_2^\text{survived} \cdots p_n^\text{survived}\)\@.
+with \(d_{1 \cdots n} = d_1 + d_2 + \cdots + d_n\) and \(p_{1 \cdots n}^\text{s} = p_1^\text{s} p_2^\text{s} \cdots p_n^\text{s}\)\@.
 
 \pkg{KoMbine} automatically collapses such time points before performing the NLL minimization.
 
@@ -331,7 +330,7 @@ Counter-intuitively, the best fit \KM{} curve does not necessarily coincide with
 
 If only the binomial penalty is included, the survival NLL always minimizes at the nominal survival probability. Similarly, with only the patient-wise errors, the nominal survival probability is also always optimal. However, when both are included, the two may differ.
 
-To understand this, imagine a case where 7 patients were at risk at a particular time point and 4 of them survived. An additional patient who survived is nominally excluded from the curve, but their parameter is so close to the boundary that they can be included with only a small NLL penalty of \(0.01\)\@. \Cref{eq:binomial-nll} evaluates to \(-1.255\) for \(4\) patients surviving out of \(7\) with \(p_\text{survived}=4/7\), but to \(-1.267\) for \(5\) patients surviving out of \(8\) with \(p_\text{survived}=5/8\). This small difference in the binomial penalty outweighs the even smaller penalty for including the patient, and so the minimum NLL occurs at the best fit survival probability of \(5/8\).
+To understand this, imagine a case where 7 patients were at risk at a particular time point and 4 of them survived. An additional patient who survived is nominally excluded from the curve, but their parameter is so close to the boundary that they can be included with only a small NLL penalty of \(0.01\)\@. \Cref{eq:binomial-nll} evaluates to \(-1.255\) for \(4\) patients surviving out of \(7\) with \(p_\text{s}=4/7\), but to \(-1.267\) for \(5\) patients surviving out of \(8\) with \(p_\text{s}=5/8\). This small difference in the binomial penalty outweighs the even smaller penalty for including the patient, and so the minimum NLL occurs at the best fit survival probability of \(5/8\).
 
 This surprising result highlights the importance of the patient-wise uncertainties. If the NLL penalty for including the patient really is that small, then we cannot, with any confidence, assign the patient to one \KM{} curve or the other.
 
