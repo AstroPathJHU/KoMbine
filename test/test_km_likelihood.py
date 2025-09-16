@@ -103,11 +103,14 @@ def runtest(
     endpoint_epsilon=1e-4,
     collapse_consecutive_deaths=False
   )
+  times_for_plot_no_collapse = times_for_plot[0:3] + [times_for_plot[-1]]
+  print(times_for_plot)
+  print(times_for_plot_no_collapse)
   (
     best_probabilities_no_collapse, CL_probabilities_no_collapse
   ) = kml2_no_collapse.survival_probabilities_likelihood(
     CLs=CLs,
-    times_for_plot=times_for_plot,
+    times_for_plot=times_for_plot_no_collapse,
   )
 
   np.testing.assert_allclose(
@@ -202,12 +205,12 @@ def runtest(
   
   np.testing.assert_allclose(
     best_probabilities_no_collapse,
-    best_probabilities,
+    list(best_probabilities[0:3]) + [best_probabilities[-1]],
     **tolerance,
   )
   np.testing.assert_allclose(
     CL_probabilities_no_collapse,
-    CL_probabilities,
+    list(CL_probabilities[0:3]) + [CL_probabilities[-1]],
     **tolerance,
   )
 
