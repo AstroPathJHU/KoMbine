@@ -202,7 +202,7 @@ def runtest(
       "CL probabilities shouldn't be the same "
       "with only the binomial penalty and with the patient-wise penalty."
     )
-  
+
   np.testing.assert_allclose(
     best_probabilities_no_collapse,
     list(best_probabilities[0:3]) + [best_probabilities[-1]],

@@ -1133,9 +1133,10 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
     return km_probability_var
 
-  def add_binomial_penalty(  # pylint: disable=too-many-locals, too-many-statements
+  def add_binomial_penalty(  # pylint: disable=too-many-locals, too-many-statements, too-many-arguments, too-many-branches
     self,
     model: gp.Model,
+    *,
     r: gp.tupledict[int, gp.Var],
     d: gp.tupledict[int, gp.Var],
     sub_d: gp.tupledict[int, gp.Var],
@@ -1356,9 +1357,14 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       # See \ref{sec:collapsing-consecutive-deaths} in the paper
       # Note that if collapse_consecutive_deaths is False (or if there's
       # only one death time in the group), we add and subtract the same thing.
-      for sub_d_counter, collapsed_time in enumerate(self._collapsed_time_groups[time], start=sub_d_counter+1):
+      for sub_d_counter, collapsed_time in enumerate(
+        self._collapsed_time_groups[time],
+        start=sub_d_counter+1
+      ):
         sub_d_var = sub_d[sub_d_counter]
-        max_sub_d = np.count_nonzero(self.patient_died(collapsed_time, collapse_consecutive_deaths=False))
+        max_sub_d = np.count_nonzero(
+          self.patient_died(collapsed_time, collapse_consecutive_deaths=False)
+        )
         sub_d_indicators = []
         for sub_d_value in range(max_sub_d + 1):
           sub_d_indicator = model.addVar(
@@ -1375,7 +1381,11 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
             name=f"sub_d_indicator_constr_{i}_{sub_d_counter}_{sub_d_value}",
           )
           if sub_d_value > 0:
-            binomial_terms.append(sub_d_indicator * (math.lgamma(sub_d_value + 1) - sub_d_value * np.log(sub_d_value)))
+            binomial_terms.append(
+              sub_d_indicator * (
+                math.lgamma(sub_d_value + 1) - sub_d_value * np.log(sub_d_value)
+              )
+            )
         model.addConstr(
           gp.quicksum(sub_d_indicators) == 1,
           name=f"one_sub_d_indicator_per_sub_death_time_{i}_{sub_d_counter}",
@@ -1383,7 +1393,11 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
       for d_value in range(max(self.n_died_max) + 1):
         if d_value > 0:
-          binomial_terms.append(-n_died_indicator_vars[i, d_value] * (math.lgamma(d_value + 1) - d_value * np.log(d_value)))
+          binomial_terms.append(
+            -n_died_indicator_vars[i, d_value] * (
+              math.lgamma(d_value + 1) - d_value * np.log(d_value)
+            )
+          )
 
     binom_penalty_expr = gp.quicksum(binomial_terms)
     binom_penalty = model.addVar(
