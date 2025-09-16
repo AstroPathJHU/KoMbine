@@ -274,6 +274,7 @@ For the patient-wise-only error, there is no need to minimize the NLL over \(S'\
 To compute the \(p\) value, \pkg{KoMbine} similarly uses \pkg{Gurobi} to minimize the NLL for the null and alternate hypotheses.  The \(p\) value is computed from the difference between the NLLs, which follows a \(\chi^2\) distribution, using standard functions in \pkg{scipy}.
 
 \subsection{Collapsing consecutive deaths}
+\label{sec:collapsing-consecutive-deaths}
 
 The binomial term in the NLL [\cref{eq:binomial-nll}] requires a sum over all time points where at least one patient died, which can be slow when there are many such time points. A mathematical trick allows us to collapse multiple time points into one, as long as no patients are censored in between, without changing the results.
 
@@ -281,10 +282,11 @@ Take the case of two consecutive time points, \(t_1\) and \(t_{2}\), with death 
 \begin{align}
 \begin{aligned}
 -\log \mathcal{L}_{\text{binomial},1,2} =&-\left[\log\binom{r_1}{d_1} + d_1 \log \left(1-p_1^\text{survived}\right) + (r_1-d_1) \log p_1^\text{survived}\right] \\
-&-\left[\log\binom{r_{1}-d_{1}}{d_{2}} + d_{2} \log \left(1-p_{2}^\text{survived}\right) + (r_{1}-d_{1}-d_{2}) \log p_{2}^\text{survived}\right]
+&-\left[\log\binom{r_{1}-d_{1}}{d_{2}} + d_{2} \log \left(1-p_{2}^\text{survived}\right) + (r_{1}-d_{1}-d_{2}) \log p_{2}^\text{survived}\right].
 \end{aligned}
 \label{eq:two-timepoints-nll}
 \end{align}
+
 The key observation is that \(p_1^\text{survived}\) and \(p_2^\text{survived}\) only enter the NLL in this term and in the constraint \cref{eq:km-survival}, which only depends on their product \(p_{1,2}^\text{survived}=p_1^\text{survived} p_2^\text{survived}\)\@. We can therefore minimize \cref{eq:two-timepoints-nll} over \(p_1^\text{survived}\) and \(p_2^\text{survived}\) with the constraint \(p_{1,2}^\text{survived}=p_1^\text{survived} p_2^\text{survived}\)\@.  The result is
 \begin{align}
 p_1^\text{survived} &= \frac{d_1 p_{1,2}^\text{survived}+d_2}{d_1+d_2}, \\
@@ -306,7 +308,16 @@ making use of the binomial coefficient identity
 
 The first line of \cref{eq:two-timepoints-collapsed-nll} is identical to the NLL contribution from a single time point with \(d_1+d_2\) deaths and risk set \(r_1\)\@. The second line does not depend on \(p_{1,2}^\text{survived}\). When applying binomial-only errors, the second line only contributes a constant offset to the NLL\@. Although it does affect the NLL when patient-wise errors are included, it can be precomputed for the various possible values of \(d_1\) and \(d_2\) and implemented in \pkg{Gurobi} using indicator variables, thereby reducing the number of continuous variables.
 
-This procedure can be applied recursively to collapse any number of consecutive time points with no censoring in between.  \pkg{KoMbine} automatically collapses such time points before performing the NLL minimization.
+This procedure can be applied recursively to collapse any number of consecutive time points with no censoring in between. The result is a single binomial term for the collapsed time points, plus a multinomial NLL term for the number of patients who died at each of the original time points out of the total number of patients who died in the group:
+\begin{align}
+\begin{aligned}
+-\log \mathcal{L}_{\text{binomial},1 \cdots n} =&-\left[\log\binom{r_1}{d_{1 \cdots n}} + d_{1 \cdots n} \log \left(1-p_{1 \cdots n}^\text{survived}\right) + (r_1-d_{1 \cdots n}) \log p_{1 \cdots n}^\text{survived}\right] \\
+&-\left[\log{(d_{1 \cdots n}!)}-d_{1 \cdots n}\log d_{1 \cdots n} - \left(\sum_{i=1}^n \left[\log{(d_i!)} - d_i \log d_i\right]\right)\right],
+\end{aligned}
+\end{align}
+with \(d_{1 \cdots n} = d_1 + d_2 + \cdots + d_n\) and \(p_{1 \cdots n}^\text{survived} = p_1^\text{survived} p_2^\text{survived} \cdots p_n^\text{survived}\)\@.
+
+\pkg{KoMbine} automatically collapses such time points before performing the NLL minimization.
 
 \section{Examples and discussion}
 

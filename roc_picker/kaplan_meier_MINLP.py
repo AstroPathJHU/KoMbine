@@ -528,8 +528,8 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       return np.sort(unique_times)
 
     # Collapse consecutive deaths logic
-    # The key insight: we can collapse death times if no censoring occurs
-    # between them (censoring at the same time doesn't count due to KM convention)
+    # The key insight: we can collapse death times if no censoring occurs between them
+    # (censoring at the same time as the last death doesn't count due to KM convention)
     collapsed_times = []
 
     i = 0
@@ -587,19 +587,25 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     """
     return len(self.times_to_consider)
   @functools.cached_property
+  def n_sub_times_to_consider(self) -> int:
+    """
+    The number of times to consider without collapsing consecutive deaths.
+    """
+    return sum(len(sub_times) for sub_times in self._collapsed_time_groups.values())
+  @functools.cached_property
   def _collapsed_time_groups(self) -> dict[float, list[float]]:
     """
     Map from representative time to list of original times in the collapsed group.
     Only used when collapse_consecutive_deaths is True.
     """
-    if not self.collapse_consecutive_deaths:
-      return {}
-
     # Get all death times up to the time point
     death_mask = (~self.patient_censored) & (self.patient_times <= self.time_point)
     death_times = self.patient_times[death_mask]
     all_times = list(death_times) + [self.time_point]
     unique_times = np.unique(all_times)
+
+    if not self.collapse_consecutive_deaths:
+      return {time: [time] for time in unique_times}
 
     groups = {}
     i = 0
@@ -641,7 +647,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
     return groups
 
-  def patient_died(self, t) -> npt.NDArray[np.bool_]:
+  def patient_died(self, t, *, collapse_consecutive_deaths=True) -> npt.NDArray[np.bool_]:
     """
     Returns a boolean array indicating which patients died at time t.
     If collapse_consecutive_deaths is True, for any t in a collapsed interval,
@@ -649,8 +655,11 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     For any time t, a patient is considered to have died at t if:
     - Their time == t and not censored (no collapse)
     - If t is in a collapsed interval, their time is >= interval_start and < t, and not censored
+
+    If self.collapse_consecutive_deaths is False, the collapse_consecutive_deaths
+    argument is ignored and no collapsing is done.
     """
-    if not self.collapse_consecutive_deaths:
+    if not self.collapse_consecutive_deaths or not collapse_consecutive_deaths:
       return (self.patient_times == t) & (~self.patient_censored)
     groups = self._collapsed_time_groups
     for group_end, group_times in groups.items():
@@ -663,7 +672,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
         )
     return (self.patient_times == t) & (~self.patient_censored)
 
-  def patient_still_at_risk(self, t) -> npt.NDArray[np.bool_]:
+  def patient_still_at_risk(self, t, *, collapse_consecutive_deaths=True) -> npt.NDArray[np.bool_]:
     """
     Returns a boolean array indicating which patients are still at risk at time t.
     If collapse_consecutive_deaths is True, anyone who died in the collapsed interval
@@ -671,8 +680,11 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     For any time t, a patient is at risk if:
     - Their time >= t (regardless of censored status)
     - If t is in a collapsed interval, their time is >= interval_start
+
+    If self.collapse_consecutive_deaths is False, the collapse_consecutive_deaths
+    argument is ignored and no collapsing is done.
     """
-    if not self.collapse_consecutive_deaths:
+    if not self.collapse_consecutive_deaths or not collapse_consecutive_deaths:
       return self.patient_times >= t
     groups = self._collapsed_time_groups
     relevant_start_time = t
@@ -924,6 +936,11 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       vtype=GRB.INTEGER,
       name="d",
     )
+    sub_d = model.addVars(
+      self.n_sub_times_to_consider,
+      vtype=GRB.INTEGER,
+      name="sub_d",
+    )
     r = model.addVars(
       self.n_times_to_consider,
       vtype=GRB.INTEGER,
@@ -936,16 +953,17 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     )
 
     # Constraints to link to totals
+    j = 0
     for i, dt in enumerate(self.times_to_consider):
       model.addConstr(
         d[i] == gp.quicksum(
-          a[j] for j in range(self.n_patients) if self.patient_died(dt)[j]
+          a[k] for k in range(self.n_patients) if self.patient_died(dt)[k]
         ),
         name=f"d_{i}_definition",
       )
       model.addConstr(
         r[i] == gp.quicksum(
-          a[j] for j in range(self.n_patients) if self.patient_still_at_risk(dt)[j]
+          a[k] for k in range(self.n_patients) if self.patient_still_at_risk(dt)[k]
         ),
         name=f"r_{i}_definition",
       )
@@ -954,8 +972,26 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
         name=f"s_{i}_definition",
       )
 
+      first_j = j
+      for j, sub_dt in enumerate(self._collapsed_time_groups[dt], start=j):
+        model.addConstr(
+          sub_d[j] == gp.quicksum(
+            a[k] for k in range(self.n_patients)
+            if self.patient_died(sub_dt, collapse_consecutive_deaths=False)[k]
+          ),
+          name=f"sub_d_{i}_definition",
+        )
+
+      #Make sure that each d is the sum of its sub_ds.
+      #This is here as a sanity check.  Gurobi should optimize it out.
+      model.addConstr(
+        d[i] == gp.quicksum(sub_d[j] for j in range(first_j, j)),
+        name=f"d_{i}_from_sub_d",
+      )
+
     return (
       d,
+      sub_d,
       r,
       s,
     )
@@ -1102,6 +1138,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     model: gp.Model,
     r: gp.tupledict[int, gp.Var],
     d: gp.tupledict[int, gp.Var],
+    sub_d: gp.tupledict[int, gp.Var],
     s: gp.tupledict[int, gp.Var],
   ):
     """
@@ -1149,6 +1186,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       lb=log_p_bounds[0],
       ub=log_p_bounds[1],
     )
+    sub_d_counter = 0
     for i in range(self.n_times_to_consider):
       model.addGenConstrExp(log_p_died[i], p_died[i], name=f"log_p_died_constr_{i}")
       model.addGenConstrExp(log_p_survived[i], p_survived[i], name=f"log_p_survived_constr_{i}")
@@ -1222,7 +1260,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       name="n_survived_indicator",
     )
     binomial_terms = []
-    for i in range(self.n_times_to_consider):
+    for i, time in enumerate(self.times_to_consider):
       for (r_value, d_value), penalty in n_choose_d_table.items():
         indicator = n_choose_d_indicator_vars[i, r_value, d_value]
         model.addGenConstrIndicator(
@@ -1313,6 +1351,39 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
         ) == 1,
         name=f"one_n_survived_indicator_per_death_time_{i}",
       )
+
+      # Additional term needed when collapsing consecutive deaths
+      # See \ref{sec:collapsing-consecutive-deaths} in the paper
+      # Note that if collapse_consecutive_deaths is False (or if there's
+      # only one death time in the group), we add and subtract the same thing.
+      for sub_d_counter, collapsed_time in enumerate(self._collapsed_time_groups[time], start=sub_d_counter):
+        sub_d_var = sub_d[sub_d_counter]
+        max_sub_d = np.count_nonzero(self.patient_died(collapsed_time, collapse_consecutive_deaths=False))
+        sub_d_indicators = []
+        for sub_d_value in range(max_sub_d + 1):
+          sub_d_indicator = model.addVar(
+            vtype=GRB.BINARY,
+            name=f"sub_d_indicator_{i}_{sub_d_counter}_{sub_d_value}",
+          )
+          sub_d_indicators.append(sub_d_indicator)
+          model.addGenConstrIndicator(
+            sub_d_indicator,
+            True,
+            sub_d_var,
+            GRB.EQUAL,
+            sub_d_value,
+            name=f"sub_d_indicator_constr_{i}_{sub_d_counter}_{sub_d_value}",
+          )
+          if sub_d_value > 0:
+            binomial_terms.append(sub_d_indicator * (math.lgamma(sub_d_value + 1) - sub_d_value * np.log(sub_d_value)))
+        model.addConstr(
+          gp.quicksum(sub_d_indicators) == 1,
+          name=f"one_sub_d_indicator_per_sub_death_time_{i}_{sub_d_counter}",
+        )
+
+      for d_value in range(max(self.n_died_max) + 1):
+        if d_value > 0:
+          binomial_terms.append(-n_died_indicator_vars[i, d_value] * (math.lgamma(d_value + 1) - d_value * np.log(d_value)))
 
     binom_penalty_expr = gp.quicksum(binomial_terms)
     binom_penalty = model.addVar(
@@ -1407,6 +1478,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
 
     (
       d,
+      sub_d,
       r,
       s,
     ) = self.add_counter_variables_and_constraints(
@@ -1429,6 +1501,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       model=model,
       r=r,
       d=d,
+      sub_d=sub_d,
       s=s,
     )
 
