@@ -104,8 +104,6 @@ def runtest(
     collapse_consecutive_deaths=False
   )
   times_for_plot_no_collapse = times_for_plot[0:3] + [times_for_plot[-1]]
-  print(times_for_plot)
-  print(times_for_plot_no_collapse)
   (
     best_probabilities_no_collapse, CL_probabilities_no_collapse
   ) = kml2_no_collapse.survival_probabilities_likelihood(
