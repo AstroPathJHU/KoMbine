@@ -953,7 +953,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
     )
 
     # Constraints to link to totals
-    j = 0
+    j = -1
     for i, dt in enumerate(self.times_to_consider):
       model.addConstr(
         d[i] == gp.quicksum(
@@ -972,20 +972,20 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
         name=f"s_{i}_definition",
       )
 
-      first_j = j
-      for j, sub_dt in enumerate(self._collapsed_time_groups[dt], start=j):
+      first_j = j+1
+      for j, sub_dt in enumerate(self._collapsed_time_groups[dt], start=first_j):
         model.addConstr(
           sub_d[j] == gp.quicksum(
             a[k] for k in range(self.n_patients)
             if self.patient_died(sub_dt, collapse_consecutive_deaths=False)[k]
           ),
-          name=f"sub_d_{i}_definition",
+          name=f"sub_d_{j}_definition",
         )
 
       #Make sure that each d is the sum of its sub_ds.
       #This is here as a sanity check.  Gurobi should optimize it out.
       model.addConstr(
-        d[i] == gp.quicksum(sub_d[j] for j in range(first_j, j)),
+        d[i] == gp.quicksum(sub_d[j] for j in range(first_j, j+1)),
         name=f"d_{i}_from_sub_d",
       )
 
@@ -1186,7 +1186,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       lb=log_p_bounds[0],
       ub=log_p_bounds[1],
     )
-    sub_d_counter = 0
+    sub_d_counter = -1
     for i in range(self.n_times_to_consider):
       model.addGenConstrExp(log_p_died[i], p_died[i], name=f"log_p_died_constr_{i}")
       model.addGenConstrExp(log_p_survived[i], p_survived[i], name=f"log_p_survived_constr_{i}")
@@ -1356,7 +1356,7 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
       # See \ref{sec:collapsing-consecutive-deaths} in the paper
       # Note that if collapse_consecutive_deaths is False (or if there's
       # only one death time in the group), we add and subtract the same thing.
-      for sub_d_counter, collapsed_time in enumerate(self._collapsed_time_groups[time], start=sub_d_counter):
+      for sub_d_counter, collapsed_time in enumerate(self._collapsed_time_groups[time], start=sub_d_counter+1):
         sub_d_var = sub_d[sub_d_counter]
         max_sub_d = np.count_nonzero(self.patient_died(collapsed_time, collapse_consecutive_deaths=False))
         sub_d_indicators = []
