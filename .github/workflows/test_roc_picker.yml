@@ -34,9 +34,10 @@ jobs:
         run: |
           python -m test.roc_picker.test_systematics_mc
 
-      - name: continuous distributions test
-        run: |
-          python test/roc_picker/test_continuous_distributions.py
+      #  not needed because it's run in compile_roc_plots.sh
+      #- name: continuous distributions test
+      #  run: |
+      #    python test/roc_picker/test_continuous_distributions.py
 
       - name: convert ROC Picker notebooks
         run: |

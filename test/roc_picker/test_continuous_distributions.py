@@ -15,7 +15,7 @@ import roc_picker.continuous_distributions
 warnings.simplefilter("error")
 
 here = pathlib.Path(__file__).parent
-docsfolder = here.parent/"docs"
+docsfolder = here.parent.parent/"docs"/"roc_picker"
 
 h = .6
 
