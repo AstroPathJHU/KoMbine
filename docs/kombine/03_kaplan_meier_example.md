@@ -40,7 +40,23 @@ with open(datacardfile) as f:
     print(f.read())
 ```
 
-The `observable_type` and `observable` lines work the same way as in the ROC Picker datacards.  The `survival_time` and `censored` lines are specific to Kaplan-Meier curves.  The `survival_time` line contains the time when the patient was censored or died, and the `censored` line indicates whether the patient was censored (1) or not (0).
+The first line gives the observable type.
+Options are:
+* `fixed`: The observable for each patient is a fixed number.  It may be modified by systematics in the systematics section, but has no internal uncertainty.
+* `poisson`: The observable for each patient is a count, which has an associated Poisson uncertainty.  It may have additional uncertainties defined in the systematics section.
+* `poisson_density`: The observable for each patient is a count, which has an associated Poisson uncertainty, divided by a fixed area, which is assumed to have no error.
+* `poisson_ratio`: The observable for each patient is a ratio of two counts.  Again, it may have additional uncertainties defined in the systematics section.
+
+Next is the list of patients.
+- `survival_time`: the time when the patient was censored or died
+- `censored`: indicates whether the patient was censored (1) or not (0).
+- The observables for each patient, which depends on the observable_type given above.
+  - For `fixed`, the line should be labeled `observable`
+  - For `poisson`, it should be labeled `count`
+  - For `poisson_ratio`, there should be two lines labeled `num` and `denom`, as in the example here
+  - For `poisson_density`, there should be two lines labeled `num` and `area`
+
+Below, you can put a list of systematic uncertainties.  These are documented in the example notebook in the ROC Picker documentation.  For KoMbine, uncertainties cannot yet be correlated between patients, so each uncertainty can only apply to a single patient.
 
 ```python
 datacard = Datacard.parse_datacard(datacardfile)
