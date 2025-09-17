@@ -12,7 +12,7 @@ import numpy as np
 
 import kombine.datacard
 from kombine.kaplan_meier_MINLP import KaplanMeierPatientNLL, MINLPForKM
-from .utility_testing_functions import format_value_for_json, Tolerance
+from ..utility_testing_functions import format_value_for_json, Tolerance
 
 warnings.simplefilter("error")
 

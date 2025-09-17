@@ -14,7 +14,7 @@ import scipy.special
 
 import roc_picker.datacard
 from roc_picker.systematics_mc import AUC
-from .utility_testing_functions import (
+from ..utility_testing_functions import (
   compare_dict_keys,
   flip_sign_curve,
   format_value_for_json,

@@ -1,3 +1,4 @@
+#pylint: disable=too-many-lines
 """
 A datacard class to specify the inputs to KoMbine and ROC Picker.
 This is heavily modeled after the datacard format used in the Higgs Combine Tool.
@@ -13,12 +14,17 @@ import scipy.stats
 
 from roc_picker.delta_functions import DeltaFunctionsROC
 from roc_picker.discrete import DiscreteROC
+from roc_picker.systematics_mc import (
+  DistributionBase,
+  DummyDistribution,
+  ROCDistributions,
+  ScipyDistribution,
+)
 from .kaplan_meier_likelihood import (
   KaplanMeierLikelihood,
   KaplanMeierPatientNLL,
 )
 from .kaplan_meier_p_value_MINLP import MINLPforKMPValue
-from roc_picker.systematics_mc import DistributionBase, DummyDistribution, ROCDistributions, ScipyDistribution
 from .utilities import LOG_ZERO_EPSILON_DEFAULT
 
 class Response:

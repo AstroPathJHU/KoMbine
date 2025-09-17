@@ -61,10 +61,6 @@ jobs:
         run: |
           python -m test.kombine.test_km_likelihood
 
-      - name: continuous distributions test
-        run: |
-          python test/kombine/test_continuous_distributions.py
-
       - name: convert KoMbine notebooks
         run: |
           jupytext --sync docs/kombine/*.md

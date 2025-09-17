@@ -11,8 +11,8 @@ Uses the likelihood method for confidence intervals instead of Greenwood.
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
-from roc_picker.datacard import Datacard
-from roc_picker.kaplan_meier_likelihood import KaplanMeierPlotConfig
+from kombine.datacard import Datacard
+from kombine.kaplan_meier_likelihood import KaplanMeierPlotConfig
 
 
 def main():

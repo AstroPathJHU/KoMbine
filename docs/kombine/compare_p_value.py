@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import matplotlib.pyplot as plt
 import numpy as np
 
-from roc_picker.kaplan_meier_p_value_MINLP import KaplanMeierPatientNLL, MINLPforKMPValue
+from kombine.kaplan_meier_p_value_MINLP import KaplanMeierPatientNLL, MINLPforKMPValue
 
 @dataclass
 class PlotConfig:
