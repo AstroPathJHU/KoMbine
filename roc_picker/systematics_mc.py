@@ -488,7 +488,7 @@ class ROCCollection:
     """
     sigmas = [-2, -1, 0, 1, 2]
     quantiles = [
-      (1 + math.erf(nsigma/np.sqrt(2))) / 2 # pylint: disable=no-member
+      (1 + math.erf(nsigma/np.sqrt(2))) / 2
       for nsigma in sigmas
     ]
 
