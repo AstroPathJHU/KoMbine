@@ -305,7 +305,7 @@ making use of the binomial coefficient identity
 \binom{r_1}{d_1}\binom{r_1-d_1}{d_2} = \binom{r_1}{d_1+d_2}\binom{d_1+d_2}{d_1}.
 \end{equation}
 
-The first line of \cref{eq:two-timepoints-collapsed-nll} is identical to the NLL contribution from a single time point with \(d_1+d_2\) deaths and risk set \(r_1\)\@. The second line does not depend on \(p_{1,2}^\text{s}\). When applying binomial-only errors, the second line only contributes a constant offset to the NLL\@. Although it does affect the NLL when patient-wise errors are included, it can be precomputed for the various possible values of \(d_1\) and \(d_2\) and implemented in \pkg{Gurobi} using indicator variables, thereby reducing the number of continuous variables.
+The first line of \cref{eq:two-timepoints-collapsed-nll} is identical to the NLL contribution from a single time point with \(d_1+d_2\) deaths and risk set \(r_1\)\@. The second line does not depend on \(p_{1,2}^\text{s}\).
 
 This procedure can be applied recursively to collapse any number of consecutive time points with no censoring in between. The result is a single binomial term for the collapsed time points, plus a multinomial NLL term for the number of patients who died at each of the original time points out of the total number of patients who died in the group:
 \begin{align}
@@ -316,7 +316,7 @@ This procedure can be applied recursively to collapse any number of consecutive 
 \end{align}
 with \(d_{1 \cdots n} = d_1 + d_2 + \cdots + d_n\) and \(p_{1 \cdots n}^\text{s} = p_1^\text{s} p_2^\text{s} \cdots p_n^\text{s}\)\@.
 
-\pkg{KoMbine} automatically collapses such time points before performing the NLL minimization.
+\pkg{KoMbine} automatically collapses such time points before performing the NLL minimization. When applying binomial-only errors, the second line only contributes a constant offset to the NLL\@. Although it does affect the NLL when patient-wise errors are included, it can be precomputed for the various possible values of \(d_i\) and implemented in \pkg{Gurobi} using indicator variables, thereby reducing the number of continuous variables. This can significantly speed up the NLL minimization, especially when not too many patients are censored.
 
 \section{Examples and discussion}
 
