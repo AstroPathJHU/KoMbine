@@ -15,7 +15,7 @@ propagation using likelihood-based methods.
 For detailed information and examples, please see the documentation.
 The source is in the `docs/` folder, and you can download the output
 (latest version from the `main` branch, compiled by Github Actions) from
-[this link](https://nightly.link/AstroPathJHU/ROCPicker/workflows/test_and_docs/main/docs.zip).
+[this link](https://nightly.link/AstroPathJHU/ROCPicker/workflows/test_kombine/main/kombine_docs.zip) for KoMbine and from [this link](https://nightly.link/AstroPathJHU/ROCPicker/workflows/test_roc_picker/main/roc_picker_docs.zip) for ROC Picker.
 
 ## Quick start
 
