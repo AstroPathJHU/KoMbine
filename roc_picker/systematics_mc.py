@@ -7,11 +7,11 @@ docs/03_examples.md for usage examples.
 import abc
 import collections
 import functools
+import math
 import numbers
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-import scipy.special
 
 class DistributionBase(abc.ABC):
   """
@@ -488,7 +488,7 @@ class ROCCollection:
     """
     sigmas = [-2, -1, 0, 1, 2]
     quantiles = [
-      (1 + scipy.special.erf(nsigma/np.sqrt(2))) / 2 # pylint: disable=no-member
+      (1 + math.erf(nsigma/np.sqrt(2))) / 2 # pylint: disable=no-member
       for nsigma in sigmas
     ]
 
