@@ -1,0 +1,65 @@
+name: test ROC Picker
+on:
+  push
+jobs:
+  test_roc_picker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4.1.6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5.1.0
+        with:
+          python-version: 3.11
+
+      - name: pip install
+        run: |
+          pip install . ipykernel jupytext lifelines nbconvert pyflakes pylint texoutparse &&
+          rm -r build
+
+      - name: test ROC Picker code in README
+        run: |
+          # Extract the ROC Picker example from README and test it
+          startlinenumber="$(grep -n "from roc_picker.discrete import DiscreteROC" README.md | sed "s/:.*//")"
+          endlinenumber="$(sed -n "${startlinenumber},1000p" README.md | grep -n '```' | head -1 | sed "s/:.*//")"
+          endlinenumber="$(expr "$startlinenumber" + "$endlinenumber" - 2)"
+          sed -n "${startlinenumber},${endlinenumber}p" README.md | python
+
+      - name: discrete unit test
+        run: |
+          python -m test.roc_picker.test_discrete
+
+      - name: systematics MC unit test
+        run: |
+          python -m test.roc_picker.test_systematics_mc
+
+      - name: continuous distributions test
+        run: |
+          python test/roc_picker/test_continuous_distributions.py
+
+      - name: convert ROC Picker notebooks
+        run: |
+          jupytext --sync docs/roc_picker/*.md
+
+      - name: test ROC Picker notebooks
+        run: |
+          jupyter nbconvert --execute --to html -- docs/roc_picker/*.ipynb
+
+      - name: Compile ROC plots
+        run: |
+          ./docs/roc_picker/compile_roc_plots.sh
+
+      - name: Compile ROC Picker docs
+        uses: xu-cheng/latex-action@v3
+        with:
+          working_directory: docs/roc_picker
+          root_file: 02_rocpicker.tex
+          latexmk_use_xelatex: true
+
+      - uses: actions/upload-artifact@v4.3.3
+        with:
+          name: roc_picker_docs
+          path: |
+            docs/roc_picker/02_rocpicker.pdf
+            docs/roc_picker/*.html

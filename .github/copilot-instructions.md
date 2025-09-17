@@ -1,38 +1,72 @@
-# ROC Picker Copilot Instructions
+# ROC Picker and KoMbine Copilot Instructions
 
 ## Repository Overview
 
-ROC Picker is a Python package for propagating statistical and systematic uncertainties in biomedical analysis. It provides tools for ROC curve analysis using various methods including discrete optimization, Monte Carlo with systematics, and Kaplan-Meier likelihood methods.
+This repository contains two distinct Python packages for biomedical analysis:
 
-**Repository size**: ~6,000 lines of Python code across 12 main modules
+- **ROC Picker**: ROC curve analysis with statistical and systematic uncertainty propagation
+- **KoMbine**: Kaplan-Meier curve analysis with likelihood-based uncertainty methods
+
+**Repository structure**: ~6,000 lines of Python code across two main packages
 **Languages**: Python (primary), LaTeX (documentation), Shell scripts (build automation)
-**Key frameworks**: NumPy/SciPy for numerical computing, Matplotlib for plotting, Gurobi for optimization
+**Key frameworks**: NumPy/SciPy for numerical computing, Matplotlib for plotting, Gurobi for optimization (KoMbine only)
 **Target runtime**: Python 3.11+ (tested with 3.12)
+
+## Package Structure
+
+### Core Packages
+- **`roc_picker/`**: ROC analysis functionality
+  - `discrete.py`, `systematics_mc.py`, `delta_functions.py` - Main ROC methods
+  - `discrete_base.py`, `continuous_distributions.py` - Supporting classes
+  - `command_line_interface.py` - ROC-specific CLI functions
+  - `datacard.py` - Re-exports Datacard from kombine for compatibility
+  
+- **`kombine/`**: Kaplan-Meier analysis functionality
+  - `kaplan_meier*.py` - KM curve and likelihood methods
+  - `discrete_optimization.py`, `utilities.py` - Optimization utilities (used by KM methods)
+  - `datacard.py` - Main Datacard class (core data parsing)
+  - `command_line_interface.py` - KM-specific CLI functions
+
+### Test Structure
+- **`test/roc_picker/`**: ROC Picker tests, datacards, and reference data
+- **`test/kombine/`**: KoMbine tests, datacards, and reference data
+- **Shared files**: `utility_testing_functions.py`, `test_continuous_distributions.py` (copied to both)
+
+### Documentation Structure  
+- **`docs/roc_picker/`**: ROC Picker documentation, LaTeX files, and plotting scripts
+- **`docs/kombine/`**: KoMbine documentation, LaTeX files, and plotting scripts
+- Each has independent numbering starting from 01, with separate `compile_*_plots.sh` scripts
 
 ## Critical Build Information
 
 ### Installation and Environment Setup
 
 **Always run installation in this exact sequence:**
-1. `pip install .` - installs the package and dependencies
+1. `pip install .` - installs both roc_picker and kombine packages
 2. `pip install pylint pyflakes texoutparse` - installs required linting and development tools
 3. `rm -rf build` - clean up build artifacts (if needed for clean builds)
 
 **Dependencies installed**: gurobipy, matplotlib, numpy, scipy>=1.15
-**Additional development tools required**: pylint, pyflakes, texoutparse (for linting and code quality checks)
+**Additional development tools required**: pylint, pyflakes, texoutparse
 
 ### Command Line Interface
 
-**Available CLI tools** (installed via pip install):
+**ROC Picker CLI tools**:
 ```bash
-rocpicker_discrete datacard.txt [options]  # Discrete ROC analysis
-rocpicker_mc datacard.txt output.pdf [options]  # Monte Carlo systematics  
-rocpicker_delta_functions datacard.txt [options]  # Delta function analysis
-kombine datacard.txt output.pdf [options]  # KM likelihood (requires full Gurobi)
-kombine_twogroups datacard.txt output.pdf [options]  # KM two-group analysis (requires full Gurobi)
+rocpicker_discrete datacard.txt [options]     # Discrete ROC analysis
+rocpicker_mc datacard.txt output.pdf [options] # Monte Carlo systematics  
+rocpicker_delta_functions datacard.txt [options] # Delta function analysis
 ```
 
-**Basic functionality test** (~4 seconds):
+**KoMbine CLI tools** (require Gurobi):
+```bash
+kombine datacard.txt output.pdf [options]      # KM likelihood 
+kombine_twogroups datacard.txt output.pdf [options] # KM two-group analysis
+```
+
+### Basic Functionality Tests
+
+**ROC Picker test** (~4 seconds):
 ```python
 from roc_picker.discrete import DiscreteROC
 responders = [1, 1, 2, 3, 9, 10]
@@ -41,200 +75,87 @@ result = DiscreteROC(responders=responders, nonresponders=nonresponders).make_pl
 # Returns dict with keys: ['nominal', 'm68', 'p68', 'm95', 'p95']
 ```
 
-### Gurobi License Limitation (CRITICAL)
+**KoMbine test** (~4 seconds):
+```python
+from kombine.datacard import Datacard
+datacard = Datacard.parse_datacard("test/kombine/datacards/simple_examples/simple_km_few_deaths.txt")
+kml = datacard.km_likelihood(parameter_min=-float('inf'), parameter_max=0.45)
+# Returns KaplanMeierLikelihood object
+```
 
-**WARNING**: The Kaplan-Meier likelihood methods require Gurobi optimizer. The restricted Gurobi license causes failures on large models with the error:
+### Gurobi License Limitation (CRITICAL for KoMbine)
+
+**WARNING**: KoMbine's Kaplan-Meier likelihood methods require Gurobi optimizer. The restricted Gurobi license causes failures on large models with the error:
 ```
 GurobiError: Model too large for size-limited license
 ```
 
 **What works without full Gurobi license**:
-- Discrete ROC analysis (`test_discrete.py`, `rocpicker_discrete`)
-- Monte Carlo systematics (`test_systematics_mc.py`, `rocpicker_mc`) 
-- Delta functions (`rocpicker_delta_functions`)
-- Discrete optimization (`test_discrete_optimization.py`)
+- All ROC Picker functionality (`test/roc_picker/` tests)
+- Basic KoMbine discrete optimization (`test/kombine/test_discrete_optimization.py`)
+- Small KoMbine datasets with few patients
 
 **What requires full Gurobi license**:
-- Kaplan-Meier likelihood tests (`test_km_likelihood.py`)
-- `kombine` and `kombine_twogroups` command-line tools
+- Large KoMbine likelihood tests (`test/kombine/test_km_likelihood.py` with many patients)
+- Full KoMbine documentation compilation (some plots)
 
-### Gurobi License Configuration for Copilot Agents
+## Testing Commands
 
-**IMPORTANT**: GitHub Copilot agents do not have direct access to repository secrets like GitHub Actions workflows do. This is by design for security reasons.
-
-**If you need to test Gurobi functionality as a Copilot agent:**
-
-1. **Limited license testing**: Most functionality works with Gurobi's restricted license that comes with the gurobipy package installation. Only large models will fail.
-
-2. **For full license access**: The repository owner would need to provide Gurobi license information through alternative means:
-   - **Option A**: Provide a temporary license file that can be placed in the repository (not recommended for security)
-   - **Option B**: Set up environment variables manually in the session:
-     ```bash
-     export GUROBI_WLSACCESSID="your_access_id"
-     export GUROBI_WLSSECRET="your_secret" 
-     export GUROBI_LICENSEID="your_license_id"
-     cat <<EOF > ~/gurobi.lic
-     WLSACCESSID=$GUROBI_WLSACCESSID
-     WLSSECRET=$GUROBI_WLSSECRET
-     LICENSEID=$GUROBI_LICENSEID
-     EOF
-     ```
-   - **Option C**: Focus testing on methods that don't require full Gurobi license
-
-**Recommendation**: Start with testing the methods that work with restricted license, and document any Gurobi license limitations as expected behavior. The repository owner can manually test the full Gurobi functionality if needed.
-
-**Note**: The GitHub Actions workflow uses these secrets for Gurobi WLS license:
-- `GUROBI_WLSACCESSID`
-- `GUROBI_WLSSECRET` 
-- `GUROBI_LICENSEID`
-
-### Testing Commands
-
-**Prerequisites**: Ensure you have installed linting and development tools: `pip install pylint pyflakes texoutparse`
-
-**Run tests in this order** (some will fail due to Gurobi license):
+### ROC Picker Tests (no Gurobi license required)
 ```bash
-# These work with restricted Gurobi license:
-python -m test.test_discrete_optimization  # ~90 seconds
-python -m test.test_discrete              # ~5 seconds  
-python -m test.test_systematics_mc        # ~10 seconds
-python test/test_continuous_distributions.py  # ~5 seconds
-
-# This fails with restricted Gurobi license:
-python -m test.test_km_likelihood  # Will fail with "Model too large for size-limited license"
+python -m test.roc_picker.test_discrete              # ~5 seconds
+python -m test.roc_picker.test_systematics_mc        # ~10 seconds
+python test/roc_picker/test_continuous_distributions.py  # ~5 seconds
 ```
 
-**Test validation**: Tests use reference JSON files in `test/reference/` to validate numerical outputs against expected results with specified tolerances (typically 1e-6 absolute/relative tolerance).
+### KoMbine Tests
+```bash
+python -m test.kombine.test_discrete_optimization    # ~90 seconds, works with restricted license
+python -m test.kombine.test_km_likelihood           # May fail with "Model too large" on restricted license
+```
 
 ### Linting and Code Quality
-
-**Always run linting before committing**:
 ```bash
 python -m pyflakes .        # Should pass (may show f-string warnings in generated docs/)
 python -m pylint .          # Should score ~10/10
 ```
 
-**Linting configuration**: `.pylintrc` configures 2-space indentation, ignores invalid variable names (C0103), and has scipy.special whitelist.
+## GitHub Actions Workflows
 
-### Documentation Build
+The repository now uses three separate workflows:
 
-**Documentation tools needed**:
-```bash
-pip install jupytext nbconvert  # For Jupyter notebook conversion
-```
+1. **`.github/workflows/linting.yml`**: Linting and type checking (pyflakes, pylint, pyright)
+2. **`.github/workflows/test_roc_picker.yml`**: ROC Picker testing and documentation
+3. **`.github/workflows/test_kombine.yml`**: KoMbine testing and documentation (requires Gurobi secrets)
 
-**Optional tools for comprehensive development environment** (matching GitHub Actions):
-```bash
-pip install ipykernel lifelines  # Additional tools used in CI
-```
+**Gurobi secrets** (for KoMbine workflow): `GUROBI_WLSACCESSID`, `GUROBI_WLSSECRET`, `GUROBI_LICENSEID`
 
-**Build documentation**:
-```bash
-cd docs
-jupytext --sync *.md        # Convert markdown to notebooks
-./compile_plots.sh          # Generate plots (requires full Gurobi license for some plots)
-```
+## Development Workflow
 
-**LaTeX compilation** (if needed):
-- Uses XeLaTeX with biber for bibliography
-- Main documents: `02_rocpicker.tex`, `08_kaplan_meier_paper.tex`
-- Configuration: `.latexmkrc` sets XeLaTeX as default
-
-## Project Architecture
-
-### Core Module Structure (`roc_picker/`)
-
-**Main entry point**: `datacard.py` (1,184 lines) - Parses datacard configuration files and orchestrates analysis
-**Key analysis modules**:
-- `discrete.py` (207 lines) - Discrete ROC optimization
-- `systematics_mc.py` (567 lines) - Monte Carlo with systematics
-- `kaplan_meier_likelihood.py` (868 lines) - KM likelihood (requires Gurobi)
-- `kaplan_meier_MINLP.py` (1,814 lines) - Mixed-integer optimization (requires Gurobi)
-- `delta_functions.py` (187 lines) - Delta function analysis
-- `discrete_optimization.py` (315 lines) - Core optimization routines
-
-**Supporting modules**:
-- `discrete_base.py` (372 lines) - Base class for discrete methods
-- `continuous_distributions.py` (213 lines) - Continuous distribution handling
-- `kaplan_meier.py` (360 lines) - KM curve utilities
-- `utilities.py` (32 lines) - Common utilities
-
-### Test Structure (`test/`)
-
-**Test modules**: Each major component has corresponding test file
-**Test data**: `test/datacards/` contains example configurations
-- `simple_examples/` - Basic test cases
-- `lung/` - Real biomedical data examples
-
-**Reference data**: `test/reference/` contains JSON files with expected numerical results
-
-### Configuration Files
-
-**Build**: `setup.py` + `pyproject.toml` (setuptools with setuptools_scm for versioning)
-**Linting**: `.pylintrc` 
-**Git**: `.gitignore` excludes build artifacts, PDFs, logs, notebooks
-**CI/CD**: `.github/workflows/test_and_docs.yml` runs full test and documentation pipeline
-
-### GitHub Actions Workflow
-
-The CI pipeline (`.github/workflows/test_and_docs.yml`) runs:
-1. Python 3.11 setup and pip install
-2. pyflakes and pylint checking
-3. Jupyter notebook conversion
-4. Pyright type checking
-5. Gurobi installation and license configuration (with secrets)
-6. README code example test
-7. All test modules
-8. Plot compilation and LaTeX document generation
-9. Artifact upload
-
-**Timing**: Full CI run takes ~10-15 minutes with LaTeX compilation
-
-### Documentation (`docs/`)
-
-**Structure**: Mixed LaTeX papers + Jupyter notebooks
-**Build script**: `compile_plots.sh` generates all figures
-**Output**: GitHub Actions compiles to PDF and uploads as artifacts
-
-## Datacard Format
-
-The package uses a text-based datacard format (similar to Higgs Combine Tool) to specify analysis configurations. Example format:
-```
-observable_type  fixed         
-------------
-# List of patients
-------------
-bin inclusive inclusive ...
-response responder non-responder ...
-observable 1 2 3 ...
-```
-
-**Key datacard locations**:
-- `test/datacards/simple_examples/` - Basic examples for testing
-- `test/datacards/lung/` - Real biomedical data for realistic testing
-
-**Example datacard files**: `example_roc.txt`, `poisson_ratio_km.txt`, `symmetric_roc.txt`
-
-## Workflow for Code Changes
-
-1. **Installation**: 
-   ```bash
-   pip install .
-   pip install pylint pyflakes texoutparse
-   ```
+### For ROC Picker changes:
+1. **Installation**: `pip install . && pip install pylint pyflakes texoutparse`
 2. **Linting**: `python -m pyflakes . && python -m pylint .`
-3. **Test relevant modules**: Run appropriate test modules (avoid KM tests if no Gurobi license)
-4. **Validation**: Use reference data tests to ensure numerical stability
-5. **Documentation**: If changing docs, run `jupytext --sync docs/*.md`
+3. **Testing**: Run ROC Picker tests from `test/roc_picker/`
+4. **Documentation**: Use `docs/roc_picker/compile_roc_plots.sh`
 
-## Troubleshooting
+### For KoMbine changes:
+1. **Installation**: Same as above
+2. **Linting**: Same as above  
+3. **Testing**: Run KoMbine tests from `test/kombine/` (may need Gurobi license)
+4. **Documentation**: Use `docs/kombine/compile_km_plots.sh`
 
-**Gurobi license errors**: Expected for KM likelihood methods - document as known limitation
-**Build directory issues**: Run `rm -rf build` before reinstalling
-**Linting f-string warnings**: Acceptable in generated `docs/*.py` files from jupytext
-**Test timing**: `test_discrete_optimization` is slow (~90s) - this is normal
-**Network timeouts during install**: Retry pip install if PyPI connection fails
-**Missing linting tools**: If you get "No module named pylint", "No module named pyflakes", or "No module named texoutparse", make sure to run `pip install pylint pyflakes texoutparse` after the main installation
+### For cross-package changes:
+- Test both packages since ROC Picker imports from KoMbine
+- The `Datacard` class lives in `kombine/datacard.py` but is re-exported by `roc_picker/datacard.py`
+
+## File Locations Quick Reference
+
+**ROC Picker code**: `roc_picker/` (6 Python modules)
+**KoMbine code**: `kombine/` (8 Python modules)
+**ROC Picker tests**: `test/roc_picker/` with `datacards/`, `reference/`, `test_output/`
+**KoMbine tests**: `test/kombine/` with `datacards/`, `reference/`, `test_output/`
+**ROC Picker docs**: `docs/roc_picker/` (LaTeX + Jupyter notebooks)
+**KoMbine docs**: `docs/kombine/` (LaTeX + Jupyter notebooks, includes JSS class files)
 
 ## Common Patterns
 
@@ -244,39 +165,11 @@ observable 1 2 3 ...
 - **Plotting**: Matplotlib-based with configurable output formats (PDF default)
 - **CLI**: Entry points defined in setup.py provide command-line interfaces
 - **Confidence intervals**: Results include nominal, ±68%, and ±95% confidence levels (keys: 'nominal', 'p68', 'm68', 'p95', 'm95')
-- **Data validation**: `flip_sign` parameter allows inverting analysis for AUC < 0.5 cases
 
-## File Locations Quick Reference
+## Troubleshooting
 
-**Source code**: `roc_picker/` (12 Python modules)
-**Tests**: `test/` with subdirectories:
-- `test/datacards/simple_examples/` - Basic test configurations  
-- `test/datacards/lung/` - Real biomedical data examples
-- `test/reference/` - Expected numerical results (JSON format)
-**Documentation**: `docs/` (LaTeX + Jupyter notebooks)
-**Build artifacts**: Excluded by `.gitignore` (build/, *.pdf, *.html, *.ipynb)
-
-## Kaplan-Meier Likelihood Testing with Limited Gurobi License
-
-**Working datacards for likelihood method testing**:
-- `simple_km_few_deaths.txt` - Works with full likelihood method (4 patients, few deaths)
-- Other `test/datacards/simple_examples/` - May work with binomial-only confidence bands
-
-**Experience with different confidence interval methods**:
-- **Full NLL**: Requires optimization, hits Gurobi license limits on larger datasets
-- **Binomial-only**: More computationally intensive than Greenwood but works with restricted license
-- **Greenwood method**: Least intensive, works with all datasets, good fallback option
-
-**Recommended testing strategy**:
-1. Start with `simple_km_few_deaths.txt` for full likelihood testing
-2. Use `--include-binomial-only` for medium datasets (works with restricted license)
-3. Use `--no-confidence-bands` (Greenwood fallback) for large datasets that hit license limits
-
-**Empirical observations**:
-- Datasets with <10 patients typically work with full likelihood method
-- Datasets with 10-100 patients may work with binomial-only method
-- Datasets with >100 patients typically require Greenwood fallback with restricted license
-
-## Trust These Instructions
-
-These instructions have been validated by running the build, test, and linting processes. Only search for additional information if these instructions are incomplete or found to be incorrect.
+**Import issues**: Remember that `roc_picker.datacard` now re-exports from `kombine.datacard`
+**Missing test data**: Check if you're in the right test subdirectory (`test/roc_picker/` vs `test/kombine/`)
+**Gurobi license errors**: Expected for large KoMbine models - document as known limitation
+**Build directory issues**: Run `rm -rf build` before reinstalling
+**Missing linting tools**: Run `pip install pylint pyflakes texoutparse` after main installation
