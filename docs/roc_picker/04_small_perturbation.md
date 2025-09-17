@@ -36,7 +36,7 @@ For this method, the only thing that matters is the ordering of the responders a
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"simple_examples"/"example_roc.txt"
+datacardfile = here.parent.parent/"test"/"roc_picker"/"datacards"/"simple_examples"/"example_roc.txt"
 datacard = Datacard.parse_datacard(datacardfile)
 ```
 
@@ -69,7 +69,7 @@ Now the actual value does matter (relative to the error).  For this example I us
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"simple_examples"/"poisson_roc.txt"
+datacardfile = here.parent.parent/"test"/"roc_picker"/"datacards"/"simple_examples"/"poisson_roc.txt"
 datacard = Datacard.parse_datacard(datacardfile)
 ```
 

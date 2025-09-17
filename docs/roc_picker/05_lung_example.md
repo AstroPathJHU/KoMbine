@@ -50,7 +50,7 @@ We estimate this uncertainty using the discrete method.
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_cells_binomial.txt"
+datacardfile = here.parent.parent/"test"/"roc_picker"/"datacards"/"lung"/"datacard_cells_binomial.txt"
 datacard = Datacard.parse_datacard(datacardfile)
 _ = datacard.discrete_roc(flip_sign=True).make_plots(show=[False, False, True])
 ```
@@ -61,9 +61,9 @@ We propagate this uncertainty using the Monte Carlo method.
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_cells_poisson.txt"
+datacardfile = here.parent.parent/"test"/"roc_picker"/"datacards"/"lung"/"datacard_cells_poisson.txt"
 datacard = Datacard.parse_datacard(datacardfile)
-_ = datacard.systematics_mc_roc(flip_sign=True).generate(size=10000, random_state=123456).plot()
+_ = datacard.systematics_mc_roc(flip_sign=True).generate(size=10000, random_state=123456).plot(show=True)
 ```
 
 ## Discussion
@@ -84,7 +84,7 @@ We again use the discrete method.  The ROC curve error bands and AUC error range
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_neighborhoods_binomial.txt"
+datacardfile = here.parent.parent/"test"/"roc_picker"/"datacards"/"lung"/"datacard_neighborhoods_binomial.txt"
 datacard = Datacard.parse_datacard(datacardfile)
 _ = datacard.discrete_roc(flip_sign=True).make_plots(show=[False, False, True])
 ```
@@ -95,7 +95,7 @@ We use the Monte Carlo method.  Because the neighborhoods are so much more commo
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_neighborhoods_poisson.txt"
+datacardfile = here.parent.parent/"test"/"roc_picker"/"datacards"/"lung"/"datacard_neighborhoods_poisson.txt"
 datacard = Datacard.parse_datacard(datacardfile)
 _ = datacard.systematics_mc_roc(flip_sign=True).generate(size=10000, random_state=123456).plot(show=True)
 ```
@@ -112,7 +112,7 @@ We use the Monte Carlo method again and find that this uncertainty is larger tha
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_neighborhoods_systematics.txt"
+datacardfile = here.parent.parent/"test"/"roc_picker"/"datacards"/"lung"/"datacard_neighborhoods_systematics.txt"
 datacard = Datacard.parse_datacard(datacardfile)
 _ = datacard.systematics_mc_roc(flip_sign=True).generate(size=10000, random_state=123456).plot(show=True)
 ```

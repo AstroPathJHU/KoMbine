@@ -39,7 +39,7 @@ from roc_picker.datacard import Datacard  #noqa: E402
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"simple_examples"/"fixed_km_censoring.txt"
+datacardfile = here.parent.parent/"test"/"kombine"/"datacards"/"simple_examples"/"fixed_km_censoring.txt"
 ```
 
 ```python

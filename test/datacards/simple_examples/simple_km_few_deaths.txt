@@ -1,9 +1,0 @@
-observable_type poisson_ratio
-------------
-# Simple KM test with only a few distinct death times
-# Designed for testing collapse_consecutive_deaths=False
-------------
-survival_time	2	3	5	4
-censored	0	0	0	0
-num	15	25	35	30
-denom	100	100	100	100

@@ -35,7 +35,7 @@ ROC Picker works using datacards.  The datacard format is inspired by the CMS Co
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"simple_examples"/"symmetric_roc.txt"
+datacardfile = here.parent.parent/"test"/"roc_picker"/"datacards"/"simple_examples"/"symmetric_roc.txt"
 ```
 
 ```python
@@ -95,7 +95,7 @@ Here's an example datacard.  This is from an actual analysis of the density of C
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent/"test"/"datacards"/"lung"/"datacard_neighborhoods.txt"
+datacardfile = here.parent.parent/"test"/"roc_picker"/"datacards"/"lung"/"datacard_neighborhoods.txt"
 
 with open(datacardfile) as f:
     print(f.read())
@@ -116,4 +116,8 @@ The method currently implemented for systematics uses a Monte Carlo method to va
 
 ```python
 _ = datacard.systematics_mc_roc(flip_sign=True).generate(size=10000, random_state=123456).plot(show=True)
+```
+
+```python
+
 ```
