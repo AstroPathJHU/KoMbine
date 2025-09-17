@@ -18,9 +18,9 @@ jupyter:
  - `02_kaplan_meier_paper.pdf`
    - This LaTeX document contains a detailed explanation of the math that
      goes into the Kaplan-Meier likelihood methods.
- - `02_kaplan_meier_example.html`
+ - `03_kaplan_meier_example.html`
    - an example of how to use the likelihood method for uncertainties on Kaplan-Meier curves
- - `03_compare_to_lifelines.html`
+ - `04_compare_to_lifelines.html`
    - a comparison of our Kaplan-Meier likelihood method to the `lifelines` package
 
 # Compilation instructions

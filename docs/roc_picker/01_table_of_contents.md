@@ -18,13 +18,13 @@ jupyter:
  - `02_rocpicker.pdf`
    - This LaTeX document contains a detailed explanation of the math that
      goes into all the ROC analysis methods.
- - `02_examples.html`
+ - `03_examples.html`
    - examples of how to run the various ROC analysis methods included in ROC Picker
      using the datacard interface.
- - `03_small_perturbation.html`
+ - `04_small_perturbation.html`
    - an illustration of small perturbations to one of the
      observables and how that affects the ROC results.
- - `04_lung_example.html`
+ - `05_lung_example.html`
    - an example ROC analysis of statistical and systematic uncertainties
      using AstroPath lung cancer data
 

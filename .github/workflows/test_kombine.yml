@@ -77,13 +77,13 @@ jobs:
         uses: xu-cheng/latex-action@v3
         with:
           working_directory: docs/kombine
-          root_file: 08_kaplan_meier_paper.tex
+          root_file: 02_kaplan_meier_paper.tex
 
       - uses: actions/upload-artifact@v4.3.3
         with:
           name: kombine_docs
           path: |
-            docs/kombine/08_kaplan_meier_paper.pdf
+            docs/kombine/02_kaplan_meier_paper.pdf
             docs/kombine/*.html
 
       - name: Check latex log
