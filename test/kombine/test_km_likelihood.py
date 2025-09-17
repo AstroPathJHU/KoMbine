@@ -10,8 +10,8 @@ import warnings
 
 import numpy as np
 
-import roc_picker.datacard
-from roc_picker.kaplan_meier_MINLP import KaplanMeierPatientNLL, MINLPForKM
+import kombine.datacard
+from kombine.kaplan_meier_MINLP import KaplanMeierPatientNLL, MINLPForKM
 from .utility_testing_functions import format_value_for_json, Tolerance
 
 warnings.simplefilter("error")
@@ -57,7 +57,7 @@ def runtest(
   # Higher precision for patient-wise p-values to avoid rounding small values to 0
   patient_wise_precision = 8
 
-  datacard = roc_picker.datacard.Datacard.parse_datacard(dcfile)
+  datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
   kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
   times_for_plot = kml.times_for_plot
 
@@ -304,7 +304,7 @@ def runtest(
         "systematic": 1,
         "systematic_small": 1,
       }[name]
-      datacard_alt = roc_picker.datacard.Datacard.parse_datacard(dcfile_alt)
+      datacard_alt = kombine.datacard.Datacard.parse_datacard(dcfile_alt)
       kml3_alt = datacard_alt.km_likelihood(
         parameter_min=0.25*factor,
         parameter_max=0.75*factor,

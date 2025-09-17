@@ -7,7 +7,7 @@ import unittest
 
 import numpy as np
 
-from roc_picker.discrete_optimization import (
+from kombine.discrete_optimization import (
   minimize_discrete_single_minimum,
   binary_search_sign_change,
 )
