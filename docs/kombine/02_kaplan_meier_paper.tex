@@ -417,41 +417,50 @@ The scatter from the line or curve, which shrinks with larger cohort sizes, is b
 \subsection{Lung cancer dataset}
 
 \begin{figure}[ht]
-  \newcommand{\spacebetweenrows}{1em}
-  \newcommand{\figwidth}{0.32\textwidth}
+  \newcommand{\figwidth}{0.28\textwidth}
+  \newcommand{\legendwidth}{0.13\textwidth}
+  \newcommand{\movelegendup}{\vspace{-0.9cm}}
   \centering
-  \begin{subfigure}[t]{\figwidth}
+  \begin{subfigure}[c]{\figwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_cells_km_RFS.pdf}
     \caption{\label{fig:lung-dataset-cells}}
   \end{subfigure}
-  \begin{subfigure}[t]{\figwidth}
+  \begin{subfigure}[c]{\figwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_cells_km_RFS_patient_wise.pdf}
     \caption{\label{fig:lung-dataset-cells-patient-wise}}
   \end{subfigure}
-  \begin{subfigure}[t]{\figwidth}
+  \begin{subfigure}[c]{\figwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_cells_km_RFS_binomial.pdf}
     \caption{\label{fig:lung-dataset-cells-binomial}}
   \end{subfigure}
-  \begin{subfigure}[t]{\figwidth}
+  \begin{minipage}[c]{\legendwidth}
+    \centering
+    \movelegendup
+    \includegraphics[width=\linewidth]{lung_cells_km_RFS_legend.pdf}
+  \end{minipage}
+  \begin{subfigure}[c]{\figwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_donuts_km_RFS.pdf}
     \caption{\label{fig:lung-dataset-donuts}}
   \end{subfigure}
-  \vspace{\spacebetweenrows}
-  \begin{subfigure}[t]{\figwidth}
+  \begin{subfigure}[c]{\figwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_donuts_km_RFS_patient_wise.pdf}
     \caption{\label{fig:lung-dataset-donuts-patient-wise}}
   \end{subfigure}
-  \vspace{\spacebetweenrows}
-  \begin{subfigure}[t]{\figwidth}
+  \begin{subfigure}[c]{\figwidth}
     \centering
     \includegraphics[width=\linewidth]{lung_donuts_km_RFS_binomial.pdf}
     \caption{\label{fig:lung-dataset-donuts-binomial}}
   \end{subfigure}
+  \begin{minipage}[c]{\legendwidth}
+    \centering
+    \movelegendup
+    \includegraphics[width=\linewidth]{lung_donuts_km_RFS_legend.pdf}
+  \end{minipage}
   \caption{\label{fig:lung-dataset} \KM{} curves for the regression-free survival of patients with lung cancer who were treated with neoadjuvant anti-PD-1 immunotherapy, stratifying patients by their pre-treatment densities of either CD8+FoxP3+ cells (top) or DONUTS (bottom). The left column shows the full uncertainty, while the middle and right columns show the uncertainties broken down into patient-wise and binomial contributions, respectively.}
 \end{figure}
 

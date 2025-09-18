@@ -3,6 +3,7 @@ Command line interface functions for KoMbine.
 """
 
 import argparse
+import os
 import pathlib
 
 import matplotlib.pyplot as plt
@@ -34,7 +35,9 @@ def _make_common_parser(description: str) -> argparse.ArgumentParser:
   parser.add_argument("--label-fontsize", type=float, help="Font size for axis labels.", default=KaplanMeierPlotConfig.label_fontsize)
   parser.add_argument("--title-fontsize", type=float, help="Font size for the plot title.", default=KaplanMeierPlotConfig.title_fontsize)
   parser.add_argument("--tick-fontsize", type=float, help="Font size for the tick labels.", default=KaplanMeierPlotConfig.tick_fontsize)
-  parser.add_argument("--legend-loc", type=str, help="Location of the legend in the plot.", default=KaplanMeierPlotConfig.legend_loc)
+  g = parser.add_mutually_exclusive_group()
+  g.add_argument("--legend-loc", type=str, help="Location of the legend in the plot.", default=KaplanMeierPlotConfig.legend_loc)
+  g.add_argument("--legend-saveas", type=pathlib.Path, help="Path to save the legend separately. If provided, the legend will be left off the main plot.", default=None)
   parser.add_argument("--title", type=str, help="Title for the plot.", default=KaplanMeierPlotConfig.title)
   parser.add_argument("--xlabel", type=str, help="Label for the x-axis.", default=KaplanMeierPlotConfig.xlabel)
   parser.add_argument("--ylabel", type=str, help="Label for the y-axis.", default=KaplanMeierPlotConfig.ylabel)
@@ -110,6 +113,7 @@ def plot_km_likelihood():
   plot_config = KaplanMeierPlotConfig(
     **_extract_common_plot_config_args(args),
     saveas=args.__dict__.pop("output_file"),
+    legend_saveas=args.__dict__.pop("legend_saveas"),
   )
 
   kml.plot(config=plot_config)
@@ -172,6 +176,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
     close_figure=False,
     show=False,
     saveas=None,
+    legend_saveas=os.devnull,
     best_label=f"High (n={len(kml_high.nominalkm.patients)})",
     best_color="blue",
     CL_colors=["dodgerblue", "skyblue"],
@@ -186,6 +191,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
     close_figure=False,
     show=False,
     saveas=None,
+    legend_saveas=args.__dict__.pop("legend_saveas"),
     best_label=f"Low (n={len(kml_low.nominalkm.patients)})",
     best_color="red",
     CL_colors=["orangered", "lightcoral"],

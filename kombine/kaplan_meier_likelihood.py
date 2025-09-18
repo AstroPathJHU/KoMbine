@@ -57,6 +57,8 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   close_figure: If True, close the figure after saving or showing.
   show: If True, display the plot.
   saveas: Path to save the plot image.
+  legend_saveas: Path to save the legend separately, or None.
+                 If provided, the legend will be left off the main plot.
   print_progress: If True, print progress messages during calculations.
   MIPGap: Relative MIP gap for the optimization solver.
   MIPGapAbs: Absolute MIP gap for the optimization solver.
@@ -104,7 +106,8 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   create_figure: bool = True
   close_figure: bool | None = None
   show: bool = False
-  saveas: os.PathLike | None = None
+  saveas: os.PathLike | str | None = None
+  legend_saveas: os.PathLike | str | None = None
   print_progress: bool = False
   MIPGap: float | None = None
   MIPGapAbs: float | None = None
@@ -889,7 +892,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     ax.set_ylabel(config.ylabel, fontsize=config.label_fontsize)
     if config.title is not None:
       ax.set_title(config.title, fontsize=config.title_fontsize)
-    ax.legend(fontsize=config.legend_fontsize, loc=config.legend_loc)
     ax.grid(visible=config.show_grid)
     ax.set_ylim(0, 1.05) # Ensure y-axis is from 0 to 1.05 for survival probability
 
@@ -905,6 +907,27 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       save_path = pathlib.Path(config.saveas)
       save_path.parent.mkdir(parents=True, exist_ok=True)
       fig.savefig(save_path, bbox_inches='tight', dpi=config.dpi)
+
+    if config.legend_saveas is None:
+      ax.legend(fontsize=config.legend_fontsize, loc=config.legend_loc)
+    else:
+      handles, labels = ax.get_legend_handles_labels()
+      fig_legend, ax_legend = plt.subplots(figsize=config.figsize, dpi=config.dpi)
+      ax_legend.axis("off")
+      legend = ax_legend.legend(
+        handles, labels,
+        fontsize=config.legend_fontsize,
+        loc="center"
+      )
+      #crop whitespace
+      fig_legend.canvas.draw()
+      bbox = legend.get_window_extent().transformed(fig_legend.dpi_scale_trans.inverted())
+      fig_legend.set_size_inches(bbox.width, bbox.height)
+
+      if config.legend_saveas != os.devnull:
+        #can't just let it write to devnull because it appends .png
+        fig_legend.savefig(config.legend_saveas, bbox_inches="tight")
+      plt.close(fig_legend)
 
     if config.show:
       plt.show()
