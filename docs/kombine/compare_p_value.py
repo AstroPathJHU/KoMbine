@@ -1,5 +1,5 @@
 """
-Compare p-values from MINLP method (Cox-only) and conventional log-rank test
+Compare p values from MINLP method (Cox-only) and conventional log-rank test
 by generating many Monte Carlo trials.
 """
 
@@ -29,14 +29,14 @@ def simulate_pvalues( #pylint: disable=too-many-locals
   verbose: bool = False,
 ) -> np.ndarray:
   """
-  Generate synthetic patients and compare p-values from MINLP method
+  Generate synthetic patients and compare p values from MINLP method
   (Cox-only) and conventional log-rank test.
 
   Returns
   -------
   np.ndarray of shape (n_trials, 2)
-    Column 0: p-values from MINLP
-    Column 1: p-values from log-rank
+    Column 0: p values from MINLP
+    Column 1: p values from log-rank
   """
   rng = np.random.default_rng(seed)
   results = np.zeros((n_trials, 2))
@@ -61,11 +61,11 @@ def simulate_pvalues( #pylint: disable=too-many-locals
           )
         )
 
-    # custom MINLP p-value
+    # custom MINLP p value
     minlp_breslow = MINLPforKMPValue(patients, parameter_threshold=1.5, tie_handling="breslow")
     pval_breslow, _, _ = minlp_breslow.solve_and_pvalue(cox_only=True)
 
-    # log-rank p-value
+    # log-rank p value
     pval_logrank = minlp_breslow.survival_curves_pvalue_logrank()
 
     results[trial, 0] = pval_breslow
@@ -75,7 +75,7 @@ def simulate_pvalues( #pylint: disable=too-many-locals
 
 def plot_pvalue_comparison( #pylint: disable=too-many-arguments
   pvalues: np.ndarray,
-  title: str = "Comparison of p-value methods",
+  title: str = "Comparison of p value methods",
   *,
   saveas: os.PathLike | str | None = None,
   show: bool | None = None,
@@ -88,7 +88,7 @@ def plot_pvalue_comparison( #pylint: disable=too-many-arguments
   Parameters
   ----------
   pvalues : np.ndarray
-    Array of shape (n_trials, 2) with p-values from MINLP and log-rank methods
+    Array of shape (n_trials, 2) with p values from MINLP and log-rank methods
   title : str
     Plot title
   saveas : os.PathLike | str | None
@@ -114,12 +114,12 @@ def plot_pvalue_comparison( #pylint: disable=too-many-arguments
   r = np.corrcoef(minlp_vals, logrank_vals)[0, 1]
 
   _, ax = plt.subplots(figsize=config.figsize)
-  ax.scatter(logrank_vals, minlp_vals, alpha=0.6, label="Data points")
-  ax.plot([0, 1], [0, 1], "r--", label="y = x")
+  ax.scatter(logrank_vals, minlp_vals, alpha=0.6, label="MC trials")
+  ax.plot([0, 1], [0, 1], "r--", label="$y=x$")
 
-  ax.set_xlabel("Conventional log-rank p-value", fontsize=config.label_fontsize)
-  ax.set_ylabel("MINLP (Cox penalty only) p-value", fontsize=config.label_fontsize)
-  ax.set_title(f"{title} (r={r:.3f})", fontsize=config.title_fontsize)
+  ax.set_xlabel("Conventional log-rank $p$ value", fontsize=config.label_fontsize)
+  ax.set_ylabel("MINLP (Cox penalty only) $p$ value", fontsize=config.label_fontsize)
+  ax.set_title(f"{title} ($r={r:.3f}$)", fontsize=config.title_fontsize)
 
   # Set limits to [0,1] and ensure square aspect ratio
   ax.set_xlim(0, 1)
@@ -137,7 +137,14 @@ def plot_pvalue_comparison( #pylint: disable=too-many-arguments
   # Add zoomed inlay
   # Create inset axes using Axes.inset_axes method
   # [left, bottom, width, height] in axes coordinates
-  inlay_ax = ax.inset_axes((0.57, 0.05, 0.4, 0.4))
+  inlay_left = 0.59
+  inlay_bottom = 0.07
+  inlay_right = 0.95
+  inlay_top = 0.43
+  assert inlay_top - inlay_bottom == inlay_right - inlay_left, "Inlay must be square"
+  inlay_ax = ax.inset_axes(
+    (inlay_left, inlay_bottom, inlay_right - inlay_left, inlay_top - inlay_bottom)
+  )
 
   # Plot the same data in the inlay but with zoomed limits
   inlay_ax.scatter(logrank_vals, minlp_vals, alpha=0.6, s=10)  # Smaller points for inlay
@@ -147,18 +154,23 @@ def plot_pvalue_comparison( #pylint: disable=too-many-arguments
   inlay_ax.set_xlim(0, inlay_upper_limit)
   inlay_ax.set_ylim(0, inlay_upper_limit)
   inlay_ax.set_aspect('equal', adjustable='box')
-  inlay_ticks = np.linspace(0, inlay_upper_limit, 6) # Generates 6 ticks from 0 to the upper limit
+  inlay_ticks = np.linspace(0, inlay_upper_limit, 3) # Generates 3 ticks from 0 to the upper limit
   inlay_ax.set_xticks(inlay_ticks)
   inlay_ax.set_yticks(inlay_ticks)
+  inlay_minor_ticks = np.linspace(0, inlay_upper_limit, 5) # Minor ticks
+  inlay_ax.set_xticks(inlay_minor_ticks, minor=True)
+  inlay_ax.set_yticks(inlay_minor_ticks, minor=True)
 
   # Style the inlay
-  inlay_ax.tick_params(axis='both', which='major', labelsize=config.tick_fontsize * 0.8)
-  inlay_ax.grid(True, alpha=0.5)
+  inlay_ax.tick_params(axis='both', which='major', labelsize=config.tick_fontsize * 0.7)
+  inlay_ax.grid(True, alpha=0.5, which='both')
 
   # Add border to make inlay stand out
   for spine in inlay_ax.spines.values():
     spine.set_edgecolor('black')
     spine.set_linewidth(1.5)
+
+  plt.tight_layout()
 
   if saveas is not None:
     plt.savefig(saveas)
@@ -202,8 +214,8 @@ def main(args=None):
     seed=seed,
     time_is_integer=args.allow_ties,
   )
-  title_suffix = "with ties" if args.allow_ties else "without ties"
-  title = f"$p$ value comparison for {n_patients} patients ({title_suffix})"
+  title_suffix = "with ties" if args.allow_ties else "no ties"
+  title = f"$p$ value comparison for\n{n_patients} patients ({title_suffix})"
 
   # Create plot configuration
   config = PlotConfig(
