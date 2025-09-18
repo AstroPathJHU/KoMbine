@@ -1,10 +1,16 @@
-Copyright 2024 for the benefit of the AstroPath Collaboration
+Copyright 2024-2025 AstroPath Collaboration
+
+Please cite the associated paper if you use this software or method to produce results.
+(Currently: submitted to arXiv and Journal of Statistical Software. Updated citation will be
+provided when available.)
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
    http://www.apache.org/licenses/LICENSE-2.0
+
+See the LICENSE file distributed with this work for additional information.
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
