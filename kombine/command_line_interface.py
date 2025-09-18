@@ -29,6 +29,7 @@ def _make_common_parser(description: str) -> argparse.ArgumentParser:
   parser.add_argument("--endpoint-epsilon", type=float, dest="endpoint_epsilon", default=1e-6, help="Endpoint epsilon for the likelihood calculation.")
   parser.add_argument("--log-zero-epsilon", type=float, dest="log_zero_epsilon", default=LOG_ZERO_EPSILON_DEFAULT, help="Log zero epsilon for the likelihood calculation.")
   parser.add_argument("--figsize", nargs=2, type=float, metavar=("WIDTH", "HEIGHT"), help="Figure size in inches.", default=KaplanMeierPlotConfig.figsize)
+  parser.add_argument("--no-tight-layout", action="store_false", help="Do not use tight layout for the plot.", default=True, dest="tight_layout")
   parser.add_argument("--legend-fontsize", type=float, help="Font size for legend text.", default=KaplanMeierPlotConfig.legend_fontsize)
   parser.add_argument("--label-fontsize", type=float, help="Font size for axis labels.", default=KaplanMeierPlotConfig.label_fontsize)
   parser.add_argument("--title-fontsize", type=float, help="Font size for the plot title.", default=KaplanMeierPlotConfig.title_fontsize)
@@ -67,6 +68,7 @@ def _extract_common_plot_config_args(args: argparse.Namespace) -> dict:
     "include_median_survival": args.__dict__.pop("include_median_survival"),
     "print_progress": args.__dict__.pop("print_progress"),
     "figsize": args.__dict__.pop("figsize"),
+    "tight_layout": args.__dict__.pop("tight_layout"),
     "legend_fontsize": args.__dict__.pop("legend_fontsize"),
     "label_fontsize": args.__dict__.pop("label_fontsize"),
     "title_fontsize": args.__dict__.pop("title_fontsize"),

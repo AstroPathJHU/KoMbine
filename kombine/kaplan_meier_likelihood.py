@@ -66,6 +66,7 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   ylabel: Label for the y-axis.
   show_grid: If True, display a grid on the plot.
   figsize: Size of the figure as a tuple (width, height).
+  tight_layout: If True, use tight layout for the plot.
   legend_fontsize: Font size for the legend.
   label_fontsize: Font size for the axis labels.
   title_fontsize: Font size for the plot title.
@@ -113,6 +114,7 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   ylabel: str = "Survival Probability"
   show_grid: bool = True
   figsize: tuple[float, float] = (10, 7)
+  tight_layout: bool = True
   legend_fontsize: int = 10
   label_fontsize: int = 12
   title_fontsize: int = 14
@@ -895,6 +897,9 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     ax.tick_params(labelsize=config.tick_fontsize)
     if config.title is not None:
       ax.title.set_fontsize(config.title_fontsize)
+
+    if config.tight_layout:
+      fig.tight_layout()
 
     if config.saveas is not None:
       save_path = pathlib.Path(config.saveas)
