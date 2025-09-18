@@ -163,7 +163,7 @@ The repository now uses three separate workflows:
 - **Reference testing**: Tests compare outputs to reference JSON files using `np.testing.assert_allclose()`
 - **Configuration**: Heavily configuration-driven via datacard files (text format similar to Higgs Combine Tool)
 - **Plotting**: Matplotlib-based with configurable output formats (PDF default)
-- **CLI**: Entry points defined in setup.py provide command-line interfaces
+- **CLI**: Entry points defined in pyproject.toml provide command-line interfaces
 - **Confidence intervals**: Results include nominal, ±68%, and ±95% confidence levels (keys: 'nominal', 'p68', 'm68', 'p95', 'm95')
 
 ## Troubleshooting

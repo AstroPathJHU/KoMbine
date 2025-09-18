@@ -2,4 +2,42 @@
 requires = ["packaging", "setuptools >= 61", "setuptools_scm[toml]>=8", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "roc_picker"
+description = "ROC Picker is a software package for propagating statistical and systematic uncertainties in a biomedical analysis. KoMbine provides Kaplan-Meier curve analysis functionality."
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Heshy Roskes", email = "heshyr@gmail.com"}
+]
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dynamic = ["version"]
+dependencies = [
+    "gurobipy",
+    "matplotlib",
+    "numpy",
+    "scipy>=1.15",
+]
+
+[project.scripts]
+rocpicker_mc = "roc_picker.command_line_interface:plot_systematics_mc_roc"
+rocpicker_discrete = "roc_picker.command_line_interface:plot_discrete_roc"
+rocpicker_delta_functions = "roc_picker.command_line_interface:plot_delta_functions_roc"
+kombine = "kombine.command_line_interface:plot_km_likelihood"
+kombine_twogroups = "kombine.command_line_interface:plot_km_likelihood_two_groups"
+
+[tool.setuptools.packages.find]
+include = ["roc_picker*", "kombine*"]
+
 [tool.setuptools_scm]
