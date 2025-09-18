@@ -15,8 +15,8 @@ jupyter:
 
  - `01_table_of_contents.html`
    - this file
- - `02_kaplan_meier_paper.pdf`
-   - This LaTeX document contains a detailed explanation of the math that
+ - `02_kombine.pdf`
+   - This paper, submitted to JSS, contains a detailed explanation of the math that
      goes into the Kaplan-Meier likelihood methods.
  - `03_kaplan_meier_example.html`
    - an example of how to use the likelihood method for uncertainties on Kaplan-Meier curves
