@@ -3,7 +3,7 @@ requires = ["packaging", "setuptools >= 61", "setuptools_scm[toml]>=8", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "kombine"
+name = "kombinekm"
 description = "KoMbine is a software package for propagating statistical and systematic uncertainties in a biomedical analysis. KoMbine provides Kaplan-Meier curve analysis functionality, while ROC Picker provides similar functionality for ROC curves."
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -29,6 +29,11 @@ dependencies = [
     "numpy",
     "scipy>=1.15",
 ]
+
+urls = { 
+    "Homepage" = "https://github.com/AstroPathJHU/KoMbine",
+    "Repository" = "https://github.com/AstroPathJHU/KoMbine"
+}
 
 [project.scripts]
 rocpicker_mc = "roc_picker.command_line_interface:plot_systematics_mc_roc"
