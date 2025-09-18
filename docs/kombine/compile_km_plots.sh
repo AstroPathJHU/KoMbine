@@ -1,5 +1,8 @@
 #!/bin/bash
 
+#This script requires a Gurobi license.  They are available for free for academic use.
+#Otherwise, all that's needed is to pip install kombinekm.
+
 set -euxo pipefail
 
 export PYTHONWARNINGS=error
@@ -14,7 +17,6 @@ COMMON_ARGS_SMALL_PLOT=(--figsize 5 5 ${FONT_SIZES[@]})
 
 kombine ../../test/kombine/datacards/simple_examples/poisson_ratio_km_censoring.txt km_example.pdf --parameter-min 0.45 "${COMMON_ARGS_BIG_PLOT[@]}" --title "Kaplan–Meier Example"
 
-# Note: lung data would normally be in ../../test/kombine/datacards/lung/ but we need to check if this data should be shared or duplicated
 SURVIVAL_TYPE=RFS
 if [ $SURVIVAL_TYPE = RFS ]; then
   YLABEL="Regression-Free Survival Probability"
@@ -27,7 +29,6 @@ elif [ $SURVIVAL_TYPE = OS ]; then
 fi
 COMMON_TWOGROUPS_ARGS=(--exclude-nominal --print-progress  --xlabel 'Time (Months)' --ylabel "$YLABEL" --patient-wise-only-suffix '' --binomial-only-suffix '' --pvalue-fontsize 16 "${COMMON_ARGS_SMALL_PLOT[@]}")
 
-# Using lung data from main test directory for now - may need to be duplicated or referenced differently
 kombine_twogroups ../../test/kombine/datacards/lung/datacard_cells_${SURVIVAL_TYPE}.txt lung_cells_km_${SURVIVAL_TYPE}.pdf --parameter-threshold "$CELL_THRESHOLD" "${COMMON_TWOGROUPS_ARGS[@]}" --title "CD8+FoxP3+ Cells" --pvalue-format '.2f' --legend-saveas lung_cells_km_${SURVIVAL_TYPE}_legend.pdf
 kombine_twogroups ../../test/kombine/datacards/lung/datacard_donuts_${SURVIVAL_TYPE}.txt lung_donuts_km_${SURVIVAL_TYPE}.pdf --parameter-threshold "$DONUT_THRESHOLD" "${COMMON_TWOGROUPS_ARGS[@]}" --title "DONUTS" --pvalue-format '.2f' --legend-saveas lung_donuts_km_${SURVIVAL_TYPE}_legend.pdf
 kombine_twogroups ../../test/kombine/datacards/lung/datacard_cells_${SURVIVAL_TYPE}.txt lung_cells_km_${SURVIVAL_TYPE}_patient_wise.pdf --parameter-threshold "$CELL_THRESHOLD" --include-patient-wise-only --exclude-full-nll "${COMMON_TWOGROUPS_ARGS[@]}" --title "CD8+FoxP3+ Cells, Patient-Wise Errors" --pvalue-format '.2f' --legend-saveas lung_cells_km_${SURVIVAL_TYPE}_legend.pdf
