@@ -126,10 +126,10 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   parser.add_argument("--parameter-threshold", type=float, dest="parameter_threshold", required=True, help="The parameter threshold for separating high and low groups.")
   parser.add_argument("--parameter-min", type=float, dest="parameter_min", default=-np.inf, help="The minimum parameter value for the low group.")
   parser.add_argument("--parameter-max", type=float, dest="parameter_max", default=np.inf, help="The maximum parameter value for the high group.")
-  parser.add_argument("--include-logrank-pvalue", action="store_true", dest="include_logrank_pvalue", help="Include conventional logrank p-value for comparison with likelihood method.")
-  parser.add_argument("--p-value-tie-handling", type=str, dest="p_value_tie_handling", choices=["breslow"], default="breslow", help="Method for handling ties in p-value calculation: currently only option is 'breslow' (Breslow approximation).")
-  parser.add_argument("--pvalue-fontsize", type=float, dest="pvalue_fontsize", default=KaplanMeierPlotConfig.pvalue_fontsize, help="Font size for p-value text.")
-  parser.add_argument("--pvalue-format", type=str, dest="pvalue_format", default=KaplanMeierPlotConfig.pvalue_format, help="Format string for p-value display (e.g., '.3g', '.2f').")
+  parser.add_argument("--include-logrank-pvalue", action="store_true", dest="include_logrank_pvalue", help="Include conventional logrank p value for comparison with likelihood method.")
+  parser.add_argument("--p-value-tie-handling", type=str, dest="p_value_tie_handling", choices=["breslow"], default="breslow", help="Method for handling ties in p value calculation: currently only option is 'breslow' (Breslow approximation).")
+  parser.add_argument("--pvalue-fontsize", type=float, dest="pvalue_fontsize", default=KaplanMeierPlotConfig.pvalue_fontsize, help="Font size for p value text.")
+  parser.add_argument("--pvalue-format", type=str, dest="pvalue_format", default=KaplanMeierPlotConfig.pvalue_format, help="Format string for p value display (e.g., '.3g', '.2f').")
   parser.add_argument("--dont-collapse-consecutive-deaths", action="store_true", dest="dont_collapse_consecutive_deaths", help="Disable collapsing of consecutive death times with no intervening censoring (slower but may be more accurate)")
   # pylint: enable=line-too-long
   args = parser.parse_args()
@@ -192,7 +192,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   )
   kml_low.plot(config=config_low)
 
-  # Calculate and display p-values based on options
+  # Calculate and display p values based on options
   p_value_texts = []
 
   if (common_plot_kwargs["include_full_NLL"]
@@ -208,18 +208,18 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
 
     if common_plot_kwargs["include_full_NLL"]:
       p_value, *_ = p_value_minlp.solve_and_pvalue()
-      p_value_texts.append(f"p = {p_value:{pvalue_format}}")
+      p_value_texts.append(f"$p$ = {p_value:{pvalue_format}}")
 
     if common_plot_kwargs["include_binomial_only"]:
       p_value_binomial, *_ = p_value_minlp.solve_and_pvalue(cox_only=True)
-      p_value_texts.append(f"p (Cox only) = {p_value_binomial:{pvalue_format}}")
+      p_value_texts.append(f"$p$ (Cox only) = {p_value_binomial:{pvalue_format}}")
 
     #Patient-wise p value is not implemented
     #if common_plot_kwargs["include_patient_wise_only"]:
     #  p_value_patient_wise, *_ = p_value_minlp.solve_and_pvalue(patient_wise_only=True)
-    #  p_value_texts.append(f"p (patient-wise only) = {p_value_patient_wise:{pvalue_format}}")
+    #  p_value_texts.append(f"$p$ (patient-wise only) = {p_value_patient_wise:{pvalue_format}}")
 
-  # Add logrank p-value if requested
+  # Add logrank p value if requested
   if include_logrank_pvalue:
     p_value_logrank = datacard.km_p_value_logrank(
       parameter_threshold=threshold,
@@ -227,12 +227,12 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
       parameter_max=parameter_max,
       cox_only=True,
     )
-    p_value_texts.append(f"p (logrank) = {p_value_logrank:{pvalue_format}}")
+    p_value_texts.append(f"$p$ (logrank) = {p_value_logrank:{pvalue_format}}")
 
-  # Display p-value text(s) on the plot
+  # Display p value text(s) on the plot
   if p_value_texts:
     ax = plt.gca()
-    # Position multiple p-values vertically, starting from top-right
+    # Position multiple p values vertically, starting from top-right
     for i, text in enumerate(p_value_texts):
       y_pos = 0.95 - (i * 0.05)  # Each line is 5% down from the previous
       ax.text(
