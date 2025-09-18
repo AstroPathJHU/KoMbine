@@ -30,10 +30,9 @@ dependencies = [
     "scipy>=1.15",
 ]
 
-urls = { 
-    "Homepage" = "https://github.com/AstroPathJHU/KoMbine",
-    "Repository" = "https://github.com/AstroPathJHU/KoMbine"
-}
+[project.urls]
+Homepage = "https://github.com/AstroPathJHU/KoMbine"
+Repository = "https://github.com/AstroPathJHU/KoMbine"
 
 [project.scripts]
 rocpicker_mc = "roc_picker.command_line_interface:plot_systematics_mc_roc"
