@@ -324,6 +324,12 @@ with \(d_{1 \cdots n} = d_1 + d_2 + \cdots + d_n\) and \(p_{1 \cdots n}^\text{s}
 
 This section provides examples that illustrate interesting aspects of the \KM{} curve estimation.
 
+\begin{figure}
+  \centering
+  \includegraphics[width=0.5\textwidth]{km_example.pdf}
+  \caption{\label{fig:best-fit-vs-nominal} An example \KM{} curve. The best fit (blue) does not coincide with the nominal curve (red). The error bands are shown as shaded blue areas.}
+\end{figure}
+
 \subsection%
 [Best fit vs. nominal \KM{} curve]% chktex 12
 {Best fit vs.\ nominal \KM{} curve}
@@ -335,12 +341,6 @@ If only the binomial penalty is included, the survival NLL always minimizes at t
 To understand this, imagine a case where 7 patients were at risk at a particular time point and 4 of them survived. An additional patient who survived is nominally excluded from the curve, but their parameter is so close to the boundary that they can be included with only a small NLL penalty of \(0.01\)\@. \Cref{eq:binomial-nll} evaluates to \(-1.255\) for \(4\) patients surviving out of \(7\) with \(p_\text{s}=4/7\), but to \(-1.267\) for \(5\) patients surviving out of \(8\) with \(p_\text{s}=5/8\). This small difference in the binomial penalty outweighs the even smaller penalty for including the patient, and so the minimum NLL occurs at the best fit survival probability of \(5/8\).
 
 This surprising result highlights the importance of the patient-wise uncertainties. If the NLL penalty for including the patient really is that small, then we cannot, with any confidence, assign the patient to one \KM{} curve or the other.
-
-\begin{figure}
-  \centering
-  \includegraphics[width=0.5\textwidth]{km_example.pdf}
-  \caption{\label{fig:best-fit-vs-nominal} An example \KM{} curve. The best fit (blue) does not coincide with the nominal curve (red). The error bands are shown as shaded blue areas.}
-\end{figure}
 
 \subsection{Comparison with conventional methods}\label{sec:compare-to-conventional}
 
@@ -373,7 +373,7 @@ Our method, by contrast, calculates the binomial likelihood (and hence the uncer
 
 In order to compare the \(p\) values, we generate Monte Carlo cohorts of patients. We calculate the \(p\) values using our method, disabling the patient-wise penalties, and with the conventional log-rank test. We plot the results in \cref{fig:compare-p-value}. The top row allows patients to die at the same time, which means that we rely on the Breslow approximation in \cref{eq:cox-nll-breslow}. In the bottom row, no two patients die at the same time, so the Breslow approximation is identical to the exact formula in \cref{eq:cox-nll-exact}.
 
-\begin{figure}
+\begin{figure}[ht]
 \centering
 \begin{subfigure}[t]{0.32\textwidth}
   \centering
