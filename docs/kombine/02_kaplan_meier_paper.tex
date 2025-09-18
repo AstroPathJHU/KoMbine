@@ -108,6 +108,8 @@ Another statistical metric often applied to \KM{} curves is the \(p\) value for 
 
 Other uncertainties that affect the \KM{} curve will typically be patient-wise uncertainties, which \emph{move} the patient from one \KM{} curve to another. For example, a biomarker study might classify patients based on the density of a particular cell type. A \KM{} plot could be constructed with two curves, for patients with a high and low density of the cell type. However, the cell type is subject to Poisson noise as well as systematic errors in the measurement. Similar errors apply to \KM{} plots that stratify patients by gene expression levels or other continuous variables.
 
+The traditional calculations also make certain approximations, in particular approximating the binomial distribution by a normal distribution. These approximations are most valid for large numbers of patients. The commercial software \pkg{StatXact} \citep{StatXact} does provide an exact method for calculating the log-rank \(p\) value for two \KM{} curves, but does not provide confidence intervals for a single \KM{} curve, nor does it account for patient-wise uncertainties.
+
 \section{Methodology}\label{sec:methodology}
 
 \pkg{KoMbine} uses a log-likelihood function to compute the confidence interval for each point on the \KM{} curve. The log likelihood is a function of the survival probability \(S\) as well as other parameters. We maximize the likelihood over those other parameters to find the ``likelihood scan'' as a function of \(S\) alone. The points of maximum likelihood form the \KM{} curve, and the confidence intervals are determined by the points where the log likelihood is below a threshold.
