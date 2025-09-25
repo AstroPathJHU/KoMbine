@@ -4,7 +4,7 @@ observable_type  fixed
 ------------
 bin             inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive     
 response        responder       responder       responder       responder       responder       responder       responder       responder       non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder 
-observable	7.25981e-03	1.10983e-02	1.83008e-02	4.90602e-02	4.37987e-02	3.80199e-02	2.47085e-02	2.08467e-03	3.14120e-01	1.08462e-01	1.49536e-01	4.09942e-01	1.07431e-01	1.48373e-01	3.33907e-01	2.19790e-01	2.93683e-01	1.93076e-01	9.76773e-02	3.43721e-01	6.64115e-02	1.62648e-01	1.79623e-01	1.20428e-01	7.18740e-01   
+observable      1.68829e-01     4.64842e-02     6.08860e-02     2.13595e-01     1.92946e-01     1.98817e-01     2.10761e-01     1.49039e-01     1.13829e-02     2.59708e-02     4.49467e-02     1.90983e-01     5.45234e-02     8.26600e-02     1.84095e-01     8.02103e-02     1.43959e-01     8.68005e-02     4.05685e-02     1.30390e-01     4.23895e-02     1.39875e-01     1.11521e-01     7.12400e-02     7.84342e-02   
 ------------
 # Systematics
 ------------
