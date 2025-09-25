@@ -122,7 +122,7 @@ def plot_km_likelihood():
     raise ValueError(f"Unused arguments: {args.__dict__}")
 
 
-def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
+def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals, too-many-statements
   """
   Run Kaplan-Meier likelihood method from a datacard, and plot Kaplan-Meier
   curves for two groups separated into high and low values of the parameter.
