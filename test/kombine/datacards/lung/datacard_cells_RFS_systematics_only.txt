@@ -1,0 +1,37 @@
+observable_type fixed
+------------
+# List of patients
+------------
+survival_time	28	8	1	21	1	30	24	10	28	26	25	2	1	30	39	34	9	43	11	2	83	38	45	30	25
+censored	1	0	0	0	0	1	0	1	1	1	1	0	0	0	1	1	1	1	0	1	0	1	1	1	1
+observable	0.00000e+00	4.83487e+00	0.00000e+00	0.00000e+00	0.00000e+00	3.66306e+00	1.27179e+00	4.64047e+00	1.83323e+00	6.35731e-01	3.11183e+00	9.62758e-01	0.00000e+00	6.95472e-01	7.23140e-01	7.83226e+00	1.52690e+00	0.00000e+00	2.97823e+00	2.90580e+00	2.44275e+00	4.34823e-01	4.56141e-01	3.04392e+00	8.69144e+00
+------------
+# Systematics
+------------
+# Note: Correlated systematics lines have been split into uncorrelated lines
+# to make them compatible with KoMbine (one non-dash value per line).
+sys_batch1_patient1	lnN	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	0.948	-	-	-	-	-	-	-	-	-
+sys_batch1_patient2	lnN	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	1.011	-	-	-	-	-
+sys_batch1_patient3	lnN	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	0.909	-	-	-	-
+sys_batch1_patient4	lnN	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	0.878	-	-
+sys_batch2_patient1	lnN	-	-	-	-	-	0.949	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-
+sys_batch2_patient2	lnN	-	-	-	-	-	-	1.028	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-
+sys_batch2_patient3	lnN	-	-	-	-	-	-	-	-	-	0.981	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-
+sys_batch2_patient4	lnN	-	-	-	-	-	-	-	-	-	-	-	0.918	-	-	-	-	-	-	-	-	-	-	-	-	-
+sys_batch2_patient5	lnN	-	-	-	-	-	-	-	-	-	-	-	-	-	1.014	-	-	-	-	-	-	-	-	-	-	-
+sys_batch3_patient1	lnN	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	0.991	-	-	-	-	-	-
+sys_batch3_patient2	lnN	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	0.959	-
+sys_batch3_patient3	lnN	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	0.992
+sys_batch4_patient1	lnN	-	-	-	1.005	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-
+sys_batch4_patient2	lnN	-	-	-	-	-	-	-	-	-	-	-	-	1.034	-	-	-	-	-	-	-	-	-	-	-	-
+sys_batch4_patient3	lnN	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	1.032	-	-	-
+sys_batch6_patient1	lnN	-	-	-	-	-	-	-	-	1.075	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-
+sys_batch6_patient2	lnN	-	-	-	-	-	-	-	-	-	-	0.902	-	-	-	-	-	-	-	-	-	-	-	-	-	-
+sys_batch7	lnN	-	-	0.888	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-
+sys_batch8_patient1	lnN	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	0.900	-	-	-	-	-	-	-	-
+sys_batch8_patient2	lnN	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	0.937	-	-	-	-	-	-	-
+sys_batch10	lnN	-	-	-	-	-	-	-	-	-	-	-	-	-	-	0.986	-	-	-	-	-	-	-	-	-	-
+sys_batch11	lnN	-	0.975	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-
+sys_batch12_patient1	lnN	0.739	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-
+sys_batch12_patient2	lnN	-	-	-	-	-	-	-	1.087	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-
+sys_batch13	lnN	-	-	-	-	0.908	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-
