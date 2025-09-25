@@ -414,7 +414,7 @@ class Systematic:
         )
       return True
     return False
-  
+
   def __hash__(self):
     return hash((self.name, self.systematic_type, self.unique_id))
 
