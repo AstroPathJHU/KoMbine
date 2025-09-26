@@ -910,6 +910,9 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
     if config.legend_saveas is None:
       ax.legend(fontsize=config.legend_fontsize, loc=config.legend_loc)
+    elif config.legend_saveas == os.devnull:
+      #don't add a legend to the main plot
+      pass
     else:
       handles, labels = ax.get_legend_handles_labels()
       fig_legend, ax_legend = plt.subplots(figsize=config.figsize, dpi=config.dpi)
@@ -924,9 +927,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       bbox = legend.get_window_extent().transformed(fig_legend.dpi_scale_trans.inverted())
       fig_legend.set_size_inches(bbox.width, bbox.height)
 
-      if config.legend_saveas != os.devnull:
-        #can't just let it write to devnull because it appends .png
-        fig_legend.savefig(config.legend_saveas, bbox_inches="tight")
+      fig_legend.savefig(config.legend_saveas, bbox_inches="tight")
       plt.close(fig_legend)
 
     if config.show:

@@ -1,0 +1,7 @@
+observable_type  fixed         
+------------
+# List of patients
+------------
+bin             inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive     
+response        responder       responder       responder       responder       responder       responder       responder       responder       non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder 
+observable	1.67748e-01	4.63502e-02	6.08860e-02	2.13415e-01	1.92065e-01	1.97311e-01	2.10761e-01	1.49039e-01	1.13829e-02	2.59708e-02	4.49467e-02	1.88902e-01	5.45234e-02	8.25885e-02	1.84095e-01	8.02103e-02	1.43959e-01	8.67539e-02	4.05685e-02	1.30085e-01	4.23427e-02	1.39428e-01	1.11305e-01	7.12400e-02	7.82632e-02

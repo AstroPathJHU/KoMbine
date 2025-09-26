@@ -122,7 +122,7 @@ def plot_km_likelihood():
     raise ValueError(f"Unused arguments: {args.__dict__}")
 
 
-def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
+def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals, too-many-statements
   """
   Run Kaplan-Meier likelihood method from a datacard, and plot Kaplan-Meier
   curves for two groups separated into high and low values of the parameter.
@@ -132,6 +132,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   parser.add_argument("--parameter-threshold", type=float, dest="parameter_threshold", required=True, help="The parameter threshold for separating high and low groups.")
   parser.add_argument("--parameter-min", type=float, dest="parameter_min", default=-np.inf, help="The minimum parameter value for the low group.")
   parser.add_argument("--parameter-max", type=float, dest="parameter_max", default=np.inf, help="The maximum parameter value for the high group.")
+  parser.add_argument("--exclude-p-value", action="store_false", dest="include_p_value", default=True, help="Exclude p value calculation and display from the plot.")
   parser.add_argument("--include-logrank-pvalue", action="store_true", dest="include_logrank_pvalue", help="Include conventional logrank p value for comparison with likelihood method.")
   parser.add_argument("--p-value-tie-handling", type=str, dest="p_value_tie_handling", choices=["breslow"], default="breslow", help="Method for handling ties in p value calculation: currently only option is 'breslow' (Breslow approximation).")
   parser.add_argument("--pvalue-fontsize", type=float, dest="pvalue_fontsize", default=KaplanMeierPlotConfig.pvalue_fontsize, help="Font size for p value text.")
@@ -148,6 +149,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   log_zero_epsilon = args.__dict__.pop("log_zero_epsilon")
   endpoint_epsilon = args.__dict__.pop("endpoint_epsilon")
   collapse_consecutive_deaths = not args.__dict__.pop("dont_collapse_consecutive_deaths")
+  include_p_value = args.__dict__.pop("include_p_value")
   include_logrank_pvalue = args.__dict__.pop("include_logrank_pvalue")
   p_value_tie_handling = args.__dict__.pop("p_value_tie_handling")
   pvalue_fontsize = args.__dict__.pop("pvalue_fontsize")
@@ -200,55 +202,56 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals
   )
   kml_low.plot(config=config_low)
 
-  # Calculate and display p values based on options
-  p_value_texts = []
+  if include_p_value:
+    # Calculate and display p values based on options
+    p_value_texts = []
 
-  if (common_plot_kwargs["include_full_NLL"]
-      or common_plot_kwargs["include_binomial_only"]
-      or common_plot_kwargs["include_patient_wise_only"]):
-    p_value_minlp = datacard.km_p_value(
-      parameter_min=parameter_min,
-      parameter_threshold=threshold,
-      parameter_max=parameter_max,
-      log_zero_epsilon=log_zero_epsilon,
-      tie_handling=p_value_tie_handling,
-    )
-
-    if common_plot_kwargs["include_full_NLL"]:
-      p_value, *_ = p_value_minlp.solve_and_pvalue()
-      p_value_texts.append(f"$p$ = {p_value:{pvalue_format}}")
-
-    if common_plot_kwargs["include_binomial_only"]:
-      p_value_binomial, *_ = p_value_minlp.solve_and_pvalue(cox_only=True)
-      p_value_texts.append(f"$p$ (Cox only) = {p_value_binomial:{pvalue_format}}")
-
-    #Patient-wise p value is not implemented
-    #if common_plot_kwargs["include_patient_wise_only"]:
-    #  p_value_patient_wise, *_ = p_value_minlp.solve_and_pvalue(patient_wise_only=True)
-    #  p_value_texts.append(f"$p$ (patient-wise only) = {p_value_patient_wise:{pvalue_format}}")
-
-  # Add logrank p value if requested
-  if include_logrank_pvalue:
-    p_value_logrank = datacard.km_p_value_logrank(
-      parameter_threshold=threshold,
-      parameter_min=parameter_min,
-      parameter_max=parameter_max,
-      cox_only=True,
-    )
-    p_value_texts.append(f"$p$ (logrank) = {p_value_logrank:{pvalue_format}}")
-
-  # Display p value text(s) on the plot
-  if p_value_texts:
-    ax = plt.gca()
-    # Position multiple p values vertically, starting from top-right
-    for i, text in enumerate(p_value_texts):
-      y_pos = 0.95 - (i * 0.05)  # Each line is 5% down from the previous
-      ax.text(
-        0.95, y_pos, text,
-        ha="right", va="top",
-        transform=ax.transAxes,
-        fontsize=pvalue_fontsize,
+    if (common_plot_kwargs["include_full_NLL"]
+        or common_plot_kwargs["include_binomial_only"]
+        or common_plot_kwargs["include_patient_wise_only"]):
+      p_value_minlp = datacard.km_p_value(
+        parameter_min=parameter_min,
+        parameter_threshold=threshold,
+        parameter_max=parameter_max,
+        log_zero_epsilon=log_zero_epsilon,
+        tie_handling=p_value_tie_handling,
       )
+
+      if common_plot_kwargs["include_full_NLL"]:
+        p_value, *_ = p_value_minlp.solve_and_pvalue()
+        p_value_texts.append(f"$p$ = {p_value:{pvalue_format}}")
+
+      if common_plot_kwargs["include_binomial_only"]:
+        p_value_binomial, *_ = p_value_minlp.solve_and_pvalue(cox_only=True)
+        p_value_texts.append(f"$p$ (Cox only) = {p_value_binomial:{pvalue_format}}")
+
+      #Patient-wise p value is not implemented
+      #if common_plot_kwargs["include_patient_wise_only"]:
+      #  p_value_patient_wise, *_ = p_value_minlp.solve_and_pvalue(patient_wise_only=True)
+      #  p_value_texts.append(f"$p$ (patient-wise only) = {p_value_patient_wise:{pvalue_format}}")
+
+    # Add logrank p value if requested
+    if include_logrank_pvalue:
+      p_value_logrank = datacard.km_p_value_logrank(
+        parameter_threshold=threshold,
+        parameter_min=parameter_min,
+        parameter_max=parameter_max,
+        cox_only=True,
+      )
+      p_value_texts.append(f"$p$ (logrank) = {p_value_logrank:{pvalue_format}}")
+
+    # Display p value text(s) on the plot
+    if p_value_texts:
+      ax = plt.gca()
+      # Position multiple p values vertically, starting from top-right
+      for i, text in enumerate(p_value_texts):
+        y_pos = 0.95 - (i * 0.05)  # Each line is 5% down from the previous
+        ax.text(
+          0.95, y_pos, text,
+          ha="right", va="top",
+          transform=ax.transAxes,
+          fontsize=pvalue_fontsize,
+        )
 
   plt.savefig(args.__dict__.pop("output_file"))
 

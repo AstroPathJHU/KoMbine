@@ -95,7 +95,7 @@ Here's an example datacard.  This is from an actual analysis of the density of C
 
 ```python
 here = pathlib.Path(".").resolve()
-datacardfile = here.parent.parent/"test"/"roc_picker"/"datacards"/"lung"/"datacard_neighborhoods.txt"
+datacardfile = here.parent.parent/"test"/"roc_picker"/"datacards"/"lung"/"datacard_donuts.txt"
 
 with open(datacardfile) as f:
     print(f.read())

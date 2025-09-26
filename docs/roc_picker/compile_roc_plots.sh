@@ -8,8 +8,8 @@ export MPLBACKEND=Agg
 
 cd $(dirname $0)
 cp ../../logo.png .
-rocpicker_mc ../../test/roc_picker/datacards/lung/datacard_neighborhoods_poisson.txt ./poisson_roc_neighborhoods.pdf --flip-sign
-rocpicker_mc ../../test/roc_picker/datacards/lung/datacard_neighborhoods_systematics.txt ./lognormal_roc_neighborhoods.pdf --flip-sign
+rocpicker_mc ../../test/roc_picker/datacards/lung/datacard_donuts_poisson.txt ./poisson_roc_donuts.pdf --flip-sign
+rocpicker_mc ../../test/roc_picker/datacards/lung/datacard_donuts_systematics.txt ./lognormal_roc_donuts.pdf --flip-sign
 rocpicker_mc ../../test/roc_picker/datacards/lung/datacard_cells_poisson.txt ./poisson_roc_cells.pdf --flip-sign
 rocpicker_mc ../../test/roc_picker/datacards/lung/datacard_cells_systematics.txt ./lognormal_roc_cells.pdf --flip-sign
 

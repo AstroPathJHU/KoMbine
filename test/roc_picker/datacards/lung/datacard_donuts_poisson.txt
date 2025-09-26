@@ -1,0 +1,8 @@
+observable_type  poisson_ratio 
+------------
+# List of patients
+------------
+bin             inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive       inclusive     
+response        responder       responder       responder       responder       responder       responder       responder       responder       non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder   non-responder 
+num	1086	1729	1740	3554	4144	5636	9852	84076	47	414	523	817	945	1155	1176	1297	1773	1862	2075	2133	3617	4996	5673	5828	9155
+denom           6474            37303           28578           16653           21576           28564           46745           564119          4129            15941           11636           4325            17332           13985           6388            16170           12316           21463           51148           16397           85422           35832           50968           81808           116977        
