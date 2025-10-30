@@ -33,6 +33,7 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
 
   Attributes:
   times_for_plot: Sequence of time points for plotting the survival probabilities.
+  xmax: Maximum time for x-axis range. If provided, limits the plot to [0, xmax].
   include_binomial_only: If True, include error bands for the binomial error alone.
   include_greenwood: If True, include error bands for the binomial error
                      using the exponential Greenwood method.
@@ -79,6 +80,7 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   pvalue_format: Format string for p-value display (e.g., '.3g', '.2f').
   """
   times_for_plot: typing.Sequence[float] | None = None
+  xmax: float | None = None
   include_binomial_only: bool = False
   include_exponential_greenwood: bool = False
   include_patient_wise_only: bool = False
@@ -562,10 +564,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     elif kwargs:
       # If config is provided and kwargs are also given, update config with kwargs
       config = dataclasses.replace(config, **kwargs)
-    # Use config.times_for_plot, falling back to self.times_for_plot if None
+    # Use config.times_for_plot, falling back to self.get_times_for_plot(xmax) if None
     times_for_plot = config.times_for_plot
     if times_for_plot is None:
-      times_for_plot = self.times_for_plot
+      times_for_plot = self.get_times_for_plot(xmax=config.xmax)
 
     fig, ax = self._prepare_figure(config)
 
@@ -894,6 +896,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       ax.set_title(config.title, fontsize=config.title_fontsize)
     ax.grid(visible=config.show_grid)
     ax.set_ylim(0, 1.05) # Ensure y-axis is from 0 to 1.05 for survival probability
+
+    # Set x-axis limits if xmax is specified
+    if config.xmax is not None:
+      ax.set_xlim(0, config.xmax)
 
     #set font sizes
     ax.tick_params(labelsize=config.tick_fontsize)

@@ -29,6 +29,7 @@ def _make_common_parser(description: str) -> argparse.ArgumentParser:
   parser.add_argument("--print-progress", action="store_true", dest="print_progress", help="Print progress messages during the computation.")
   parser.add_argument("--endpoint-epsilon", type=float, dest="endpoint_epsilon", default=1e-6, help="Endpoint epsilon for the likelihood calculation.")
   parser.add_argument("--log-zero-epsilon", type=float, dest="log_zero_epsilon", default=LOG_ZERO_EPSILON_DEFAULT, help="Log zero epsilon for the likelihood calculation.")
+  parser.add_argument("--xmax", type=float, dest="xmax", default=None, help="Maximum time for x-axis range. Limits the plot to [0, xmax].")
   parser.add_argument("--figsize", nargs=2, type=float, metavar=("WIDTH", "HEIGHT"), help="Figure size in inches.", default=KaplanMeierPlotConfig.figsize)
   parser.add_argument("--no-tight-layout", action="store_false", help="Do not use tight layout for the plot.", default=True, dest="tight_layout")
   parser.add_argument("--legend-fontsize", type=float, help="Font size for legend text.", default=KaplanMeierPlotConfig.legend_fontsize)
@@ -70,6 +71,7 @@ def _extract_common_plot_config_args(args: argparse.Namespace) -> dict:
     "include_nominal": args.__dict__.pop("include_nominal"),
     "include_median_survival": args.__dict__.pop("include_median_survival"),
     "print_progress": args.__dict__.pop("print_progress"),
+    "xmax": args.__dict__.pop("xmax"),
     "figsize": args.__dict__.pop("figsize"),
     "tight_layout": args.__dict__.pop("tight_layout"),
     "legend_fontsize": args.__dict__.pop("legend_fontsize"),
