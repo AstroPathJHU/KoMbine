@@ -76,13 +76,13 @@ class KaplanMeierBase(abc.ABC):
     Returns the survival times for the Kaplan-Meier curve.
     The times are the unique survival times of the patients,
     plus a point at 0 and a point beyond the last time (or xmax).
-    
+
     Parameters
     ----------
     xmax : float, optional
         Maximum time for the x-axis. If provided, includes all times <= xmax
-        and the first time > xmax (for interpolation/curve continuity).
-    
+        and xmax itself for smooth curve termination.
+
     Returns
     -------
     list[float]
@@ -91,17 +91,12 @@ class KaplanMeierBase(abc.ABC):
     times_for_plot = sorted(self.patient_death_times)
 
     if xmax is not None:
-      # Include all times <= xmax and the first time > xmax for interpolation
+      # Include all times <= xmax
       times_within_xmax = [t for t in times_for_plot if t <= xmax]
-      times_after_xmax = [t for t in times_for_plot if t > xmax]
 
-      # Build the time list: 0, times <= xmax, first time > xmax (if exists), xmax
+      # Build the time list: 0, times <= xmax, xmax
       result = [0]
       result.extend(times_within_xmax)
-
-      if times_after_xmax:
-        # Include the first time after xmax for curve continuity/interpolation
-        result.append(times_after_xmax[0])
 
       # Add xmax at the end if it's not already in the list
       if xmax not in result:

@@ -46,23 +46,25 @@ def test_xmax_at_death_time():
   dcfile = datacards / "simple_km_few_deaths.txt"
   datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
   kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
-  
+
   # Death times are at 2, 3, 4, 5
   # Use xmax=4.0 which is exactly a death time
   times_xmax = kml.get_times_for_plot(xmax=4.0)
   print(f"Times with xmax=4.0 (at death time): {times_xmax}")
-  
-  # Should include 0, 2, 3, 4 (all times <= xmax), and 5 (first time > xmax)
+
+  # Should include 0, 2, 3, 4 (all times <= xmax)
   assert 0 in times_xmax
   assert 2 in times_xmax
   assert 3 in times_xmax
   assert 4 in times_xmax
-  assert 5 in times_xmax, "First time > xmax should be included"
-  
+
+  # Times beyond xmax should not be included
+  assert 5 not in times_xmax, "Times beyond xmax should not be included"
+
   # xmax=4 is already a death time, so it shouldn't be added again
-  # The list should be: 0, 2, 3, 4, 5
-  assert len(times_xmax) == 5, f"Expected 5 times, got {len(times_xmax)}"
-  
+  # The list should be: 0, 2, 3, 4
+  assert len(times_xmax) == 4, f"Expected 4 times, got {len(times_xmax)}"
+
   print("✓ test_xmax_at_death_time passed")
 
 
@@ -73,22 +75,22 @@ def test_xmax_before_first_death():
   dcfile = datacards / "simple_km_few_deaths.txt"
   datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
   kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
-  
+
   # Death times are at 2, 3, 4, 5
   # Use xmax=1.5 which is before the first death time
   times_xmax = kml.get_times_for_plot(xmax=1.5)
   print(f"Times with xmax=1.5 (before first death): {times_xmax}")
-  
-  # Should include 0, first death time (2), and xmax (1.5)
+
+  # Should include 0 and xmax (1.5)
   assert 0 in times_xmax
-  assert 2 in times_xmax, "First time > xmax should be included"
   assert 1.5 in times_xmax
-  
-  # Should not include any other death times
+
+  # Should not include any death times since they're all > xmax
+  assert 2 not in times_xmax
   assert 3 not in times_xmax
   assert 4 not in times_xmax
   assert 5 not in times_xmax
-  
+
   print("✓ test_xmax_before_first_death passed")
 
 

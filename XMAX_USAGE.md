@@ -60,20 +60,19 @@ When `xmax` is specified:
 
 1. **Time Point Selection**: The algorithm includes:
    - All death times ≤ xmax
-   - The first death time > xmax (for curve continuity and interpolation)
    - xmax itself (to ensure the curve ends exactly at the boundary)
 
 2. **X-Axis Limits**: The matplotlib x-axis is set to [0, xmax] using `ax.set_xlim(0, xmax)`
 
-3. **Curve Continuity**: The survival probability at xmax is calculated using the next time point after xmax, ensuring a smooth curve ending at the boundary
+3. **Curve Continuity**: The survival probability at xmax is calculated from the survival curve, ensuring a smooth ending at the boundary
 
 ## Edge Cases
 
 The implementation correctly handles:
 
 - **xmax beyond all death times**: Includes all death times and xmax
-- **xmax exactly at a death time**: No duplication, includes next time for interpolation
-- **xmax before first death time**: Includes only first death time and xmax
+- **xmax exactly at a death time**: No duplication, xmax is already in the death times list
+- **xmax before first death time**: Includes only 0 and xmax
 - **No xmax specified**: Full-range plot (backward compatible with existing behavior)
 
 ## Testing

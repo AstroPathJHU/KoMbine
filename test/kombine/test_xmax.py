@@ -27,24 +27,22 @@ def test_xmax_times_for_plot():
   
   # Test with xmax=3.5
   # Death times are at 2, 3, 4, 5 based on the datacard
-  # With xmax=3.5, we should get: 0, 2, 3, 4 (first time > 3.5), and 3.5 itself
+  # With xmax=3.5, we should get: 0, 2, 3, and 3.5 itself
   times_xmax = kml.get_times_for_plot(xmax=3.5)
   print(f"Times with xmax=3.5: {times_xmax}")
-  
+
   # Verify that all times <= 3.5 are included
   assert 0 in times_xmax, "Time 0 should be included"
   assert 2 in times_xmax, "Time 2 should be included (death time <= xmax)"
   assert 3 in times_xmax, "Time 3 should be included (death time <= xmax)"
-  
-  # Verify that the first time > xmax is included for interpolation
-  assert 4 in times_xmax, "Time 4 should be included (first time > xmax)"
-  
+
   # Verify that xmax itself is included if not already present
   assert 3.5 in times_xmax, "xmax (3.5) should be included"
-  
-  # Verify that times significantly beyond xmax are not included
-  assert 5 not in times_xmax, "Time 5 should not be included (beyond first time > xmax)"
-  
+
+  # Verify that times beyond xmax are not included
+  assert 4 not in times_xmax, "Time 4 should not be included (> xmax)"
+  assert 5 not in times_xmax, "Time 5 should not be included (> xmax)"
+
   print("✓ test_xmax_times_for_plot passed")
 
 
