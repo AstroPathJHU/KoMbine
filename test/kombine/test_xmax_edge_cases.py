@@ -18,12 +18,12 @@ def test_xmax_beyond_all_times():
   dcfile = datacards / "simple_km_few_deaths.txt"
   datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
   kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
-  
+
   # Death times are at 2, 3, 4, 5
   # Use xmax=10 which is beyond all death times
   times_xmax = kml.get_times_for_plot(xmax=10.0)
   print(f"Times with xmax=10.0 (beyond all deaths): {times_xmax}")
-  
+
   # Should include all death times and xmax
   assert 0 in times_xmax
   assert 2 in times_xmax
@@ -31,11 +31,11 @@ def test_xmax_beyond_all_times():
   assert 4 in times_xmax
   assert 5 in times_xmax
   assert 10.0 in times_xmax
-  
+
   # Should not have any "extra" time beyond last death since there's no time > xmax
   # The list should be: 0, 2, 3, 4, 5, 10
   assert len(times_xmax) == 6, f"Expected 6 times, got {len(times_xmax)}"
-  
+
   print("✓ test_xmax_beyond_all_times passed")
 
 
@@ -101,7 +101,7 @@ def test_xmax_plot_with_simple_datacard():
   dcfile = datacards / "simple_km_few_deaths.txt"
   datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
   kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
-  
+
   # Test with different xmax values
   for xmax_val in [2.5, 3.5, 4.5]:
     output_file = here / "test_output" / f"test_xmax_edge_{xmax_val}.pdf"
@@ -116,7 +116,7 @@ def test_xmax_plot_with_simple_datacard():
 
     # Verify the plot was created
     assert output_file.exists(), f"Plot file should be created for xmax={xmax_val}"
-  
+
   print("✓ test_xmax_plot_with_simple_datacard passed - multiple plots created")
 
 
