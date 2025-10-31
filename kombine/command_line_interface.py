@@ -140,6 +140,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals, too-many
   parser.add_argument("--pvalue-fontsize", type=float, dest="pvalue_fontsize", default=KaplanMeierPlotConfig.pvalue_fontsize, help="Font size for p value text.")
   parser.add_argument("--pvalue-format", type=str, dest="pvalue_format", default=KaplanMeierPlotConfig.pvalue_format, help="Format string for p value display (e.g., '.3g', '.2f').")
   parser.add_argument("--dont-collapse-consecutive-deaths", action="store_true", dest="dont_collapse_consecutive_deaths", help="Disable collapsing of consecutive death times with no intervening censoring (slower but may be more accurate)")
+  parser.add_argument("--no-n-in-legend", action="store_false", dest="n_in_legend", help="Do not include number of patients in each group in the legend labels.", default=True)
   # pylint: enable=line-too-long
   args = parser.parse_args()
   _validate_plot_args(args, parser)
@@ -156,6 +157,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals, too-many
   p_value_tie_handling = args.__dict__.pop("p_value_tie_handling")
   pvalue_fontsize = args.__dict__.pop("pvalue_fontsize")
   pvalue_format = args.__dict__.pop("pvalue_format")
+  n_in_legend = args.__dict__.pop("n_in_legend")
 
   kml_low = datacard.km_likelihood(
     parameter_min=parameter_min,
@@ -174,6 +176,11 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals, too-many
 
   common_plot_kwargs = _extract_common_plot_config_args(args)
 
+  high_label = "High"
+  low_label = "Low"
+  if n_in_legend:
+    high_label += f" (n={len(kml_high.nominalkm.patients)})"
+    low_label += f" (n={len(kml_low.nominalkm.patients)})"
   config_high = KaplanMeierPlotConfig(
     **common_plot_kwargs,
     create_figure=True,
@@ -181,7 +188,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals, too-many
     show=False,
     saveas=None,
     legend_saveas=os.devnull,
-    best_label=f"High (n={len(kml_high.nominalkm.patients)})",
+    best_label=high_label,
     best_color="blue",
     CL_colors=["dodgerblue", "skyblue"],
     pvalue_fontsize=pvalue_fontsize,
@@ -196,7 +203,7 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals, too-many
     show=False,
     saveas=None,
     legend_saveas=args.__dict__.pop("legend_saveas"),
-    best_label=f"Low (n={len(kml_low.nominalkm.patients)})",
+    best_label=low_label,
     best_color="red",
     CL_colors=["orangered", "lightcoral"],
     pvalue_fontsize=pvalue_fontsize,
