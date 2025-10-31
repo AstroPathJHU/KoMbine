@@ -89,7 +89,6 @@ def _make_common_parser(description: str) -> argparse.ArgumentParser:
   parser.add_argument("--endpoint-epsilon", type=float, dest="endpoint_epsilon", default=1e-6, help="Endpoint epsilon for the likelihood calculation.")
   parser.add_argument("--log-zero-epsilon", type=float, dest="log_zero_epsilon", default=LOG_ZERO_EPSILON_DEFAULT, help="Log zero epsilon for the likelihood calculation.")
   parser.add_argument("--xmax", type=float, dest="xmax", default=None, help="Maximum time for x-axis range. Limits the plot to [0, xmax].")
-  parser.add_argument("--color", type=str, dest="color", default=None, choices=list(COLOR_SCHEMES.keys()), help=f"Color scheme for the plot. Options: {', '.join(COLOR_SCHEMES.keys())}. Default is blue for single plots.")
   parser.add_argument("--figsize", nargs=2, type=float, metavar=("WIDTH", "HEIGHT"), help="Figure size in inches.", default=KaplanMeierPlotConfig.figsize)
   parser.add_argument("--no-tight-layout", action="store_false", help="Do not use tight layout for the plot.", default=True, dest="tight_layout")
   parser.add_argument("--legend-fontsize", type=float, help="Font size for legend text.", default=KaplanMeierPlotConfig.legend_fontsize)
@@ -159,6 +158,7 @@ def plot_km_likelihood():
   parser.add_argument("--parameter-min", type=float, dest="parameter_min", default=-np.inf)
   parser.add_argument("--parameter-max", type=float, dest="parameter_max", default=np.inf)
   parser.add_argument("--dont-collapse-consecutive-deaths", action="store_true", dest="dont_collapse_consecutive_deaths", help="Disable collapsing of consecutive death times with no intervening censoring (slower but may be more accurate)")
+  parser.add_argument("--color", type=str, dest="color", default=None, choices=list(COLOR_SCHEMES.keys()), help=f"Color scheme for the plot. Options: {', '.join(COLOR_SCHEMES.keys())}. Default is blue for single plots.")
   # pylint: enable=line-too-long
   args = parser.parse_args()
   _validate_plot_args(args, parser)
