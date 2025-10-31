@@ -106,6 +106,34 @@ _ = kml_low.plot(include_patient_wise_only=True)
 _ = kml_low.plot(include_binomial_only=True)
 ```
 
+## Additional Features
+
+### Limiting the x-axis range
+
+You can limit the x-axis range of plots using the `xmax` parameter:
+
+```python
+_ = kml_low.plot(xmax=50.0)
+```
+
+This limits the plot to the time range [0, xmax], which is useful for focusing on the early portion of the survival curve or when you want to compare plots with different time scales.
+
+### Customizing colors
+
+Colors can be customized for plots. For single plots, use the `best_color` and `CL_colors` parameters in the plot configuration. From the command line, use the `--color` option:
+
+```bash
+kombine datacard.txt output.pdf --color green
+```
+
+For two-group plots, you can specify different colors for each group:
+
+```bash
+kombine_twogroups datacard.txt output.pdf --parameter-threshold 0.45 --high-color purple --low-color orange
+```
+
+Available color options include: blue, red, green, purple, orange, teal, brown, and pink.
+
 ```python
 
 ```

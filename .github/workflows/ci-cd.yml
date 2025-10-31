@@ -150,6 +150,14 @@ jobs:
         run: |
           python -m test.kombine.test_km_likelihood
 
+      - name: xmax functionality tests
+        run: |
+          python -m test.kombine.test_xmax
+
+      - name: xmax edge case tests
+        run: |
+          python -m test.kombine.test_xmax_edge_cases
+
       - name: convert KoMbine notebooks
         run: |
           jupytext --sync docs/kombine/*.md

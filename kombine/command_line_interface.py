@@ -14,6 +14,65 @@ from .kaplan_meier_likelihood import KaplanMeierPlotConfig
 from .utilities import LOG_ZERO_EPSILON_DEFAULT
 
 
+# Color scheme definitions for plots
+COLOR_SCHEMES = {
+  'blue': {
+    'main': 'blue',
+    'shades': ['dodgerblue', 'skyblue'],
+  },
+  'red': {
+    'main': 'red',
+    'shades': ['orangered', 'lightcoral'],
+  },
+  'green': {
+    'main': 'green',
+    'shades': ['mediumseagreen', 'lightgreen'],
+  },
+  'purple': {
+    'main': 'purple',
+    'shades': ['mediumpurple', 'plum'],
+  },
+  'orange': {
+    'main': 'orange',
+    'shades': ['darkorange', 'lightsalmon'],
+  },
+  'teal': {
+    'main': 'teal',
+    'shades': ['darkturquoise', 'paleturquoise'],
+  },
+  'brown': {
+    'main': 'saddlebrown',
+    'shades': ['peru', 'tan'],
+  },
+  'pink': {
+    'main': 'deeppink',
+    'shades': ['hotpink', 'lightpink'],
+  },
+}
+
+
+def _get_color_scheme(color_name: str) -> dict:
+  """
+  Get the color scheme for a given color name.
+  
+  Parameters
+  ----------
+  color_name : str
+    Name of the color scheme (e.g., 'blue', 'red', 'green').
+    
+  Returns
+  -------
+  dict
+    Dictionary with 'main' color and 'shades' list.
+  """
+  if color_name not in COLOR_SCHEMES:
+    raise ValueError(
+      f"Invalid color '{color_name}'. "
+      f"Available colors: {', '.join(COLOR_SCHEMES.keys())}"
+    )
+  return COLOR_SCHEMES[color_name]
+
+
 def _make_common_parser(description: str) -> argparse.ArgumentParser:
   # pylint: disable=line-too-long
   parser = argparse.ArgumentParser(description=description)
@@ -30,6 +89,7 @@ def _make_common_parser(description: str) -> argparse.ArgumentParser:
   parser.add_argument("--endpoint-epsilon", type=float, dest="endpoint_epsilon", default=1e-6, help="Endpoint epsilon for the likelihood calculation.")
   parser.add_argument("--log-zero-epsilon", type=float, dest="log_zero_epsilon", default=LOG_ZERO_EPSILON_DEFAULT, help="Log zero epsilon for the likelihood calculation.")
   parser.add_argument("--xmax", type=float, dest="xmax", default=None, help="Maximum time for x-axis range. Limits the plot to [0, xmax].")
+  parser.add_argument("--color", type=str, dest="color", default=None, choices=list(COLOR_SCHEMES.keys()), help=f"Color scheme for the plot. Options: {', '.join(COLOR_SCHEMES.keys())}. Default is blue for single plots.")
   parser.add_argument("--figsize", nargs=2, type=float, metavar=("WIDTH", "HEIGHT"), help="Figure size in inches.", default=KaplanMeierPlotConfig.figsize)
   parser.add_argument("--no-tight-layout", action="store_false", help="Do not use tight layout for the plot.", default=True, dest="tight_layout")
   parser.add_argument("--legend-fontsize", type=float, help="Font size for legend text.", default=KaplanMeierPlotConfig.legend_fontsize)
@@ -112,10 +172,18 @@ def plot_km_likelihood():
     collapse_consecutive_deaths=not args.__dict__.pop("dont_collapse_consecutive_deaths"),
   )
 
+  # Handle color scheme
+  color = args.__dict__.pop("color")
+  if color is None:
+    color = 'blue'  # Default color
+  color_scheme = _get_color_scheme(color)
+
   plot_config = KaplanMeierPlotConfig(
     **_extract_common_plot_config_args(args),
     saveas=args.__dict__.pop("output_file"),
     legend_saveas=args.__dict__.pop("legend_saveas"),
+    best_color=color_scheme['main'],
+    CL_colors=color_scheme['shades'],
   )
 
   kml.plot(config=plot_config)
@@ -134,6 +202,8 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals, too-many
   parser.add_argument("--parameter-threshold", type=float, dest="parameter_threshold", required=True, help="The parameter threshold for separating high and low groups.")
   parser.add_argument("--parameter-min", type=float, dest="parameter_min", default=-np.inf, help="The minimum parameter value for the low group.")
   parser.add_argument("--parameter-max", type=float, dest="parameter_max", default=np.inf, help="The maximum parameter value for the high group.")
+  parser.add_argument("--high-color", type=str, dest="high_color", default=None, choices=list(COLOR_SCHEMES.keys()), help=f"Color scheme for the high group. Options: {', '.join(COLOR_SCHEMES.keys())}. Default is blue.")
+  parser.add_argument("--low-color", type=str, dest="low_color", default=None, choices=list(COLOR_SCHEMES.keys()), help=f"Color scheme for the low group. Options: {', '.join(COLOR_SCHEMES.keys())}. Default is red.")
   parser.add_argument("--exclude-p-value", action="store_false", dest="include_p_value", default=True, help="Exclude p value calculation and display from the plot.")
   parser.add_argument("--include-logrank-pvalue", action="store_true", dest="include_logrank_pvalue", help="Include conventional logrank p value for comparison with likelihood method.")
   parser.add_argument("--p-value-tie-handling", type=str, dest="p_value_tie_handling", choices=["breslow"], default="breslow", help="Method for handling ties in p value calculation: currently only option is 'breslow' (Breslow approximation).")
@@ -176,6 +246,16 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals, too-many
 
   common_plot_kwargs = _extract_common_plot_config_args(args)
 
+  # Handle color schemes
+  high_color = args.__dict__.pop("high_color")
+  low_color = args.__dict__.pop("low_color")
+  if high_color is None:
+    high_color = 'blue'  # Default high color
+  if low_color is None:
+    low_color = 'red'  # Default low color
+  high_color_scheme = _get_color_scheme(high_color)
+  low_color_scheme = _get_color_scheme(low_color)
+
   high_label = "High"
   low_label = "Low"
   if n_in_legend:
@@ -189,8 +269,8 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals, too-many
     saveas=None,
     legend_saveas=os.devnull,
     best_label=high_label,
-    best_color="blue",
-    CL_colors=["dodgerblue", "skyblue"],
+    best_color=high_color_scheme['main'],
+    CL_colors=high_color_scheme['shades'],
     pvalue_fontsize=pvalue_fontsize,
     pvalue_format=pvalue_format,
   )
@@ -204,8 +284,8 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals, too-many
     saveas=None,
     legend_saveas=args.__dict__.pop("legend_saveas"),
     best_label=low_label,
-    best_color="red",
-    CL_colors=["orangered", "lightcoral"],
+    best_color=low_color_scheme['main'],
+    CL_colors=low_color_scheme['shades'],
     pvalue_fontsize=pvalue_fontsize,
     pvalue_format=pvalue_format,
   )
