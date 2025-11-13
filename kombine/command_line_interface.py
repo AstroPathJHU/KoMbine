@@ -149,9 +149,14 @@ def _extract_common_plot_config_args(args: argparse.Namespace) -> dict:
   }
 
 
-def plot_km_likelihood():
+def _make_kombine_parser() -> argparse.ArgumentParser:
   """
-  Run Kaplan-Meier likelihood method from a datacard.
+  Create the argument parser for the kombine command.
+  
+  Returns
+  -------
+  argparse.ArgumentParser
+    Configured argument parser for kombine.
   """
   # pylint: disable=line-too-long
   parser = _make_common_parser("Run Kaplan-Meier likelihood method from a datacard.")
@@ -160,6 +165,14 @@ def plot_km_likelihood():
   parser.add_argument("--dont-collapse-consecutive-deaths", action="store_true", dest="dont_collapse_consecutive_deaths", help="Disable collapsing of consecutive death times with no intervening censoring (slower but may be more accurate)")
   parser.add_argument("--color", type=str, dest="color", default=None, choices=list(COLOR_SCHEMES.keys()), help=f"Color scheme for the plot. Options: {', '.join(COLOR_SCHEMES.keys())}. Default is blue for single plots.")
   # pylint: enable=line-too-long
+  return parser
+
+
+def plot_km_likelihood():
+  """
+  Run Kaplan-Meier likelihood method from a datacard.
+  """
+  parser = _make_kombine_parser()
   args = parser.parse_args()
   _validate_plot_args(args, parser)
 
@@ -192,10 +205,14 @@ def plot_km_likelihood():
     raise ValueError(f"Unused arguments: {args.__dict__}")
 
 
-def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals, too-many-statements
+def _make_kombine_twogroups_parser() -> argparse.ArgumentParser:
   """
-  Run Kaplan-Meier likelihood method from a datacard, and plot Kaplan-Meier
-  curves for two groups separated into high and low values of the parameter.
+  Create the argument parser for the kombine_twogroups command.
+  
+  Returns
+  -------
+  argparse.ArgumentParser
+    Configured argument parser for kombine_twogroups.
   """
   # pylint: disable=line-too-long
   parser = _make_common_parser("Run Kaplan-Meier likelihood method from a datacard, and plot Kaplan-Meier curves for two groups separated into high and low values of the parameter.")
@@ -212,6 +229,15 @@ def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals, too-many
   parser.add_argument("--dont-collapse-consecutive-deaths", action="store_true", dest="dont_collapse_consecutive_deaths", help="Disable collapsing of consecutive death times with no intervening censoring (slower but may be more accurate)")
   parser.add_argument("--no-n-in-legend", action="store_false", dest="n_in_legend", help="Do not include number of patients in each group in the legend labels.", default=True)
   # pylint: enable=line-too-long
+  return parser
+
+
+def plot_km_likelihood_two_groups(): # pylint: disable=too-many-locals, too-many-statements
+  """
+  Run Kaplan-Meier likelihood method from a datacard, and plot Kaplan-Meier
+  curves for two groups separated into high and low values of the parameter.
+  """
+  parser = _make_kombine_twogroups_parser()
   args = parser.parse_args()
   _validate_plot_args(args, parser)
 

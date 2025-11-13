@@ -37,6 +37,19 @@ This repository contains two distinct Python packages for biomedical analysis:
 - **`docs/kombine/`**: KoMbine documentation, LaTeX files, and plotting scripts
 - Each has independent numbering starting from 01, with separate `compile_*_plots.sh` scripts
 
+**KoMbine documentation files**:
+- `01_table_of_contents.md` - Index of all documentation files
+- `02_kombine.tex` - LaTeX paper with mathematical details (JSS submission)
+- `03_kaplan_meier_example.md` - Jupyter notebook showing Python API usage examples
+- `04_compare_to_lifelines.md` - Jupyter notebook comparing to `lifelines` package
+- `05_command_line_interface.md` - **Pure Markdown** (no Python cells) documenting all CLI options for `kombine` and `kombine_twogroups` commands
+
+**Documentation style guidelines**:
+- Files `03_*.md` and `04_*.md` are Jupytext notebooks with Python cells for interactive examples
+- File `05_command_line_interface.md` is pure Markdown without Python cells - it documents the CLI, not the Python API
+- All CLI options must be documented in `05_command_line_interface.md` and verified by `test/kombine/test_cli_documentation.py`
+- When adding new CLI arguments, update `05_command_line_interface.md` and run the documentation test
+
 ## Critical Build Information
 
 ### Installation and Environment Setup

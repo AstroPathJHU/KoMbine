@@ -158,6 +158,10 @@ jobs:
         run: |
           python -m test.kombine.test_xmax_edge_cases
 
+      - name: CLI documentation completeness test
+        run: |
+          python -m test.kombine.test_cli_documentation
+
       - name: convert KoMbine notebooks
         run: |
           jupytext --sync docs/kombine/*.md
