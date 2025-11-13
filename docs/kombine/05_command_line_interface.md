@@ -1,3 +1,16 @@
+---
+jupyter:
+  jupytext:
+    cell_metadata_filter: -all
+    formats: ipynb,md,py
+    main_language: python
+    text_representation:
+      extension: .md
+      format_name: markdown
+      format_version: '1.3'
+      jupytext_version: 1.18.1
+---
+
 # KoMbine Command Line Interface
 
 This document describes the command line interface for KoMbine's Kaplan-Meier likelihood methods.

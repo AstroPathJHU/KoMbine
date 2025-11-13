@@ -158,9 +158,9 @@ jobs:
         run: |
           python -m test.kombine.test_xmax_edge_cases
 
-      - name: CLI documentation completeness test
+      - name: Documentation tests
         run: |
-          python -m test.kombine.test_cli_documentation
+          python -m test.kombine.test_documentation
 
       - name: convert KoMbine notebooks
         run: |
