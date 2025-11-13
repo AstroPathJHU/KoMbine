@@ -1,8 +1,37 @@
 """
 Test Kaplan-Meier plotting functionality.
 
-This includes tests for xmax (x-axis range control), color customization,
-and other plotting features.
+This module contains comprehensive tests for KM plotting features including:
+
+1. X-axis range control (xmax):
+   - Basic functionality and time point selection
+   - Plot generation with xmax parameter
+   - X-axis limit setting
+   - Backward compatibility (no xmax)
+   - Edge cases: xmax beyond all times, at death time, before first death
+   - Multiple xmax values
+
+2. Plot configuration options:
+   - Custom title and axis labels
+   - Custom figure size
+   - Legend control (location, no legend)
+   - Tight layout control
+   - Custom font sizes (title, labels, ticks, legend)
+
+3. Error band options:
+   - Binomial-only error bands
+   - Patient-wise-only error bands
+   - Combining xmax with different error band configurations
+
+4. Basic plotting:
+   - Basic plot generation
+   - Include/exclude nominal curve
+   - Different output formats (PDF, PNG)
+   - Plot results structure validation
+
+5. Combined features:
+   - xmax with custom plot options
+   - xmax with different error bands
 """
 
 import pathlib
@@ -298,6 +327,315 @@ def test_basic_plot_generation():
   print(f"✓ test_basic_plot_generation passed - plot saved to {output_file}")
 
 
+def test_plot_with_custom_title_labels():
+  """
+  Test that custom title and axis labels can be set.
+  """
+  dcfile = datacards / "simple_km_few_deaths.txt"
+  datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
+  kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
+
+  output_file = here / "test_output" / "test_custom_labels.pdf"
+  config = KaplanMeierPlotConfig(
+    saveas=output_file,
+    show=False,
+    print_progress=False,
+    title="Custom Survival Analysis",
+    xlabel="Time (months)",
+    ylabel="Survival Probability",
+  )
+
+  kml.plot(config=config)
+
+  assert output_file.exists(), "Plot file should be created"
+  print("✓ test_plot_with_custom_title_labels passed")
+
+
+def test_plot_with_custom_figsize():
+  """
+  Test that custom figure size can be set.
+  """
+  dcfile = datacards / "simple_km_few_deaths.txt"
+  datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
+  kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
+
+  output_file = here / "test_output" / "test_custom_figsize.pdf"
+  config = KaplanMeierPlotConfig(
+    saveas=output_file,
+    show=False,
+    print_progress=False,
+    figsize=(10, 6),
+  )
+
+  kml.plot(config=config)
+
+  assert output_file.exists(), "Plot file should be created"
+  print("✓ test_plot_with_custom_figsize passed")
+
+
+def test_plot_exclude_nominal():
+  """
+  Test plotting without the nominal line.
+  """
+  dcfile = datacards / "simple_km_few_deaths.txt"
+  datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
+  kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
+
+  output_file = here / "test_output" / "test_exclude_nominal.pdf"
+  config = KaplanMeierPlotConfig(
+    saveas=output_file,
+    show=False,
+    print_progress=False,
+    include_nominal=False,
+  )
+
+  results = kml.plot(config=config)
+
+  assert output_file.exists(), "Plot file should be created"
+  # The nominal curve should still be in results even if not plotted
+  assert "nominal" in results, "Results should contain 'nominal' key"
+  print("✓ test_plot_exclude_nominal passed")
+
+
+def test_plot_include_binomial_only():
+  """
+  Test plotting with binomial-only error bands.
+  """
+  dcfile = datacards / "simple_km_few_deaths.txt"
+  datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
+  kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
+
+  output_file = here / "test_output" / "test_binomial_only.pdf"
+  config = KaplanMeierPlotConfig(
+    saveas=output_file,
+    show=False,
+    print_progress=False,
+    include_binomial_only=True,
+  )
+
+  results = kml.plot(config=config)
+
+  assert output_file.exists(), "Plot file should be created"
+  assert "x" in results, "Results should contain 'x' key"
+  print("✓ test_plot_include_binomial_only passed")
+
+
+def test_plot_include_patient_wise_only():
+  """
+  Test plotting with patient-wise-only error bands.
+  """
+  dcfile = datacards / "simple_km_few_deaths.txt"
+  datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
+  kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
+
+  output_file = here / "test_output" / "test_patient_wise_only.pdf"
+  config = KaplanMeierPlotConfig(
+    saveas=output_file,
+    show=False,
+    print_progress=False,
+    include_patient_wise_only=True,
+  )
+
+  results = kml.plot(config=config)
+
+  assert output_file.exists(), "Plot file should be created"
+  assert "x" in results, "Results should contain 'x' key"
+  print("✓ test_plot_include_patient_wise_only passed")
+
+
+def test_plot_no_legend():
+  """
+  Test plotting without a legend.
+  """
+  dcfile = datacards / "simple_km_few_deaths.txt"
+  datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
+  kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
+
+  output_file = here / "test_output" / "test_no_legend.pdf"
+  config = KaplanMeierPlotConfig(
+    saveas=output_file,
+    show=False,
+    print_progress=False,
+    legend_loc=None,  # No legend
+  )
+
+  kml.plot(config=config)
+
+  assert output_file.exists(), "Plot file should be created"
+  print("✓ test_plot_no_legend passed")
+
+
+def test_plot_with_xmax_and_custom_options():
+  """
+  Test combining xmax with other custom plot options.
+  """
+  dcfile = datacards / "simple_km_few_deaths.txt"
+  datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
+  kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
+
+  output_file = here / "test_output" / "test_xmax_custom_options.pdf"
+  config = KaplanMeierPlotConfig(
+    saveas=output_file,
+    show=False,
+    print_progress=False,
+    xmax=4.0,
+    title="Survival Analysis (Limited Range)",
+    xlabel="Time (months)",
+    ylabel="Survival Rate",
+    figsize=(8, 6),
+  )
+
+  results = kml.plot(config=config)
+
+  assert output_file.exists(), "Plot file should be created"
+  assert "x" in results, "Results should contain 'x' key"
+  print("✓ test_plot_with_xmax_and_custom_options passed")
+
+
+def test_plot_different_output_formats():
+  """
+  Test that plots can be saved in different formats.
+  """
+  dcfile = datacards / "simple_km_few_deaths.txt"
+  datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
+  kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
+
+  # Test PDF (already tested elsewhere, but for completeness)
+  pdf_file = here / "test_output" / "test_format.pdf"
+  config_pdf = KaplanMeierPlotConfig(
+    saveas=pdf_file,
+    show=False,
+    print_progress=False,
+  )
+  kml.plot(config=config_pdf)
+  assert pdf_file.exists(), "PDF file should be created"
+
+  # Test PNG
+  png_file = here / "test_output" / "test_format.png"
+  config_png = KaplanMeierPlotConfig(
+    saveas=png_file,
+    show=False,
+    print_progress=False,
+  )
+  kml.plot(config=config_png)
+  assert png_file.exists(), "PNG file should be created"
+
+  print("✓ test_plot_different_output_formats passed")
+
+
+def test_plot_returns_expected_structure():
+  """
+  Test that plot results contain all expected keys and data structures.
+  """
+  dcfile = datacards / "simple_km_few_deaths.txt"
+  datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
+  kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
+
+  config = KaplanMeierPlotConfig(
+    show=False,
+    print_progress=False,
+  )
+
+  results = kml.plot(config=config)
+
+  # Check that essential keys are present
+  assert "x" in results, "Results should contain 'x' key"
+  assert "nominal" in results, "Results should contain 'nominal' key"
+
+  # Check that x and nominal are array-like
+  assert len(results["x"]) > 0, "x should have data points"
+  assert len(results["nominal"]) > 0, "nominal should have data points"
+
+  # Check that x and nominal have the same length
+  assert len(results["x"]) == len(results["nominal"]), \
+    "x and nominal should have the same length"
+
+  print("✓ test_plot_returns_expected_structure passed")
+
+
+def test_plot_with_no_tight_layout():
+  """
+  Test plotting with tight_layout disabled.
+  """
+  dcfile = datacards / "simple_km_few_deaths.txt"
+  datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
+  kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
+
+  output_file = here / "test_output" / "test_no_tight_layout.pdf"
+  config = KaplanMeierPlotConfig(
+    saveas=output_file,
+    show=False,
+    print_progress=False,
+    tight_layout=False,
+  )
+
+  kml.plot(config=config)
+
+  assert output_file.exists(), "Plot file should be created"
+  print("✓ test_plot_with_no_tight_layout passed")
+
+
+def test_xmax_with_different_error_bands():
+  """
+  Test that xmax works correctly with different error band configurations.
+  """
+  dcfile = datacards / "simple_km_few_deaths.txt"
+  datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
+  kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
+
+  # Test xmax with binomial-only
+  output_file1 = here / "test_output" / "test_xmax_binomial.pdf"
+  config1 = KaplanMeierPlotConfig(
+    saveas=output_file1,
+    show=False,
+    print_progress=False,
+    xmax=3.5,
+    include_binomial_only=True,
+  )
+  kml.plot(config=config1)
+  assert output_file1.exists(), "Plot with xmax and binomial-only should be created"
+
+  # Test xmax with patient-wise-only
+  output_file2 = here / "test_output" / "test_xmax_patient_wise.pdf"
+  config2 = KaplanMeierPlotConfig(
+    saveas=output_file2,
+    show=False,
+    print_progress=False,
+    xmax=3.5,
+    include_patient_wise_only=True,
+  )
+  kml.plot(config=config2)
+  assert output_file2.exists(), "Plot with xmax and patient-wise-only should be created"
+
+  print("✓ test_xmax_with_different_error_bands passed")
+
+
+def test_plot_with_custom_font_sizes():
+  """
+  Test plotting with custom font sizes.
+  """
+  dcfile = datacards / "simple_km_few_deaths.txt"
+  datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
+  kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
+
+  output_file = here / "test_output" / "test_custom_fonts.pdf"
+  config = KaplanMeierPlotConfig(
+    saveas=output_file,
+    show=False,
+    print_progress=False,
+    title="Test Plot",
+    title_fontsize=16,
+    label_fontsize=12,
+    tick_fontsize=10,
+    legend_fontsize=10,
+  )
+
+  kml.plot(config=config)
+
+  assert output_file.exists(), "Plot file should be created"
+  print("✓ test_plot_with_custom_font_sizes passed")
+
+
 if __name__ == "__main__":
   # X-axis range control tests
   test_xmax_times_for_plot()
@@ -313,5 +651,17 @@ if __name__ == "__main__":
 
   # Basic plotting tests
   test_basic_plot_generation()
+  test_plot_with_custom_title_labels()
+  test_plot_with_custom_figsize()
+  test_plot_exclude_nominal()
+  test_plot_include_binomial_only()
+  test_plot_include_patient_wise_only()
+  test_plot_no_legend()
+  test_plot_with_xmax_and_custom_options()
+  test_plot_different_output_formats()
+  test_plot_returns_expected_structure()
+  test_plot_with_no_tight_layout()
+  test_xmax_with_different_error_bands()
+  test_plot_with_custom_font_sizes()
 
   print("\n✅ All KM plotting tests passed!")
