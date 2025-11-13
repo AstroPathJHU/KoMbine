@@ -95,7 +95,7 @@ class KaplanMeierBase(abc.ABC):
       times_within_xmax = [t for t in times_for_plot if t <= xmax]
 
       # Build the time list: 0, times <= xmax, xmax
-      result = [0]
+      result = [0.]
       result.extend(times_within_xmax)
 
       # Add xmax at the end if it's not already in the list
