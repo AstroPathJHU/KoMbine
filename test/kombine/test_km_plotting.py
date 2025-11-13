@@ -433,7 +433,7 @@ def test_plot_exclude_nominal():
   ax = plt.gca()
   lines = ax.get_lines()
   # With include_nominal=False, there should be no line labeled as nominal
-  line_labels = [line.get_label().lower() for line in lines]
+  line_labels = [str(line.get_label()).lower() for line in lines]
   has_nominal = "kaplan-meier" in line_labels or any("nominal" in label for label in line_labels)
   assert not has_nominal, "Nominal line should not be plotted when include_nominal=False"
 
