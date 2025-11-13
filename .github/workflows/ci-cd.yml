@@ -150,13 +150,9 @@ jobs:
         run: |
           python -m test.kombine.test_km_likelihood
 
-      - name: xmax functionality tests
+      - name: KM plotting tests
         run: |
-          python -m test.kombine.test_xmax
-
-      - name: xmax edge case tests
-        run: |
-          python -m test.kombine.test_xmax_edge_cases
+          python -m test.kombine.test_km_plotting
 
       - name: Documentation tests
         run: |
