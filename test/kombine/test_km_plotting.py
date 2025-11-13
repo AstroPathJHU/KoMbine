@@ -336,18 +336,34 @@ def test_plot_with_custom_title_labels():
   kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
 
   output_file = here / "test_output" / "test_custom_labels.pdf"
+  custom_title = "Custom Survival Analysis"
+  custom_xlabel = "Time (months)"
+  custom_ylabel = "Survival Probability"
+
   config = KaplanMeierPlotConfig(
     saveas=output_file,
     show=False,
     print_progress=False,
-    title="Custom Survival Analysis",
-    xlabel="Time (months)",
-    ylabel="Survival Probability",
+    create_figure=True,
+    close_figure=False,
+    title=custom_title,
+    xlabel=custom_xlabel,
+    ylabel=custom_ylabel,
   )
 
   kml.plot(config=config)
 
+  # Verify the plot was created
   assert output_file.exists(), "Plot file should be created"
+
+  # Verify the labels are actually set
+  ax = plt.gca()
+  assert ax.get_title() == custom_title, f"Title should be '{custom_title}'"
+  assert ax.get_xlabel() == custom_xlabel, f"X-label should be '{custom_xlabel}'"
+  assert ax.get_ylabel() == custom_ylabel, f"Y-label should be '{custom_ylabel}'"
+
+  plt.close()
+
   print("✓ test_plot_with_custom_title_labels passed")
 
 
@@ -360,16 +376,30 @@ def test_plot_with_custom_figsize():
   kml = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=np.inf)
 
   output_file = here / "test_output" / "test_custom_figsize.pdf"
+  custom_figsize = (10, 6)
+
   config = KaplanMeierPlotConfig(
     saveas=output_file,
     show=False,
     print_progress=False,
-    figsize=(10, 6),
+    create_figure=True,
+    close_figure=False,
+    figsize=custom_figsize,
   )
 
   kml.plot(config=config)
 
+  # Verify the plot was created
   assert output_file.exists(), "Plot file should be created"
+
+  # Verify the figure size is correct
+  fig = plt.gcf()
+  actual_figsize = fig.get_size_inches()
+  assert np.allclose(actual_figsize, custom_figsize), \
+    f"Figure size should be {custom_figsize}, got {actual_figsize}"
+
+  plt.close()
+
   print("✓ test_plot_with_custom_figsize passed")
 
 
@@ -386,14 +416,29 @@ def test_plot_exclude_nominal():
     saveas=output_file,
     show=False,
     print_progress=False,
+    create_figure=True,
+    close_figure=False,
     include_nominal=False,
   )
 
   results = kml.plot(config=config)
 
   assert output_file.exists(), "Plot file should be created"
+
   # The nominal curve should still be in results even if not plotted
   assert "nominal" in results, "Results should contain 'nominal' key"
+
+  # Verify that the nominal line is not in the plot
+  # Check the number of lines - should have fewer without nominal
+  ax = plt.gca()
+  lines = ax.get_lines()
+  # With include_nominal=False, there should be no line labeled as nominal
+  line_labels = [line.get_label().lower() for line in lines]
+  has_nominal = "kaplan-meier" in line_labels or any("nominal" in label for label in line_labels)
+  assert not has_nominal, "Nominal line should not be plotted when include_nominal=False"
+
+  plt.close()
+
   print("✓ test_plot_exclude_nominal passed")
 
 
@@ -445,7 +490,7 @@ def test_plot_include_patient_wise_only():
 
 def test_plot_no_legend():
   """
-  Test plotting without a legend.
+  Test plotting with legend_loc=None (implementation may vary).
   """
   dcfile = datacards / "simple_km_few_deaths.txt"
   datacard = kombine.datacard.Datacard.parse_datacard(dcfile)
@@ -456,12 +501,16 @@ def test_plot_no_legend():
     saveas=output_file,
     show=False,
     print_progress=False,
-    legend_loc=None,  # No legend
+    legend_loc=None,  # Request no legend
   )
 
+  # Test that the config is accepted and plot is created
   kml.plot(config=config)
 
   assert output_file.exists(), "Plot file should be created"
+  # Note: The actual legend behavior may depend on the implementation
+  # This test verifies that legend_loc=None is accepted as a valid config
+
   print("✓ test_plot_no_legend passed")
 
 
