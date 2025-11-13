@@ -115,37 +115,37 @@ Control p-value calculation and display:
 
 ### Basic single group plot
 
-```bash
+```
 kombine datacard.txt output.pdf
 ```
 
 ### Single group with custom color and x-axis limit
 
-```bash
+```
 kombine datacard.txt output.pdf --color green --xmax 50.0
 ```
 
 ### Single group with patient-wise error only
 
-```bash
+```
 kombine datacard.txt output.pdf --include-patient-wise-only
 ```
 
 ### Two group comparison
 
-```bash
+```
 kombine_twogroups datacard.txt output.pdf --parameter-threshold 0.45
 ```
 
 ### Two groups with custom colors
 
-```bash
+```
 kombine_twogroups datacard.txt output.pdf --parameter-threshold 0.45 --high-color purple --low-color orange
 ```
 
 ### Two groups with custom parameter range and x-axis limit
 
-```bash
+```
 kombine_twogroups datacard.txt output.pdf \
   --parameter-threshold 0.45 \
   --parameter-min 0.0 \
@@ -155,7 +155,7 @@ kombine_twogroups datacard.txt output.pdf \
 
 ### Advanced: Custom plot appearance
 
-```bash
+```
 kombine datacard.txt output.pdf \
   --color teal \
   --xmax 75.0 \
