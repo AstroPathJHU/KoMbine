@@ -148,6 +148,9 @@ def test_cli_documentation_completeness():
 def test_table_of_contents_sync():
   """
   Test that the table of contents is synchronized with actual documentation files.
+  Bidirectional check:
+  1. All documentation files are listed in the TOC
+  2. All files referenced in the TOC actually exist
   """
   here = pathlib.Path(__file__).parent.parent.parent
   docs_dir = here / "docs" / "kombine"
@@ -159,18 +162,19 @@ def test_table_of_contents_sync():
   # Read the table of contents
   toc_content = toc_file.read_text()
 
-  # Find all documentation files in the directory (numbered markdown files)
+  # Find all documentation files in the directory (numbered markdown/tex files)
   doc_files = sorted([
-    f.name for f in docs_dir.glob("[0-9][0-9]_*.md")
+    f.name for f in docs_dir.glob("[0-9][0-9]_*.*")
     if f.name != "01_table_of_contents.md"
+    and (f.name.endswith('.md') or f.name.endswith('.tex'))
   ])
 
   # Extract file references from the table of contents
   # Looking for patterns like `02_kombine.pdf` or `03_kaplan_meier_example.html`
-  toc_pattern = r'`(\d\d_[^`]+\.(pdf|html|md))`'
+  toc_pattern = r'`(\d\d_[^`]+\.(pdf|html))`'
   toc_references = set(re.findall(toc_pattern, toc_content))
 
-  # Check which files are documented
+  # Direction 1: Check which actual files are missing from TOC
   missing_from_toc = set()
   for doc_file in doc_files:
     # Check if the file is mentioned in the TOC
@@ -184,16 +188,45 @@ def test_table_of_contents_sync():
     if expected_ref not in [ref[0] for ref in toc_references]:
       missing_from_toc.add(doc_file)
 
+  # Direction 2: Check which TOC references don't have corresponding files
+  missing_files = set()
+  for ref, _ in toc_references:
+    # Skip the table of contents itself
+    if ref.startswith('01_table_of_contents'):
+      continue
+
+    # Convert TOC reference back to actual file name
+    # .pdf references should have .tex files
+    # .html references should have .md files
+    if ref.endswith('.pdf'):
+      actual_file = ref.replace('.pdf', '.tex')
+    else:  # .html
+      actual_file = ref.replace('.html', '.md')
+
+    # Check if the actual file exists
+    if actual_file not in doc_files:
+      missing_files.add(ref)
+
   # Report findings
   if missing_from_toc:
     print(f"\n❌ Documentation files missing from table of contents: {sorted(missing_from_toc)}")
 
+  if missing_files:
+    print(f"\n❌ Files referenced in TOC that don't exist: {sorted(missing_files)}")
+
+  # Assert both directions
   assert not missing_from_toc, (
     f"The following documentation files are not listed in {toc_file.name}: "
     f"{', '.join(sorted(missing_from_toc))}"
   )
 
+  assert not missing_files, (
+    f"The following files are referenced in {toc_file.name} but don't exist: "
+    f"{', '.join(sorted(missing_files))}"
+  )
+
   print(f"\n✓ All {len(doc_files)} documentation files are listed in the table of contents")
+  print(f"✓ All {len(toc_references)} TOC references point to existing files")
 
 
 if __name__ == "__main__":
