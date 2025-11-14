@@ -85,12 +85,14 @@
 \theoremstyle{thmstylethree}%
 \newtheorem{definition}{Definition}%
 
+\newcommand{\KM}{Kaplan--Meier} %chktex 8
+
 \raggedbottom
 %%\unnumbered% uncomment this for unnumbered level heads
 
 \begin{document}
 
-\title[Article Title]{Article Title}
+\title[Propagating Statistical and Systematic Errors to \KM{} Curves]{Propagating Statistical and Systematic Errors to \KM{} Curves}
 
 %%=============================================================%%
 %% GivenName	-> \fnm{Joergen W.}
@@ -101,25 +103,19 @@
 %%  \sfx{IV}}\email{iauthor@gmail.com}
 %%=============================================================%%
 
-\author*[1,2]{\fnm{First} \sur{Author}}\email{iauthor@gmail.com}
+\author*[1,2]{\fnm{Jeffrey} \sur{Roskes}}\email{jroskes1@jhu.edu}
 
-\author[2,3]{\fnm{Second} \sur{Author}}\email{iiauthor@gmail.com}
-\equalcont{These authors contributed equally to this work.}
+\affil*[1]{\orgdiv{Institute for Data Intensive Engineering and Science}, \orgname{Johns Hopkins University}, \orgaddress{\street{3400 N. Charles Street}, \city{Baltimore}, \postcode{21218}, \state{MD}, \country{USA}}}
 
-\author[1,2]{\fnm{Third} \sur{Author}}\email{iiiauthor@gmail.com}
-\equalcont{These authors contributed equally to this work.}
-
-\affil*[1]{\orgdiv{Department}, \orgname{Organization}, \orgaddress{\street{Street}, \city{City}, \postcode{100190}, \state{State}, \country{Country}}}
-
-\affil[2]{\orgdiv{Department}, \orgname{Organization}, \orgaddress{\street{Street}, \city{City}, \postcode{10587}, \state{State}, \country{Country}}}
-
-\affil[3]{\orgdiv{Department}, \orgname{Organization}, \orgaddress{\street{Street}, \city{City}, \postcode{610101}, \state{State}, \country{Country}}}
+\affil[2]{\orgdiv{Mark Foundation Center for Advanced Genomics and Imaging}, \orgname{Johns Hopkins University}, \orgaddress{\street{3400 N. Charles Street}, \city{Baltimore}, \postcode{21218}, \state{MD}, \country{USA}}}
 
 %%==================================%%
 %% Sample for unstructured abstract %%
 %%==================================%%
 
-\abstract{The abstract serves both as a general introduction to the topic and as a brief, non-technical summary of the main results and their implications. Authors are advised to check the author instructions for the journal they are submitting to for word limits and if structural elements like subheadings, citations, or equations are permitted.}
+\abstract{
+\KM{} curves are widely used in medical research to evaluate the performance of biomarkers and predict patient outcomes. These curves are often shown without error bands, and even when error bands are provided, they typically only account for the statistical uncertainty resulting from the finite number of patients in the study. In reality, other sources of uncertainty affect the measurements as well. As datasets grow, the statistical uncertainty on the number of patients no longer dominates the overall uncertainty, and other uncertainties are increasingly important to model. We present a maximum likelihood method to propagate both statistical and systematic uncertainties through the \KM{} curve estimation processes. We illustrate our method using real-world data from patients with non-small-cell lung cancer and show that estimating and propagating these uncertainties is essential for evaluating biomarker performance.
+}
 
 %%================================%%
 %% Sample for structured abstract %%
@@ -133,7 +129,7 @@
 % 
 % \textbf{Conclusion:} The abstract serves both as a general introduction to the topic and as a brief, non-technical summary of the main results and their implications. The abstract must not include subheadings (unless expressly permitted in the journal's Instructions to Authors), equations or citations. As a guide the abstract should not exceed 200 words. Most journals do not set a hard limit however authors are advised to check the author instructions for the journal they are submitting to.}
 
-\keywords{keyword1, Keyword2, Keyword3, Keyword4}
+\keywords{Survival analysis, Maximum likelihood, Uncertainty, Biomarkers, Systematic uncertainty}
 
 %%\pacs[JEL Classification]{D8, H51}
 
@@ -141,11 +137,19 @@
 
 \maketitle
 
-\section{Introduction}\label{sec1}
+\section{Introduction}\label{sec:intro}
 
-The Introduction section, of referenced text \cite{bib1} expands on the background of the work (some overlap with the Abstract is acceptable). The introduction should not include subheadings.
+\KM{} curves are widely used in medical research to predict patient outcomes by giving the survival probability as a function of time. The curves are constructed empirically based on observed outcomes in a cohort of patients. They can be used to evaluate the performance of biomarkers, by stratifying patients into groups based on the biomarker value and plotting separate \KM{} curves for each group, or to compare the effectiveness of different treatments. By examining the \KM{} curves, we can also predict how long a future patient is likely to survive.
 
-Springer Nature does not impose a strict layout as standard however authors are advised to check the individual requirements for the journal they are planning to submit to as there may be journal-level preferences. When preparing your text please also be aware that some stylistic choices are not supported in full text XML (publication version), including coloured font. These will not be replicated in the typeset article if it is accepted. 
+\KM{} curves are often shown without error bands, or with error bands that only take into account the statistical uncertainty resulting from the finite number of patients in the study. In this paper, we present KoMbine, the first package that can calculate both statistical and systematic uncertainties on \KM{} curves.
+
+The maximum likelihood techniques and modeling of systematic uncertainties used in KoMbine are based on the Combine package \citep{CAT-23-001}, which was developed by the CMS Collaboration in particle physics\@. Combine, built on the RooFit framework \citep{RooFit} and the Minuit optimizer \citep{minuit}, is used for high-precision measurements of particle properties, which must account for tens or even hundreds of systematic uncertainties, and was used for such high-profile measurements as the discovery of the Higgs boson \citep{HIG-12-028} and subsequent measurements of its properties.
+
+No particle physics measurement is reported without a comprehensive assessment of the uncertainties that affect the measurement. This rigorous approach has led to a higher degree of reproducibility in particle physics results than in many other fields, including medical research.
+
+The KoMbine package handles the statistical uncertainty on the number of patients in a more precise way than conventional methods and incorporates patient-wise uncertainties into the calculation. The statistical and patient-wise uncertainties can also be plotted separately, allowing the user to see which uncertainties dominate, which in turn can help to plan the next iteration of the experiment.
+
+KoMbine is available from PyPI via \texttt{pip install kobminekm} and from GitHub at \url{https://github.com/AstroPathJHU/KoMbine}.
 
 \section{Results}\label{sec2}
 
@@ -616,7 +620,7 @@ An appendix contains supplementary information that is not an essential part of 
 %% file, and delete the associated \verb+\bibliography+ commands.                            %%
 %%===========================================================================================%%
 
-\bibliography{sn-bibliography}% common bib file
+\bibliography{02_kombine}% common bib file
 %% if required, the content of .bbl file can be included here once bbl is generated
 %%\input sn-article.bbl
 
