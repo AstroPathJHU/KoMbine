@@ -150,6 +150,14 @@ jobs:
         run: |
           python -m test.kombine.test_km_likelihood
 
+      - name: KM plotting tests
+        run: |
+          python -m test.kombine.test_km_plotting
+
+      - name: Documentation tests
+        run: |
+          python -m test.kombine.test_documentation
+
       - name: convert KoMbine notebooks
         run: |
           jupytext --sync docs/kombine/*.md

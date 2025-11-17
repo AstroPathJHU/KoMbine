@@ -12,6 +12,16 @@ This repository contains two distinct Python packages for biomedical analysis:
 **Key frameworks**: NumPy/SciPy for numerical computing, Matplotlib for plotting, Gurobi for optimization (KoMbine only)
 **Target runtime**: Python 3.11+ (tested with 3.12)
 
+## Code Style Guidelines
+
+**CRITICAL: Indentation and Formatting**
+- **Use 2-space indentation** for all Python code (not 4 spaces or tabs)
+- **No trailing whitespace** - remove all trailing spaces at the end of lines
+- **Always run pylint after editing** and fix any errors before committing
+- Run `python -m pylint <file>` to check for issues
+- Nontrivial errors that would require major refactoring can be ignored via `# pylint: disable=error-name` comments
+- Target pylint score: 10.00/10
+
 ## Package Structure
 
 ### Core Packages
@@ -20,7 +30,7 @@ This repository contains two distinct Python packages for biomedical analysis:
   - `discrete_base.py`, `continuous_distributions.py` - Supporting classes
   - `command_line_interface.py` - ROC-specific CLI functions
   - `datacard.py` - Re-exports Datacard from kombine for compatibility
-  
+
 - **`kombine/`**: Kaplan-Meier analysis functionality
   - `kaplan_meier*.py` - KM curve and likelihood methods
   - `discrete_optimization.py`, `utilities.py` - Optimization utilities (used by KM methods)
@@ -32,10 +42,25 @@ This repository contains two distinct Python packages for biomedical analysis:
 - **`test/kombine/`**: KoMbine tests, datacards, and reference data
 - **Shared files**: `utility_testing_functions.py`, `test_continuous_distributions.py` (copied to both)
 
-### Documentation Structure  
+### Documentation Structure
 - **`docs/roc_picker/`**: ROC Picker documentation, LaTeX files, and plotting scripts
 - **`docs/kombine/`**: KoMbine documentation, LaTeX files, and plotting scripts
 - Each has independent numbering starting from 01, with separate `compile_*_plots.sh` scripts
+
+**KoMbine documentation files**:
+- `01_table_of_contents.md` - Index of all documentation files (synced with Jupytext)
+- `02_kombine.tex` - LaTeX paper with mathematical details (JSS submission)
+- `03_kaplan_meier_example.md` - Jupyter notebook showing Python API usage examples
+- `04_compare_to_lifelines.md` - Jupyter notebook comparing to `lifelines` package
+- `05_command_line_interface.md` - **Pure Markdown** (no Python cells) documenting all CLI options for `kombine` and `kombine_twogroups` commands (synced with Jupytext)
+
+**Documentation style guidelines**:
+- Files `03_*.md` and `04_*.md` are Jupytext notebooks with Python cells for interactive examples
+- Files `01_*.md` and `05_*.md` are pure Markdown with Jupytext headers but no Python cells
+- All documentation markdown files must have Jupytext headers to allow `jupytext --sync` to process them
+- All CLI options must be documented in `05_command_line_interface.md` and verified by `test/kombine/test_documentation.py`
+- When adding new CLI arguments, update `05_command_line_interface.md` and run the documentation test
+- The table of contents (`01_table_of_contents.md`) must list all numbered documentation files
 
 ## Critical Build Information
 

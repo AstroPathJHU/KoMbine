@@ -22,6 +22,8 @@ jupyter:
    - an example of how to use the likelihood method for uncertainties on Kaplan-Meier curves
  - `04_compare_to_lifelines.html`
    - a comparison of our Kaplan-Meier likelihood method to the `lifelines` package
+ - `05_command_line_interface.html`
+   - documentation for the command line interface (`kombine` and `kombine_twogroups` commands)
 
 # Compilation instructions
 
