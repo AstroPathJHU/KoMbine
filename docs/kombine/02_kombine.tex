@@ -91,6 +91,8 @@
 \newcommand{\RooFit}{\textsc{RooFit}}
 \newcommand{\Minuit}{\textsc{Minuit}}
 \newcommand{\lifelines}{lifelines}
+\newcommand{\Python}{Python}
+\newcommand{\scipy}{scipy}
 
 \raggedbottom{}
 %%\unnumbered% uncomment this for unnumbered level heads
@@ -462,39 +464,13 @@ In \KoMbine{}, we introduce a novel likelihood-based method for the propagation 
 
 In addition to providing more precise uncertainty estimates, our method can provide critical insight for experimental dsign.  Researchers can avoid wasting time and effort trying to reduce subdominant uncertainties and instead focus on their work on the parts of the experiment that have the highest impact on the results.
 
-A primary limitation of our current framework is that it is limited to uncorrelated systematic errors.  Extending the methodology to uncertainties that are correlated between patients, such as batch effects, would involve modifying our minimization problem structure to float the uncertainty parameters and computing \(a_j\) from them, rather than precomputing penalties and floating \(a_j\) directly.  Although straightforward to describe, this conceptual switch is nontrivial to implement within the current optimization framework described in Sec.~\ref{sec:implementation-details} and will probably require a rethinking of the optimization strategy.
+A primary limitation of our current framework is that it is limited to uncorrelated systematic errors.  Extending the methodology to uncertainties that are correlated between patients, such as batch effects, would involve modifying our minimization problem structure to float the uncertainty parameters and computing \(a_j\) from them, rather than precomputing penalties and floating \(a_j\) directly.  Although straightforward to describe, this conceptual switch is nontrivial to implement within the current optimization framework described in Appendix~\ref{sec:implementation-details} and will probably require a rethinking of the optimization strategy.
 
 \section{Conclusions}
 
 Data sets used in biomedical analyses are growing rapidly, reducing statistical uncertainties.  The systematic uncertainties in the analysis are increasingly the dominant component of the overall uncertainty, and must be rigorously incorporated in order to ensure the validity of the results.
 
 \KoMbine{} is the first methodology to formally propagate both statistical and systematic uncertainties to \KM{} survival curves.  By calculating the uncertainty budget as well as the overall confidence bands, \KoMbine{} will facilitate the development of the next generation of robust, reproducible, and clinically actionable biomarkers.
-
-\section{Methods}\label{sec11}
-
-Topical subheadings are allowed. Authors must ensure that their Methods section includes adequate experimental and characterization data necessary for others in the field to reproduce their work. Authors are encouraged to include RIIDs where appropriate. 
-
-\textbf{Ethical approval declarations} (only required where applicable) Any article reporting experiment/s carried out on (i)~live vertebrate (or higher invertebrates), (ii)~humans or (iii)~human samples must include an unambiguous statement within the methods section that meets the following requirements: 
-
-\begin{enumerate}[1.]
-\item Approval: a statement which confirms that all experimental protocols were approved by a named institutional and/or licensing committee. Please identify the approving body in the methods section
-
-\item Accordance: a statement explicitly saying that the methods were carried out in accordance with the relevant guidelines and regulations
-
-\item Informed consent (for experiments involving humans or human tissue samples): include a statement confirming that informed consent was obtained from all participants and/or their legal guardian/s
-\end{enumerate}
-
-If your manuscript includes potentially identifying patient/participant information, or if it describes human transplantation research, or if it reports results of a clinical trial then  additional information will be required. Please visit (\url{https://www.nature.com/nature-research/editorial-policies}) for Nature Portfolio journals, (\url{https://www.springer.com/gp/authors-editors/journal-author/journal-author-helpdesk/publishing-ethics/14214}) for Springer Nature journals, or (\url{https://www.biomedcentral.com/getpublished/editorial-policies\#ethics+and+consent}) for BMC.
-
-\section{Discussion}\label{sec12}
-
-Discussions should be brief and focused. In some disciplines use of Discussion or `Conclusion' is interchangeable. It is not mandatory to use both. Some journals prefer a section `Results and Discussion' followed by a section `Conclusion'. Please refer to Journal-level guidance for any specific requirements. 
-
-\section{Conclusion}\label{sec13}
-
-Conclusions may be used to restate your hypothesis or research question, restate your major findings, explain the relevance and the added value of your work, highlight any limitations of your study, describe future directions for research and recommendations. 
-
-In some disciplines use of Discussion or 'Conclusion' is interchangeable. It is not mandatory to use both. Please refer to Journal-level guidance for any specific requirements. 
 
 \backmatter
 
@@ -508,68 +484,90 @@ Please refer to Journal-level guidance for any specific requirements.
 
 \bmhead{Acknowledgements}
 
-Acknowledgements are not compulsory. Where included they should be brief. Grant or contribution numbers may be acknowledged.
-
-Please refer to Journal-level guidance for any specific requirements.
+I would like to thank my AstroPath colleagues, in particular my mentors, Drs.~Alex Szalay and Janis Taube, for their support on this project. I would also like to acknowledge editing support by Ben Cohen, provided by the Office of the Vice Provost for Research at Johns Hopkins University.
 
 \section*{Declarations}
 
-Some journals require declarations to be submitted in a standardised format. Please check the Instructions for Authors of the journal to which you are submitting to see if you need to complete this section. If yes, your manuscript must contain the following sections under the heading `Declarations':
+\textbf{Funding} \\
+This research was supported by the Mark Foundation for Cancer Research.
 
-\begin{itemize}
-\item Funding
-\item Conflict of interest/Competing interests (check journal-specific guidelines for which heading to use)
-\item Ethics approval and consent to participate
-\item Consent for publication
-\item Data availability 
-\item Materials availability
-\item Code availability 
-\item Author contribution
-\end{itemize}
+\textbf{Conflict of interest} \\
+The author holds a patent on the DONUTS biomarker and has received licensing royalties as well as research support from Quanterix.
 
-\noindent
-If any of the sections are not relevant to your manuscript, please include the heading and write `Not applicable' for that section. 
+\textbf{Ethics approval} \\
+Not applicable.
 
-%%===================================================%%
-%% For presentation purpose, we have included        %%
-%% \bigskip command. Please ignore this.             %%
-%%===================================================%%
-\bigskip
-\begin{flushleft}%
-Editorial Policies for:
+\textbf{Consent to participate} \\
+Not applicable.
 
-\bigskip\noindent
-Springer journals and proceedings: \url{https://www.springer.com/gp/editorial-policies}
+\textbf{Consent for publication} \\
+Not applicable.
 
-\bigskip\noindent
-Nature Portfolio journals: \url{https://www.nature.com/nature-research/editorial-policies}
+\textbf{Data availability} \\
+The data used in this work, together with the code, are available at \url{https://github.com/AstroPathJHU/KoMbine}.
 
-\bigskip\noindent
-\textit{Scientific Reports}: \url{https://www.nature.com/srep/journal-policies/editorial-policies}
+\textbf{Code availability} \\
+All code used in this work is available at \url{https://github.com/AstroPathJHU/KoMbine}.
 
-\bigskip\noindent
-BMC journals: \url{https://www.biomedcentral.com/getpublished/editorial-policies}
-\end{flushleft}
+\textbf{Authors' contributions} \\
+Not applicable. The author is solely responsible for all aspects of this work.
 
 \begin{appendices}
 
-\section{Section title of first appendix}\label{secA1}
+\section{Implementation details}\label{sec:implementation-details}
 
-An appendix contains supplementary information that is not an essential part of the text itself but which may be helpful in providing a more comprehensive understanding of the research problem or it is information that is too cumbersome to be included in the body of the paper.
+\KoMbine{} is implemented in \Python{} and uses \Gurobi{} \citep{gurobi} to minimize the NLL for a given value of \(S\).
 
-%%=============================================%%
-%% For submissions to Nature Portfolio Journals %%
-%% please use the heading ``Extended Data''.   %%
-%%=============================================%%
+We first minimize \(-\log \mathcal{L}_{\text{total}}\) without the constraint on \(S\) (\ref{eq:km-survival}) to find the maximum likelihood estimate and the best value of \(S\)\@. \code{scipy.optimize.brentq} \citep{brentq,scipy} is then used to compute the confidence intervals, bounded by the values of \(S\) where the NLL equals a threshold value (1.0 for 68\% CL and 3.84 for 95\% CL).
 
-%%=============================================================%%
-%% Sample for another appendix section			       %%
-%%=============================================================%%
+For the patient-wise-only error, there is no need to minimize the NLL over \(S'\), as by construction it minimizes at \(S'=S_\text{nominal}\). To find the confidence intervals, we use a simple binary search that only looks at the possible discrete values of \(S\): intermediate values of \(S'\) cannot return anything different.
 
-%% \section{Example of another appendix section}\label{secA2}%
-%% Appendices may be used for helpful, supporting or essential material that would otherwise 
-%% clutter, break up or be distracting to the text. Appendices can consist of sections, figures, 
-%% tables and equations etc.
+To compute the \(p\)~value, \KoMbine{} similarly uses \Gurobi{} to minimize the NLL for the null and alternate hypotheses. The \(p\)~value is computed from the difference between the NLLs, which follows a \(\chi^2\) distribution, using standard functions in \scipy{} \citep{scipy}.
+
+\subsection{Collapsing consecutive deaths}
+
+The binomial term in the NLL [Eq.~(\ref{eq:binomial-nll})] requires a sum over all time points where at least one patient died, which can be slow when there are many such time points. A mathematical trick allows us to collapse multiple time points into one, as long as no patients are censored in between, without changing the results.
+
+Take the case of two consecutive time points, \(t_1\) and \(t_{2}\), with death counts \(d_1\) and \(d_{2}\) and risk sets \(r_1\) and \(r_{2}=r_1-d_1\)\@.  The contribution to the NLL from these two time points is
+\begin{align}
+\begin{aligned}
+-\log \mathcal{L}_{\text{binomial},1,2} =&-\left[\log\binom{r_1}{d_1} + d_1 \log \left(1-p_1^\text{s}\right) + (r_1-d_1) \log p_1^\text{s}\right] \\
+&-\left[\log\binom{r_{1}-d_{1}}{d_{2}} + d_{2} \log \left(1-p_{2}^\text{s}\right) + (r_{1}-d_{1}-d_{2}) \log p_{2}^\text{s}\right].
+\end{aligned}
+\label{eq:two-timepoints-nll}
+\end{align}
+
+The key observation is that \(p_1^\text{s}\) and \(p_2^\text{s}\) only enter the NLL in this term and in the constraint Eq.~(\ref{eq:km-survival}), which only depends on their product \(p_{1,2}^\text{s}=p_1^\text{s} p_2^\text{s}\)\@. We can therefore minimize Eq.~(\ref{eq:two-timepoints-nll}) over \(p_1^\text{s}\) and \(p_2^\text{s}\) with the constraint \(p_{1,2}^\text{s}=p_1^\text{s} p_2^\text{s}\)\@.  The result is
+\begin{align}
+p_1^\text{s} &= \frac{d_1 p_{1,2}^\text{s}+d_2}{d_1+d_2}, \\
+p_2^\text{s} &= \frac{(d_1+d_2) p_{1,2}^\text{s}}{d_1 p_{1,2}^\text{s} + d_2}.
+\end{align}
+
+We plug into Eq.~(\ref{eq:two-timepoints-nll}) to obtain:
+\begin{align}
+\begin{aligned}
+-\log \mathcal{L}_{\text{binomial},1,2} =&-\left[\log\binom{r_1}{d_1+d_2} + (d_1+d_2) \log \left(1-p_{1,2}^\text{s}\right) + (r_1-d_1-d_2) \log p_{1,2}^\text{s}\right] \\
+&-\left[\log\binom{d_1+d_2}{d_1} + d_1 \log \left(\frac{d_1}{d_1+d_2}\right) + d_2 \log \left(\frac{d_2}{d_1+d_2}\right)\right],
+\end{aligned}
+\label{eq:two-timepoints-collapsed-nll}
+\end{align}
+making use of the binomial coefficient identity
+\begin{equation}
+\binom{r_1}{d_1}\binom{r_1-d_1}{d_2} = \binom{r_1}{d_1+d_2}\binom{d_1+d_2}{d_1}.
+\end{equation}
+
+The first line of Eq.~(\ref{eq:two-timepoints-collapsed-nll}) is identical to the NLL contribution from a single time point with \(d_1+d_2\) deaths and risk set \(r_1\)\@. The second line does not depend on \(p_{1,2}^\text{s}\).
+
+This procedure can be applied recursively to collapse any number of consecutive time points with no censoring in between. The result is a single binomial term for the collapsed time points, plus a multinomial NLL term for the number of patients who died at each of the original time points out of the total number of patients who died in the group:
+\begin{align}
+\begin{aligned}
+-\log \mathcal{L}_{\text{binomial},1 \cdots n} =&-\left[\log\binom{r_1}{d_{1 \cdots n}} + d_{1 \cdots n} \log \left(1-p_{1 \cdots n}^\text{s}\right) + (r_1-d_{1 \cdots n}) \log p_{1 \cdots n}^\text{s}\right] \\
+&-\left[\log{(d_{1 \cdots n}!)}-d_{1 \cdots n}\log d_{1 \cdots n} - \left(\sum_{i=1}^n \left[\log{(d_i!)} - d_i \log d_i\right]\right)\right],
+\end{aligned}
+\end{align}
+with \(d_{1 \cdots n} = d_1 + d_2 + \cdots + d_n\) and \(p_{1 \cdots n}^\text{s} = p_1^\text{s} p_2^\text{s} \cdots p_n^\text{s}\)\@.
+
+\KoMbine{} automatically collapses such time points before performing the NLL minimization. When applying binomial-only errors, the second line only contributes a constant offset to the NLL\@. Although it does affect the NLL when patient-wise errors are included, it can be precomputed for the various possible values of \(d_i\) and implemented in \Gurobi{} using indicator variables, thereby reducing the number of continuous variables. This can significantly speed up the NLL minimization, especially when not too many patients are censored.
 
 \end{appendices}
 
