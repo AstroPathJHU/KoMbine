@@ -90,6 +90,7 @@
 \newcommand{\Combine}{\textsc{Combine}}
 \newcommand{\RooFit}{\textsc{RooFit}}
 \newcommand{\Minuit}{\textsc{Minuit}}
+\newcommand{\lifelines}{lifelines}
 
 \raggedbottom{}
 %%\unnumbered% uncomment this for unnumbered level heads
@@ -153,11 +154,11 @@ No particle physics measurement is reported without a comprehensive assessment o
 
 Our method handles the statistical uncertainty on the number of patients in a more rigorous way than conventional methods and incorporates patient-wise uncertainties into the calculation. The method also allows for calculating the statistical and patient-wise uncertainties separately. Determining which uncertainties dominate can help to plan the next iteration of the experiment.
 
-Our method is implemented in the \KoMbine{} package, which is available from PyPI via \texttt{pip install kombinekm} and from GitHub at \url{https://github.com/AstroPathJHU/KoMbine}.
+We call our method \KoMbine{}.  It is implemented in the \KoMbine{} package, which is available from PyPI via \texttt{pip install kombinekm} and from GitHub at \url{https://github.com/AstroPathJHU/KoMbine}.
 
 \section{Methodology}\label{sec:methodology}
 
-\pkg{KoMbine} uses a log-likelihood function to compute the confidence interval for each point on the \KM{} curve. The log likelihood is a function of the survival probability \(S\) as well as other parameters. We maximize the likelihood over those other parameters to find the ``likelihood scan'' as a function of \(S\) alone. The points of maximum likelihood form the \KM{} curve, and the confidence intervals are determined by the points where the log likelihood is below a threshold.
+\KoMbine{} uses a log-likelihood function to compute the confidence interval for each point on the \KM{} curve. The log likelihood is a function of the survival probability \(S\) as well as other parameters. We maximize the likelihood over those other parameters to find the ``likelihood scan'' as a function of \(S\) alone. The points of maximum likelihood form the \KM{} curve, and the confidence intervals are determined by the points where the log likelihood is below a threshold.
 
 \subsection{Notation}\label{sec:notation}
 
@@ -184,7 +185,7 @@ As mentioned earlier, most \KM{} curve packages provide confidence intervals usi
 \label{eq:greenwood}
 S(t)\in\hat{S}(t) \pm z_{\alpha/2} \sqrt{{\hat{S}(t)}^2{\sum_{i=1}^{n} \frac{d_i}{r_i(r_i-d_i)}}},
 \end{equation}
-where \(\hat{S}\) is the nominal value of the survival function, given by \cref{eq:km-nominal}. The exponential Greenwood interval is given by
+where \(\hat{S}\) is the nominal value of the survival function, given by Eq.~(\ref{eq:km-nominal}). The exponential Greenwood interval is given by
 \begin{equation}
 \label{eq:exponential-greenwood}
 \log{\left(-\log S(t)\right)} \in \log{\left(-\log \hat{S}(t)\right)} \pm z_{\alpha/2} \sqrt{\frac{1}{{\left(\log \hat{S}(t)\right)}^2} \sum_{i=1}^{n} \frac{d_i}{r_i(r_i-d_i)}}.
@@ -209,7 +210,7 @@ where \(p_i^\text{d} = 1 - p_i^\text{s}\). The negative log likelihood (NLL) is
 -\log \mathcal{L}_{\text{binomial}}(p_i^\text{s}, a_j) = -\left[\sum_{i=1}^{n} \left( \log\binom{r_i}{d_i} + d_i \log p_i^\text{d} + (r_i-d_i) \log p_i^\text{s} \right)\right]. \label{eq:binomial-nll}
 \end{equation}
 
-We are not interested in the individual \(p_i^\text{s}\) values, but rather the overall survival probability \(S_n\). We therefore use \cref{eq:km-survival} as a constraint when we minimize the NLL\@.
+We are not interested in the individual \(p_i^\text{s}\) values, but rather the overall survival probability \(S_n\). We therefore use Eq.~(\ref{eq:km-survival}) as a constraint when we minimize the NLL\@.
 
 \subsubsection{Patient-wise uncertainty}\label{sec:patient-wise-uncertainty}
 
@@ -219,7 +220,7 @@ The classic case when this happens is when dividing the patients into groups bas
 
 We first precompute the NLL penalty for each patient to be included in the \KM{} curve, which is negative if the patient is nominally included and positive if the patient is nominally excluded. The penalty depends on the functional form of the patient's parameter's probability density function, and it is calculated as the difference between the minimum NLL for the parameter to be within the range to be included in the curve and the minimum NLL for it to be outside the range.
 
-\pkg{KoMbine} allows several possible probability distributions for the patient parameters, including a delta function, Poisson distribution, a Poisson distribution divided by a fixed area (to represent, for instance, a density of cells), and a ratio of two Poisson distributions. Any of these can be multiplied by systematic uncertainties following the log-normal distribution, a common choice used to represent multiplicative uncertainties.
+The current \KoMbine{} implementation allows several possible probability distributions for the patient parameters, including a delta function, Poisson distribution, a Poisson distribution divided by a fixed area (to represent, for instance, a density of cells), and a ratio of two Poisson distributions. Any of these can be multiplied by systematic uncertainties following the log-normal distribution, a common choice used to represent multiplicative uncertainties.
 
 For the purpose of the math here, all that is important is that the penalty is a fixed number per patient, which we call \(-\log \mathcal{L}_j^{\text{patient}}\). We compute the NLL as
 \begin{equation}
@@ -241,7 +242,7 @@ Although the total uncertainty on the \KM{} curve includes both the binomial and
 
 \subsubsection{Binomial uncertainty}
 
-To examine the binomial uncertainty, we can fix the parameters to their nominal values, fixing \(a_j=\hat{a}_j=1\) for the patients who are nominally included and \(0\) for those who are nominally excluded. These results are approximately equivalent to the Greenwood confidence intervals used in other packages. As will be illustrated in \cref{sec:compare-to-greenwood}, our method is somewhat more precise, but is also computationally slower.
+To examine the binomial uncertainty, we can fix the parameters to their nominal values, fixing \(a_j=\hat{a}_j=1\) for the patients who are nominally included and \(0\) for those who are nominally excluded. These results are approximately equivalent to the Greenwood confidence intervals used in other packages. As will be illustrated in Section~\ref{sec:compare-to-greenwood}, our method is somewhat more precise, but it is also computationally slower.
 
 \subsubsection{Patient-wise uncertainty}
 
@@ -252,16 +253,16 @@ p_i^\text{s}(a_j) = 1 - \frac{d_i(a_j)}{r_i(a_j)}.
 
 With this definition, \(S\) can only take on certain fixed, discrete values. Furthermore, depending on the order that patients were censored or died, values of \(S\) that are close together may actually only be reachable by very different combinations of patients included in the analysis, with correspondingly different NLL values. A scatter plot of \(-\log\mathcal{L}\) as a function of \(S\) would be useless.
 
-Instead, we use a continuous variable \(S'\). We calculate \(\hat{S}\) using the nominal values of the patient parameters, as in \cref{eq:km-nominal}. Then, for any value of \(S'\), we minimize the NLL over \(a_j\) with the constraint that \(S\) is at least as far from \(\hat{S}\) as \(S'\):
+Instead, we use a continuous variable \(S'\). We calculate \(\hat{S}\) using the nominal values of the patient parameters, as in Eq.~(\ref{eq:km-nominal}). Then, for any value of \(S'\), we minimize the NLL over \(a_j\) with the constraint that \(S\) is at least as far from \(\hat{S}\) as \(S'\):
 \begin{align}
 S \ge S' & \text{ if } S' > \hat{S} \\
 S \le S' & \text{ if } S' < \hat{S}
 \end{align}
-This gives an interpretable visualization of the patient-wise uncertainty: we obtain the NLL that the survival probability is at least as far from the nominal probability as \(S'\). By construction, \(-\log\mathcal{L}(S')\) has a single minimum (either a single point or, if some patients are exactly on the boundary, a flat region) at \(\hat{S}\) and increases as \(S'\) moves away in either direction.
+This gives an interpretable visualization of the patient-wise uncertainty: we obtain the NLL that the survival probability is at least as far from the nominal probability as \(S'\). By construction, \(-\log\mathcal{L}(S')\) has a single minimum (either a single point or, if some patients have a penalty of \(0\), a flat region) at \(S'=\hat{S}\) and increases as \(S'\) moves away in either direction.
 
 \subsection[p~values]{\(p\)~values}
 
-\pkg{KoMbine} also provides a method to compute the \(p\)~value to reject the null hypothesis that two survival curves are identical. We use a log-rank approach, similar to the conventional approach used in \pkg{lifelines} and similar packages. However, as in the case of the \KM{} error bars, our likelihood modeling does not rely on approximating the binomial distribution as normal, and we also include the patient-wise errors.
+We can also use a similar method to compute the \(p\)~value to reject the null hypothesis that two survival curves are identical. In \KoMbine{}, we use a log-rank approach, similar to the conventional approach used in \lifelines{} and similar packages. However, as in the case of the \KM{} error bars, our likelihood modeling does not rely on approximating the binomial distribution as normal, and we also include the patient-wise errors.
 
 We have two curves, labeled \(k=0\) and \(k=1\), and we add this index to all relevant quantities. For example, each patient may be in one of the curves, and this inclusion is given by \(a_{jk}\). Each patient can be in at most one of the two curves, but we also allow for a patient to be in neither. (This is useful, for example, when stratifying patients into low, middle, and high categories based on a parameter\@. \(p\)~values are computed pairwise between the curves, and in each pairwise comparison, some patients are in neither curve.)  Each patient has a positive or negative penalty, \(-\log\mathcal{L}_{jk}^\text{patient}\), to be included in each curve.
 
@@ -286,19 +287,20 @@ Q&=\frac{U^2}{\text{Var}(U)},
 \end{align}
 which follows a \(\chi^2\) distribution with one degree of freedom~\citep[pp.~45--47]{mantel1966evaluation,peto1972asymptotically,appliedsurvivalanalysis}.
 
-In the likelihood approach, we instead compute the full NLL, similar to \cref{eq:total-nll}. We have two separate patient-wise NLL penalties, one for each curve. The probability distribution representing the relationship between the curves is modeled with the Cox partial likelihood distribution with \(\beta=\log{H}\), which reduces to the hypergeometric distribution under the null hypothesis when \(H=1\)~\citep{cox1972regression,breslow1974covariance}:
+In the likelihood approach, we instead compute the full NLL, similar to Eq.~(\ref{eq:total-nll}). We have two separate patient-wise NLL penalties, one for each curve. The probability distribution representing the relationship between the curves is modeled with the Cox partial likelihood distribution with \(\beta=\log{H}\), which reduces to the hypergeometric distribution under the null hypothesis when \(H=1\)~\citep{cox1972regression,breslow1974covariance}:
 \begin{align}
 -\log \mathcal{L}_{\text{Cox}}(a_{jk}, H)&=-\sum_i\left[\log\binom{r_{i0}}{d_{i0}}+\log\binom{r_{i1}}{d_{i1}}+d_{i1}\log H-\log Z_j(H)\right] \label{eq:cox-nll-exact}\\
 &\approx-\sum_i \left[d_{i1} \log H - d_i \log\left(r_{i0} + H r_{i1}\right)\right] \label{eq:cox-nll-breslow}
 \end{align}
-\Cref{eq:cox-nll-exact} gives the exact formula, with the normalization factor \(Z_j(H)\) given by
+
+Eq.~(\ref{eq:cox-nll-exact}) gives the exact formula, with the normalization factor \(Z_j(H)\) given by
 \begin{equation}
 Z_j(H) = \sum_{m}\binom{r_{i0}}{m}\binom{r_{i1}}{d_{i0}+d_{i1}-m}H^m,
 \label{eq:cox-normalization}
 \end{equation}
 where the sum is over all feasible values of \(m\) that allow both binomial coefficients to be finite.
 
-\Cref{eq:cox-nll-breslow} applies the Breslow approximation~\citep{breslow1974covariance}. Both give identical results when there no two patients die at the same time. Since our biomedical analyses typically do not involve many patients, ties are rare, and we therefore use \cref{eq:cox-nll-breslow} in \pkg{KoMbine}. We explore the effect of this approximation in \cref{sec:compare-to-conventional-p-value}.
+Eq.~(\ref{eq:cox-nll-breslow}) applies the Breslow approximation~\citep{breslow1974covariance}. Both give identical results when there no two patients die at the same time. Since our biomedical analyses typically do not involve many patients, ties are rare, and we therefore use Eq.~(\ref{eq:cox-nll-breslow}) in \KoMbine{}. We explore the effect of this approximation in Section~\ref{sec:compare-to-conventional-p-value}.
 
 The total NLL is then given by
 \begin{equation}
@@ -306,9 +308,9 @@ The total NLL is then given by
 \label{eq:p-value-nll}
 \end{equation}
 
-We evaluate the NLL for the null hypothesis by minimizing \cref{eq:p-value-nll} over \(a_{jk}\) with the constraint \(H=1\). For the alternate hypothesis, we minimize \cref{eq:p-value-nll} over both \(a_{jk}\) and \(H\). The difference between the two NLLs is used to compute the \(p\)~value using a \(\chi^2\) distribution with one degree of freedom.
+We evaluate the NLL for the null hypothesis by minimizing Eq.~(\ref{eq:p-value-nll}) over \(a_{jk}\) with the constraint \(H=1\). For the alternate hypothesis, we minimize Eq.~(\ref{eq:p-value-nll}) over both \(a_{jk}\) and \(H\). The difference between the two NLLs is used to compute the \(p\)~value using a \(\chi^2\) distribution with one degree of freedom.
 
-We also allow fixing \(a_{jk}\) and using only the Cox penalty. Because floating \(a_{jk}\) can decrease the NLL for both the null and alternate hypotheses, the \(p\)~value may be either larger or smaller than the \(p\)~value with fixed \(a_{jk}\). \Cref{sec:compare-to-conventional-p-value} compares our Cox-only \(p\)~value to the conventional log-rank test.
+We also allow fixing \(a_{jk}\) and using only the Cox penalty. Because floating \(a_{jk}\) can decrease the NLL for both the null and alternate hypotheses, the \(p\)~value may be either larger or smaller than the \(p\)~value with fixed \(a_{jk}\). Section~\ref{sec:compare-to-conventional-p-value} compares our Cox-only \(p\)~value to the conventional log-rank test.
 
 \section{Results}\label{sec2}
 
