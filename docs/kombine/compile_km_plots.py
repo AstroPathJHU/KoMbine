@@ -293,9 +293,9 @@ def plot_compare_p_value():
 
 
 def plot_lung_dataset():
-  """Generate lung dataset plots as two figures with 1x3 subplots plus legend."""
+  """Generate lung dataset plot as a single 2x3 figure combining cells and donuts."""
   # pylint: disable=too-many-locals, too-many-statements
-  print("Generating lung dataset plots...")
+  print("Generating lung dataset plot...")
 
   survival_type = 'RFS'
 
@@ -403,70 +403,91 @@ def plot_lung_dataset():
 
     add_subfigure_label(ax, label)
 
-  # Create figures for cells and donuts
-  for dataset_name, datacard, threshold, name in [
-    ('cells', datacard_cells, cell_threshold, 'CD8+FoxP3+ Cells'),
-    ('donuts', datacard_donuts, donut_threshold, 'DONUTS'),
-  ]:
-    print(f"  Processing {dataset_name}...")
+  # Create single figure with 2 rows, 3 columns (cells in row 0, donuts in row 1)
+  fig = plt.figure(figsize=(21, 11))
+  gs = fig.add_gridspec(2, 3, hspace=0.35, wspace=0.35)
 
-    # Create figure with 1 row, 4 columns (3 plots + 1 legend)
-    fig = plt.figure(figsize=(21, 5.5))
-    gs = fig.add_gridspec(1, 4, width_ratios=[1, 1, 1, 0.2], wspace=0.35)
+  # Row 0: CD8+FoxP3+ Cells
+  print("  Processing cells...")
+  ax_cells_a = fig.add_subplot(gs[0, 0])
+  create_km_subplot(
+    ax_cells_a, datacard_cells, cell_threshold,
+    title='CD8+FoxP3+ Cells',
+    include_full_nll=True,
+    include_patient_wise=False,
+    include_binomial=False,
+    label='A'
+  )
 
-    # Panel A: Full NLL
-    ax_a = fig.add_subplot(gs[0, 0])
-    create_km_subplot(
-      ax_a, datacard, threshold,
-      title=name,
-      include_full_nll=True,
-      include_patient_wise=False,
-      include_binomial=False,
-      label='A'
-    )
+  ax_cells_b = fig.add_subplot(gs[0, 1])
+  create_km_subplot(
+    ax_cells_b, datacard_cells, cell_threshold,
+    title='CD8+FoxP3+ Cells, Patient-Wise Errors',
+    include_full_nll=False,
+    include_patient_wise=True,
+    include_binomial=False,
+    label='B'
+  )
 
-    # Panel B: Patient-wise only
-    ax_b = fig.add_subplot(gs[0, 1])
-    create_km_subplot(
-      ax_b, datacard, threshold,
-      title=f"{name}, Patient-Wise Errors",
-      include_full_nll=False,
-      include_patient_wise=True,
-      include_binomial=False,
-      label='B'
-    )
+  ax_cells_c = fig.add_subplot(gs[0, 2])
+  create_km_subplot(
+    ax_cells_c, datacard_cells, cell_threshold,
+    title='CD8+FoxP3+ Cells, Binomial Errors',
+    include_full_nll=False,
+    include_patient_wise=False,
+    include_binomial=True,
+    label='C'
+  )
 
-    # Panel C: Binomial only
-    ax_c = fig.add_subplot(gs[0, 2])
-    create_km_subplot(
-      ax_c, datacard, threshold,
-      title=f"{name}, Binomial Errors",
-      include_full_nll=False,
-      include_patient_wise=False,
-      include_binomial=True,
-      label='C'
-    )
+  # Row 1: DONUTS
+  print("  Processing donuts...")
+  ax_donuts_a = fig.add_subplot(gs[1, 0])
+  create_km_subplot(
+    ax_donuts_a, datacard_donuts, donut_threshold,
+    title='DONUTS',
+    include_full_nll=True,
+    include_patient_wise=False,
+    include_binomial=False,
+    label='D'
+  )
 
-    # Add legend in the rightmost column
-    legend_ax = fig.add_subplot(gs[0, 3])
-    legend_ax.axis('off')
+  ax_donuts_b = fig.add_subplot(gs[1, 1])
+  create_km_subplot(
+    ax_donuts_b, datacard_donuts, donut_threshold,
+    title='DONUTS, Patient-Wise Errors',
+    include_full_nll=False,
+    include_patient_wise=True,
+    include_binomial=False,
+    label='E'
+  )
 
-    # Get legend from one of the plots and display it separately
-    handles, labels = ax_a.get_legend_handles_labels()
-    if handles:
-      # Remove legend from the subplots
-      for ax in [ax_a, ax_b, ax_c]:
-        legend = ax.get_legend()
-        if legend is not None:
-          legend.remove()
+  ax_donuts_c = fig.add_subplot(gs[1, 2])
+  create_km_subplot(
+    ax_donuts_c, datacard_donuts, donut_threshold,
+    title='DONUTS, Binomial Errors',
+    include_full_nll=False,
+    include_patient_wise=False,
+    include_binomial=True,
+    label='F'
+  )
 
-      # Add combined legend to the legend axes
-      legend_ax.legend(handles, labels, loc='center', fontsize=FONT_SIZES['legend'])
+  # Remove legends from all subplots - we'll add a single combined legend
+  for ax in [ax_cells_a, ax_cells_b, ax_cells_c, ax_donuts_a, ax_donuts_b, ax_donuts_c]:
+    legend = ax.get_legend()
+    if legend is not None:
+      legend.remove()
 
-    output_file = f"lung_{dataset_name}_km_{survival_type}.pdf"
-    plt.savefig(output_file)
-    plt.close()
-    print(f"    Saved {output_file}")
+  # Get legend handles and labels from one of the plots
+  handles, labels = ax_cells_a.get_legend_handles_labels()
+  if handles:
+    # Add a single combined legend at the bottom
+    fig.legend(handles, labels, loc='lower center', ncol=len(handles),
+               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, -0.02))
+
+  output_file = f"lung_km_{survival_type}.pdf"
+  plt.savefig(output_file, bbox_inches='tight')
+  plt.close()
+  print(f"  Saved {output_file}")
 
 
 def main():
