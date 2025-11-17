@@ -194,7 +194,7 @@ def plot_compare_p_value():
     # Bottom row (no ties)
     {'n_patients': 10, 'allow_ties': False, 'label': 'D'},
     {'n_patients': 100, 'allow_ties': False, 'label': 'E'},
-    None,  # Empty subplot in bottom right
+    None,  # Empty subplot in bottom right - will be used for legend
   ]
 
   seed = 123456
@@ -208,13 +208,16 @@ def plot_compare_p_value():
     tick_fontsize=FONT_SIZES['tick'],
   )
 
+  legend_handles = None
+  legend_labels = None
+
   for idx, config in enumerate(configs):
     row = idx // 3
     col = idx % 3
     ax = axes[row, col]
 
     if config is None:
-      # Hide the empty subplot
+      # This is the empty subplot - will be used for legend
       ax.axis('off')
       continue
 
@@ -234,7 +237,7 @@ def plot_compare_p_value():
 
     # Plot on the specific axes
     plt.sca(ax)
-    ax.scatter(logrank_vals, minlp_vals, alpha=0.6, s=20)
+    ax.scatter(logrank_vals, minlp_vals, alpha=0.6, s=20, label="MC trials")
     ax.plot([0, 1], [0, 1], "r--", label="$y=x$")
 
     ax.set_xlabel("Conventional log-rank $p$ value", fontsize=plot_config.label_fontsize)
@@ -250,8 +253,11 @@ def plot_compare_p_value():
     ax.set_ylim(0, 1)
     ax.set_aspect('equal', adjustable='box')
     ax.tick_params(axis='both', which='major', labelsize=plot_config.tick_fontsize)
-    ax.legend(fontsize=plot_config.legend_fontsize)
     ax.grid(True)
+
+    # Store legend handles and labels from the first plot
+    if legend_handles is None:
+      legend_handles, legend_labels = ax.get_legend_handles_labels()
 
     # Add zoomed inlay for better visibility of small p-values
     inlay_upper_limit = 0.1
@@ -285,6 +291,13 @@ def plot_compare_p_value():
       spine.set_linewidth(1.5)
 
     add_subfigure_label(ax, config['label'])
+
+  # Add legend to the bottom-right empty subplot
+  if legend_handles:
+    legend_ax = axes[1, 2]
+    legend_ax.legend(legend_handles, legend_labels, loc='center',
+                     fontsize=plot_config.legend_fontsize * 1.5,
+                     frameon=True, fancybox=True, shadow=True)
 
   plt.tight_layout()
   plt.savefig("p_value_comparison.pdf")
