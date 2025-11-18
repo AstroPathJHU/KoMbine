@@ -80,18 +80,24 @@ def add_subfigure_label(ax, label, fontsize=18, x=-0.15, y=1.05):
   )
 
 
-def plot_km_example():
+def plot_km_example(testing=False):
   """Generate the single Kaplan-Meier example plot."""
   print("Generating km_example.pdf...")
 
-  dc_file = pathlib.Path(
-    "../../test/kombine/datacards/simple_examples/poisson_ratio_km_censoring.txt"
-  )
+  if testing:
+    # Use minimal datacard for testing (4 patients)
+    dc_file = pathlib.Path(
+      "../../test/kombine/datacards/simple_examples/simple_km_few_deaths.txt"
+    )
+  else:
+    dc_file = pathlib.Path(
+      "../../test/kombine/datacards/simple_examples/poisson_ratio_km_censoring.txt"
+    )
 
   datacard = Datacard.parse_datacard(dc_file)
 
   kml = datacard.km_likelihood(
-    parameter_min=0.45,
+    parameter_min=0.45 if not testing else -np.inf,
     parameter_max=np.inf
   )
 
@@ -114,8 +120,13 @@ def plot_km_example():
   print("  Saved km_example.pdf")
 
 
-def plot_compare_to_greenwood():
-  """Generate comparison to Greenwood plots as a single figure with 2 subplots."""
+def plot_compare_to_greenwood(testing=False):
+  """
+  Generate comparison to Greenwood plots as a single figure with 2 subplots.
+
+  Args:
+    testing: If True, use minimal datacards (4 timepoints for testing)
+  """
   print("Generating comparison_to_greenwood.pdf...")
 
   fig, axes = plt.subplots(1, 2, figsize=(16, 7))
@@ -134,8 +145,13 @@ def plot_compare_to_greenwood():
     'exponential_greenwood_suffix': 'e. G.',
   }
 
-  # Panel A: Small N (12 patients)
-  dc_file = pathlib.Path("../../test/kombine/datacards/simple_examples/fixed_km_censoring.txt")
+  # Panel A: Small N (12 patients in production, 4 in testing)
+  if testing:
+    dc_file = pathlib.Path("../../test/kombine/datacards/simple_examples/simple_km_few_deaths.txt")
+    n_small_label = '$N=4$'
+  else:
+    dc_file = pathlib.Path("../../test/kombine/datacards/simple_examples/fixed_km_censoring.txt")
+    n_small_label = '$N=12$'
   datacard_small = Datacard.parse_datacard(
     dc_file
   )
@@ -156,7 +172,7 @@ def plot_compare_to_greenwood():
     title_fontsize=FONT_SIZES['title'],
     label_fontsize=FONT_SIZES['label'],
     tick_fontsize=FONT_SIZES['tick'],
-    title='$N=12$',
+    title=n_small_label,
     legend_loc=None,  # Remove legend from left plot
     **common_config
   )
@@ -167,10 +183,17 @@ def plot_compare_to_greenwood():
     legend.remove()
   add_subfigure_label(axes[0], 'A')
 
-  # Panel B: Large N (100 patients)
-  dc_file = pathlib.Path(
-    "../../test/kombine/datacards/simple_examples/fixed_km_censoring_many_patients.txt"
-  )
+  # Panel B: Large N (100 patients in production, 4 in testing)
+  if testing:
+    # Use same minimal datacard for testing
+    dc_file = pathlib.Path("../../test/kombine/datacards/simple_examples/simple_km_few_deaths.txt")
+    n_label = '$N=4$'
+  else:
+    dc_file = pathlib.Path(
+      "../../test/kombine/datacards/simple_examples/fixed_km_censoring_many_patients.txt"
+    )
+    n_label = '$N=100$'
+
   datacard_large = Datacard.parse_datacard(dc_file)
   kml_large = datacard_large.km_likelihood(
     parameter_min=-np.inf,
@@ -189,7 +212,7 @@ def plot_compare_to_greenwood():
     title_fontsize=FONT_SIZES['title'],
     label_fontsize=FONT_SIZES['label'],
     tick_fontsize=FONT_SIZES['tick'],
-    title='$N=100$',
+    title=n_label,
     **common_config
   )
   kml_large.plot(config=config_large)
@@ -582,10 +605,10 @@ Examples:
     print("=" * 60)
 
   if generate_all or args.km_example:
-    plot_km_example()
+    plot_km_example(testing=args.testing)
 
   if generate_all or args.greenwood:
-    plot_compare_to_greenwood()
+    plot_compare_to_greenwood(testing=args.testing)
 
   if generate_all or args.p_value:
     plot_compare_p_value(testing=args.testing)
