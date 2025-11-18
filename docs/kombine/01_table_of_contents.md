@@ -33,7 +33,7 @@ If you want to compile it yourself:
 
  - First, install KoMbine with `pip install`.
  - LaTeX:
-   - Run `compile_km_plots.sh`
+   - Run `compile_km_plots.py`
    - Then compile the LaTeX using `xelatex` and `biber`.
  - Jupyter notebooks
    - Run `jupytext --sync *.md` to convert the markdown files to `.ipynb`

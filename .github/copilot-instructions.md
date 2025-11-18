@@ -167,7 +167,7 @@ The repository now uses three separate workflows:
 1. **Installation**: Same as above
 2. **Linting**: Same as above  
 3. **Testing**: Run KoMbine tests from `test/kombine/` (may need Gurobi license)
-4. **Documentation**: Use `docs/kombine/compile_km_plots.sh`
+4. **Documentation**: Use `docs/kombine/compile_km_plots.py`
 
 ### For cross-package changes:
 - Test both packages since ROC Picker imports from KoMbine

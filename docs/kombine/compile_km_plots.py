@@ -2,7 +2,7 @@
 """
 Generate all plots for 02_kombine.tex using matplotlib subplots.
 
-This script replaces compile_km_plots.sh and creates combined figures with
+This script creates combined figures with
 subplots instead of individual PDF files. Each combined figure includes
 Nature-style subfigure labels (A, B, C, etc.).
 """
