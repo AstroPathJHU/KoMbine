@@ -131,7 +131,7 @@ def plot_pvalue_comparison( #pylint: disable=too-many-arguments, too-many-locals
   ax.set_ylabel("MINLP (Cox penalty only) $p$ value", fontsize=config.label_fontsize)
 
   if title:
-    ax.set_title(f"{title} ($r={r:.3f}$)", fontsize=config.title_fontsize)
+    ax.set_title(f"{title}\n$r={r:.3f}$", fontsize=config.title_fontsize)
 
   # Set limits to [0,1] and ensure square aspect ratio
   ax.set_xlim(0, 1)

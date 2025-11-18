@@ -257,7 +257,7 @@ def plot_compare_p_value():
     r = np.corrcoef(minlp_vals, logrank_vals)[0, 1]
 
     title_suffix = "with ties" if config['allow_ties'] else "no ties"
-    title = f"{config['n_patients']} patients ({title_suffix}) ($r={r:.3f}$)"
+    title = f"{config['n_patients']} patients ({title_suffix})"
 
     # Use the refactored function from compare_p_value.py
     _, handles, labels = plot_pvalue_comparison(
@@ -269,7 +269,7 @@ def plot_compare_p_value():
     )
 
     # Update y-axis label to add newline
-    ax.set_ylabel("MINLP (Cox penalty only)\n$p$ value", fontsize=plot_config.label_fontsize)
+    ax.set_ylabel("MINLP $p$ value\n(Cox penalty only)", fontsize=plot_config.label_fontsize)
 
     # Store legend handles and labels from the first plot
     if legend_handles is None:
@@ -405,7 +405,7 @@ def plot_lung_dataset():
 
   # Create single figure with 2 rows, 3 columns (cells in row 0, donuts in row 1)
   fig = plt.figure(figsize=(21, 12))  # Increased height for more space
-  gs = fig.add_gridspec(2, 3, hspace=0.5, wspace=0.35)  # Increased hspace for legend
+  gs = fig.add_gridspec(2, 3, hspace=0.35, wspace=0.35)  # Increased hspace for legend
 
   # Row 0: CD8+FoxP3+ Cells
   print("  Processing cells...")
