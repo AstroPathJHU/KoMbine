@@ -67,6 +67,14 @@ This repository contains two distinct Python packages for biomedical analysis:
 - When adding new CLI arguments, update `05_command_line_interface.md` and run the documentation test
 - The table of contents (`01_table_of_contents.md`) must list all numbered documentation files
 
+**Compiling KoMbine LaTeX documentation (`02_kombine.tex`)**:
+- **CRITICAL**: Before compiling LaTeX, you must either:
+  1. Run `python docs/kombine/compile_km_plots.py --testing` to generate test plots (works with restricted Gurobi license), OR
+  2. Temporarily remove figure `\includegraphics` commands from the LaTeX file (do NOT commit this removal)
+- Without plots, LaTeX compilation will fail with missing file errors
+- The `--testing` flag generates smaller datasets: 10 patients for p-value plots, 3 patients for lung dataset
+- Full plot generation requires a full Gurobi license
+
 ## Critical Build Information
 
 ### Installation and Environment Setup
