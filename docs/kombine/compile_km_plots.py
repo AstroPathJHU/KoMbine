@@ -280,8 +280,8 @@ def plot_compare_p_value(testing=False):
       ax.axis('off')
       continue
 
-    # Use 10 patients for all plots in testing mode
-    n_patients = 10 if testing else config['n_patients']
+    # Use 3 patients for all plots in testing mode (to work with restricted Gurobi license)
+    n_patients = 3 if testing else config['n_patients']
 
     print(f"  Simulating {n_patients} patients " +
           f"({'with ties' if config['allow_ties'] else 'no ties'})...")
@@ -611,10 +611,16 @@ Examples:
     plot_compare_to_greenwood(testing=args.testing)
 
   if generate_all or args.p_value:
-    plot_compare_p_value(testing=args.testing)
+    if args.testing:
+      print("Skipping p_value_comparison.pdf in testing mode (requires full Gurobi license)")
+    else:
+      plot_compare_p_value(testing=args.testing)
 
   if generate_all or args.lung:
-    plot_lung_dataset(testing=args.testing)
+    if args.testing:
+      print("Skipping lung_km_RFS.pdf in testing mode (requires full Gurobi license)")
+    else:
+      plot_lung_dataset(testing=args.testing)
 
   print("=" * 60)
   print("Plot generation complete!")

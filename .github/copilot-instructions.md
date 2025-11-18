@@ -152,10 +152,18 @@ Avoid these for testing (require full license):
 When testing plotting code that uses KoMbine API, always use the small datacards listed above.
 
 **compile_km_plots.py testing mode**:
-The `--testing` flag in `docs/kombine/compile_km_plots.py` successfully generates plots with restricted Gurobi license:
-- P-value comparison: Uses 10 patients (works with restricted license)
-- Lung dataset: Uses 3-patient test datacards from `test_compile_km_plots/` (works with restricted license)
-- Verified working as of 2025-11-18: `python compile_km_plots.py --testing --lung` completes successfully
+The `--testing` flag in `docs/kombine/compile_km_plots.py` generates plots compatible with restricted Gurobi license:
+- **km_example**: Uses simple_km_few_deaths.txt (4 timepoints) - ✓ works with restricted license
+- **greenwood comparison**: Uses simple_km_few_deaths.txt (4 timepoints) - ✓ works with restricted license
+- **p-value comparison**: Skipped in testing mode (MINLP optimization too complex even with minimal patients)
+- **lung dataset**: Skipped in testing mode (KM likelihood optimization too complex even with minimal patients)
+
+For LaTeX compilation with restricted Gurobi license:
+1. Run `python docs/kombine/compile_km_plots.py --testing` (generates km_example and greenwood plots)
+2. Temporarily remove p_value_comparison and lung_km_RFS figure includes from LaTeX (don't commit)
+3. Compile LaTeX: `cd docs/kombine && pdflatex 02_kombine.tex`
+
+Verified working as of 2025-11-18: `python compile_km_plots.py --testing` completes successfully with restricted license
 
 ## Testing Commands
 
