@@ -5,8 +5,19 @@ Generate all plots for 02_kombine.tex using matplotlib subplots.
 This script creates combined figures with
 subplots instead of individual PDF files. Each combined figure includes
 Nature-style subfigure labels (A, B, C, etc.).
+
+Command line options:
+  --km-example         Generate only the KM example plot
+  --greenwood          Generate only the Greenwood comparison plot
+  --p-value            Generate only the p-value comparison plot
+  --lung               Generate only the lung cancer dataset plot
+  --testing            Use smaller datasets for faster testing
+
+If no plot options are specified, all plots are generated.
+Multiple plot options can be combined to generate specific subsets.
 """
 
+import argparse
 import os
 import pathlib
 import sys
@@ -190,8 +201,13 @@ def plot_compare_to_greenwood():
   print("  Saved comparison_to_greenwood.pdf")
 
 
-def plot_compare_p_value():
-  """Generate p-value comparison plots as a single figure with 3x2 subplots."""
+def plot_compare_p_value(testing=False):
+  """
+  Generate p-value comparison plots as a single figure with 3x2 subplots.
+
+  Args:
+    testing: If True, use 10 patients for all plots for faster testing
+  """
   # pylint: disable=too-many-locals
   print("Generating p_value_comparison.pdf...")
 
@@ -241,11 +257,14 @@ def plot_compare_p_value():
       ax.axis('off')
       continue
 
-    print(f"  Simulating {config['n_patients']} patients " +
+    # Use 10 patients for all plots in testing mode
+    n_patients = 10 if testing else config['n_patients']
+
+    print(f"  Simulating {n_patients} patients " +
           f"({'with ties' if config['allow_ties'] else 'no ties'})...")
 
     pvalues = simulate_pvalues(
-      n_patients=config['n_patients'],
+      n_patients=n_patients,
       n_trials=n_trials,
       seed=seed + idx,
       time_is_integer=config['allow_ties'],
@@ -256,8 +275,9 @@ def plot_compare_p_value():
     minlp_vals, logrank_vals = pvalues[:, 0], pvalues[:, 1]
     r = np.corrcoef(minlp_vals, logrank_vals)[0, 1]
 
+    # Display original n_patients in title even in testing mode
     title_suffix = "with ties" if config['allow_ties'] else "no ties"
-    title = f"{config['n_patients']} patients ({title_suffix})"
+    title = f"{config['n_patients']} patients ({title_suffix}) ($r={r:.3f}$)"
 
     # Use the refactored function from compare_p_value.py
     _, handles, labels = plot_pvalue_comparison(
@@ -292,8 +312,13 @@ def plot_compare_p_value():
   print("  Saved p_value_comparison.pdf")
 
 
-def plot_lung_dataset():
-  """Generate lung dataset plot as a single 2x3 figure combining cells and donuts."""
+def plot_lung_dataset(testing=False):
+  """
+  Generate lung dataset plot as a single 2x3 figure combining cells and donuts.
+
+  Args:
+    testing: If True, use test datacards with fewer patients for faster testing
+  """
   # pylint: disable=too-many-locals, too-many-statements
   print("Generating lung dataset plot...")
 
@@ -310,14 +335,24 @@ def plot_lung_dataset():
   else:
     raise ValueError(f"Unknown survival type: {survival_type}")
 
-  # Load datacards
-  dc_file_cells = pathlib.Path(
-    f"../../test/kombine/datacards/lung/datacard_cells_{survival_type}.txt"
-  )
+  # Load datacards - use simple test datacards in testing mode
+  if testing:
+    # Use simple fixed datacards for testing (they work with restricted Gurobi license)
+    dc_file_cells = pathlib.Path(
+      "../../test/kombine/datacards/simple_examples/fixed_km_censoring.txt"
+    )
+    dc_file_donuts = pathlib.Path(
+      "../../test/kombine/datacards/simple_examples/fixed_km_censoring.txt"
+    )
+  else:
+    dc_file_cells = pathlib.Path(
+      f"../../test/kombine/datacards/lung/datacard_cells_{survival_type}.txt"
+    )
+    dc_file_donuts = pathlib.Path(
+      f"../../test/kombine/datacards/lung/datacard_donuts_{survival_type}.txt"
+    )
+
   datacard_cells = Datacard.parse_datacard(dc_file_cells)
-  dc_file_donuts = pathlib.Path(
-    f"../../test/kombine/datacards/lung/datacard_donuts_{survival_type}.txt"
-  )
   datacard_donuts = Datacard.parse_datacard(dc_file_donuts)
 
   # Helper function to create KM plot for a specific configuration
@@ -405,7 +440,7 @@ def plot_lung_dataset():
 
   # Create single figure with 2 rows, 3 columns (cells in row 0, donuts in row 1)
   fig = plt.figure(figsize=(21, 12))  # Increased height for more space
-  gs = fig.add_gridspec(2, 3, hspace=0.35, wspace=0.35)  # Increased hspace for legend
+  gs = fig.add_gridspec(2, 3, hspace=0.42, wspace=0.35)  # Optimized hspace for legend placement
 
   # Row 0: CD8+FoxP3+ Cells
   print("  Processing cells...")
@@ -480,16 +515,19 @@ def plot_lung_dataset():
   # Get legend handles and labels from cells row
   handles_cells, labels_cells = ax_cells_a.get_legend_handles_labels()
   if handles_cells:
-    # Add legend for cells row (between rows, no title)
+    # Add legend for cells row (centered between rows, no title)
+    # Position optimized so distance from top row = distance from bottom row
     fig.legend(handles_cells, labels_cells, loc='center', ncol=len(handles_cells),
-               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, 0.5))
+               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, 0.5),
+               frameon=True, fancybox=True, shadow=True)
 
   # Get legend handles and labels from donuts row
   handles_donuts, labels_donuts = ax_donuts_a.get_legend_handles_labels()
   if handles_donuts:
     # Add legend for donuts row (bottom, no title)
     fig.legend(handles_donuts, labels_donuts, loc='lower center', ncol=len(handles_donuts),
-               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, -0.02))
+               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, 0.02),
+               frameon=True, fancybox=True, shadow=True)
 
   output_file = f"lung_km_{survival_type}.pdf"
   # Use bbox_inches='tight' with bbox_extra_artists to include the legends
@@ -502,14 +540,55 @@ def plot_lung_dataset():
 
 
 def main():
-  """Generate all plots for the paper."""
+  """Generate plots for the paper based on command line arguments."""
+  parser = argparse.ArgumentParser(
+    description='Generate plots for 02_kombine.tex',
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+    epilog="""
+Examples:
+  python compile_km_plots.py                    # Generate all plots
+  python compile_km_plots.py --testing          # Generate all plots with test data
+  python compile_km_plots.py --lung --testing   # Generate only lung plot with test data
+  python compile_km_plots.py --greenwood --p-value  # Generate only Greenwood and p-value plots
+    """
+  )
+
+  # Plot selection options
+  parser.add_argument('--km-example', action='store_true',
+                      help='Generate only the KM example plot')
+  parser.add_argument('--greenwood', action='store_true',
+                      help='Generate only the Greenwood comparison plot')
+  parser.add_argument('--p-value', action='store_true',
+                      help='Generate only the p-value comparison plot')
+  parser.add_argument('--lung', action='store_true',
+                      help='Generate only the lung cancer dataset plot')
+
+  # Testing option
+  parser.add_argument('--testing', action='store_true',
+                      help='Use smaller datasets for faster testing')
+
+  args = parser.parse_args()
+
+  # If no plot options specified, generate all plots
+  generate_all = not (args.km_example or args.greenwood or args.p_value or args.lung)
+
   print("Starting plot generation for 02_kombine.tex")
   print("=" * 60)
+  if args.testing:
+    print("TESTING MODE: Using smaller datasets")
+    print("=" * 60)
 
-  plot_km_example()
-  plot_compare_to_greenwood()
-  plot_compare_p_value()
-  plot_lung_dataset()
+  if generate_all or args.km_example:
+    plot_km_example()
+
+  if generate_all or args.greenwood:
+    plot_compare_to_greenwood()
+
+  if generate_all or args.p_value:
+    plot_compare_p_value(testing=args.testing)
+
+  if generate_all or args.lung:
+    plot_lung_dataset(testing=args.testing)
 
   print("=" * 60)
   print("Plot generation complete!")
