@@ -185,7 +185,7 @@ jobs:
 
       - name: Check latex log
         run: |
-          python .github/workflows/checklog.py docs/kombine/*.log  --ignore-regex "Macro 'volume[+]number' undefined." --ignore-regex 'Underfull \\vbox \(badness (10000|2189)\) has occurred' --ignore-regex 'Option .hyperindex. has already been used' --ignore-regex 'Missing driver name\.'
+          python .github/workflows/checklog.py docs/kombine/*.log --ignore-regex 'Underfull \\vbox \(badness (10000)\) has occurred'
 
   build:
     needs: [linting, test-roc-picker, test-kombine]
