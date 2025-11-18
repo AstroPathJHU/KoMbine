@@ -440,7 +440,7 @@ def plot_lung_dataset(testing=False):
 
   # Create single figure with 2 rows, 3 columns (cells in row 0, donuts in row 1)
   fig = plt.figure(figsize=(21, 12))  # Increased height for more space
-  gs = fig.add_gridspec(2, 3, hspace=0.42, wspace=0.35)  # Optimized hspace for legend placement
+  gs = fig.add_gridspec(2, 3, hspace=0.40, wspace=0.35)  # Optimized hspace for legend placement
 
   # Row 0: CD8+FoxP3+ Cells
   print("  Processing cells...")
@@ -518,7 +518,7 @@ def plot_lung_dataset(testing=False):
     # Add legend for cells row (centered between rows, no title)
     # Position optimized so distance from top row = distance from bottom row
     fig.legend(handles_cells, labels_cells, loc='center', ncol=len(handles_cells),
-               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, 0.5),
+               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, 0.48),
                frameon=True, fancybox=True, shadow=True)
 
   # Get legend handles and labels from donuts row
@@ -526,7 +526,7 @@ def plot_lung_dataset(testing=False):
   if handles_donuts:
     # Add legend for donuts row (bottom, no title)
     fig.legend(handles_donuts, labels_donuts, loc='lower center', ncol=len(handles_donuts),
-               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, 0.02),
+               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, 0.01),
                frameon=True, fancybox=True, shadow=True)
 
   output_file = f"lung_km_{survival_type}.pdf"
