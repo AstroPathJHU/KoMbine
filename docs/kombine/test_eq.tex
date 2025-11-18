@@ -1,0 +1,18 @@
+\documentclass{article}
+\usepackage{amsmath}
+\begin{document}
+
+{
+\newcommand{\firstline}{\log\binom{r_1}{d_1+d_2} + (d_1+d_2) \log \left(1-p_{1,2}^\text{s}\right)}
+\newcommand{\secondline}{+ (r_1-d_1-d_2) \log p_{1,2}^\text{s}}
+\begin{align}
+\begin{aligned}
+-\log \mathcal{L}_{\text{binomial},1,2} =&-\left[\firstline\vphantom{\secondline}\right. \\
+&\phantom{-\left[\firstline\vphantom{\secondline}\right.}\left.\vphantom{\firstline}\secondline\right] \\
+&-\left[\log\binom{d_1+d_2}{d_1} + d_1 \log \left(\frac{d_1}{d_1+d_2}\right) + d_2 \log \left(\frac{d_2}{d_1+d_2}\right)\right],
+\end{aligned}
+\label{eq:test}
+\end{align}
+}
+
+\end{document}
