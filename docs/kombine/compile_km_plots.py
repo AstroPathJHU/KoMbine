@@ -216,10 +216,10 @@ def plot_compare_p_value(testing=False):
   # pylint: disable=import-error, import-outside-toplevel
   from compare_p_value import simulate_pvalues, plot_pvalue_comparison, PlotConfig
 
-  fig, axes = plt.subplots(2, 3, figsize=(16, 11))
+  _, axes = plt.subplots(2, 3, figsize=(16, 11))
 
   # Add main title
-  fig.suptitle('$p$ value comparison', fontsize=FONT_SIZES['suptitle'], fontweight='bold')
+  # fig.suptitle('$p$ value comparison', fontsize=FONT_SIZES['suptitle'], fontweight='bold')
 
   # Configuration for each subplot
   configs = [
@@ -304,7 +304,7 @@ def plot_compare_p_value(testing=False):
                      fontsize=plot_config.legend_fontsize * 1.5,
                      frameon=True, fancybox=True, shadow=True)
 
-  plt.tight_layout(rect=(0, 0, 1, 0.96))  # Make room for suptitle
+  plt.tight_layout()  # Make room for suptitle
   # Adjust spacing between rows
   plt.subplots_adjust(hspace=0.4)
   plt.savefig("p_value_comparison.pdf")
