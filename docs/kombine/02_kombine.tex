@@ -93,6 +93,7 @@
 \newcommand{\lifelines}{lifelines}
 \newcommand{\Python}{Python}
 \newcommand{\scipy}{scipy}
+\newcommand{\Gurobi}{Gurobi}
 
 \raggedbottom{}
 %%\unnumbered% uncomment this for unnumbered level heads
@@ -316,11 +317,17 @@ We also allow fixing \(a_{jk}\) and using only the Cox penalty. Because floating
 
 \section{Numerical examples}
 
-These examples illustrate interesting aspects of the \KM{} curve estimation in the \KoMbine method.
+These examples illustrate interesting aspects of the \KM{} curve estimation in the \KoMbine{} method.
 
 \subsection%
 [Best fit vs. nominal \KM{} curve]% chktex 12
 {Best fit vs.\ nominal \KM{} curve}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.5\textwidth]{km_example.pdf}
+  \caption{\label{fig:best-fit-vs-nominal} An example \KM{} curve. The best fit (blue) does not coincide with the nominal curve (red). The error bands are shown as shaded blue areas.}
+\end{figure}
 
 Counter-intuitively, the best fit \KM{} curve does not necessarily coincide with the nominal \KM{} curve. An example is shown in Fig.~\ref{fig:best-fit-vs-nominal}.
 
@@ -344,7 +351,7 @@ In Fig.~\ref{fig:compare-to-greenwood}A, only 12 patients are included in the \K
 
 One striking difference in both cases is that the Greenwood method cannot calculate confidence intervals for the first or last time points, when the probabilities are \(1\) and \(0\). This is a fundamental limitation of the Greenwood method, which approximates the uncertainty on the \emph{true} binomial probability using the \emph{observed} numbers of patients who were at risk and who survived. If everyone survived or died, the binomial uncertainty is \(0\).
 
-Our method, by contrast, calculates the binomial likelihood (and hence the uncertainty) using the \emph{true} survival probability, which we can do despite not knowing it in advance, because it is a parameter in the likelihood fit. This is the fundamental tradeoff of the likelihood method: we can be more precise, but the likelihood fit is more computationally intensive.
+Our method, by contrast, calculates the binomial likelihood (and hence the uncertainty) using the \emph{true} survival probability, which we can do despite not knowing it in advance, because it is a parameter in the likelihood fit. This is the essential tradeoff of the likelihood method: we can be more precise, but the likelihood fit is more computationally intensive.
 
 \subsection[Conventional log-rank p~value estimation]{Conventional log-rank \(p\)~value estimation}\label{sec:compare-to-conventional-p-value}
 
@@ -367,14 +374,14 @@ The scatter from the line or curve, which shrinks with larger cohort sizes, is b
 \begin{figure}[ht]
   \centering
   \includegraphics[width=\linewidth]{lung_km_RFS.pdf}
-  \caption{\label{fig:lung-dataset} \KM{} curves for the regression-free survival of patients with lung cancer who were treated with neoadjuvant anti-PD-1 immunotherapy, stratifying patients by their pre-treatment densities of either CD8+FoxP3+ cells (top row, panels A--C) or DONUTS (bottom row, panels D--F). The left column (panels A and D) shows the full uncertainty, while the middle (panels B and E) and right (panels C and F) columns show the uncertainties broken down into patient-wise and binomial contributions, respectively.}
+  \caption{\label{fig:lung-dataset} \KM{} curves for the regression-free survival of patients with lung cancer who were treated with neoadjuvant anti-PD-1 immunotherapy, stratifying patients by their pre-treatment densities of either CD8+FoxP3+ cells (top row, panels A--C) or DONUTS (bottom row, panels D--F). The left column (panels A and D) shows the full uncertainty, while the middle (panels B and E) and right (panels C and F) columns show the uncertainties broken down into patient-wise and binomial contributions, respectively.} %chktex 8
 \end{figure}
 
 This example is taken from \citet{DONUTS}, in which we analyzed pre-treatment biopsies from a cohort of patients with non-small-cell lung cancer (NSCLC) treated with neoadjuvant anti-PD-1 immunotherapy. We identified CD8+FoxP3+ cells, which are associated with good outcomes, but are extremely rare: a patient may have only one or two in their biopsy. We also developed a probabilistic biomarker, called DONUTS, which resemble the niche of the CD8+FoxP3+ cells but are much more abundant.
 
 Figure~\ref{fig:lung-dataset}A shows \KM{} curves for regression-free survival (RFS) of patients with high and low densities of CD8+FoxP3+ cells. The patients with a high density of CD8+FoxP3+ cells have better outcomes, as expected, but the error bands are large due to the high Poisson uncertainty in the number of CD8+FoxP3+ cells. By contrast, Fig.~\ref{fig:lung-dataset}D shows the \KM{} curves for RFS of patients with high and low densities of DONUTS\@. The error bands are smaller, as the DONUTS are much more abundant.
 
-Figures~\ref{fig:lung-dataset}B and \ref{fig:lung-dataset}E show the same \KM{} curves with the patient-wise uncertainties, while Figs.~\ref{fig:lung-dataset}C and \ref{fig:lung-dataset}F show the binomial uncertainties. The binomial uncertainties have similar magnitude for the cells and for the DONUTS, as both have similar sample sizes in the high and low categories. The patient-wise uncertainties, on the other hand, are comparable to the binomial errors for the cells but almost zero for the DONUTS\@.
+Figures~\ref{fig:lung-dataset}B and~\ref{fig:lung-dataset}E show the same \KM{} curves with the patient-wise uncertainties, while Figs.~\ref{fig:lung-dataset}C and~\ref{fig:lung-dataset}F show the binomial uncertainties. The binomial uncertainties have similar magnitude for the cells and for the DONUTS, as both have similar sample sizes in the high and low categories. The patient-wise uncertainties, on the other hand, are comparable to the binomial errors for the cells but almost zero for the DONUTS\@.
 
 It should be noted that this is a fairly small cohort of only 25 patients. In a larger-scale study, the binomial uncertainties would be smaller and the difference in patient-wise uncertainties would be even more pronounced.
 
@@ -392,7 +399,7 @@ Data sets used in biomedical analyses are growing rapidly, reducing statistical 
 
 \KoMbine{} is the first methodology to formally propagate both statistical and systematic uncertainties to \KM{} survival curves.  By calculating the uncertainty budget as well as the overall confidence bands, \KoMbine{} will facilitate the development of the next generation of robust, reproducible, and clinically actionable biomarkers.
 
-\backmatter
+\backmatter{}
 
 \bmhead{Supplementary information}
 
@@ -438,7 +445,7 @@ Not applicable. The author is solely responsible for all aspects of this work.
 
 \KoMbine{} is implemented in \Python{} and uses \Gurobi{} \citep{gurobi} to minimize the NLL for a given value of \(S\).
 
-We first minimize \(-\log \mathcal{L}_{\text{total}}\) without the constraint on \(S\) (\ref{eq:km-survival}) to find the maximum likelihood estimate and the best value of \(S\)\@. \code{scipy.optimize.brentq} \citep{brentq,scipy} is then used to compute the confidence intervals, bounded by the values of \(S\) where the NLL equals a threshold value (1.0 for 68\% CL and 3.84 for 95\% CL).
+We first minimize \(-\log \mathcal{L}_{\text{total}}\) without the constraint on \(S\) (\ref{eq:km-survival}) to find the maximum likelihood estimate and the best value of \(S\)\@. \texttt{scipy.optimize.brentq} \citep{brentq,scipy} is then used to compute the confidence intervals, bounded by the values of \(S\) where the NLL equals a threshold value (1.0 for 68\% CL and 3.84 for 95\% CL).
 
 For the patient-wise-only error, there is no need to minimize the NLL over \(S'\), as by construction it minimizes at \(S'=S_\text{nominal}\). To find the confidence intervals, we use a simple binary search that only looks at the possible discrete values of \(S\): intermediate values of \(S'\) cannot return anything different.
 
