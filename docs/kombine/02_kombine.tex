@@ -47,6 +47,15 @@
 \usepackage{amsthm}%
 \usepackage{mathrsfs}%
 \usepackage[title]{appendix}%
+% Prevent appendix from resetting figure and equation counters
+% to avoid hyperref duplicate identifier warnings
+\makeatletter
+\g@addto@macro\appendices{%
+  \def\theHfigure{\theHsection.\arabic{figure}}%
+  \def\theHequation{\theHsection.\arabic{equation}}%
+  \def\theHtable{\theHsection.\arabic{table}}%
+}
+\makeatother
 \usepackage{xcolor}%
 \usepackage{textcomp}%
 \usepackage{manyfoot}%
