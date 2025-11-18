@@ -374,7 +374,7 @@ The scatter from the line or curve, which shrinks with larger cohort sizes, is b
 \begin{figure}[ht]
   \centering
   \includegraphics[width=\linewidth]{lung_km_RFS.pdf}
-  \caption{\label{fig:lung-dataset} \KM{} curves for the regression-free survival of patients with lung cancer who were treated with neoadjuvant anti-PD-1 immunotherapy, stratifying patients by their pre-treatment densities of either CD8+FoxP3+ cells (top row, panels A--C) or DONUTS (bottom row, panels D--F). The left column (panels A and D) shows the full uncertainty, while the middle (panels B and E) and right (panels C and F) columns show the uncertainties broken down into patient-wise and binomial contributions, respectively.} %chktex 8
+  \caption{\label{fig:lung-dataset} \KM{} curves for the regression-free survival (RFS) of patients with non-small-cell lung cancer who were treated with neoadjuvant anti-PD-1 immunotherapy, stratifying patients by their pre-treatment densities of either CD8+FoxP3+ cells (top row, panels A--C) or DONUTS (bottom row, panels D--F). The left column (panels A and D) shows the full uncertainty, while the middle (panels B and E) and right (panels C and F) columns show the uncertainties broken down into patient-wise and binomial contributions, respectively.} %chktex 8
 \end{figure}
 
 This example is taken from \citet{DONUTS}, in which we analyzed pre-treatment biopsies from a cohort of patients with non-small-cell lung cancer (NSCLC) treated with neoadjuvant anti-PD-1 immunotherapy. We identified CD8+FoxP3+ cells, which are associated with good outcomes, but are extremely rare: a patient may have only one or two in their biopsy. We also developed a probabilistic biomarker, called DONUTS, which resemble the niche of the CD8+FoxP3+ cells but are much more abundant.
@@ -383,7 +383,7 @@ Figure~\ref{fig:lung-dataset}A shows \KM{} curves for regression-free survival (
 
 Figures~\ref{fig:lung-dataset}B and~\ref{fig:lung-dataset}E show the same \KM{} curves with the patient-wise uncertainties, while Figs.~\ref{fig:lung-dataset}C and~\ref{fig:lung-dataset}F show the binomial uncertainties. The binomial uncertainties have similar magnitude for the cells and for the DONUTS, as both have similar sample sizes in the high and low categories. The patient-wise uncertainties, on the other hand, are comparable to the binomial errors for the cells but almost zero for the DONUTS\@.
 
-It should be noted that this is a fairly small cohort of only 25 patients. In a larger-scale study, the binomial uncertainties would be smaller and the difference in patient-wise uncertainties would be even more pronounced.
+It should be noted that this is a fairly small cohort of only 25 patients. In a larger-scale study, the binomial uncertainties would be smaller, while the difference in the patient-wise uncertainties would remain the same.  The difference in the overall uncertainty would therefore be even more pronounced.
 
 \section{Discussion}
 

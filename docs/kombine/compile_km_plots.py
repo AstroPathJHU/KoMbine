@@ -416,25 +416,28 @@ def plot_lung_dataset(testing=False):
     )
     kml_low.plot(config=config_low)
 
-    # Calculate and add p-value
-    p_value_minlp = datacard.km_p_value(
-      parameter_min=-np.inf,
-      parameter_threshold=threshold,
-      parameter_max=np.inf,
-      tie_handling='breslow',
-    )
+    if not include_patient_wise:
+      # Calculate and add p-value
+      p_value_minlp = datacard.km_p_value(
+        parameter_min=-np.inf,
+        parameter_threshold=threshold,
+        parameter_max=np.inf,
+        tie_handling='breslow',
+      )
 
-    if include_full_nll:
-      p_value, *_ = p_value_minlp.solve_and_pvalue()
-    else:
-      p_value, *_ = p_value_minlp.solve_and_pvalue(cox_only=True)
+      if include_full_nll:
+        p_value, *_ = p_value_minlp.solve_and_pvalue()
+        text = f"$p$ = {p_value:.2f}"
+      else:
+        p_value, *_ = p_value_minlp.solve_and_pvalue(cox_only=True)
+        text = f"$p$ (Cox only) = {p_value:.2f}"
 
-    ax.text(
-      0.95, 0.95, f"$p$ = {p_value:.2f}",
-      ha="right", va="top",
-      transform=ax.transAxes,
-      fontsize=16,
-    )
+      ax.text(
+        0.95, 0.95, text,
+        ha="right", va="top",
+        transform=ax.transAxes,
+        fontsize=16,
+      )
 
     add_subfigure_label(ax, label)
 
