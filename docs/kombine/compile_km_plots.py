@@ -454,7 +454,11 @@ def plot_lung_dataset():
                fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, -0.02))
 
   output_file = f"lung_km_{survival_type}.pdf"
-  plt.savefig(output_file, bbox_inches='tight')
+  # Use bbox_inches='tight' with bbox_extra_artists to include the legend
+  if fig.legends:
+    plt.savefig(output_file, bbox_inches='tight', bbox_extra_artists=fig.legends)
+  else:
+    plt.savefig(output_file, bbox_inches='tight')
   plt.close()
   print(f"  Saved {output_file}")
 

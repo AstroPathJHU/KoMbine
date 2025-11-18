@@ -19,7 +19,8 @@ This repository contains two distinct Python packages for biomedical analysis:
 - **No trailing whitespace** - remove all trailing spaces at the end of lines
 - **Always run pylint after editing** and fix any errors before committing
 - Run `python -m pylint <file>` to check for issues
-- Nontrivial errors that would require major refactoring can be ignored via `# pylint: disable=error-name` comments
+- **Pylint must return perfect results (10.00/10)** - all warnings and errors must be addressed
+- Nontrivial errors that would require major refactoring can be ignored via `# pylint: disable=error-name` comments, but this is less preferable
 - Target pylint score: 10.00/10
 
 ## Package Structure
