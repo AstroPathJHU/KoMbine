@@ -1,0 +1,9 @@
+# Test datacard for lung donuts with very few patients
+# This can be used to test the compile_km_plots.py script without Gurobi license
+
+# Patient data: time, censored, parameter
+patient 4.8 0 800
+patient 9.2 1 1200
+patient 11.5 0 950
+patient 16.3 1 1400
+patient 19.1 0 700

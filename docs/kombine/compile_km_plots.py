@@ -313,6 +313,7 @@ def plot_lung_dataset():
       'show': False,
       'saveas': None,
       'legend_saveas': None,
+      'tight_layout': False,  # Disable tight_layout for subplots in GridSpec
       'figsize': FIGSIZE_SMALL,
       'legend_fontsize': FONT_SIZES['legend'],
       'title_fontsize': FONT_SIZES['title'],

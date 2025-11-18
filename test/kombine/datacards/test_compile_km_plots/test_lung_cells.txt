@@ -1,0 +1,9 @@
+# Test datacard for lung cells with very few patients
+# This can be used to test the compile_km_plots.py script without Gurobi license
+
+# Patient data: time, censored, parameter
+patient 5.2 0 0.3
+patient 8.1 1 0.5
+patient 12.3 0 0.2
+patient 15.7 1 0.6
+patient 18.4 0 0.1
