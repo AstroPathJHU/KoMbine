@@ -185,7 +185,7 @@ jobs:
 
       - name: Check latex log
         run: |
-          python .github/workflows/checklog.py docs/kombine/*.log --ignore-regex 'Underfull \\vbox \(badness (10000)\) has occurred'
+          python .github/workflows/checklog.py docs/kombine/*.log --ignore-regex 'Underfull \\vbox \(badness (10000)\) has occurred' --ignore-regex 'destination with the same identifier.*has been already used, duplicate ignored'
 
   build:
     needs: [linting, test-roc-picker, test-kombine]
