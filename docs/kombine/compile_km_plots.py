@@ -8,6 +8,7 @@ Nature-style subfigure labels (A, B, C, etc.).
 """
 
 import os
+import pathlib
 import sys
 import warnings
 
@@ -71,9 +72,11 @@ def plot_km_example():
   """Generate the single Kaplan-Meier example plot."""
   print("Generating km_example.pdf...")
 
-  datacard = Datacard.parse_datacard(
+  dc_file = pathlib.Path(
     "../../test/kombine/datacards/simple_examples/poisson_ratio_km_censoring.txt"
   )
+
+  datacard = Datacard.parse_datacard(dc_file)
 
   kml = datacard.km_likelihood(
     parameter_min=0.45,
@@ -116,8 +119,9 @@ def plot_compare_to_greenwood():
   }
 
   # Panel A: Small N (12 patients)
+  dc_file = pathlib.Path("../../test/kombine/datacards/simple_examples/fixed_km_censoring.txt")
   datacard_small = Datacard.parse_datacard(
-    "../../test/kombine/datacards/simple_examples/fixed_km_censoring.txt"
+    dc_file
   )
   kml_small = datacard_small.km_likelihood(
     parameter_min=-np.inf,
@@ -142,9 +146,10 @@ def plot_compare_to_greenwood():
   add_subfigure_label(axes[0], 'A')
 
   # Panel B: Large N (100 patients)
-  datacard_large = Datacard.parse_datacard(
+  dc_file = pathlib.Path(
     "../../test/kombine/datacards/simple_examples/fixed_km_censoring_many_patients.txt"
   )
+  datacard_large = Datacard.parse_datacard(dc_file)
   kml_large = datacard_large.km_likelihood(
     parameter_min=-np.inf,
     parameter_max=np.inf
@@ -242,7 +247,6 @@ def plot_compare_p_value():
       ax=ax,
       config=plot_config,
       add_legend=False,
-      return_handles=True,
     )
 
     # Store legend handles and labels from the first plot
@@ -283,12 +287,14 @@ def plot_lung_dataset():
     raise ValueError(f"Unknown survival type: {survival_type}")
 
   # Load datacards
-  datacard_cells = Datacard.parse_datacard(
+  dc_file_cells = pathlib.Path(
     f"../../test/kombine/datacards/lung/datacard_cells_{survival_type}.txt"
   )
-  datacard_donuts = Datacard.parse_datacard(
+  datacard_cells = Datacard.parse_datacard(dc_file_cells)
+  dc_file_donuts = pathlib.Path(
     f"../../test/kombine/datacards/lung/datacard_donuts_{survival_type}.txt"
   )
+  datacard_donuts = Datacard.parse_datacard(dc_file_donuts)
 
   # Helper function to create KM plot for a specific configuration
   def create_km_subplot(ax, datacard, threshold, title, include_full_nll,

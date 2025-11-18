@@ -7,6 +7,7 @@ import argparse
 import os
 from dataclasses import dataclass
 
+import matplotlib.axes
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -77,14 +78,13 @@ def plot_pvalue_comparison( #pylint: disable=too-many-arguments, too-many-locals
   pvalues: np.ndarray,
   title: str = "Comparison of p value methods",
   *,
-  ax: plt.Axes | None = None,
+  ax: matplotlib.axes.Axes | None = None,
   saveas: os.PathLike | str | None = None,
   show: bool | None = None,
   config: PlotConfig | None = None,
   inlay_upper_limit: float = 0.1,
   add_legend: bool = True,
-  return_handles: bool = False,
-) -> float | tuple[float, list, list]:
+) -> tuple[float, list, list]:
   """
   Make scatter plot and compute correlation coefficient.
 
@@ -106,14 +106,10 @@ def plot_pvalue_comparison( #pylint: disable=too-many-arguments, too-many-locals
     Upper limit for the zoomed inlay (default 0.1)
   add_legend : bool
     Whether to add legend to the plot
-  return_handles : bool
-    Whether to return legend handles and labels
 
   Returns
   -------
-  float or tuple
-    If return_handles is False: correlation coefficient
-    If return_handles is True: tuple of (correlation coefficient, handles, labels)
+  tuple of (correlation coefficient, handles, labels)
   """
   if show is None:
     show = saveas is None and ax is None
@@ -197,12 +193,8 @@ def plot_pvalue_comparison( #pylint: disable=too-many-arguments, too-many-locals
       plt.show()
     plt.close()
 
-  # Return handles and labels if requested
-  if return_handles:
-    handles, labels = ax.get_legend_handles_labels()
-    return r, handles, labels
-
-  return r
+  handles, labels = ax.get_legend_handles_labels()
+  return r, handles, labels
 
 def main(args=None):
   """
@@ -250,7 +242,7 @@ def main(args=None):
     tick_fontsize=args.tick_fontsize,
   )
 
-  r = plot_pvalue_comparison(
+  r, _, _ = plot_pvalue_comparison(
     pvalues,
     saveas=args.save_as,
     show=False,
