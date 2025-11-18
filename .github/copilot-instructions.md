@@ -190,6 +190,7 @@ The repository now uses three separate workflows:
 - **Plotting**: Matplotlib-based with configurable output formats (PDF default)
 - **CLI**: Entry points defined in pyproject.toml provide command-line interfaces
 - **Confidence intervals**: Results include nominal, ±68%, and ±95% confidence levels (keys: 'nominal', 'p68', 'm68', 'p95', 'm95')
+- **Exception handling**: Do not catch exceptions and convert them to warnings. If there is an error, it should be raised as an error so the user is aware of the problem.
 
 ## Troubleshooting
 

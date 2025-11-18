@@ -175,13 +175,13 @@ def plot_compare_to_greenwood():
 
 def plot_compare_p_value():
   """Generate p-value comparison plots as a single figure with 3x2 subplots."""
-  # pylint: disable=too-many-locals, too-many-statements
+  # pylint: disable=too-many-locals
   print("Generating p_value_comparison.pdf...")
 
   # Import here to ensure script directory is in path
   sys.path.insert(0, SCRIPT_DIR)
   # pylint: disable=import-error, import-outside-toplevel
-  from compare_p_value import simulate_pvalues, PlotConfig
+  from compare_p_value import simulate_pvalues, plot_pvalue_comparison, PlotConfig
 
   _, axes = plt.subplots(2, 3, figsize=(15, 10))
 
@@ -232,63 +232,22 @@ def plot_compare_p_value():
       verbose=False,
     )
 
-    minlp_vals, logrank_vals = pvalues[:, 0], pvalues[:, 1]
-    r = np.corrcoef(minlp_vals, logrank_vals)[0, 1]
-
-    # Plot on the specific axes
-    plt.sca(ax)
-    ax.scatter(logrank_vals, minlp_vals, alpha=0.6, s=20, label="MC trials")
-    ax.plot([0, 1], [0, 1], "r--", label="$y=x$")
-
-    ax.set_xlabel("Conventional log-rank $p$ value", fontsize=plot_config.label_fontsize)
-    ax.set_ylabel("MINLP (Cox penalty only) $p$ value", fontsize=plot_config.label_fontsize)
-
     title_suffix = "with ties" if config['allow_ties'] else "no ties"
-    ax.set_title(
-      f"$p$ value comparison for\n{config['n_patients']} patients ({title_suffix})\n$r={r:.3f}$",
-      fontsize=plot_config.title_fontsize
-    )
+    title = f"$p$ value comparison for\n{config['n_patients']} patients ({title_suffix})"
 
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.set_aspect('equal', adjustable='box')
-    ax.tick_params(axis='both', which='major', labelsize=plot_config.tick_fontsize)
-    ax.grid(True)
+    # Use the refactored function from compare_p_value.py
+    _, handles, labels = plot_pvalue_comparison(
+      pvalues,
+      title=title,
+      ax=ax,
+      config=plot_config,
+      add_legend=False,
+      return_handles=True,
+    )
 
     # Store legend handles and labels from the first plot
     if legend_handles is None:
-      legend_handles, legend_labels = ax.get_legend_handles_labels()
-
-    # Add zoomed inlay for better visibility of small p-values
-    inlay_upper_limit = 0.1
-    inlay_left = 0.59
-    inlay_bottom = 0.07
-    inlay_right = 0.95
-    inlay_top = 0.43
-
-    inlay_ax = ax.inset_axes(
-      (inlay_left, inlay_bottom, inlay_right - inlay_left, inlay_top - inlay_bottom)
-    )
-
-    inlay_ax.scatter(logrank_vals, minlp_vals, alpha=0.6, s=5)
-    inlay_ax.plot([0, inlay_upper_limit], [0, inlay_upper_limit], "r--", linewidth=0.8)
-
-    inlay_ax.set_xlim(0, inlay_upper_limit)
-    inlay_ax.set_ylim(0, inlay_upper_limit)
-    inlay_ax.set_aspect('equal', adjustable='box')
-    inlay_ticks = np.linspace(0, inlay_upper_limit, 3)
-    inlay_ax.set_xticks(inlay_ticks)
-    inlay_ax.set_yticks(inlay_ticks)
-    inlay_minor_ticks = np.linspace(0, inlay_upper_limit, 5)
-    inlay_ax.set_xticks(inlay_minor_ticks, minor=True)
-    inlay_ax.set_yticks(inlay_minor_ticks, minor=True)
-
-    inlay_ax.tick_params(axis='both', which='major', labelsize=plot_config.tick_fontsize * 0.7)
-    inlay_ax.grid(True, alpha=0.5, which='both')
-
-    for spine in inlay_ax.spines.values():
-      spine.set_edgecolor('black')
-      spine.set_linewidth(1.5)
+      legend_handles, legend_labels = handles, labels
 
     add_subfigure_label(ax, config['label'])
 
@@ -392,27 +351,24 @@ def plot_lung_dataset():
     kml_low.plot(config=config_low)
 
     # Calculate and add p-value
-    try:
-      p_value_minlp = datacard.km_p_value(
-        parameter_min=-np.inf,
-        parameter_threshold=threshold,
-        parameter_max=np.inf,
-        tie_handling='breslow',
-      )
+    p_value_minlp = datacard.km_p_value(
+      parameter_min=-np.inf,
+      parameter_threshold=threshold,
+      parameter_max=np.inf,
+      tie_handling='breslow',
+    )
 
-      if include_full_nll:
-        p_value, *_ = p_value_minlp.solve_and_pvalue()
-      else:
-        p_value, *_ = p_value_minlp.solve_and_pvalue(cox_only=True)
+    if include_full_nll:
+      p_value, *_ = p_value_minlp.solve_and_pvalue()
+    else:
+      p_value, *_ = p_value_minlp.solve_and_pvalue(cox_only=True)
 
-      ax.text(
-        0.95, 0.95, f"$p$ = {p_value:.2f}",
-        ha="right", va="top",
-        transform=ax.transAxes,
-        fontsize=16,
-      )
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-      print(f"    Warning: Could not calculate p-value: {exc}")
+    ax.text(
+      0.95, 0.95, f"$p$ = {p_value:.2f}",
+      ha="right", va="top",
+      transform=ax.transAxes,
+      fontsize=16,
+    )
 
     add_subfigure_label(ax, label)
 
@@ -508,29 +464,10 @@ def main():
   print("Starting plot generation for 02_kombine.tex")
   print("=" * 60)
 
-  # Generate km_example
-  try:
-    plot_km_example()
-  except Exception as exc:  # pylint: disable=broad-exception-caught
-    print(f"  WARNING: Failed to generate km_example.pdf: {exc}")
-
-  # Generate comparison to Greenwood
-  try:
-    plot_compare_to_greenwood()
-  except Exception as exc:  # pylint: disable=broad-exception-caught
-    print(f"  WARNING: Failed to generate comparison_to_greenwood.pdf: {exc}")
-
-  # Generate p-value comparison
-  try:
-    plot_compare_p_value()
-  except Exception as exc:  # pylint: disable=broad-exception-caught
-    print(f"  WARNING: Failed to generate p_value_comparison.pdf: {exc}")
-
-  # Generate lung dataset plots
-  try:
-    plot_lung_dataset()
-  except Exception as exc:  # pylint: disable=broad-exception-caught
-    print(f"  WARNING: Failed to generate lung dataset plots: {exc}")
+  plot_km_example()
+  plot_compare_to_greenwood()
+  plot_compare_p_value()
+  plot_lung_dataset()
 
   print("=" * 60)
   print("Plot generation complete!")
