@@ -134,14 +134,20 @@ GurobiError: Model too large for size-limited license
 Use these small datacards for testing (they work with restricted license):
 - `test/kombine/datacards/simple_examples/simple_km_few_deaths.txt` - Very small test case
 - `test/kombine/datacards/simple_examples/fixed_km_censoring.txt` - 12 patients (works)
-- `test/kombine/datacards/test_compile_km_plots/test_lung_cells.txt` - 5 patients for testing cells plots
-- `test/kombine/datacards/test_compile_km_plots/test_lung_donuts.txt` - 5 patients for testing donuts plots
+- `test/kombine/datacards/test_compile_km_plots/test_lung_cells.txt` - 3 patients for testing cells plots
+- `test/kombine/datacards/test_compile_km_plots/test_lung_donuts.txt` - 3 patients for testing donuts plots
 
 Avoid these for testing (require full license):
 - `test/kombine/datacards/simple_examples/fixed_km_censoring_many_patients.txt` - 100 patients
 - `test/kombine/datacards/lung/*` - Real lung cancer data with many patients
 
 When testing plotting code that uses KoMbine API, always use the small datacards listed above.
+
+**compile_km_plots.py testing mode**:
+The `--testing` flag in `docs/kombine/compile_km_plots.py` successfully generates plots with restricted Gurobi license:
+- P-value comparison: Uses 10 patients (works with restricted license)
+- Lung dataset: Uses 3-patient test datacards from `test_compile_km_plots/` (works with restricted license)
+- Verified working as of 2025-11-18: `python compile_km_plots.py --testing --lung` completes successfully
 
 ## Testing Commands
 

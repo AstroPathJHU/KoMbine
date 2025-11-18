@@ -467,7 +467,8 @@ p_2^\text{s} &= \frac{(d_1+d_2) p_{1,2}^\text{s}}{d_1 p_{1,2}^\text{s} + d_2}.
 We plug into Eq.~(\ref{eq:two-timepoints-nll}) to obtain:
 \begin{align}
 \begin{aligned}
--\log \mathcal{L}_{\text{binomial},1,2} =&-\left[\log\binom{r_1}{d_1+d_2} + (d_1+d_2) \log \left(1-p_{1,2}^\text{s}\right) + (r_1-d_1-d_2) \log p_{1,2}^\text{s}\right] \\
+-\log \mathcal{L}_{\text{binomial},1,2} =&-\left[\vphantom{\log p_{1,2}^\text{s}}\log\binom{r_1}{d_1+d_2} + (d_1+d_2) \log \left(1-p_{1,2}^\text{s}\right)\right. \\
+&\left.\vphantom{\log p_{1,2}^\text{s}}\quad + (r_1-d_1-d_2) \log p_{1,2}^\text{s}\right] \\
 &-\left[\log\binom{d_1+d_2}{d_1} + d_1 \log \left(\frac{d_1}{d_1+d_2}\right) + d_2 \log \left(\frac{d_2}{d_1+d_2}\right)\right],
 \end{aligned}
 \label{eq:two-timepoints-collapsed-nll}
