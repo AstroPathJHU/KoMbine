@@ -55,6 +55,9 @@
 \usepackage{algorithmicx}%
 \usepackage{algpseudocode}%
 \usepackage{listings}%
+\usepackage{silence}%
+\WarningFilter{latexfont}{Size substitutions with differences}
+\WarningFilter{latexfont}{Font shape `U/rsfs/m/n' in size}
 %%%%
 
 %%%%%=============================================================================%%%%
@@ -399,36 +402,35 @@ Data sets used in biomedical analyses are growing rapidly, reducing statistical 
 
 \KoMbine{} is the first methodology to formally propagate both statistical and systematic uncertainties to \KM{} survival curves.  By calculating the uncertainty budget as well as the overall confidence bands, \KoMbine{} will facilitate the development of the next generation of robust, reproducible, and clinically actionable biomarkers.
 
-\backmatter{}
-
-\bmhead{Acknowledgements}
+\backmatter%
+\section*{Acknowledgements}
 
 I would like to thank my AstroPath colleagues, in particular my mentors, Drs.~Alex Szalay and Janis Taube, for their support on this project. I would also like to acknowledge editing support by Ben Cohen, provided by the Office of the Vice Provost for Research at Johns Hopkins University.
 
 \section*{Declarations}
 
-\paragraph{Funding}
+\subsection*{Funding}
 This research was supported by the Mark Foundation for Cancer Research.
 
-\paragraph{Conflict of interest}
+\subsection*{Conflict of interest}
 The author holds a patent on the DONUTS biomarker and has received licensing royalties as well as research support from Quanterix.
 
-\paragraph{Ethics approval}
+\subsection*{Ethics approval}
 Not applicable.
 
-\paragraph{Consent to participate}
+\subsection*{Consent to participate}
 Not applicable.
 
-\paragraph{Consent for publication}
+\subsection*{Consent for publication}
 Not applicable.
 
-\paragraph{Data availability}
+\subsection*{Data availability}
 The data used in this work are available together with the code at \url{https://github.com/AstroPathJHU/KoMbine}.
 
-\paragraph{Code availability}
+\subsection*{Code availability}
 All code used in this work is available at \url{https://github.com/AstroPathJHU/KoMbine}.
 
-\paragraph{Authors' contributions}
+\subsection*{Authors' contributions}
 Not applicable. The author is solely responsible for all aspects of this work.
 
 \begin{appendices}
