@@ -22,6 +22,10 @@ This repository contains two distinct Python packages for biomedical analysis:
 - **Pylint must return perfect results (10.00/10)** - all warnings and errors must be addressed
 - Nontrivial errors that would require major refactoring can be ignored via `# pylint: disable=error-name` comments, but this is less preferable
 - Target pylint score: 10.00/10
+- **Pyright must not have any errors** - run `pyright <file>` to check for type errors
+- Before running pyright, install any missing packages (e.g., `pip install matplotlib numpy scipy`) to properly evaluate real type errors, as missing import errors can mask actual issues
+- Expected import errors in CI environments without packages installed are acceptable
+- Fix all other pyright errors before committing
 
 ## Package Structure
 

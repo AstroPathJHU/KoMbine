@@ -184,7 +184,7 @@ def plot_compare_to_greenwood():
   kml_large.plot(config=config_large)
   add_subfigure_label(axes[1], 'B')
 
-  plt.tight_layout(rect=[0, 0, 1, 0.96])  # Make room for suptitle
+  plt.tight_layout(rect=(0, 0, 1, 0.96))  # Make room for suptitle
   plt.savefig("comparison_to_greenwood.pdf")
   plt.close()
   print("  Saved comparison_to_greenwood.pdf")
@@ -200,7 +200,10 @@ def plot_compare_p_value():
   # pylint: disable=import-error, import-outside-toplevel
   from compare_p_value import simulate_pvalues, plot_pvalue_comparison, PlotConfig
 
-  _, axes = plt.subplots(2, 3, figsize=(15, 10))
+  fig, axes = plt.subplots(2, 3, figsize=(16, 11))
+
+  # Add main title
+  fig.suptitle('$p$ value comparison', fontsize=FONT_SIZES['suptitle'], fontweight='bold')
 
   # Configuration for each subplot
   configs = [
@@ -249,8 +252,12 @@ def plot_compare_p_value():
       verbose=False,
     )
 
+    # Calculate correlation for subtitle
+    minlp_vals, logrank_vals = pvalues[:, 0], pvalues[:, 1]
+    r = np.corrcoef(minlp_vals, logrank_vals)[0, 1]
+
     title_suffix = "with ties" if config['allow_ties'] else "no ties"
-    title = f"$p$ value comparison for\n{config['n_patients']} patients ({title_suffix})"
+    title = f"{config['n_patients']} patients ({title_suffix}) ($r={r:.3f}$)"
 
     # Use the refactored function from compare_p_value.py
     _, handles, labels = plot_pvalue_comparison(
@@ -260,6 +267,9 @@ def plot_compare_p_value():
       config=plot_config,
       add_legend=False,
     )
+
+    # Update y-axis label to add newline
+    ax.set_ylabel("MINLP (Cox penalty only)\n$p$ value", fontsize=plot_config.label_fontsize)
 
     # Store legend handles and labels from the first plot
     if legend_handles is None:
@@ -274,7 +284,9 @@ def plot_compare_p_value():
                      fontsize=plot_config.legend_fontsize * 1.5,
                      frameon=True, fancybox=True, shadow=True)
 
-  plt.tight_layout()
+  plt.tight_layout(rect=(0, 0, 1, 0.96))  # Make room for suptitle
+  # Adjust spacing between rows
+  plt.subplots_adjust(hspace=0.4)
   plt.savefig("p_value_comparison.pdf")
   plt.close()
   print("  Saved p_value_comparison.pdf")
@@ -392,8 +404,8 @@ def plot_lung_dataset():
     add_subfigure_label(ax, label)
 
   # Create single figure with 2 rows, 3 columns (cells in row 0, donuts in row 1)
-  fig = plt.figure(figsize=(21, 11))
-  gs = fig.add_gridspec(2, 3, hspace=0.35, wspace=0.35)
+  fig = plt.figure(figsize=(21, 12))  # Increased height for more space
+  gs = fig.add_gridspec(2, 3, hspace=0.5, wspace=0.35)  # Increased hspace for legend
 
   # Row 0: CD8+FoxP3+ Cells
   print("  Processing cells...")
@@ -468,18 +480,16 @@ def plot_lung_dataset():
   # Get legend handles and labels from cells row
   handles_cells, labels_cells = ax_cells_a.get_legend_handles_labels()
   if handles_cells:
-    # Add legend for cells row (top)
-    fig.legend(handles_cells, labels_cells, loc='upper center', ncol=len(handles_cells),
-               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, 0.52),
-               title='CD8+FoxP3+ Cells', title_fontsize=FONT_SIZES['legend'])
+    # Add legend for cells row (between rows, no title)
+    fig.legend(handles_cells, labels_cells, loc='center', ncol=len(handles_cells),
+               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, 0.5))
 
   # Get legend handles and labels from donuts row
   handles_donuts, labels_donuts = ax_donuts_a.get_legend_handles_labels()
   if handles_donuts:
-    # Add legend for donuts row (bottom)
+    # Add legend for donuts row (bottom, no title)
     fig.legend(handles_donuts, labels_donuts, loc='lower center', ncol=len(handles_donuts),
-               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, -0.02),
-               title='DONUTS', title_fontsize=FONT_SIZES['legend'])
+               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, -0.02))
 
   output_file = f"lung_km_{survival_type}.pdf"
   # Use bbox_inches='tight' with bbox_extra_artists to include the legends
