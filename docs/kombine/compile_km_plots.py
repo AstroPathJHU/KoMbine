@@ -32,10 +32,11 @@ os.chdir(SCRIPT_DIR)
 
 # Font sizes for all plots
 FONT_SIZES = {
-  'legend': 16,
-  'title': 16,
-  'label': 16,
+  'legend': 18,
+  'title': 20,  # Subplot titles should be larger than legend and label
+  'label': 18,
   'tick': 16,
+  'suptitle': 24,  # For main titles
 }
 
 # Common configurations
@@ -106,7 +107,11 @@ def plot_compare_to_greenwood():
   """Generate comparison to Greenwood plots as a single figure with 2 subplots."""
   print("Generating comparison_to_greenwood.pdf...")
 
-  _, axes = plt.subplots(1, 2, figsize=(14, 7))
+  fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+
+  # Add main title
+  fig.suptitle('Comparison to exponential Greenwood confidence intervals',
+               fontsize=FONT_SIZES['suptitle'], fontweight='bold')
 
   # Common configuration for exponential Greenwood plots
   common_config = {
@@ -134,15 +139,21 @@ def plot_compare_to_greenwood():
     close_figure=False,
     show=False,
     saveas=None,
+    legend_saveas=None,
     figsize=FIGSIZE_BIG,
     legend_fontsize=FONT_SIZES['legend'],
     title_fontsize=FONT_SIZES['title'],
     label_fontsize=FONT_SIZES['label'],
     tick_fontsize=FONT_SIZES['tick'],
-    title='Comparison to Greenwood, $N=12$',
+    title='$N=12$',
+    legend_loc=None,  # Remove legend from left plot
     **common_config
   )
   kml_small.plot(config=config_small)
+  # Remove legend if it exists
+  legend = axes[0].get_legend()
+  if legend is not None:
+    legend.remove()
   add_subfigure_label(axes[0], 'A')
 
   # Panel B: Large N (100 patients)
@@ -161,18 +172,19 @@ def plot_compare_to_greenwood():
     close_figure=False,
     show=False,
     saveas=None,
+    legend_saveas=None,
     figsize=FIGSIZE_BIG,
     legend_fontsize=FONT_SIZES['legend'],
     title_fontsize=FONT_SIZES['title'],
     label_fontsize=FONT_SIZES['label'],
     tick_fontsize=FONT_SIZES['tick'],
-    title='Comparison to Greenwood, $N=100$',
+    title='$N=100$',
     **common_config
   )
   kml_large.plot(config=config_large)
   add_subfigure_label(axes[1], 'B')
 
-  plt.tight_layout()
+  plt.tight_layout(rect=[0, 0, 1, 0.96])  # Make room for suptitle
   plt.savefig("comparison_to_greenwood.pdf")
   plt.close()
   print("  Saved comparison_to_greenwood.pdf")
@@ -276,7 +288,7 @@ def plot_lung_dataset():
   survival_type = 'RFS'
 
   if survival_type == 'RFS':
-    ylabel = "Regression-Free Survival Probability"
+    ylabel = "RFS Probability"  # Abbreviated to avoid overlap
     cell_threshold = 0.4
     donut_threshold = 1130
   elif survival_type == 'OS':
@@ -447,21 +459,30 @@ def plot_lung_dataset():
     label='F'
   )
 
-  # Remove legends from all subplots - we'll add a single combined legend
+  # Remove legends from all subplots - we'll add separate legends for cells and donuts
   for ax in [ax_cells_a, ax_cells_b, ax_cells_c, ax_donuts_a, ax_donuts_b, ax_donuts_c]:
     legend = ax.get_legend()
     if legend is not None:
       legend.remove()
 
-  # Get legend handles and labels from one of the plots
-  handles, labels = ax_cells_a.get_legend_handles_labels()
-  if handles:
-    # Add a single combined legend at the bottom
-    fig.legend(handles, labels, loc='lower center', ncol=len(handles),
-               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, -0.02))
+  # Get legend handles and labels from cells row
+  handles_cells, labels_cells = ax_cells_a.get_legend_handles_labels()
+  if handles_cells:
+    # Add legend for cells row (top)
+    fig.legend(handles_cells, labels_cells, loc='upper center', ncol=len(handles_cells),
+               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, 0.52),
+               title='CD8+FoxP3+ Cells', title_fontsize=FONT_SIZES['legend'])
+
+  # Get legend handles and labels from donuts row
+  handles_donuts, labels_donuts = ax_donuts_a.get_legend_handles_labels()
+  if handles_donuts:
+    # Add legend for donuts row (bottom)
+    fig.legend(handles_donuts, labels_donuts, loc='lower center', ncol=len(handles_donuts),
+               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, -0.02),
+               title='DONUTS', title_fontsize=FONT_SIZES['legend'])
 
   output_file = f"lung_km_{survival_type}.pdf"
-  # Use bbox_inches='tight' with bbox_extra_artists to include the legend
+  # Use bbox_inches='tight' with bbox_extra_artists to include the legends
   if fig.legends:
     plt.savefig(output_file, bbox_inches='tight', bbox_extra_artists=fig.legends)
   else:
