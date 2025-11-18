@@ -73,7 +73,7 @@ def simulate_pvalues( #pylint: disable=too-many-locals
 
   return results
 
-def plot_pvalue_comparison( #pylint: disable=too-many-arguments, too-many-locals
+def plot_pvalue_comparison( #pylint: disable=too-many-arguments, too-many-locals, too-many-statements
   pvalues: np.ndarray,
   title: str = "Comparison of p value methods",
   *,
