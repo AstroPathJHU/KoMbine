@@ -339,10 +339,10 @@ def plot_lung_dataset(testing=False):
   if testing:
     # Use simple fixed datacards for testing (they work with restricted Gurobi license)
     dc_file_cells = pathlib.Path(
-      "../../test/kombine/datacards/simple_examples/fixed_km_censoring.txt"
+      "../../test/kombine/datacards/test_compile_km_plots/test_lung_cells.txt"
     )
     dc_file_donuts = pathlib.Path(
-      "../../test/kombine/datacards/simple_examples/fixed_km_censoring.txt"
+      "../../test/kombine/datacards/test_compile_km_plots/test_lung_donuts.txt"
     )
   else:
     dc_file_cells = pathlib.Path(
@@ -519,7 +519,7 @@ def plot_lung_dataset(testing=False):
     # Position optimized so distance from top row = distance from bottom row
     fig.legend(handles_cells, labels_cells, loc='center', ncol=len(handles_cells),
                fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, 0.48),
-               frameon=True, fancybox=True, shadow=True)
+               frameon=True, fancybox=True)
 
   # Get legend handles and labels from donuts row
   handles_donuts, labels_donuts = ax_donuts_a.get_legend_handles_labels()
@@ -527,7 +527,7 @@ def plot_lung_dataset(testing=False):
     # Add legend for donuts row (bottom, no title)
     fig.legend(handles_donuts, labels_donuts, loc='lower center', ncol=len(handles_donuts),
                fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, 0.01),
-               frameon=True, fancybox=True, shadow=True)
+               frameon=True, fancybox=True)
 
   output_file = f"lung_km_{survival_type}.pdf"
   # Use bbox_inches='tight' with bbox_extra_artists to include the legends
