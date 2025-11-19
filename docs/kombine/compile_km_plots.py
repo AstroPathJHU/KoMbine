@@ -337,7 +337,10 @@ def plot_compare_p_value(testing=False):
 
 def plot_lung_dataset(testing=False):
   """
-  Generate lung dataset plot as a single 2x3 figure combining cells and donuts.
+  Generate lung dataset plot with 10 panels (A-J) in 3 rows:
+  - Row 1: A, B (cells), F, G (DONUTS)
+  - Row 2: C, D (cells), H, I (DONUTS)
+  - Row 3: E (cells), J (DONUTS) - larger plots
 
   Args:
     testing: If True, use test datacards with fewer patients for faster testing
@@ -361,22 +364,64 @@ def plot_lung_dataset(testing=False):
   # Load datacards - use simple test datacards in testing mode
   if testing:
     # Use simple fixed datacards for testing (they work with restricted Gurobi license)
-    dc_file_cells = pathlib.Path(
+    dc_file_cells_poisson = pathlib.Path(
       "../../test/kombine/datacards/test_compile_km_plots/test_lung_cells.txt"
     )
-    dc_file_donuts = pathlib.Path(
+    dc_file_donuts_poisson = pathlib.Path(
       "../../test/kombine/datacards/test_compile_km_plots/test_lung_donuts.txt"
     )
+    # For testing, use the same datacards for all variants
+    dc_file_cells_flatfield_before = dc_file_cells_poisson
+    dc_file_cells_flatfield_after = dc_file_cells_poisson
+    dc_file_cells_combined = dc_file_cells_poisson
+    dc_file_donuts_flatfield_before = dc_file_donuts_poisson
+    dc_file_donuts_flatfield_after = dc_file_donuts_poisson
+    dc_file_donuts_combined = dc_file_donuts_poisson
   else:
-    dc_file_cells = pathlib.Path(
+    # Poisson-only datacards for panels A, B, F, G (binomial and Poisson errors)
+    dc_file_cells_poisson = pathlib.Path(
       f"../../test/kombine/datacards/lung/poisson/datacard_cells_{survival_type}.txt"
     )
-    dc_file_donuts = pathlib.Path(
+    dc_file_donuts_poisson = pathlib.Path(
       f"../../test/kombine/datacards/lung/poisson/datacard_donuts_{survival_type}.txt"
     )
+    # Flatfielding before correction for panels C, H
+    dc_file_cells_flatfield_before = pathlib.Path(
+      f"../../test/kombine/datacards/lung/uncorrected_flatfielding_systematic/"
+      f"datacard_cells_{survival_type}.txt"
+    )
+    dc_file_donuts_flatfield_before = pathlib.Path(
+      f"../../test/kombine/datacards/lung/uncorrected_flatfielding_systematic/"
+      f"datacard_donuts_{survival_type}.txt"
+    )
+    # Flatfielding after correction for panels D, I
+    dc_file_cells_flatfield_after = pathlib.Path(
+      f"../../test/kombine/datacards/lung/flatfielding_systematic/"
+      f"datacard_cells_{survival_type}.txt"
+    )
+    dc_file_donuts_flatfield_after = pathlib.Path(
+      f"../../test/kombine/datacards/lung/flatfielding_systematic/"
+      f"datacard_donuts_{survival_type}.txt"
+    )
+    # Combined (Poisson + flatfielding after correction) for panels E, J
+    dc_file_cells_combined = pathlib.Path(
+      f"../../test/kombine/datacards/lung/poisson_and_flatfielding/"
+      f"datacard_cells_{survival_type}.txt"
+    )
+    dc_file_donuts_combined = pathlib.Path(
+      f"../../test/kombine/datacards/lung/poisson_and_flatfielding/"
+      f"datacard_donuts_{survival_type}.txt"
+    )
 
-  datacard_cells = Datacard.parse_datacard(dc_file_cells)
-  datacard_donuts = Datacard.parse_datacard(dc_file_donuts)
+  # Parse all datacards
+  datacard_cells_poisson = Datacard.parse_datacard(dc_file_cells_poisson)
+  datacard_donuts_poisson = Datacard.parse_datacard(dc_file_donuts_poisson)
+  datacard_cells_flatfield_before = Datacard.parse_datacard(dc_file_cells_flatfield_before)
+  datacard_donuts_flatfield_before = Datacard.parse_datacard(dc_file_donuts_flatfield_before)
+  datacard_cells_flatfield_after = Datacard.parse_datacard(dc_file_cells_flatfield_after)
+  datacard_donuts_flatfield_after = Datacard.parse_datacard(dc_file_donuts_flatfield_after)
+  datacard_cells_combined = Datacard.parse_datacard(dc_file_cells_combined)
+  datacard_donuts_combined = Datacard.parse_datacard(dc_file_donuts_combined)
 
   # Helper function to create KM plot for a specific configuration
   def create_km_subplot(ax, datacard, threshold, title, include_full_nll,
@@ -464,94 +509,146 @@ def plot_lung_dataset(testing=False):
 
     add_subfigure_label(ax, label)
 
-  # Create single figure with 2 rows, 3 columns (cells in row 0, donuts in row 1)
-  fig = plt.figure(figsize=(21, 12))  # Increased height for more space
-  gs = fig.add_gridspec(2, 3, hspace=0.40, wspace=0.35)  # Optimized hspace for legend placement
+  # Create figure with 3 rows and 4 columns
+  # Row 1: A, B (cells) | F, G (DONUTS) - 4 small plots
+  # Row 2: C, D (cells) | H, I (DONUTS) - 4 small plots
+  # Row 3: E (cells) | J (DONUTS) - 2 larger plots
+  fig = plt.figure(figsize=(21, 18))  # Increased height for 3 rows
+  gs = fig.add_gridspec(3, 4, hspace=0.40, wspace=0.35, height_ratios=[1, 1, 1.2])
 
-  # Row 0: CD8+FoxP3+ Cells
   print("  Processing cells...")
-  ax_cells_a = fig.add_subplot(gs[0, 0])
+
+  # Row 0, Col 0: Panel A - Binomial uncertainties (cells)
+  ax_a = fig.add_subplot(gs[0, 0])
   create_km_subplot(
-    ax_cells_a, datacard_cells, cell_threshold,
-    title='CD8+FoxP3+ Cells',
-    include_full_nll=True,
+    ax_a, datacard_cells_poisson, cell_threshold,
+    title='Binomial Uncertainties',
+    include_full_nll=False,
     include_patient_wise=False,
-    include_binomial=False,
+    include_binomial=True,
     label='A'
   )
 
-  ax_cells_b = fig.add_subplot(gs[0, 1])
+  # Row 0, Col 1: Panel B - Poisson uncertainties (cells)
+  ax_b = fig.add_subplot(gs[0, 1])
   create_km_subplot(
-    ax_cells_b, datacard_cells, cell_threshold,
-    title='CD8+FoxP3+ Cells, Patient-Wise Errors',
+    ax_b, datacard_cells_poisson, cell_threshold,
+    title='Poisson Uncertainties',
     include_full_nll=False,
     include_patient_wise=True,
     include_binomial=False,
     label='B'
   )
 
-  ax_cells_c = fig.add_subplot(gs[0, 2])
+  # Row 1, Col 0: Panel C - Flatfielding before correction (cells)
+  ax_c = fig.add_subplot(gs[1, 0])
   create_km_subplot(
-    ax_cells_c, datacard_cells, cell_threshold,
-    title='CD8+FoxP3+ Cells, Binomial Errors',
-    include_full_nll=False,
+    ax_c, datacard_cells_flatfield_before, cell_threshold,
+    title='Flatfielding (Before Correction)',
+    include_full_nll=True,
     include_patient_wise=False,
-    include_binomial=True,
+    include_binomial=False,
     label='C'
   )
 
-  # Row 1: DONUTS
-  print("  Processing donuts...")
-  ax_donuts_a = fig.add_subplot(gs[1, 0])
+  # Row 1, Col 1: Panel D - Flatfielding after correction (cells)
+  ax_d = fig.add_subplot(gs[1, 1])
   create_km_subplot(
-    ax_donuts_a, datacard_donuts, donut_threshold,
-    title='DONUTS',
+    ax_d, datacard_cells_flatfield_after, cell_threshold,
+    title='Flatfielding (After Correction)',
     include_full_nll=True,
     include_patient_wise=False,
     include_binomial=False,
     label='D'
   )
 
-  ax_donuts_b = fig.add_subplot(gs[1, 1])
+  # Row 2, Col 0-1: Panel E - Combined uncertainties (cells) - spans 2 columns
+  ax_e = fig.add_subplot(gs[2, 0:2])
   create_km_subplot(
-    ax_donuts_b, datacard_donuts, donut_threshold,
-    title='DONUTS, Patient-Wise Errors',
-    include_full_nll=False,
-    include_patient_wise=True,
+    ax_e, datacard_cells_combined, cell_threshold,
+    title='CD8+FoxP3+ Cells: Combined Uncertainties',
+    include_full_nll=True,
+    include_patient_wise=False,
     include_binomial=False,
     label='E'
   )
 
-  ax_donuts_c = fig.add_subplot(gs[1, 2])
+  print("  Processing donuts...")
+
+  # Row 0, Col 2: Panel F - Binomial uncertainties (DONUTS)
+  ax_f = fig.add_subplot(gs[0, 2])
   create_km_subplot(
-    ax_donuts_c, datacard_donuts, donut_threshold,
-    title='DONUTS, Binomial Errors',
+    ax_f, datacard_donuts_poisson, donut_threshold,
+    title='Binomial Uncertainties',
     include_full_nll=False,
     include_patient_wise=False,
     include_binomial=True,
     label='F'
   )
 
-  # Remove legends from all subplots - we'll add separate legends for cells and donuts
-  for ax in [ax_cells_a, ax_cells_b, ax_cells_c, ax_donuts_a, ax_donuts_b, ax_donuts_c]:
+  # Row 0, Col 3: Panel G - Poisson uncertainties (DONUTS)
+  ax_g = fig.add_subplot(gs[0, 3])
+  create_km_subplot(
+    ax_g, datacard_donuts_poisson, donut_threshold,
+    title='Poisson Uncertainties',
+    include_full_nll=False,
+    include_patient_wise=True,
+    include_binomial=False,
+    label='G'
+  )
+
+  # Row 1, Col 2: Panel H - Flatfielding before correction (DONUTS)
+  ax_h = fig.add_subplot(gs[1, 2])
+  create_km_subplot(
+    ax_h, datacard_donuts_flatfield_before, donut_threshold,
+    title='Flatfielding (Before Correction)',
+    include_full_nll=True,
+    include_patient_wise=False,
+    include_binomial=False,
+    label='H'
+  )
+
+  # Row 1, Col 3: Panel I - Flatfielding after correction (DONUTS)
+  ax_i = fig.add_subplot(gs[1, 3])
+  create_km_subplot(
+    ax_i, datacard_donuts_flatfield_after, donut_threshold,
+    title='Flatfielding (After Correction)',
+    include_full_nll=True,
+    include_patient_wise=False,
+    include_binomial=False,
+    label='I'
+  )
+
+  # Row 2, Col 2-3: Panel J - Combined uncertainties (DONUTS) - spans 2 columns
+  ax_j = fig.add_subplot(gs[2, 2:4])
+  create_km_subplot(
+    ax_j, datacard_donuts_combined, donut_threshold,
+    title='DONUTS: Combined Uncertainties',
+    include_full_nll=True,
+    include_patient_wise=False,
+    include_binomial=False,
+    label='J'
+  )
+
+  # Remove legends from all subplots
+  all_axes = [ax_a, ax_b, ax_c, ax_d, ax_e, ax_f, ax_g, ax_h, ax_i, ax_j]
+  for ax in all_axes:
     legend = ax.get_legend()
     if legend is not None:
       legend.remove()
 
-  # Get legend handles and labels from cells row
-  handles_cells, labels_cells = ax_cells_a.get_legend_handles_labels()
-  if handles_cells:
-    # Add legend for cells row (centered between rows, no title)
-    # Position optimized so distance from top row = distance from bottom row
-    fig.legend(handles_cells, labels_cells, loc='center', ncol=len(handles_cells),
-               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, 0.48),
-               frameon=True, fancybox=True)
+  # Add a vertical line to separate cells (left) from DONUTS (right)
+  # The line goes between columns 1 and 2 (between indices 1.5)
+  line_x = 0.5  # Middle of the figure
+  fig.add_artist(plt.Line2D([line_x, line_x], [0.05, 0.95],
+                             transform=fig.transFigure,
+                             color='black', linewidth=2, linestyle='-'))
 
-  # Get legend handles and labels from donuts row
-  handles_donuts, labels_donuts = ax_donuts_a.get_legend_handles_labels()
-  if handles_donuts:
-    # Add legend for donuts row (bottom, no title)
-    fig.legend(handles_donuts, labels_donuts, loc='lower center', ncol=len(handles_donuts),
+  # Get legend handles and labels
+  handles, labels = ax_a.get_legend_handles_labels()
+  if handles:
+    # Add single legend at the bottom
+    fig.legend(handles, labels, loc='lower center', ncol=len(handles),
                fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, 0.01),
                frameon=True, fancybox=True)
 
