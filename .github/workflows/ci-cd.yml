@@ -133,10 +133,6 @@ jobs:
           LICENSEID=${{ secrets.GUROBI_LICENSEID }}
           EOF
 
-      - name: Generate systematic datacards
-        run: |
-          python test/kombine/datacards/lung/generate_systematic_datacards.py
-
       - name: test KoMbine code in README
         run: |
           # Extract and modify the KoMbine example from README and test it

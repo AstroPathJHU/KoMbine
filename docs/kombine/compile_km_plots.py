@@ -41,6 +41,10 @@ os.environ['PYTHONUNBUFFERED'] = '1'
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(SCRIPT_DIR)
 
+# Add repository root to path to allow importing from test package
+REPO_ROOT = pathlib.Path(SCRIPT_DIR).parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
 # Font sizes for all plots
 FONT_SIZES = {
   'legend': 18,
@@ -335,6 +339,43 @@ def plot_compare_p_value(testing=False):
   print("  Saved p_value_comparison.pdf")
 
 
+def generate_systematic_datacards():
+  """
+  Generate systematic datacards for lung dataset if they don't already exist.
+
+  This imports and runs the datacard generation script to create:
+  - poisson_and_flatfielding
+  - poisson_and_uncorrected_flatfielding
+  - flatfielding_systematic
+  - uncorrected_flatfielding_systematic
+  """
+  # Import the datacard generation module
+  # pylint: disable=import-outside-toplevel
+  from test.kombine.datacards.lung import generate_systematic_datacards as gen_module
+
+  # Check if any of the systematic datacard directories exist
+  lung_dir = REPO_ROOT / 'test' / 'kombine' / 'datacards' / 'lung'
+  systematic_dirs = [
+    lung_dir / 'poisson_and_flatfielding',
+    lung_dir / 'poisson_and_uncorrected_flatfielding',
+    lung_dir / 'flatfielding_systematic',
+    lung_dir / 'uncorrected_flatfielding_systematic',
+  ]
+
+  # Check if all directories exist with at least one datacard file
+  all_exist = all(
+    d.exists() and any(d.glob('datacard_*.txt'))
+    for d in systematic_dirs
+  )
+
+  if not all_exist:
+    print("Generating systematic datacards...")
+    gen_module.main()
+    print("✓ Systematic datacards generated")
+  else:
+    print("✓ Systematic datacards already exist, skipping generation")
+
+
 def plot_lung_dataset(testing=False):
   """
   Generate lung dataset plot with 10 panels (A-J) in 3 rows:
@@ -347,6 +388,10 @@ def plot_lung_dataset(testing=False):
   """
   # pylint: disable=too-many-locals, too-many-statements
   print("Generating lung dataset plot...")
+
+  # Generate systematic datacards if needed (only in non-testing mode)
+  if not testing:
+    generate_systematic_datacards()
 
   survival_type = 'RFS'
 
