@@ -145,6 +145,9 @@ def generate_datacards_for_folder(source_folder, target_folder, *,
   source_path = pathlib.Path(source_folder)
   target_path = pathlib.Path(target_folder)
 
+  # Create target directory if it doesn't exist
+  target_path.mkdir(parents=True, exist_ok=True)
+
   # Process each datacard in the source folder
   for source_file in source_path.glob('datacard_*.txt'):
     lines = read_datacard(source_file)
