@@ -20,15 +20,17 @@ Multiple plot options can be combined to generate specific subsets.
 import argparse
 import os
 import pathlib
-import sys
 import warnings
 
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
-from kombine.datacard import Datacard
-from kombine.kaplan_meier_likelihood import KaplanMeierPlotConfig
+from ...kombine.datacard import Datacard
+from ...kombine.kaplan_meier_likelihood import KaplanMeierPlotConfig
+from ...test.kombine.datacards.lung.generate_systematic_datacards import main as generate_systematic_datacards
+
+from .compare_p_value import simulate_pvalues, plot_pvalue_comparison, PlotConfig
 
 # Set matplotlib backend before importing kombine modules
 matplotlib.use('Agg')
@@ -231,11 +233,6 @@ def plot_compare_p_value(testing=False):
   # pylint: disable=too-many-locals
   print("Generating p_value_comparison.pdf...")
 
-  # Import here to ensure script directory is in path
-  sys.path.insert(0, SCRIPT_DIR)
-  # pylint: disable=import-error, import-outside-toplevel
-  from compare_p_value import simulate_pvalues, plot_pvalue_comparison, PlotConfig
-
   _, axes = plt.subplots(2, 3, figsize=(16, 11))
 
   # Add main title
@@ -331,47 +328,6 @@ def plot_compare_p_value(testing=False):
   plt.savefig(output_file)
   plt.close()
   print(f"  Saved {output_file}")
-
-
-def generate_systematic_datacards():
-  """
-  Generate systematic datacards for lung dataset if they don't already exist.
-
-  This imports and runs the datacard generation script to create:
-  - poisson_and_flatfielding
-  - poisson_and_uncorrected_flatfielding
-  - flatfielding_systematic
-  - uncorrected_flatfielding_systematic
-  """
-  # Import the datacard generation module
-  # When run with `python -m docs.kombine.compile_km_plots`, the current
-  # directory (repo root) is in sys.path, so absolute imports work.
-  # pylint: disable=import-outside-toplevel
-  from test.kombine.datacards.lung import generate_systematic_datacards as gen_module
-
-  # Check if any of the systematic datacard directories exist
-  # Navigate up from docs/kombine to repo root, then to test/kombine/datacards/lung
-  lung_dir = pathlib.Path(SCRIPT_DIR).parent.parent / 'test' / 'kombine' / 'datacards' / 'lung'
-  systematic_dirs = [
-    lung_dir / 'poisson_and_flatfielding',
-    lung_dir / 'poisson_and_uncorrected_flatfielding',
-    lung_dir / 'flatfielding_systematic',
-    lung_dir / 'uncorrected_flatfielding_systematic',
-  ]
-
-  # Check if all directories exist with at least one datacard file
-  all_exist = all(
-    d.exists() and any(d.glob('datacard_*.txt'))
-    for d in systematic_dirs
-  )
-
-  if not all_exist:
-    print("Generating systematic datacards...")
-    gen_module.main()
-    print("✓ Systematic datacards generated")
-  else:
-    print("✓ Systematic datacards already exist, skipping generation")
-
 
 def plot_lung_dataset(testing=False):
   """
