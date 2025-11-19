@@ -94,10 +94,10 @@ def convert_to_fixed_observable(lines):
       new_lines.append('observable_type fixed\n')
     elif line.startswith('num\t') or line.startswith('num '):
       # Store num values but don't add to output yet
-      num_values = line.strip().split('\t')[1:]
+      num_values = line.strip().split()[1:]
     elif line.startswith('area\t') or line.startswith('area '):
       # Store area values but don't add to output yet
-      area_values = line.strip().split('\t')[1:]
+      area_values = line.strip().split()[1:]
     else:
       new_lines.append(line)
 
