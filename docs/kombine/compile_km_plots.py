@@ -611,16 +611,10 @@ Examples:
     plot_compare_to_greenwood(testing=args.testing)
 
   if generate_all or args.p_value:
-    if args.testing:
-      print("Skipping p_value_comparison.pdf in testing mode (requires full Gurobi license)")
-    else:
-      plot_compare_p_value(testing=args.testing)
+    plot_compare_p_value(testing=args.testing)
 
   if generate_all or args.lung:
-    if args.testing:
-      print("Skipping lung_km_RFS.pdf in testing mode (requires full Gurobi license)")
-    else:
-      plot_lung_dataset(testing=args.testing)
+    plot_lung_dataset(testing=args.testing)
 
   print("=" * 60)
   print("Plot generation complete!")
