@@ -43,7 +43,10 @@ def checklatex(filename, ignore_regexes=()):
   print(repr(messages[-1].logmessage))
 
   messages = [
-    m for m in messages if not any(r.search(str(m.message).replace("\n", "")) for r in ignore_regexes)
+    m for m in messages if not any(
+      r.search(str(m.message).replace("\n", ""))
+      for r in ignore_regexes
+    )
   ]
 
   errors = [m for m in messages if m.type == "error"]
