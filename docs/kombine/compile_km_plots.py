@@ -423,7 +423,7 @@ def plot_lung_dataset(testing=False):
 
   # Helper function to create KM plot for a specific configuration
   def create_km_subplot(ax, datacard, threshold, title, include_full_nll,
-                        include_patient_wise, include_binomial, label):
+                        include_patient_wise, include_binomial, label, label_x=-0.15):
     # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-locals
     """Create a single KM subplot."""
     plt.sca(ax)
@@ -505,14 +505,14 @@ def plot_lung_dataset(testing=False):
         fontsize=16,
       )
 
-    add_subfigure_label(ax, label)
+    add_subfigure_label(ax, label, x=label_x)
 
   # Create figure with 3 rows and 4 columns
   # Row 1: A, B (cells) | F, G (DONUTS) - 4 small plots
   # Row 2: C, D (cells) | H, I (DONUTS) - 4 small plots
-  # Row 3: E (cells) | J (DONUTS) - 2 larger plots
-  fig = plt.figure(figsize=(21, 18))  # Increased height for 3 rows
-  gs = fig.add_gridspec(3, 4, hspace=0.40, wspace=0.35, height_ratios=[1, 1, 1.2])
+  # Row 3: E (cells) | J (DONUTS) - 2 larger plots (taller to keep them square)
+  fig = plt.figure(figsize=(21, 21))  # Increased height for taller bottom plots
+  gs = fig.add_gridspec(3, 4, hspace=0.40, wspace=0.35, height_ratios=[1, 1, 2])
 
   print("  Processing cells...")
 
@@ -542,7 +542,7 @@ def plot_lung_dataset(testing=False):
   ax_c = fig.add_subplot(gs[1, 0])
   create_km_subplot(
     ax_c, datacard_cells_flatfield_before, cell_threshold,
-    title='Flatfielding (Before Correction)',
+    title='Flatfielding (Pre-Correction)',
     include_full_nll=True,
     include_patient_wise=False,
     include_binomial=False,
@@ -553,7 +553,7 @@ def plot_lung_dataset(testing=False):
   ax_d = fig.add_subplot(gs[1, 1])
   create_km_subplot(
     ax_d, datacard_cells_flatfield_after, cell_threshold,
-    title='Flatfielding (After Correction)',
+    title='Flatfielding (Post-Correction)',
     include_full_nll=True,
     include_patient_wise=False,
     include_binomial=False,
@@ -564,11 +564,12 @@ def plot_lung_dataset(testing=False):
   ax_e = fig.add_subplot(gs[2, 0:2])
   create_km_subplot(
     ax_e, datacard_cells_combined, cell_threshold,
-    title='CD8+FoxP3+ Cells: Combined Uncertainties',
+    title='Combined Uncertainties',
     include_full_nll=True,
     include_patient_wise=False,
     include_binomial=False,
-    label='E'
+    label='E',
+    label_x=-0.08  # Adjusted for 2-column span to align with A and C
   )
 
   print("  Processing donuts...")
@@ -599,7 +600,7 @@ def plot_lung_dataset(testing=False):
   ax_h = fig.add_subplot(gs[1, 2])
   create_km_subplot(
     ax_h, datacard_donuts_flatfield_before, donut_threshold,
-    title='Flatfielding (Before Correction)',
+    title='Flatfielding (Pre-Correction)',
     include_full_nll=True,
     include_patient_wise=False,
     include_binomial=False,
@@ -610,7 +611,7 @@ def plot_lung_dataset(testing=False):
   ax_i = fig.add_subplot(gs[1, 3])
   create_km_subplot(
     ax_i, datacard_donuts_flatfield_after, donut_threshold,
-    title='Flatfielding (After Correction)',
+    title='Flatfielding (Post-Correction)',
     include_full_nll=True,
     include_patient_wise=False,
     include_binomial=False,
@@ -621,11 +622,12 @@ def plot_lung_dataset(testing=False):
   ax_j = fig.add_subplot(gs[2, 2:4])
   create_km_subplot(
     ax_j, datacard_donuts_combined, donut_threshold,
-    title='DONUTS: Combined Uncertainties',
+    title='Combined Uncertainties',
     include_full_nll=True,
     include_patient_wise=False,
     include_binomial=False,
-    label='J'
+    label='J',
+    label_x=-0.08  # Adjusted for 2-column span to align with F and H
   )
 
   # Remove legends from all subplots
@@ -635,6 +637,12 @@ def plot_lung_dataset(testing=False):
     if legend is not None:
       legend.remove()
 
+  # Add column titles at the top
+  fig.text(0.25, 0.98, 'CD8+FoxP3+ Cells', ha='center', va='top',
+           fontsize=FONT_SIZES['suptitle'], fontweight='bold')
+  fig.text(0.75, 0.98, 'DONUTS', ha='center', va='top',
+           fontsize=FONT_SIZES['suptitle'], fontweight='bold')
+
   # Add a vertical line to separate cells (left) from DONUTS (right)
   # The line goes between columns 1 and 2 (between indices 1.5)
   line_x = 0.5  # Middle of the figure
@@ -642,20 +650,31 @@ def plot_lung_dataset(testing=False):
                              transform=fig.transFigure,
                              color='black', linewidth=2, linestyle='-'))
 
-  # Get legend handles and labels
-  handles, labels = ax_a.get_legend_handles_labels()
-  if handles:
-    # Add single legend at the bottom
-    fig.legend(handles, labels, loc='lower center', ncol=len(handles),
-               fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, 0.01),
-               frameon=True, fancybox=True)
+  # Get legend handles and labels from the combined plots (no "Binomial only" text)
+  handles_cells, labels_cells = ax_e.get_legend_handles_labels()
+  handles_donuts, labels_donuts = ax_j.get_legend_handles_labels()
+
+  # Add separate legends for each column (2 rows each)
+  if handles_cells:
+    # Calculate ncol to get 2 rows: ncol = ceil(n_items / 2)
+    ncol_cells = (len(handles_cells) + 1) // 2
+    fig.legend(handles_cells, labels_cells, loc='lower left',
+               ncol=ncol_cells, fontsize=FONT_SIZES['legend'],
+               bbox_to_anchor=(0.05, 0.01), frameon=True, fancybox=True)
+
+  if handles_donuts:
+    ncol_donuts = (len(handles_donuts) + 1) // 2
+    fig.legend(handles_donuts, labels_donuts, loc='lower right',
+               ncol=ncol_donuts, fontsize=FONT_SIZES['legend'],
+               bbox_to_anchor=(0.95, 0.01), frameon=True, fancybox=True)
 
   output_file = SCRIPT_DIR / f"lung_km_{survival_type}.pdf"
-  # Use bbox_inches='tight' with bbox_extra_artists to include the legends
-  if fig.legends:
-    plt.savefig(output_file, bbox_inches='tight', bbox_extra_artists=fig.legends)
-  else:
-    plt.savefig(output_file, bbox_inches='tight')
+  
+  # Adjust layout to make room for column titles and legends
+  plt.subplots_adjust(top=0.95, bottom=0.08)
+  
+  # Save the figure
+  plt.savefig(output_file)
   plt.close()
   print(f"  Saved {output_file}")
 
@@ -666,11 +685,11 @@ def main():
     description='Generate plots for 02_kombine.tex',
     formatter_class=argparse.RawDescriptionHelpFormatter,
     epilog="""
-Examples:
-  python -m docs.kombine.compile_km_plots                    # Generate all plots
-  python -m docs.kombine.compile_km_plots --testing          # Generate all plots with test data
-  python -m docs.kombine.compile_km_plots --lung --testing   # Generate only lung plot with test data
-  python -m docs.kombine.compile_km_plots --greenwood --p-value  # Generate Greenwood and p-value plots
+Examples (run from parent directory):
+  python -m ROCPickerPaper.docs.kombine.compile_km_plots                    # Generate all plots
+  python -m ROCPickerPaper.docs.kombine.compile_km_plots --testing          # Generate all plots with test data
+  python -m ROCPickerPaper.docs.kombine.compile_km_plots --lung --testing   # Generate only lung plot with test data
+  python -m ROCPickerPaper.docs.kombine.compile_km_plots --greenwood --p-value  # Generate Greenwood and p-value plots
     """
   )
 

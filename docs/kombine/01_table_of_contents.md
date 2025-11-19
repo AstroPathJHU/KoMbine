@@ -33,7 +33,7 @@ If you want to compile it yourself:
 
  - First, install KoMbine with `pip install`.
  - LaTeX:
-   - Run `python -m docs.kombine.compile_km_plots` from the repository root
+   - Run `python -m ROCPickerPaper.docs.kombine.compile_km_plots` from the parent directory
    - Then compile the LaTeX using `xelatex` and `biber`.
  - Jupyter notebooks
    - Run `jupytext --sync *.md` to convert the markdown files to `.ipynb`

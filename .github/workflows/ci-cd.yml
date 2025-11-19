@@ -168,7 +168,8 @@ jobs:
 
       - name: Compile KM plots
         run: |
-          python -m docs.kombine.compile_km_plots
+          cd ..
+          python -m ROCPickerPaper.docs.kombine.compile_km_plots
 
       - name: Compile KoMbine docs
         uses: xu-cheng/latex-action@v3
