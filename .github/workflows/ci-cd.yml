@@ -168,7 +168,7 @@ jobs:
 
       - name: Compile KM plots
         run: |
-          python ./docs/kombine/compile_km_plots.py
+          python -m docs.kombine.compile_km_plots
 
       - name: Compile KoMbine docs
         uses: xu-cheng/latex-action@v3

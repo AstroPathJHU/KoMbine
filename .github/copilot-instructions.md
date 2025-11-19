@@ -69,7 +69,7 @@ This repository contains two distinct Python packages for biomedical analysis:
 
 **Compiling KoMbine LaTeX documentation (`02_kombine.tex`)**:
 - **CRITICAL**: Before compiling LaTeX, you must either:
-  1. Run `python docs/kombine/compile_km_plots.py --testing` to generate test plots (works with restricted Gurobi license), OR
+  1. Run `python -m docs.kombine.compile_km_plots --testing` to generate test plots (works with restricted Gurobi license), OR
   2. Temporarily remove figure `\includegraphics` commands from the LaTeX file (do NOT commit this removal)
 - Without plots, LaTeX compilation will fail with missing file errors
 - The `--testing` flag generates smaller datasets: 10 patients for p-value plots, 3 patients for lung dataset
@@ -159,11 +159,11 @@ The `--testing` flag in `docs/kombine/compile_km_plots.py` generates plots compa
 - **lung dataset**: Skipped in testing mode (KM likelihood optimization too complex even with minimal patients)
 
 For LaTeX compilation with restricted Gurobi license:
-1. Run `python docs/kombine/compile_km_plots.py --testing` (generates km_example and greenwood plots)
+1. Run `python -m docs.kombine.compile_km_plots --testing` (generates km_example and greenwood plots)
 2. Temporarily remove p_value_comparison and lung_km_RFS figure includes from LaTeX (don't commit)
 3. Compile LaTeX: `cd docs/kombine && pdflatex 02_kombine.tex`
 
-Verified working as of 2025-11-18: `python compile_km_plots.py --testing` completes successfully with restricted license
+Verified working as of 2025-11-19: `python -m docs.kombine.compile_km_plots --testing` completes successfully with restricted license
 
 ## Testing Commands
 
@@ -208,7 +208,7 @@ The repository now uses three separate workflows:
 1. **Installation**: Same as above
 2. **Linting**: Same as above  
 3. **Testing**: Run KoMbine tests from `test/kombine/` (may need Gurobi license)
-4. **Documentation**: Use `docs/kombine/compile_km_plots.py`
+4. **Documentation**: Use `python -m docs.kombine.compile_km_plots`
 
 ### For cross-package changes:
 - Test both packages since ROC Picker imports from KoMbine

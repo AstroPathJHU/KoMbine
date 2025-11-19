@@ -37,13 +37,12 @@ matplotlib.use('Agg')
 warnings.filterwarnings('error')
 os.environ['PYTHONUNBUFFERED'] = '1'
 
-# Navigate to script directory
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-os.chdir(SCRIPT_DIR)
+# Get script directory for relative file operations
+SCRIPT_DIR = pathlib.Path(__file__).parent.resolve()
 
-# Add repository root to path to allow importing from test package
-REPO_ROOT = pathlib.Path(SCRIPT_DIR).parent.parent
-sys.path.insert(0, str(REPO_ROOT))
+# When run with `python -m docs.kombine.compile_km_plots`, the current directory
+# is already the repo root. We keep it there for imports to work correctly.
+# File operations will use SCRIPT_DIR for relative paths.
 
 # Font sizes for all plots
 FONT_SIZES = {
@@ -90,13 +89,9 @@ def plot_km_example(testing=False):
 
   if testing:
     # Use minimal datacard for testing (4 patients)
-    dc_file = pathlib.Path(
-      "../../test/kombine/datacards/simple_examples/simple_km_few_deaths.txt"
-    )
+    dc_file = SCRIPT_DIR / "../../test/kombine/datacards/simple_examples/simple_km_few_deaths.txt"
   else:
-    dc_file = pathlib.Path(
-      "../../test/kombine/datacards/simple_examples/poisson_ratio_km_censoring.txt"
-    )
+    dc_file = SCRIPT_DIR / "../../test/kombine/datacards/simple_examples/poisson_ratio_km_censoring.txt"
 
   datacard = Datacard.parse_datacard(dc_file)
 
@@ -105,11 +100,12 @@ def plot_km_example(testing=False):
     parameter_max=np.inf
   )
 
+  output_file = SCRIPT_DIR / "km_example.pdf"
   config = KaplanMeierPlotConfig(
     create_figure=True,
     close_figure=False,
     show=False,
-    saveas="km_example.pdf",
+    saveas=str(output_file),
     figsize=FIGSIZE_BIG,
     legend_fontsize=FONT_SIZES['legend'],
     title_fontsize=FONT_SIZES['title'],
@@ -119,9 +115,9 @@ def plot_km_example(testing=False):
   )
 
   kml.plot(config=config)
-  plt.savefig("km_example.pdf")
+  plt.savefig(output_file)
   plt.close()
-  print("  Saved km_example.pdf")
+  print(f"  Saved {output_file}")
 
 
 def plot_compare_to_greenwood(testing=False):
@@ -151,14 +147,12 @@ def plot_compare_to_greenwood(testing=False):
 
   # Panel A: Small N (12 patients in production, 4 in testing)
   if testing:
-    dc_file = pathlib.Path("../../test/kombine/datacards/simple_examples/simple_km_few_deaths.txt")
+    dc_file = SCRIPT_DIR / "../../test/kombine/datacards/simple_examples/simple_km_few_deaths.txt"
     n_small_label = '$N=4$'
   else:
-    dc_file = pathlib.Path("../../test/kombine/datacards/simple_examples/fixed_km_censoring.txt")
+    dc_file = SCRIPT_DIR / "../../test/kombine/datacards/simple_examples/fixed_km_censoring.txt"
     n_small_label = '$N=12$'
-  datacard_small = Datacard.parse_datacard(
-    dc_file
-  )
+  datacard_small = Datacard.parse_datacard(dc_file)
   kml_small = datacard_small.km_likelihood(
     parameter_min=-np.inf,
     parameter_max=np.inf
@@ -190,12 +184,10 @@ def plot_compare_to_greenwood(testing=False):
   # Panel B: Large N (100 patients in production, 4 in testing)
   if testing:
     # Use same minimal datacard for testing
-    dc_file = pathlib.Path("../../test/kombine/datacards/simple_examples/simple_km_few_deaths.txt")
+    dc_file = SCRIPT_DIR / "../../test/kombine/datacards/simple_examples/simple_km_few_deaths.txt"
     n_label = '$N=4$'
   else:
-    dc_file = pathlib.Path(
-      "../../test/kombine/datacards/simple_examples/fixed_km_censoring_many_patients.txt"
-    )
+    dc_file = SCRIPT_DIR / "../../test/kombine/datacards/simple_examples/fixed_km_censoring_many_patients.txt"
     n_label = '$N=100$'
 
   datacard_large = Datacard.parse_datacard(dc_file)
@@ -223,9 +215,10 @@ def plot_compare_to_greenwood(testing=False):
   add_subfigure_label(axes[1], 'B')
 
   plt.tight_layout(rect=(0, 0, 1, 0.96))  # Make room for suptitle
-  plt.savefig("comparison_to_greenwood.pdf")
+  output_file = SCRIPT_DIR / "comparison_to_greenwood.pdf"
+  plt.savefig(output_file)
   plt.close()
-  print("  Saved comparison_to_greenwood.pdf")
+  print(f"  Saved {output_file}")
 
 
 def plot_compare_p_value(testing=False):
@@ -334,9 +327,10 @@ def plot_compare_p_value(testing=False):
   plt.tight_layout()  # Make room for suptitle
   # Adjust spacing between rows
   plt.subplots_adjust(hspace=0.4)
-  plt.savefig("p_value_comparison.pdf")
+  output_file = SCRIPT_DIR / "p_value_comparison.pdf"
+  plt.savefig(output_file)
   plt.close()
-  print("  Saved p_value_comparison.pdf")
+  print(f"  Saved {output_file}")
 
 
 def generate_systematic_datacards():
@@ -350,11 +344,14 @@ def generate_systematic_datacards():
   - uncorrected_flatfielding_systematic
   """
   # Import the datacard generation module
+  # When run with `python -m docs.kombine.compile_km_plots`, the current
+  # directory (repo root) is in sys.path, so absolute imports work.
   # pylint: disable=import-outside-toplevel
   from test.kombine.datacards.lung import generate_systematic_datacards as gen_module
 
   # Check if any of the systematic datacard directories exist
-  lung_dir = REPO_ROOT / 'test' / 'kombine' / 'datacards' / 'lung'
+  # Navigate up from docs/kombine to repo root, then to test/kombine/datacards/lung
+  lung_dir = pathlib.Path(SCRIPT_DIR).parent.parent / 'test' / 'kombine' / 'datacards' / 'lung'
   systematic_dirs = [
     lung_dir / 'poisson_and_flatfielding',
     lung_dir / 'poisson_and_uncorrected_flatfielding',
@@ -409,11 +406,11 @@ def plot_lung_dataset(testing=False):
   # Load datacards - use simple test datacards in testing mode
   if testing:
     # Use simple fixed datacards for testing (they work with restricted Gurobi license)
-    dc_file_cells_poisson = pathlib.Path(
-      "../../test/kombine/datacards/test_compile_km_plots/test_lung_cells.txt"
+    dc_file_cells_poisson = (
+      SCRIPT_DIR / "../../test/kombine/datacards/test_compile_km_plots/test_lung_cells.txt"
     )
-    dc_file_donuts_poisson = pathlib.Path(
-      "../../test/kombine/datacards/test_compile_km_plots/test_lung_donuts.txt"
+    dc_file_donuts_poisson = (
+      SCRIPT_DIR / "../../test/kombine/datacards/test_compile_km_plots/test_lung_donuts.txt"
     )
     # For testing, use the same datacards for all variants
     dc_file_cells_flatfield_before = dc_file_cells_poisson
@@ -424,37 +421,37 @@ def plot_lung_dataset(testing=False):
     dc_file_donuts_combined = dc_file_donuts_poisson
   else:
     # Poisson-only datacards for panels A, B, F, G (binomial and Poisson errors)
-    dc_file_cells_poisson = pathlib.Path(
-      f"../../test/kombine/datacards/lung/poisson/datacard_cells_{survival_type}.txt"
+    dc_file_cells_poisson = (
+      SCRIPT_DIR / f"../../test/kombine/datacards/lung/poisson/datacard_cells_{survival_type}.txt"
     )
-    dc_file_donuts_poisson = pathlib.Path(
-      f"../../test/kombine/datacards/lung/poisson/datacard_donuts_{survival_type}.txt"
+    dc_file_donuts_poisson = (
+      SCRIPT_DIR / f"../../test/kombine/datacards/lung/poisson/datacard_donuts_{survival_type}.txt"
     )
     # Flatfielding before correction for panels C, H
-    dc_file_cells_flatfield_before = pathlib.Path(
-      f"../../test/kombine/datacards/lung/uncorrected_flatfielding_systematic/"
+    dc_file_cells_flatfield_before = (
+      SCRIPT_DIR / f"../../test/kombine/datacards/lung/uncorrected_flatfielding_systematic/"
       f"datacard_cells_{survival_type}.txt"
     )
-    dc_file_donuts_flatfield_before = pathlib.Path(
-      f"../../test/kombine/datacards/lung/uncorrected_flatfielding_systematic/"
+    dc_file_donuts_flatfield_before = (
+      SCRIPT_DIR / f"../../test/kombine/datacards/lung/uncorrected_flatfielding_systematic/"
       f"datacard_donuts_{survival_type}.txt"
     )
     # Flatfielding after correction for panels D, I
-    dc_file_cells_flatfield_after = pathlib.Path(
-      f"../../test/kombine/datacards/lung/flatfielding_systematic/"
+    dc_file_cells_flatfield_after = (
+      SCRIPT_DIR / f"../../test/kombine/datacards/lung/flatfielding_systematic/"
       f"datacard_cells_{survival_type}.txt"
     )
-    dc_file_donuts_flatfield_after = pathlib.Path(
-      f"../../test/kombine/datacards/lung/flatfielding_systematic/"
+    dc_file_donuts_flatfield_after = (
+      SCRIPT_DIR / f"../../test/kombine/datacards/lung/flatfielding_systematic/"
       f"datacard_donuts_{survival_type}.txt"
     )
     # Combined (Poisson + flatfielding after correction) for panels E, J
-    dc_file_cells_combined = pathlib.Path(
-      f"../../test/kombine/datacards/lung/poisson_and_flatfielding/"
+    dc_file_cells_combined = (
+      SCRIPT_DIR / f"../../test/kombine/datacards/lung/poisson_and_flatfielding/"
       f"datacard_cells_{survival_type}.txt"
     )
-    dc_file_donuts_combined = pathlib.Path(
-      f"../../test/kombine/datacards/lung/poisson_and_flatfielding/"
+    dc_file_donuts_combined = (
+      SCRIPT_DIR / f"../../test/kombine/datacards/lung/poisson_and_flatfielding/"
       f"datacard_donuts_{survival_type}.txt"
     )
 
@@ -697,7 +694,7 @@ def plot_lung_dataset(testing=False):
                fontsize=FONT_SIZES['legend'], bbox_to_anchor=(0.5, 0.01),
                frameon=True, fancybox=True)
 
-  output_file = f"lung_km_{survival_type}.pdf"
+  output_file = SCRIPT_DIR / f"lung_km_{survival_type}.pdf"
   # Use bbox_inches='tight' with bbox_extra_artists to include the legends
   if fig.legends:
     plt.savefig(output_file, bbox_inches='tight', bbox_extra_artists=fig.legends)
@@ -714,10 +711,10 @@ def main():
     formatter_class=argparse.RawDescriptionHelpFormatter,
     epilog="""
 Examples:
-  python compile_km_plots.py                    # Generate all plots
-  python compile_km_plots.py --testing          # Generate all plots with test data
-  python compile_km_plots.py --lung --testing   # Generate only lung plot with test data
-  python compile_km_plots.py --greenwood --p-value  # Generate only Greenwood and p-value plots
+  python -m docs.kombine.compile_km_plots                    # Generate all plots
+  python -m docs.kombine.compile_km_plots --testing          # Generate all plots with test data
+  python -m docs.kombine.compile_km_plots --lung --testing   # Generate only lung plot with test data
+  python -m docs.kombine.compile_km_plots --greenwood --p-value  # Generate Greenwood and p-value plots
     """
   )
 
