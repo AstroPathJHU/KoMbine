@@ -369,10 +369,10 @@ def plot_lung_dataset(testing=False):
     )
   else:
     dc_file_cells = pathlib.Path(
-      f"../../test/kombine/datacards/lung/datacard_cells_{survival_type}.txt"
+      f"../../test/kombine/datacards/lung/poisson/datacard_cells_{survival_type}.txt"
     )
     dc_file_donuts = pathlib.Path(
-      f"../../test/kombine/datacards/lung/datacard_donuts_{survival_type}.txt"
+      f"../../test/kombine/datacards/lung/poisson/datacard_donuts_{survival_type}.txt"
     )
 
   datacard_cells = Datacard.parse_datacard(dc_file_cells)
