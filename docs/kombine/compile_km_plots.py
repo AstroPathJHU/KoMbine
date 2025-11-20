@@ -26,8 +26,9 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ...kombine.datacard import Datacard
-from ...kombine.kaplan_meier_likelihood import KaplanMeierPlotConfig
+from kombine.datacard import Datacard
+from kombine.kaplan_meier_likelihood import KaplanMeierPlotConfig
+
 from ...test.kombine.datacards.lung.generate_systematic_datacards import main as generate_systematic_datacards
 
 from .compare_p_value import simulate_pvalues, plot_pvalue_comparison, PlotConfig
