@@ -142,8 +142,8 @@ GurobiError: Model too large for size-limited license
 Use these small datacards for testing (they work with restricted license):
 - `test/kombine/datacards/simple_examples/simple_km_few_deaths.txt` - Very small test case
 - `test/kombine/datacards/simple_examples/fixed_km_censoring.txt` - 12 patients (works)
-- `test/kombine/datacards/test_compile_km_plots/test_lung_cells.txt` - 3 patients for testing cells plots
-- `test/kombine/datacards/test_compile_km_plots/test_lung_donuts.txt` - 3 patients for testing donuts plots
+- `test/kombine/datacards/lung/test_small_dataset/test_lung_cells.txt` - 3 patients for testing cells plots
+- `test/kombine/datacards/lung/test_small_dataset/test_lung_donuts.txt` - 3 patients for testing donuts plots
 
 Avoid these for testing (require full license):
 - `test/kombine/datacards/simple_examples/fixed_km_censoring_many_patients.txt` - 100 patients

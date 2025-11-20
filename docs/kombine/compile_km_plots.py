@@ -337,13 +337,23 @@ def plot_lung_dataset(testing=False):
   - Row 3: E (cells), J (DONUTS) - larger plots
 
   Args:
-    testing: If True, use test datacards with fewer patients for faster testing
+    testing: If True (or a single bool), use test datacards for all panels.
+             If a tuple of 10 bools, use test datacards for each panel individually
+             (order: A, B, C, D, E, F, G, H, I, J)
   """
   # pylint: disable=too-many-locals, too-many-statements
   print("Generating lung dataset plot...")
 
-  # Generate systematic datacards if needed (only in non-testing mode)
-  if not testing:
+  # Convert testing to a tuple of 10 bools if it's a single bool
+  if isinstance(testing, bool):
+    testing_flags = (testing,) * 10
+  elif isinstance(testing, (tuple, list)) and len(testing) == 10:
+    testing_flags = tuple(testing)
+  else:
+    raise ValueError("testing must be a bool or a tuple/list of 10 bools")
+
+  # Generate systematic datacards if needed (only if any panel is in production mode)
+  if not all(testing_flags):
     generate_systematic_datacards()
 
   survival_type = 'RFS'
@@ -359,59 +369,54 @@ def plot_lung_dataset(testing=False):
   else:
     raise ValueError(f"Unknown survival type: {survival_type}")
 
-  # Load datacards - use simple test datacards in testing mode
-  if testing:
-    # Use simple fixed datacards for testing (they work with restricted Gurobi license)
-    dc_file_cells_poisson = (
-      SCRIPT_DIR / "../../test/kombine/datacards/test_compile_km_plots/test_lung_cells.txt"
-    )
-    dc_file_donuts_poisson = (
-      SCRIPT_DIR / "../../test/kombine/datacards/test_compile_km_plots/test_lung_donuts.txt"
-    )
-    # For testing, use the same datacards for all variants
-    dc_file_cells_flatfield_before = dc_file_cells_poisson
-    dc_file_cells_flatfield_after = dc_file_cells_poisson
-    dc_file_cells_combined = dc_file_cells_poisson
-    dc_file_donuts_flatfield_before = dc_file_donuts_poisson
-    dc_file_donuts_flatfield_after = dc_file_donuts_poisson
-    dc_file_donuts_combined = dc_file_donuts_poisson
-  else:
-    # Poisson-only datacards for panels A, B, F, G (binomial and Poisson errors)
-    dc_file_cells_poisson = (
-      SCRIPT_DIR / f"../../test/kombine/datacards/lung/poisson/datacard_cells_{survival_type}.txt"
-    )
-    dc_file_donuts_poisson = (
-      SCRIPT_DIR / f"../../test/kombine/datacards/lung/poisson/datacard_donuts_{survival_type}.txt"
-    )
-    # Flatfielding before correction for panels C, H
-    dc_file_cells_flatfield_before = (
-      SCRIPT_DIR / f"../../test/kombine/datacards/lung/uncorrected_flatfielding_systematic/"
-      f"datacard_cells_{survival_type}.txt"
-    )
-    dc_file_donuts_flatfield_before = (
-      SCRIPT_DIR / f"../../test/kombine/datacards/lung/uncorrected_flatfielding_systematic/"
-      f"datacard_donuts_{survival_type}.txt"
-    )
-    # Flatfielding after correction for panels D, I
-    dc_file_cells_flatfield_after = (
-      SCRIPT_DIR / f"../../test/kombine/datacards/lung/flatfielding_systematic/"
-      f"datacard_cells_{survival_type}.txt"
-    )
-    dc_file_donuts_flatfield_after = (
-      SCRIPT_DIR / f"../../test/kombine/datacards/lung/flatfielding_systematic/"
-      f"datacard_donuts_{survival_type}.txt"
-    )
-    # Combined (Poisson + flatfielding after correction) for panels E, J
-    dc_file_cells_combined = (
-      SCRIPT_DIR / f"../../test/kombine/datacards/lung/poisson_and_flatfielding/"
-      f"datacard_cells_{survival_type}.txt"
-    )
-    dc_file_donuts_combined = (
-      SCRIPT_DIR / f"../../test/kombine/datacards/lung/poisson_and_flatfielding/"
-      f"datacard_donuts_{survival_type}.txt"
-    )
+  # Define lung datacard root directory
+  lung_datacard_root = SCRIPT_DIR / "../../test/kombine/datacards/lung"
+
+  # Helper function to get datacard path based on testing flag for that panel
+  def get_datacard_path(panel_idx, cell_type, datacard_type):
+    """
+    Get datacard path for a specific panel.
+
+    Args:
+      panel_idx: Index in testing_flags (0-9 for panels A-J)
+      cell_type: 'cells' or 'donuts'
+      datacard_type: 'poisson', 'flatfield_before', 'flatfield_after', or 'combined'
+    """
+    if testing_flags[panel_idx]:
+      # Use test datacards
+      return lung_datacard_root / f"test_small_dataset/test_lung_{cell_type}.txt"
+
+    # Use production datacards
+    if datacard_type == 'poisson':
+      return lung_datacard_root / f"poisson/datacard_{cell_type}_{survival_type}.txt"
+    if datacard_type == 'flatfield_before':
+      return (lung_datacard_root /
+              f"uncorrected_flatfielding_systematic/datacard_{cell_type}_{survival_type}.txt")
+    if datacard_type == 'flatfield_after':
+      return (lung_datacard_root /
+              f"flatfielding_systematic/datacard_{cell_type}_{survival_type}.txt")
+    if datacard_type == 'combined':
+      return (lung_datacard_root /
+              f"poisson_and_flatfielding/datacard_{cell_type}_{survival_type}.txt")
+    raise ValueError(f"Unknown datacard_type: {datacard_type}")
+
+  # Load datacards for each panel
+  # Panels A, B use cells poisson; Panels F, G use donuts poisson
+  dc_file_cells_poisson = get_datacard_path(0, 'cells', 'poisson')  # Panel A
+  dc_file_donuts_poisson = get_datacard_path(5, 'donuts', 'poisson')  # Panel F
+
+  # Panels C, D use cells flatfield before/after; Panels H, I use donuts flatfield before/after
+  dc_file_cells_flatfield_before = get_datacard_path(2, 'cells', 'flatfield_before')  # Panel C
+  dc_file_cells_flatfield_after = get_datacard_path(3, 'cells', 'flatfield_after')  # Panel D
+  dc_file_donuts_flatfield_before = get_datacard_path(7, 'donuts', 'flatfield_before')  # Panel H
+  dc_file_donuts_flatfield_after = get_datacard_path(8, 'donuts', 'flatfield_after')  # Panel I
+
+  # Panels E, J use cells/donuts combined
+  dc_file_cells_combined = get_datacard_path(4, 'cells', 'combined')  # Panel E
+  dc_file_donuts_combined = get_datacard_path(9, 'donuts', 'combined')  # Panel J
 
   # Parse all datacards
+  print(f"  Loading datacards (testing flags: {testing_flags})...")
   datacard_cells_poisson = Datacard.parse_datacard(dc_file_cells_poisson)
   datacard_donuts_poisson = Datacard.parse_datacard(dc_file_donuts_poisson)
   datacard_cells_flatfield_before = Datacard.parse_datacard(dc_file_cells_flatfield_before)
@@ -517,6 +522,7 @@ def plot_lung_dataset(testing=False):
   print("  Processing cells...")
 
   # Row 0, Col 0: Panel A - Binomial uncertainties (cells)
+  print(f"    Creating panel A (binomial, cells, testing={testing_flags[0]})...")
   ax_a = fig.add_subplot(gs[0, 0])
   create_km_subplot(
     ax_a, datacard_cells_poisson, cell_threshold,
@@ -528,6 +534,7 @@ def plot_lung_dataset(testing=False):
   )
 
   # Row 0, Col 1: Panel B - Poisson uncertainties (cells)
+  print(f"    Creating panel B (Poisson, cells, testing={testing_flags[1]})...")
   ax_b = fig.add_subplot(gs[0, 1])
   create_km_subplot(
     ax_b, datacard_cells_poisson, cell_threshold,
@@ -539,28 +546,31 @@ def plot_lung_dataset(testing=False):
   )
 
   # Row 1, Col 0: Panel C - Flatfielding before correction (cells)
+  print(f"    Creating panel C (flatfield pre, cells, testing={testing_flags[2]})...")
   ax_c = fig.add_subplot(gs[1, 0])
   create_km_subplot(
     ax_c, datacard_cells_flatfield_before, cell_threshold,
     title='Flatfielding (Pre-Correction)',
-    include_full_nll=False,
-    include_patient_wise=True,
+    include_full_nll=True,
+    include_patient_wise=False,
     include_binomial=False,
     label='C'
   )
 
   # Row 1, Col 1: Panel D - Flatfielding after correction (cells)
+  print(f"    Creating panel D (flatfield post, cells, testing={testing_flags[3]})...")
   ax_d = fig.add_subplot(gs[1, 1])
   create_km_subplot(
     ax_d, datacard_cells_flatfield_after, cell_threshold,
     title='Flatfielding (Post-Correction)',
-    include_full_nll=False,
-    include_patient_wise=True,
+    include_full_nll=True,
+    include_patient_wise=False,
     include_binomial=False,
     label='D'
   )
 
   # Row 2, Col 0-1: Panel E - Combined uncertainties (cells) - spans 2 columns
+  print(f"    Creating panel E (combined, cells, testing={testing_flags[4]})...")
   ax_e = fig.add_subplot(gs[2, 0:2])
   create_km_subplot(
     ax_e, datacard_cells_combined, cell_threshold,
@@ -575,6 +585,7 @@ def plot_lung_dataset(testing=False):
   print("  Processing donuts...")
 
   # Row 0, Col 2: Panel F - Binomial uncertainties (DONUTS)
+  print(f"    Creating panel F (binomial, donuts, testing={testing_flags[5]})...")
   ax_f = fig.add_subplot(gs[0, 2])
   create_km_subplot(
     ax_f, datacard_donuts_poisson, donut_threshold,
@@ -586,6 +597,7 @@ def plot_lung_dataset(testing=False):
   )
 
   # Row 0, Col 3: Panel G - Poisson uncertainties (DONUTS)
+  print(f"    Creating panel G (Poisson, donuts, testing={testing_flags[6]})...")
   ax_g = fig.add_subplot(gs[0, 3])
   create_km_subplot(
     ax_g, datacard_donuts_poisson, donut_threshold,
@@ -597,28 +609,31 @@ def plot_lung_dataset(testing=False):
   )
 
   # Row 1, Col 2: Panel H - Flatfielding before correction (DONUTS)
+  print(f"    Creating panel H (flatfield pre, donuts, testing={testing_flags[7]})...")
   ax_h = fig.add_subplot(gs[1, 2])
   create_km_subplot(
     ax_h, datacard_donuts_flatfield_before, donut_threshold,
     title='Flatfielding (Pre-Correction)',
-    include_full_nll=False,
-    include_patient_wise=True,
+    include_full_nll=True,
+    include_patient_wise=False,
     include_binomial=False,
     label='H'
   )
 
   # Row 1, Col 3: Panel I - Flatfielding after correction (DONUTS)
+  print(f"    Creating panel I (flatfield post, donuts, testing={testing_flags[8]})...")
   ax_i = fig.add_subplot(gs[1, 3])
   create_km_subplot(
     ax_i, datacard_donuts_flatfield_after, donut_threshold,
     title='Flatfielding (Post-Correction)',
-    include_full_nll=False,
-    include_patient_wise=True,
+    include_full_nll=True,
+    include_patient_wise=False,
     include_binomial=False,
     label='I'
   )
 
   # Row 2, Col 2-3: Panel J - Combined uncertainties (DONUTS) - spans 2 columns
+  print(f"    Creating panel J (combined, donuts, testing={testing_flags[9]})...")
   ax_j = fig.add_subplot(gs[2, 2:4])
   create_km_subplot(
     ax_j, datacard_donuts_combined, donut_threshold,
@@ -669,10 +684,10 @@ def plot_lung_dataset(testing=False):
                bbox_to_anchor=(0.95, 0.01), frameon=True, fancybox=True)
 
   output_file = SCRIPT_DIR / f"lung_km_{survival_type}.pdf"
-  
+
   # Adjust layout to make room for column titles and legends
   plt.subplots_adjust(top=0.95, bottom=0.08)
-  
+
   # Save the figure
   plt.savefig(output_file)
   plt.close()
@@ -689,6 +704,7 @@ Examples (run from parent directory):
   python -m ROCPickerPaper.docs.kombine.compile_km_plots                    # Generate all plots
   python -m ROCPickerPaper.docs.kombine.compile_km_plots --testing          # Generate all plots with test data
   python -m ROCPickerPaper.docs.kombine.compile_km_plots --lung --testing   # Generate only lung plot with test data
+  python -m ROCPickerPaper.docs.kombine.compile_km_plots --lung --lung-production-panel A E  # Lung plot: panels A,E in production, others in testing
   python -m ROCPickerPaper.docs.kombine.compile_km_plots --greenwood --p-value  # Generate Greenwood and p-value plots
     """
   )
@@ -706,6 +722,10 @@ Examples (run from parent directory):
   # Testing option
   parser.add_argument('--testing', action='store_true',
                       help='Use smaller datasets for faster testing')
+  parser.add_argument('--lung-production-panel', type=str, nargs='+', metavar='PANEL',
+                      help='For lung plot, use production data for specified panel(s) '
+                           '(A-J, space-separated) and testing data for others. '
+                           'Example: --lung-production-panel A E')
 
   args = parser.parse_args()
 
@@ -728,7 +748,26 @@ Examples (run from parent directory):
     plot_compare_p_value(testing=args.testing)
 
   if generate_all or args.lung:
-    plot_lung_dataset(testing=args.testing)
+    # Handle lung plot testing options
+    lung_testing = args.testing
+    if args.lung_production_panel:
+      # Parse panel specification (e.g., ["A", "E"])
+      production_panels = [p.strip().upper() for p in args.lung_production_panel]
+      panel_names = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
+
+      # Validate panel names
+      invalid_panels = [p for p in production_panels if p not in panel_names]
+      if invalid_panels:
+        parser.error(f"Invalid panel name(s): {', '.join(invalid_panels)}. "
+                     f"Must be one of: {', '.join(panel_names)}")
+
+      # Create testing flags tuple (True = testing, False = production)
+      lung_testing = tuple(p not in production_panels for p in panel_names)
+      print(f"LUNG PLOT: Production panels: {', '.join(production_panels)}, "
+            f"Testing panels: {', '.join(p for p, t in zip(panel_names, lung_testing) if t)}")
+      print("=" * 60)
+
+    plot_lung_dataset(testing=lung_testing)
 
   print("=" * 60)
   print("Plot generation complete!")
