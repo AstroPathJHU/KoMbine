@@ -24,7 +24,7 @@ import subprocess
 import sys
 import warnings
 
-import matplotlib
+import matplotlib.lines
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -42,6 +42,7 @@ os.environ['PYTHONUNBUFFERED'] = '1'
 
 # Get script directory for relative file operations
 SCRIPT_DIR = pathlib.Path(__file__).parent.resolve()
+DATACARDS_DIR = SCRIPT_DIR / "../../test/kombine/datacards"
 
 # When run with `python -m docs.kombine.compile_km_plots`, the current directory
 # is already the repo root. We keep it there for imports to work correctly.
@@ -92,10 +93,9 @@ def plot_km_example(testing=False):
 
   if testing:
     # Use minimal datacard for testing (4 patients)
-    dc_file = SCRIPT_DIR / "../../test/kombine/datacards/simple_examples/simple_km_few_deaths.txt"
+    dc_file = DATACARDS_DIR / "simple_examples/simple_km_few_deaths.txt"
   else:
-    dc_file = SCRIPT_DIR / "../../test/kombine/datacards/simple_examples/poisson_ratio_km_censoring.txt"
-
+    dc_file = DATACARDS_DIR / "simple_examples/poisson_ratio_km_censoring.txt"
   datacard = Datacard.parse_datacard(dc_file)
 
   kml = datacard.km_likelihood(
@@ -150,10 +150,10 @@ def plot_compare_to_greenwood(testing=False):
 
   # Panel A: Small N (12 patients in production, 4 in testing)
   if testing:
-    dc_file = SCRIPT_DIR / "../../test/kombine/datacards/simple_examples/simple_km_few_deaths.txt"
+    dc_file = DATACARDS_DIR / "simple_examples/simple_km_few_deaths.txt"
     n_small_label = '$N=4$'
   else:
-    dc_file = SCRIPT_DIR / "../../test/kombine/datacards/simple_examples/fixed_km_censoring.txt"
+    dc_file = DATACARDS_DIR / "simple_examples/fixed_km_censoring.txt"
     n_small_label = '$N=12$'
   datacard_small = Datacard.parse_datacard(dc_file)
   kml_small = datacard_small.km_likelihood(
@@ -187,10 +187,10 @@ def plot_compare_to_greenwood(testing=False):
   # Panel B: Large N (100 patients in production, 4 in testing)
   if testing:
     # Use same minimal datacard for testing
-    dc_file = SCRIPT_DIR / "../../test/kombine/datacards/simple_examples/simple_km_few_deaths.txt"
+    dc_file = DATACARDS_DIR / "simple_examples/simple_km_few_deaths.txt"
     n_label = '$N=4$'
   else:
-    dc_file = SCRIPT_DIR / "../../test/kombine/datacards/simple_examples/fixed_km_censoring_many_patients.txt"
+    dc_file = DATACARDS_DIR / "simple_examples/fixed_km_censoring_many_patients.txt"
     n_label = '$N=100$'
 
   datacard_large = Datacard.parse_datacard(dc_file)
@@ -330,7 +330,7 @@ def plot_compare_p_value(testing=False):
   plt.close()
   print(f"  Saved {output_file}")
 
-def plot_lung_dataset(testing=False):
+def plot_lung_dataset(testing: bool | tuple[bool, ...] =False):
   """
   Generate lung dataset plot with 10 panels (A-J) in 3 rows:
   - Row 1: A, B (cells), F, G (DONUTS)
@@ -356,7 +356,7 @@ def plot_lung_dataset(testing=False):
   # Generate systematic datacards if needed (only if any panel is in production mode)
   if not all(testing_flags):
     print("  Generating systematic datacards...")
-    script_path = SCRIPT_DIR / "../../test/kombine/datacards/lung/generate_systematic_datacards.py"
+    script_path = DATACARDS_DIR / "lung/generate_systematic_datacards.py"
     subprocess.run([sys.executable, str(script_path)], check=True, text=True)
 
   survival_type = 'RFS'
@@ -373,7 +373,7 @@ def plot_lung_dataset(testing=False):
     raise ValueError(f"Unknown survival type: {survival_type}")
 
   # Define lung datacard root directory
-  lung_datacard_root = SCRIPT_DIR / "../../test/kombine/datacards/lung"
+  lung_datacard_root = DATACARDS_DIR / "lung"
 
   # Helper function to get datacard path based on testing flag for that panel
   def get_datacard_path(panel_idx, cell_type, datacard_type):
@@ -669,9 +669,11 @@ def plot_lung_dataset(testing=False):
   # Add a vertical line to separate cells (left) from DONUTS (right)
   # The line goes between columns 1 and 2 (between indices 1.5)
   line_x = 0.5  # Middle of the figure
-  fig.add_artist(plt.Line2D([line_x, line_x], [0.05, 0.95],
-                             transform=fig.transFigure,
-                             color='black', linewidth=2, linestyle='-'))
+  fig.add_artist(matplotlib.lines.Line2D(
+    [line_x, line_x], [0.05, 0.95],
+    transform=fig.transFigure,
+    color='black', linewidth=2, linestyle='-')
+  )
 
   # Get legend handles and labels from the combined plots (no "Binomial only" text)
   handles_cells, labels_cells = ax_e.get_legend_handles_labels()
