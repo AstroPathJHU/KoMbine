@@ -660,17 +660,23 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False):
 
   output_file = SCRIPT_DIR / f"lung_km_{survival_type}.pdf"
 
-  # Adjust layout to make room for column titles and legends
-  # Remove left/right margins, more space at top for titles, keep space at bottom for legends
-  plt.subplots_adjust(left=0.02, right=0.98, top=0.96, bottom=0.08)
+  # Adjust layout to make room for column titles, legends, and subplot labels
+  # Small margins to accommodate subplot labels (A,C,E on left; F,H,J on right)
+  # More space at top for titles, space at bottom for legends
+  plt.subplots_adjust(left=0.05, right=0.95, top=0.96, bottom=0.08)
 
   # Calculate column title positions based on actual subplot positions
-  # After adjusting margins, the plots span from left=0.02 to right=0.98
-  # Left column (cells) spans from 0.02 to ~0.48 (accounting for wspace)
-  # Right column (donuts) spans from ~0.52 to 0.98
-  # Center line is at 0.5
-  left_col_center = 0.02 + (0.5 - 0.02) / 2  # Center of left half
-  right_col_center = 0.5 + (0.98 - 0.5) / 2  # Center of right half
+  # After adjusting margins, the plots span from left=0.05 to right=0.95
+  # The center line is at 0.5, dividing left and right columns
+  left_margin = 0.05
+  right_margin = 0.95
+  center_line = 0.5
+  
+  # Calculate centers accounting for margins and center line
+  # Left column: from left_margin to just before center_line
+  left_col_center = left_margin + (center_line - left_margin) / 2
+  # Right column: from just after center_line to right_margin
+  right_col_center = center_line + (right_margin - center_line) / 2
 
   # Add column titles at the top, centered above their respective columns
   fig.text(left_col_center, 0.99, 'CD8+FoxP3+ Cells', ha='center', va='top',
@@ -699,13 +705,13 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False):
     ncol_cells = (len(handles_cells) + 1) // 2
     fig.legend(handles_cells, labels_cells, loc='lower left',
                ncol=ncol_cells, fontsize=FONT_SIZES['legend'],
-               bbox_to_anchor=(left_col_center - 0.2, 0.01), frameon=True, fancybox=True)
+               bbox_to_anchor=(left_col_center - 0.18, 0.01), frameon=True, fancybox=True)
 
   if handles_donuts:
     ncol_donuts = (len(handles_donuts) + 1) // 2
     fig.legend(handles_donuts, labels_donuts, loc='lower right',
                ncol=ncol_donuts, fontsize=FONT_SIZES['legend'],
-               bbox_to_anchor=(right_col_center + 0.2, 0.01), frameon=True, fancybox=True)
+               bbox_to_anchor=(right_col_center + 0.18, 0.01), frameon=True, fancybox=True)
 
   # Save the figure
   plt.savefig(output_file)
