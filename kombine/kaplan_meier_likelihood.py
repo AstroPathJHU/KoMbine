@@ -63,6 +63,8 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   print_progress: If True, print progress messages during calculations.
   MIPGap: Relative MIP gap for the optimization solver.
   MIPGapAbs: Absolute MIP gap for the optimization solver.
+  rerun_until_convergence: If True, rerun the MINLP optimization until the result
+                          converges within tolerances between consecutive iterations.
   include_median_survival: If True, include the median survival time in the legend.
   title: Title for the plot.
   xlabel: Label for the x-axis.
@@ -113,6 +115,7 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   print_progress: bool = False
   MIPGap: float | None = None
   MIPGapAbs: float | None = None
+  rerun_until_convergence: bool = False
   include_median_survival: bool = False
   title: str | None = "Kaplan-Meier Curves"
   xlabel: str = "Time"
@@ -260,12 +263,18 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     print_progress=False,
     MIPGap=None,
     MIPGapAbs=None,
+    rerun_until_convergence=False,
   ) -> tuple[
     collections.abc.Callable[[float | None], scipy.optimize.OptimizeResult],
     collections.abc.Callable[[float | None], float],
   ]:
     """
     Get the twoNLL function for the given time point.
+
+    Args:
+      rerun_until_convergence: If True, run the MINLP at least twice, repeating
+                              until result.x converges within MIPGap and MIPGapAbs
+                              tolerances between consecutive iterations.
     """
     if MIPGap is None:
       MIPGap = self.__default_MIPGap
@@ -278,7 +287,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       """
       Run the MINLP for the given expected probability.
       """
-      return minlp.run_MINLP(
+      result = minlp.run_MINLP(
         expected_probability=expected_probability,
         binomial_only=binomial_only,
         patient_wise_only=patient_wise_only,
@@ -287,6 +296,43 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         MIPGap=MIPGap,
         MIPGapAbs=MIPGapAbs,
       )
+
+      if not rerun_until_convergence or not result.success:
+        return result
+
+      # Rerun until convergence: repeat until result.x is stable between iterations
+      prev_x = result.x
+      max_iterations = 10  # Safety limit to prevent infinite loops
+      iteration = 1
+
+      while iteration < max_iterations:
+        result = minlp.run_MINLP(
+          expected_probability=expected_probability,
+          binomial_only=binomial_only,
+          patient_wise_only=patient_wise_only,
+          verbose=verbose,
+          print_progress=print_progress,
+          MIPGap=MIPGap,
+          MIPGapAbs=MIPGapAbs,
+        )
+
+        if not result.success:
+          # If rerun fails, return the last successful result
+          break
+
+        # Check convergence using both relative and absolute tolerances
+        abs_diff = abs(result.x - prev_x)
+        rel_diff = abs_diff / max(abs(prev_x), 1e-10)  # Avoid division by zero
+
+        if abs_diff <= MIPGapAbs and rel_diff <= MIPGap:
+          # Converged
+          break
+
+        prev_x = result.x
+        iteration += 1
+
+      return result
+
     @InspectableCache
     def twoNLL(expected_probability: float | None) -> float:
       """
@@ -372,6 +418,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     print_progress=False,
     MIPGap=None,
     MIPGapAbs=None,
+    rerun_until_convergence=False,
   ) -> tuple[np.ndarray, np.ndarray]:
     """
     Get the survival probabilities for the given quantiles.
@@ -396,6 +443,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         Gurobi MIP gap tolerance (used for objective function tolerance)
     MIPGapAbs : float, optional
         Gurobi absolute MIP gap tolerance (used for objective function tolerance)
+    rerun_until_convergence : bool, default False
+        If True, rerun the MINLP until the result converges within tolerances
         
     Returns
     -------
@@ -426,6 +475,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         print_progress=print_progress,
         MIPGap=MIPGap,
         MIPGapAbs=MIPGapAbs,
+        rerun_until_convergence=rerun_until_convergence,
       )
       # Find the expected probability that minimizes the negative log-likelihood
       # for the given time point
@@ -760,6 +810,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         print_progress=config.print_progress,
         MIPGap=config.MIPGap,
         MIPGapAbs=config.MIPGapAbs,
+        rerun_until_convergence=config.rerun_until_convergence,
       )
 
     if config.include_binomial_only:
@@ -770,6 +821,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         print_progress=config.print_progress,
         MIPGap=config.MIPGap,
         MIPGapAbs=config.MIPGapAbs,
+        rerun_until_convergence=config.rerun_until_convergence,
       )
 
     if config.include_exponential_greenwood:
@@ -787,6 +839,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         print_progress=config.print_progress,
         MIPGap=config.MIPGap,
         MIPGapAbs=config.MIPGapAbs,
+        rerun_until_convergence=config.rerun_until_convergence,
       )
 
     # --- determine which set is the 'best' (preserve original precedence) ---

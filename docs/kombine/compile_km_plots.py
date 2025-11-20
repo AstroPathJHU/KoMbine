@@ -20,6 +20,8 @@ Multiple plot options can be combined to generate specific subsets.
 import argparse
 import os
 import pathlib
+import subprocess
+import sys
 import warnings
 
 import matplotlib
@@ -28,8 +30,6 @@ import numpy as np
 
 from kombine.datacard import Datacard
 from kombine.kaplan_meier_likelihood import KaplanMeierPlotConfig
-
-from ...test.kombine.datacards.lung.generate_systematic_datacards import main as generate_systematic_datacards
 
 from .compare_p_value import simulate_pvalues, plot_pvalue_comparison, PlotConfig
 
@@ -355,7 +355,13 @@ def plot_lung_dataset(testing=False):
 
   # Generate systematic datacards if needed (only if any panel is in production mode)
   if not all(testing_flags):
-    generate_systematic_datacards()
+    print("  Generating systematic datacards...")
+    script_path = SCRIPT_DIR / "../../test/kombine/datacards/lung/generate_systematic_datacards.py"
+    result = subprocess.run([sys.executable, str(script_path)], check=True, capture_output=True, text=True)
+    if result.stdout:
+      print(result.stdout, end='')
+    if result.returncode != 0:
+      raise RuntimeError(f"Failed to generate systematic datacards: {result.stderr}")
 
   survival_type = 'RFS'
 
@@ -429,7 +435,8 @@ def plot_lung_dataset(testing=False):
 
   # Helper function to create KM plot for a specific configuration
   def create_km_subplot(ax, datacard, threshold, title, include_full_nll,
-                        include_patient_wise, include_binomial, label, label_x=-0.15):
+                        include_patient_wise, include_binomial, label, label_x=-0.15,
+                        rerun_until_convergence=False):
     # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-locals
     """Create a single KM subplot."""
     plt.sca(ax)
@@ -462,6 +469,7 @@ def plot_lung_dataset(testing=False):
       'pvalue_format': '.2f',
       'include_nominal': False,
       'include_full_NLL': include_full_nll,
+      'rerun_until_convergence': rerun_until_convergence,
       'include_patient_wise_only': include_patient_wise,
       'include_binomial_only': include_binomial,
     }
@@ -518,7 +526,7 @@ def plot_lung_dataset(testing=False):
   # Row 2: C, D (cells) | H, I (DONUTS) - 4 small plots
   # Row 3: E (cells) | J (DONUTS) - 2 larger plots (taller to keep them square)
   fig = plt.figure(figsize=(21, 21))  # Increased height for taller bottom plots
-  gs = fig.add_gridspec(3, 4, hspace=0.40, wspace=0.35, height_ratios=[1, 1, 2])
+  gs = fig.add_gridspec(3, 4, hspace=0.25, wspace=0.35, height_ratios=[1, 1, 2])
 
   print("  Processing cells...")
 
@@ -615,10 +623,11 @@ def plot_lung_dataset(testing=False):
   create_km_subplot(
     ax_h, datacard_donuts_flatfield_before, donut_threshold,
     title='Flatfielding\n(Pre-Correction)',
-    include_full_nll=False,
-    include_patient_wise=True,
+    include_full_nll=True,
+    include_patient_wise=False,
     include_binomial=False,
-    label='H'
+    label='H',
+    rerun_until_convergence=True
   )
 
   # Row 1, Col 3: Panel I - Flatfielding after correction (DONUTS)
@@ -653,10 +662,12 @@ def plot_lung_dataset(testing=False):
     if legend is not None:
       legend.remove()
 
-  # Add column titles at the top
-  fig.text(0.25, 0.98, 'CD8+FoxP3+ Cells', ha='center', va='top',
+  # Add column titles at the top, centered above their respective columns
+  # Left column (cells) spans columns 0-1, center at 0.25
+  # Right column (donuts) spans columns 2-3, center at 0.75
+  fig.text(0.25, 0.99, 'CD8+FoxP3+ Cells', ha='center', va='top',
            fontsize=FONT_SIZES['suptitle'], fontweight='bold')
-  fig.text(0.75, 0.98, 'DONUTS', ha='center', va='top',
+  fig.text(0.75, 0.99, 'DONUTS', ha='center', va='top',
            fontsize=FONT_SIZES['suptitle'], fontweight='bold')
 
   # Add a vertical line to separate cells (left) from DONUTS (right)
@@ -687,7 +698,8 @@ def plot_lung_dataset(testing=False):
   output_file = SCRIPT_DIR / f"lung_km_{survival_type}.pdf"
 
   # Adjust layout to make room for column titles and legends
-  plt.subplots_adjust(top=0.95, bottom=0.08)
+  # More space at top for titles, keep space at bottom for legends
+  plt.subplots_adjust(top=0.96, bottom=0.08)
 
   # Save the figure
   plt.savefig(output_file)
