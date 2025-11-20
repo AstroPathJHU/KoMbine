@@ -136,7 +136,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
         method='Powell',
         options={
           #loose tolerance - we don't actually care about the values of the nuisance parameters
-          "gtol": 1e-3,
+          "ftol": 1e-3,
         }
       )
       if not res.success:

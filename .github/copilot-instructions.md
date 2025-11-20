@@ -121,78 +121,77 @@ kml = datacard.km_likelihood(parameter_min=-float('inf'), parameter_max=0.45)
 # Returns KaplanMeierLikelihood object
 ```
 
-### Gurobi License Setup and Limitations (CRITICAL for KoMbine)
+### Gurobi License Setup (CRITICAL for KoMbine)
 
 **Gurobi License Configuration**:
-KoMbine's Kaplan-Meier likelihood methods require Gurobi optimizer. The Copilot GitHub Actions environment has access to Gurobi Web License Service (WLS) credentials via environment variables:
+KoMbine's Kaplan-Meier likelihood methods require Gurobi optimizer. The Copilot GitHub Actions environment has access to Gurobi Web License Service (WLS) academic license via environment variables:
 
 - `GUROBI_WLSACCESSID` - WLS access ID
-- `GUROBI_WLSSECRET` - WLS secret key  
+- `GUROBI_WLSSECRET` - WLS secret key
 - `GUROBI_LICENSEID` - License ID
 
-**IMPORTANT**: The Copilot environment blocks access to `token.gurobi.com`, preventing the WLS academic license from being activated. Gurobi falls back to a temporary restricted license that expires 2027-11-29.
+**Setting up the unrestricted academic license in Copilot environment**:
 
-To use the WLS license in CI/CD (where network access is available), create a license file as shown in `.github/workflows/ci-cd.yml`:
+Create a license file in the home directory:
 
 ```bash
 cat <<EOF > ~/gurobi.lic
-WLSACCESSID=${{ secrets.GUROBI_WLSACCESSID }}
-WLSSECRET=${{ secrets.GUROBI_WLSSECRET }}
-LICENSEID=${{ secrets.GUROBI_LICENSEID }}
+WLSACCESSID=${GUROBI_WLSACCESSID}
+WLSSECRET=${GUROBI_WLSSECRET}
+LICENSEID=${GUROBI_LICENSEID}
 EOF
 ```
 
-In the Copilot environment, Gurobi automatically uses the restricted license without additional setup. Just import and use:
+This activates the WLS academic license (requires network access to `token.gurobi.com`, which is now allowed in the Copilot environment). When you import gurobipy, it will automatically use this license:
 
 ```python
 import gurobipy
-env = gurobipy.Env()  # Uses restricted license (network blocked)
-# Use the environment...
-env.dispose()
+env = gurobipy.Env()  # Uses WLS academic license from ~/gurobi.lic
+# Academic license 2671493 - for non-commercial use only - registered to hr___@jhu.edu
 ```
 
-**License Limitations**:
-The restricted Gurobi license causes failures on large models with the error:
-```
-GurobiError: Model too large for size-limited license
-```
+**License capabilities**:
+With the unrestricted WLS academic license, you can:
+- Run all KoMbine tests including `test_km_likelihood.py` with large datasets
+- Generate full KoMbine documentation plots without size restrictions
+- Run MINLP optimizations on models with hundreds of variables and constraints
+- Execute the full lung cancer dataset analysis with 100+ patients
 
-**What works without full Gurobi license**:
+**What works without setting up the license file**:
+If you don't create the license file, Gurobi falls back to a temporary restricted license (expires 2027-11-29) that works for:
 - All ROC Picker functionality (`test/roc_picker/` tests)
 - Basic KoMbine discrete optimization (`test/kombine/test_discrete_optimization.py`)
-- Small KoMbine datasets with few patients
+- Small KoMbine datasets (< 5 patients) for testing plot generation
 
-**What requires full Gurobi license**:
-- Large KoMbine likelihood tests (`test/kombine/test_km_likelihood.py` with many patients)
-- Full KoMbine documentation compilation (some plots)
+**CI/CD License Setup**:
+In `.github/workflows/ci-cd.yml`, the license is set up similarly using GitHub secrets:
+```yaml
+- name: Set up Gurobi license
+  run: |
+    cat <<EOF > ~/gurobi.lic
+    WLSACCESSID=${{ secrets.GUROBI_WLSACCESSID }}
+    WLSSECRET=${{ secrets.GUROBI_WLSSECRET }}
+    LICENSEID=${{ secrets.GUROBI_LICENSEID }}
+    EOF
+```
 
-**Testing KoMbine plotting code without full Gurobi license**:
+**Test Datacards for Development**:
 
-Use these small datacards for testing (they work with restricted license):
-- `test/kombine/datacards/simple_examples/simple_km_few_deaths.txt` - Very small test case
-- `test/kombine/datacards/simple_examples/fixed_km_censoring.txt` - 12 patients (works)
-- `test/kombine/datacards/lung/test_small_dataset/test_lung_cells.txt` - 3 patients for testing cells plots
-- `test/kombine/datacards/lung/test_small_dataset/test_lung_donuts.txt` - 3 patients for testing donuts plots
+Small datacards for quick testing (work even with restricted license):
+- `test/kombine/datacards/simple_examples/simple_km_few_deaths.txt` - 4 timepoints, minimal test case
+- `test/kombine/datacards/lung/test_small_dataset/test_lung_cells.txt` - 3 patients for cells plots
+- `test/kombine/datacards/lung/test_small_dataset/test_lung_donuts.txt` - 3 patients for DONUTS plots
 
-Avoid these for testing (require full license):
+Production datacards (require unrestricted license):
+- `test/kombine/datacards/simple_examples/fixed_km_censoring.txt` - 12 patients
 - `test/kombine/datacards/simple_examples/fixed_km_censoring_many_patients.txt` - 100 patients
-- `test/kombine/datacards/lung/*` - Real lung cancer data with many patients
+- `test/kombine/datacards/lung/lung_cells.txt` - Full lung cancer cells dataset
+- `test/kombine/datacards/lung/lung_donuts.txt` - Full lung cancer DONUTS dataset
 
-When testing plotting code that uses KoMbine API, always use the small datacards listed above.
-
-**compile_km_plots.py testing mode**:
-The `--testing` flag in `docs/kombine/compile_km_plots.py` generates plots compatible with restricted Gurobi license:
-- **km_example**: Uses simple_km_few_deaths.txt (4 timepoints) - ✓ works with restricted license
-- **greenwood comparison**: Uses simple_km_few_deaths.txt (4 timepoints) - ✓ works with restricted license
-- **p-value comparison**: Skipped in testing mode (MINLP optimization too complex even with minimal patients)
-- **lung dataset**: Skipped in testing mode (KM likelihood optimization too complex even with minimal patients)
-
-For LaTeX compilation with restricted Gurobi license:
-1. Run `python -m ROCPickerPaper.docs.kombine.compile_km_plots --testing` (from parent directory) to generate km_example and greenwood plots
-2. Temporarily remove p_value_comparison and lung_km_RFS figure includes from LaTeX (don't commit)
-3. Compile LaTeX: `cd docs/kombine && pdflatex 02_kombine.tex`
-
-Verified working as of 2025-11-19: `python -m ROCPickerPaper.docs.kombine.compile_km_plots --testing` completes successfully with restricted license
+**compile_km_plots.py modes**:
+- `--testing`: Uses small test datasets, works with restricted license, generates km_example and greenwood plots only
+- Production mode (default): Uses full datasets, requires unrestricted license, generates all plots including p-value comparison and lung_km_RFS
+- `--lung-production-panel A B ...`: Mixed mode - specified panels use production data, others use test data (useful for debugging specific panels)
 
 ## Testing Commands
 
@@ -203,11 +202,13 @@ python -m test.roc_picker.test_systematics_mc        # ~10 seconds
 python test/roc_picker/test_continuous_distributions.py  # ~5 seconds
 ```
 
-### KoMbine Tests
+### KoMbine Tests (require unrestricted Gurobi license)
 ```bash
-python -m test.kombine.test_discrete_optimization    # ~90 seconds, works with restricted license
-python -m test.kombine.test_km_likelihood           # May fail with "Model too large" on restricted license
+python -m test.kombine.test_discrete_optimization    # ~90 seconds
+python -m test.kombine.test_km_likelihood           # ~2 minutes, requires unrestricted license
 ```
+
+**Note**: Always set up the Gurobi license file (see above) before running KoMbine tests.
 
 ### Linting and Code Quality
 ```bash
