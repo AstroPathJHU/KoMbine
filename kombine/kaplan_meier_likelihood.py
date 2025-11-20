@@ -1,3 +1,4 @@
+#pylint: disable=too-many-lines
 """
 Kaplan-Meier curve with error bars calculated using the log-likelihood method.
 """
@@ -317,7 +318,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
             MIPGap=MIPGap,
             MIPGapAbs=MIPGapAbs,
           )
-        except Exception:
+        except Exception: #pylint: disable=broad-exception-caught
           # If rerun raises an exception, return the last successful result
           return last_successful_result
 
