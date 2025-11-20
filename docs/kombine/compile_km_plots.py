@@ -551,7 +551,7 @@ def plot_lung_dataset(testing=False):
   ax_c = fig.add_subplot(gs[1, 0])
   create_km_subplot(
     ax_c, datacard_cells_flatfield_before, cell_threshold,
-    title='Flatfielding (Pre-Correction)',
+    title='Flatfielding\n(Pre-Correction)',
     include_full_nll=False,
     include_patient_wise=True,
     include_binomial=False,
@@ -563,7 +563,7 @@ def plot_lung_dataset(testing=False):
   ax_d = fig.add_subplot(gs[1, 1])
   create_km_subplot(
     ax_d, datacard_cells_flatfield_after, cell_threshold,
-    title='Flatfielding (Post-Correction)',
+    title='Flatfielding\n(Post-Correction)',
     include_full_nll=False,
     include_patient_wise=True,
     include_binomial=False,
@@ -614,7 +614,7 @@ def plot_lung_dataset(testing=False):
   ax_h = fig.add_subplot(gs[1, 2])
   create_km_subplot(
     ax_h, datacard_donuts_flatfield_before, donut_threshold,
-    title='Flatfielding (Pre-Correction)',
+    title='Flatfielding\n(Pre-Correction)',
     include_full_nll=False,
     include_patient_wise=True,
     include_binomial=False,
@@ -626,7 +626,7 @@ def plot_lung_dataset(testing=False):
   ax_i = fig.add_subplot(gs[1, 3])
   create_km_subplot(
     ax_i, datacard_donuts_flatfield_after, donut_threshold,
-    title='Flatfielding (Post-Correction)',
+    title='Flatfielding\n(Post-Correction)',
     include_full_nll=False,
     include_patient_wise=True,
     include_binomial=False,
