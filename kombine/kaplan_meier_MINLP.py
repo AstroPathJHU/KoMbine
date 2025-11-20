@@ -102,7 +102,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       res = scipy.optimize.minimize(
         obj,
         x0=np.array([0.0]),
-        method='BFGS',
+        method='Powell',
       )
       if not res.success:
         raise RuntimeError(f"Optimization failed:\n{res}")
@@ -133,7 +133,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       res = scipy.optimize.minimize(
         obj,
         x0=np.zeros(len(var_types)),
-        method='BFGS',
+        method='Powell',
         options={
           #loose tolerance - we don't actually care about the values of the nuisance parameters
           "gtol": 1e-3,
