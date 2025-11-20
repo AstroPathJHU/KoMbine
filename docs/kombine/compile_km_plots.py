@@ -357,11 +357,7 @@ def plot_lung_dataset(testing=False):
   if not all(testing_flags):
     print("  Generating systematic datacards...")
     script_path = SCRIPT_DIR / "../../test/kombine/datacards/lung/generate_systematic_datacards.py"
-    result = subprocess.run([sys.executable, str(script_path)], check=True, capture_output=True, text=True)
-    if result.stdout:
-      print(result.stdout, end='')
-    if result.returncode != 0:
-      raise RuntimeError(f"Failed to generate systematic datacards: {result.stderr}")
+    subprocess.run([sys.executable, str(script_path)], check=True, text=True)
 
   survival_type = 'RFS'
 
@@ -623,8 +619,8 @@ def plot_lung_dataset(testing=False):
   create_km_subplot(
     ax_h, datacard_donuts_flatfield_before, donut_threshold,
     title='Flatfielding\n(Pre-Correction)',
-    include_full_nll=True,
-    include_patient_wise=False,
+    include_full_nll=False,
+    include_patient_wise=True,
     include_binomial=False,
     label='H',
     rerun_until_convergence=True
