@@ -121,9 +121,38 @@ kml = datacard.km_likelihood(parameter_min=-float('inf'), parameter_max=0.45)
 # Returns KaplanMeierLikelihood object
 ```
 
-### Gurobi License Limitation (CRITICAL for KoMbine)
+### Gurobi License Setup and Limitations (CRITICAL for KoMbine)
 
-**WARNING**: KoMbine's Kaplan-Meier likelihood methods require Gurobi optimizer. The restricted Gurobi license causes failures on large models with the error:
+**Gurobi License Configuration**:
+KoMbine's Kaplan-Meier likelihood methods require Gurobi optimizer. The Copilot GitHub Actions environment has access to Gurobi Web License Service (WLS) credentials via environment variables:
+
+- `GUROBI_WLSACCESSID` - WLS access ID
+- `GUROBI_WLSSECRET` - WLS secret key  
+- `GUROBI_LICENSEID` - License ID
+
+**IMPORTANT**: The Copilot environment blocks access to `token.gurobi.com`, preventing the WLS academic license from being activated. Gurobi falls back to a temporary restricted license that expires 2027-11-29.
+
+To use the WLS license in CI/CD (where network access is available), create a license file as shown in `.github/workflows/ci-cd.yml`:
+
+```bash
+cat <<EOF > ~/gurobi.lic
+WLSACCESSID=${{ secrets.GUROBI_WLSACCESSID }}
+WLSSECRET=${{ secrets.GUROBI_WLSSECRET }}
+LICENSEID=${{ secrets.GUROBI_LICENSEID }}
+EOF
+```
+
+In the Copilot environment, Gurobi automatically uses the restricted license without additional setup. Just import and use:
+
+```python
+import gurobipy
+env = gurobipy.Env()  # Uses restricted license (network blocked)
+# Use the environment...
+env.dispose()
+```
+
+**License Limitations**:
+The restricted Gurobi license causes failures on large models with the error:
 ```
 GurobiError: Model too large for size-limited license
 ```

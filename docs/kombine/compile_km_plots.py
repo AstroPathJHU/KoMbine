@@ -522,7 +522,9 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False):
   # Row 2: C, D (cells) | H, I (DONUTS) - 4 small plots
   # Row 3: E (cells) | J (DONUTS) - 2 larger plots (taller to keep them square)
   fig = plt.figure(figsize=(21, 21))  # Increased height for taller bottom plots
-  gs = fig.add_gridspec(3, 4, hspace=0.25, wspace=0.35, height_ratios=[1, 1, 2])
+  # Increased wspace to 0.50 to create more space between columns, preventing right column
+  # subfigure labels (F, H, J) and axis labels from overlapping the vertical separator line
+  gs = fig.add_gridspec(3, 4, hspace=0.25, wspace=0.50, height_ratios=[1, 1, 2])
 
   print("  Processing cells...")
 
@@ -671,7 +673,7 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False):
   left_margin = 0.05
   right_margin = 0.95
   center_line = 0.5
-  
+
   # Calculate centers accounting for margins and center line
   # Left column: from left_margin to just before center_line
   left_col_center = left_margin + (center_line - left_margin) / 2
