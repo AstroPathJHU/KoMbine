@@ -658,17 +658,31 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False):
     if legend is not None:
       legend.remove()
 
+  output_file = SCRIPT_DIR / f"lung_km_{survival_type}.pdf"
+
+  # Adjust layout to make room for column titles and legends
+  # Remove left/right margins, more space at top for titles, keep space at bottom for legends
+  plt.subplots_adjust(left=0.02, right=0.98, top=0.96, bottom=0.08)
+
+  # Calculate column title positions based on actual subplot positions
+  # After adjusting margins, the plots span from left=0.02 to right=0.98
+  # Left column (cells) spans from 0.02 to ~0.48 (accounting for wspace)
+  # Right column (donuts) spans from ~0.52 to 0.98
+  # Center line is at 0.5
+  left_col_center = 0.02 + (0.5 - 0.02) / 2  # Center of left half
+  right_col_center = 0.5 + (0.98 - 0.5) / 2  # Center of right half
+
   # Add column titles at the top, centered above their respective columns
-  # Left column (cells) spans columns 0-1, center at 0.25
-  # Right column (donuts) spans columns 2-3, center at 0.75
-  fig.text(0.25, 0.99, 'CD8+FoxP3+ Cells', ha='center', va='top',
-           fontsize=FONT_SIZES['suptitle'], fontweight='bold')
-  fig.text(0.75, 0.99, 'DONUTS', ha='center', va='top',
-           fontsize=FONT_SIZES['suptitle'], fontweight='bold')
+  fig.text(left_col_center, 0.99, 'CD8+FoxP3+ Cells', ha='center', va='top',
+           fontsize=FONT_SIZES['suptitle'], fontweight='bold',
+           transform=fig.transFigure)
+  fig.text(right_col_center, 0.99, 'DONUTS', ha='center', va='top',
+           fontsize=FONT_SIZES['suptitle'], fontweight='bold',
+           transform=fig.transFigure)
 
   # Add a vertical line to separate cells (left) from DONUTS (right)
-  # The line goes between columns 1 and 2 (between indices 1.5)
-  line_x = 0.5  # Middle of the figure
+  # The line goes at x=0.5 (middle of the figure)
+  line_x = 0.5
   fig.add_artist(matplotlib.lines.Line2D(
     [line_x, line_x], [0.05, 0.95],
     transform=fig.transFigure,
@@ -685,19 +699,13 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False):
     ncol_cells = (len(handles_cells) + 1) // 2
     fig.legend(handles_cells, labels_cells, loc='lower left',
                ncol=ncol_cells, fontsize=FONT_SIZES['legend'],
-               bbox_to_anchor=(0.05, 0.01), frameon=True, fancybox=True)
+               bbox_to_anchor=(left_col_center - 0.2, 0.01), frameon=True, fancybox=True)
 
   if handles_donuts:
     ncol_donuts = (len(handles_donuts) + 1) // 2
     fig.legend(handles_donuts, labels_donuts, loc='lower right',
                ncol=ncol_donuts, fontsize=FONT_SIZES['legend'],
-               bbox_to_anchor=(0.95, 0.01), frameon=True, fancybox=True)
-
-  output_file = SCRIPT_DIR / f"lung_km_{survival_type}.pdf"
-
-  # Adjust layout to make room for column titles and legends
-  # More space at top for titles, keep space at bottom for legends
-  plt.subplots_adjust(top=0.96, bottom=0.08)
+               bbox_to_anchor=(right_col_center + 0.2, 0.01), frameon=True, fancybox=True)
 
   # Save the figure
   plt.savefig(output_file)

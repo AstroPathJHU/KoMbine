@@ -302,23 +302,28 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
       # Rerun until convergence: repeat until result.x is stable between iterations
       prev_x = result.x
+      last_successful_result = result
       max_iterations = 10  # Safety limit to prevent infinite loops
       iteration = 1
 
       while iteration < max_iterations:
-        result = minlp.run_MINLP(
-          expected_probability=expected_probability,
-          binomial_only=binomial_only,
-          patient_wise_only=patient_wise_only,
-          verbose=verbose,
-          print_progress=print_progress,
-          MIPGap=MIPGap,
-          MIPGapAbs=MIPGapAbs,
-        )
+        try:
+          result = minlp.run_MINLP(
+            expected_probability=expected_probability,
+            binomial_only=binomial_only,
+            patient_wise_only=patient_wise_only,
+            verbose=verbose,
+            print_progress=print_progress,
+            MIPGap=MIPGap,
+            MIPGapAbs=MIPGapAbs,
+          )
+        except Exception:
+          # If rerun raises an exception, return the last successful result
+          return last_successful_result
 
         if not result.success:
           # If rerun fails, return the last successful result
-          break
+          return last_successful_result
 
         # Check convergence using both relative and absolute tolerances
         abs_diff = abs(result.x - prev_x)
@@ -329,6 +334,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           break
 
         prev_x = result.x
+        last_successful_result = result
         iteration += 1
 
       return result
