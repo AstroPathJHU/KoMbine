@@ -188,7 +188,7 @@ where \(p_i^\text{s}\) is the probability that a patient who has survived until 
 
 \subsection{Greenwood confidence intervals}\label{sec:greenwood}
 
-As mentioned earlier, most \KM{} curve packages provide confidence intervals using some variation of Greenwood's formula. At confidence level \(1-\alpha\), Greenwood's interval is given by
+As mentioned earlier, confidence intervals on \KM{} curves are typically estimated using some variation of Greenwood's formula. At confidence level \(1-\alpha\), Greenwood's interval is given by
 \begin{equation}
 \label{eq:greenwood}
 S(t)\in\hat{S}(t) \pm z_{\alpha/2} \sqrt{{\hat{S}(t)}^2{\sum_{i=1}^{n} \frac{d_i}{r_i(r_i-d_i)}}},
@@ -203,7 +203,7 @@ where \(\hat{S}\) is the nominal value of the survival function, given by Eq.~(\
 
 With large numbers of patients, these approximations hold, but their validity decreases for smaller cohort sizes. Our log likelihood method avoids these approximations.
 
-\subsection{Log likelihood implementation}
+\subsection{Log likelihood method}
 
 For clarity, we will distinguish the two types of uncertainty: the statistical uncertainty from the finite number of patients (which we will call the ``binomial uncertainty'') and the patient-wise uncertainty.
 
