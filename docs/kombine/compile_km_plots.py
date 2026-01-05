@@ -529,7 +529,7 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False, survival_type: st
   fig = plt.figure(figsize=(21, 21))  # Increased height for taller bottom plots
   # Increased wspace to 0.50 to create more space between columns, preventing right column
   # subfigure labels (F, H, J) and axis labels from overlapping the vertical separator line
-  gs = fig.add_gridspec(3, 4, hspace=0.25, wspace=0.50, height_ratios=[1, 1, 2])
+  gs = fig.add_gridspec(3, 4, hspace=0.25, wspace=0.25, height_ratios=[1, 1, 2])
 
   print("  Processing cells...")
 
@@ -670,20 +670,30 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False, survival_type: st
   # Adjust layout to make room for column titles, legends, and subplot labels
   # Small margins to accommodate subplot labels (A,C,E on left; F,H,J on right)
   # More space at top for titles, space at bottom for legends
-  plt.subplots_adjust(left=0.05, right=0.95, top=0.96, bottom=0.08)
+  plt.subplots_adjust(left=0.06, right=0.94, top=0.96, bottom=0.08)
 
   # Calculate column title positions based on actual subplot positions
-  # After adjusting margins, the plots span from left=0.05 to right=0.95
-  # The center line is at 0.5, dividing left and right columns
-  left_margin = 0.05
-  right_margin = 0.95
-  center_line = 0.5
-
-  # Calculate centers accounting for margins and center line
-  # Left column: from left_margin to just before center_line
-  left_col_center = left_margin + (center_line - left_margin) / 2
-  # Right column: from just after center_line to right_margin
-  right_col_center = center_line + (right_margin - center_line) / 2
+  # Get the actual bounding boxes INCLUDING labels to find where the gap really is
+  # Use column 1 (ax_b) and column 2 (ax_f) to find the boundary between left and right groups
+  # Need to draw the canvas first so matplotlib calculates the text bounding boxes
+  fig.canvas.draw()
+  renderer = fig.canvas.get_renderer()
+  
+  # get_tightbbox includes axis labels, tick labels, etc.
+  bbox_b = ax_b.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
+  bbox_f = ax_f.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
+  
+  # The center line should be in the middle of the gap between these two columns
+  center_line = (bbox_b.x1 + bbox_f.x0) / 2  # x1 is right edge of B (with labels), x0 is left edge of F (with labels)
+  
+  # For column titles, find the centers of the left and right groups
+  bbox_a = ax_a.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
+  bbox_g = ax_g.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
+  
+  # Left column spans from left edge of A to right edge of B (including labels)
+  left_col_center = (bbox_a.x0 + bbox_b.x1) / 2
+  # Right column spans from left edge of F to right edge of G (including labels)
+  right_col_center = (bbox_f.x0 + bbox_g.x1) / 2
 
   # Add column titles at the top, centered above their respective columns
   fig.text(left_col_center, 0.99, 'CD8+FoxP3+ Cells', ha='center', va='top',
@@ -694,8 +704,8 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False, survival_type: st
            transform=fig.transFigure)
 
   # Add a vertical line to separate cells (left) from DONUTS (right)
-  # The line goes at x=0.5 (middle of the figure)
-  line_x = 0.5
+  # The line goes in the middle of the gap between columns 1 and 2
+  line_x = center_line
   fig.add_artist(matplotlib.lines.Line2D(
     [line_x, line_x], [0.05, 0.95],
     transform=fig.transFigure,
