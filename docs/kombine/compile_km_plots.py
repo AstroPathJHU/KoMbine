@@ -717,6 +717,45 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False, survival_type: st
   handles_cells, labels_cells = ax_e.get_legend_handles_labels()
   handles_donuts, labels_donuts = ax_j.get_legend_handles_labels()
 
+  # Reorder legend items to display in rows: High group in top row, Low group in bottom row
+  # Matplotlib with ncol=3 fills column-by-column, so we need to reorder for row-by-row display
+  def reorder_legend_items(handles, labels):
+    """Reorder legend items so they display in rows when matplotlib fills by columns."""
+    import re
+    
+    if len(handles) != 6:
+      raise ValueError(f"Expected 6 legend items, got {len(handles)}")
+    
+    # Validate labels are in the expected input order
+    # Input order: [High, 68CL, 95CL, Low, 68CL, 95CL]
+    if not re.match(r'^High \(n=[0-9]+\)$', labels[0]):
+      raise ValueError(f"Expected labels[0] to be 'High (n=...)', got '{labels[0]}'")
+    if labels[1] != '68% CL':
+      raise ValueError(f"Expected labels[1] to be '68% CL', got '{labels[1]}'")
+    if labels[2] != '95% CL':
+      raise ValueError(f"Expected labels[2] to be '95% CL', got '{labels[2]}'")
+    if not re.match(r'^Low \(n=[0-9]+\)$', labels[3]):
+      raise ValueError(f"Expected labels[3] to be 'Low (n=...)', got '{labels[3]}'")
+    if labels[4] != '68% CL':
+      raise ValueError(f"Expected labels[4] to be '68% CL', got '{labels[4]}'")
+    if labels[5] != '95% CL':
+      raise ValueError(f"Expected labels[5] to be '95% CL', got '{labels[5]}'")
+    
+    # With ncol=3, matplotlib fills by columns:
+    # Position: [0, 1, 2, 3, 4, 5] displays as:
+    #   0  2  4
+    #   1  3  5
+    # We want:
+    #   High  68%  95%
+    #   Low   68%  95%
+    # So reorder to: [High, Low, 68%, 68%, 95%, 95%]
+    # Mapping: [0, 3, 1, 4, 2, 5]
+    new_order = [0, 3, 1, 4, 2, 5]
+    return [handles[i] for i in new_order], [labels[i] for i in new_order]
+
+  handles_cells, labels_cells = reorder_legend_items(handles_cells, labels_cells)
+  handles_donuts, labels_donuts = reorder_legend_items(handles_donuts, labels_donuts)
+
   # Add separate legends for each column (2 rows each)
   if handles_cells:
     # Calculate ncol to get 2 rows: ncol = ceil(n_items / 2)
