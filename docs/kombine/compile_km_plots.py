@@ -20,6 +20,7 @@ Multiple plot options can be combined to generate specific subsets.
 import argparse
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import warnings
@@ -413,10 +414,18 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False, survival_type: st
   dc_file_donuts_binomial = get_datacard_path(5, 'donuts', 'poisson', survival_type)  # Panel F
 
   # Panels C, D use cells flatfield before/after; Panels H, I use donuts flatfield before/after
-  dc_file_cells_flatfield_before = get_datacard_path(2, 'cells', 'flatfield_before', survival_type)  # Panel C
-  dc_file_cells_flatfield_after = get_datacard_path(3, 'cells', 'flatfield_after', survival_type)  # Panel D
-  dc_file_donuts_flatfield_before = get_datacard_path(7, 'donuts', 'flatfield_before', survival_type)  # Panel H
-  dc_file_donuts_flatfield_after = get_datacard_path(8, 'donuts', 'flatfield_after', survival_type)  # Panel I
+  dc_file_cells_flatfield_before = get_datacard_path(
+    2, 'cells', 'flatfield_before', survival_type
+  )  # Panel C
+  dc_file_cells_flatfield_after = get_datacard_path(
+    3, 'cells', 'flatfield_after', survival_type
+  )  # Panel D
+  dc_file_donuts_flatfield_before = get_datacard_path(
+    7, 'donuts', 'flatfield_before', survival_type
+  )  # Panel H
+  dc_file_donuts_flatfield_after = get_datacard_path(
+    8, 'donuts', 'flatfield_after', survival_type
+  )  # Panel I
 
   # Panels E, J use cells/donuts combined
   dc_file_cells_combined = get_datacard_path(4, 'cells', 'combined', survival_type)  # Panel E
@@ -678,18 +687,19 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False, survival_type: st
   # Need to draw the canvas first so matplotlib calculates the text bounding boxes
   fig.canvas.draw()
   renderer = fig.canvas.get_renderer()
-  
+
   # get_tightbbox includes axis labels, tick labels, etc.
   bbox_b = ax_b.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
   bbox_f = ax_f.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
-  
+
   # The center line should be in the middle of the gap between these two columns
-  center_line = (bbox_b.x1 + bbox_f.x0) / 2  # x1 is right edge of B (with labels), x0 is left edge of F (with labels)
-  
+  # x1 is right edge of B (with labels), x0 is left edge of F (with labels)
+  center_line = (bbox_b.x1 + bbox_f.x0) / 2
+
   # For column titles, find the centers of the left and right groups
   bbox_a = ax_a.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
   bbox_g = ax_g.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
-  
+
   # Left column spans from left edge of A to right edge of B (including labels)
   left_col_center = (bbox_a.x0 + bbox_b.x1) / 2
   # Right column spans from left edge of F to right edge of G (including labels)
@@ -721,11 +731,10 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False, survival_type: st
   # Matplotlib with ncol=3 fills column-by-column, so we need to reorder for row-by-row display
   def reorder_legend_items(handles, labels):
     """Reorder legend items so they display in rows when matplotlib fills by columns."""
-    import re
-    
+
     if len(handles) != 6:
       raise ValueError(f"Expected 6 legend items, got {len(handles)}")
-    
+
     # Validate labels are in the expected input order
     # Input order: [High, 68CL, 95CL, Low, 68CL, 95CL]
     if not re.match(r'^High \(n=[0-9]+\)$', labels[0]):
@@ -740,7 +749,7 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False, survival_type: st
       raise ValueError(f"Expected labels[4] to be '68% CL', got '{labels[4]}'")
     if labels[5] != '95% CL':
       raise ValueError(f"Expected labels[5] to be '95% CL', got '{labels[5]}'")
-    
+
     # With ncol=3, matplotlib fills by columns:
     # Position: [0, 1, 2, 3, 4, 5] displays as:
     #   0  2  4
