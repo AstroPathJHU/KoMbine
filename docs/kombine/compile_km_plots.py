@@ -330,7 +330,7 @@ def plot_compare_p_value(testing=False):
   plt.close()
   print(f"  Saved {output_file}")
 
-def plot_lung_dataset(testing: bool | tuple[bool, ...] =False):
+def plot_lung_dataset(testing: bool | tuple[bool, ...] =False, survival_type: str ='RFS'):
   """
   Generate lung dataset plot with 10 panels (A-J) in 3 rows:
   - Row 1: A, B (cells), F, G (DONUTS)
@@ -341,9 +341,10 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False):
     testing: If True (or a single bool), use test datacards for all panels.
              If a tuple of 10 bools, use test datacards for each panel individually
              (order: A, B, C, D, E, F, G, H, I, J)
+  survival_type: 'RFS' or 'OS' to select which survival type to plot
   """
   # pylint: disable=too-many-locals, too-many-statements
-  print("Generating lung dataset plot...")
+  print(f"Generating lung dataset plot for {survival_type}...")
 
   # Convert testing to a tuple of 10 bools if it's a single bool
   if isinstance(testing, bool):
@@ -358,8 +359,6 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False):
     print("  Generating systematic datacards...")
     script_path = DATACARDS_DIR / "lung/generate_systematic_datacards.py"
     subprocess.run([sys.executable, str(script_path)], check=True, text=True)
-
-  survival_type = 'RFS'
 
   if survival_type == 'RFS':
     ylabel = "RFS Probability"  # Abbreviated to avoid overlap
@@ -376,7 +375,7 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False):
   lung_datacard_root = DATACARDS_DIR / "lung"
 
   # Helper function to get datacard path based on testing flag for that panel
-  def get_datacard_path(panel_idx, cell_type, datacard_type):
+  def get_datacard_path(panel_idx, cell_type, datacard_type, survival_type):
     """
     Get datacard path for a specific panel.
 
@@ -384,6 +383,7 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False):
       panel_idx: Index in testing_flags (0-9 for panels A-J)
       cell_type: 'cells' or 'donuts'
       datacard_type: 'poisson', 'flatfield_before', 'flatfield_after', or 'combined'
+      survival_type: 'RFS' or 'OS'
     """
     if testing_flags[panel_idx]:
       # Use test datacards
@@ -404,24 +404,29 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False):
     raise ValueError(f"Unknown datacard_type: {datacard_type}")
 
   # Load datacards for each panel
-  # Panels A, B use cells poisson; Panels F, G use donuts poisson
-  dc_file_cells_poisson = get_datacard_path(0, 'cells', 'poisson')  # Panel A
-  dc_file_donuts_poisson = get_datacard_path(5, 'donuts', 'poisson')  # Panel F
+  # Panel B uses cells poisson; Panel G uses donuts poisson
+  dc_file_cells_poisson = get_datacard_path(1, 'cells', 'poisson', survival_type)  # Panel A
+  dc_file_donuts_poisson = get_datacard_path(6, 'donuts', 'poisson', survival_type)  # Panel F
+
+  #Panels A, F use binomial uncertainties (from poisson datacard)
+  dc_file_cells_binomial = get_datacard_path(0, 'cells', 'poisson', survival_type)  # Panel A
+  dc_file_donuts_binomial = get_datacard_path(5, 'donuts', 'poisson', survival_type)  # Panel F
 
   # Panels C, D use cells flatfield before/after; Panels H, I use donuts flatfield before/after
-  dc_file_cells_flatfield_before = get_datacard_path(2, 'cells', 'flatfield_before')  # Panel C
-  dc_file_cells_flatfield_after = get_datacard_path(3, 'cells', 'flatfield_after')  # Panel D
-  dc_file_donuts_flatfield_before = get_datacard_path(7, 'donuts', 'flatfield_before')  # Panel H
-  dc_file_donuts_flatfield_after = get_datacard_path(8, 'donuts', 'flatfield_after')  # Panel I
+  dc_file_cells_flatfield_before = get_datacard_path(2, 'cells', 'flatfield_before', survival_type)  # Panel C
+  dc_file_cells_flatfield_after = get_datacard_path(3, 'cells', 'flatfield_after', survival_type)  # Panel D
+  dc_file_donuts_flatfield_before = get_datacard_path(7, 'donuts', 'flatfield_before', survival_type)  # Panel H
+  dc_file_donuts_flatfield_after = get_datacard_path(8, 'donuts', 'flatfield_after', survival_type)  # Panel I
 
   # Panels E, J use cells/donuts combined
-  dc_file_cells_combined = get_datacard_path(4, 'cells', 'combined')  # Panel E
-  dc_file_donuts_combined = get_datacard_path(9, 'donuts', 'combined')  # Panel J
-
+  dc_file_cells_combined = get_datacard_path(4, 'cells', 'combined', survival_type)  # Panel E
+  dc_file_donuts_combined = get_datacard_path(9, 'donuts', 'combined', survival_type)  # Panel J
   # Parse all datacards
   print(f"  Loading datacards (testing flags: {testing_flags})...")
   datacard_cells_poisson = Datacard.parse_datacard(dc_file_cells_poisson)
   datacard_donuts_poisson = Datacard.parse_datacard(dc_file_donuts_poisson)
+  datacard_cells_binomial = Datacard.parse_datacard(dc_file_cells_binomial)
+  datacard_donuts_binomial = Datacard.parse_datacard(dc_file_donuts_binomial)
   datacard_cells_flatfield_before = Datacard.parse_datacard(dc_file_cells_flatfield_before)
   datacard_donuts_flatfield_before = Datacard.parse_datacard(dc_file_donuts_flatfield_before)
   datacard_cells_flatfield_after = Datacard.parse_datacard(dc_file_cells_flatfield_after)
@@ -532,7 +537,7 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False):
   print(f"    Creating panel A (binomial, cells, testing={testing_flags[0]})...")
   ax_a = fig.add_subplot(gs[0, 0])
   create_km_subplot(
-    ax_a, datacard_cells_poisson, cell_threshold,
+    ax_a, datacard_cells_binomial, cell_threshold,
     title='Binomial Uncertainties',
     include_full_nll=False,
     include_patient_wise=False,
@@ -595,7 +600,7 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False):
   print(f"    Creating panel F (binomial, donuts, testing={testing_flags[5]})...")
   ax_f = fig.add_subplot(gs[0, 2])
   create_km_subplot(
-    ax_f, datacard_donuts_poisson, donut_threshold,
+    ax_f, datacard_donuts_binomial, donut_threshold,
     title='Binomial Uncertainties',
     include_full_nll=False,
     include_patient_wise=False,
@@ -753,6 +758,8 @@ Examples (run from parent directory):
                       help='For lung plot, use production data for specified panel(s) '
                            '(A-J, space-separated) and testing data for others. '
                            'Example: --lung-production-panel A E')
+  parser.add_argument('--lung-survival-type', type=str, choices=['RFS', 'OS'], default='RFS',
+                      help='Survival type for lung dataset plot: RFS (default) or OS')
 
   args = parser.parse_args()
 
@@ -794,7 +801,7 @@ Examples (run from parent directory):
             f"Testing panels: {', '.join(p for p, t in zip(panel_names, lung_testing) if t)}")
       print("=" * 60)
 
-    plot_lung_dataset(testing=lung_testing)
+    plot_lung_dataset(testing=lung_testing, survival_type=args.lung_survival_type)
 
   print("=" * 60)
   print("Plot generation complete!")
