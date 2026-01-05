@@ -670,7 +670,7 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False, survival_type: st
   # Adjust layout to make room for column titles, legends, and subplot labels
   # Small margins to accommodate subplot labels (A,C,E on left; F,H,J on right)
   # More space at top for titles, space at bottom for legends
-  plt.subplots_adjust(left=0.06, right=0.94, top=0.96, bottom=0.08)
+  plt.subplots_adjust(left=0.06, right=0.94, top=0.96, bottom=0.09)
 
   # Calculate column title positions based on actual subplot positions
   # Get the actual bounding boxes INCLUDING labels to find where the gap really is
@@ -705,9 +705,10 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False, survival_type: st
 
   # Add a vertical line to separate cells (left) from DONUTS (right)
   # The line goes in the middle of the gap between columns 1 and 2
+  # Extend from bottom (0.0) to top of column titles (0.99) to cover legend area
   line_x = center_line
   fig.add_artist(matplotlib.lines.Line2D(
-    [line_x, line_x], [0.05, 0.95],
+    [line_x, line_x], [0.0, 0.99],
     transform=fig.transFigure,
     color='black', linewidth=2, linestyle='-')
   )
@@ -722,13 +723,13 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False, survival_type: st
     ncol_cells = (len(handles_cells) + 1) // 2
     fig.legend(handles_cells, labels_cells, loc='lower left',
                ncol=ncol_cells, fontsize=FONT_SIZES['legend'],
-               bbox_to_anchor=(left_col_center - 0.18, 0.01), frameon=True, fancybox=True)
+               bbox_to_anchor=(left_col_center - 0.18, 0.005), frameon=True, fancybox=True)
 
   if handles_donuts:
     ncol_donuts = (len(handles_donuts) + 1) // 2
     fig.legend(handles_donuts, labels_donuts, loc='lower right',
                ncol=ncol_donuts, fontsize=FONT_SIZES['legend'],
-               bbox_to_anchor=(right_col_center + 0.18, 0.01), frameon=True, fancybox=True)
+               bbox_to_anchor=(right_col_center + 0.18, 0.005), frameon=True, fancybox=True)
 
   # Save the figure
   plt.savefig(output_file)
