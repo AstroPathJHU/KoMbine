@@ -686,20 +686,27 @@ def plot_lung_dataset(testing: bool | tuple[bool, ...] =False, survival_type: st
   # Use column 1 (ax_b) and column 2 (ax_f) to find the boundary between left and right groups
   # Need to draw the canvas first so matplotlib calculates the text bounding boxes
   fig.canvas.draw()
-  renderer = fig.canvas.get_renderer()
+  renderer = fig.canvas.get_renderer()  # type: ignore[attr-defined]
 
   # get_tightbbox includes axis labels, tick labels, etc.
-  bbox_b = ax_b.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
-  bbox_f = ax_f.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
+  orig_bbox_a = ax_a.get_tightbbox(renderer)
+  orig_bbox_b = ax_b.get_tightbbox(renderer)
+  orig_bbox_f = ax_f.get_tightbbox(renderer)
+  orig_bbox_g = ax_g.get_tightbbox(renderer)
+  assert orig_bbox_a is not None
+  assert orig_bbox_b is not None
+  assert orig_bbox_f is not None
+  assert orig_bbox_g is not None
+  bbox_a = orig_bbox_a.transformed(fig.transFigure.inverted())
+  bbox_b = orig_bbox_b.transformed(fig.transFigure.inverted())
+  bbox_f = orig_bbox_f.transformed(fig.transFigure.inverted())
+  bbox_g = orig_bbox_g.transformed(fig.transFigure.inverted())
 
   # The center line should be in the middle of the gap between these two columns
   # x1 is right edge of B (with labels), x0 is left edge of F (with labels)
   center_line = (bbox_b.x1 + bbox_f.x0) / 2
 
   # For column titles, find the centers of the left and right groups
-  bbox_a = ax_a.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
-  bbox_g = ax_g.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
-
   # Left column spans from left edge of A to right edge of B (including labels)
   left_col_center = (bbox_a.x0 + bbox_b.x1) / 2
   # Right column spans from left edge of F to right edge of G (including labels)
