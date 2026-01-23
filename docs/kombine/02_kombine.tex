@@ -154,7 +154,13 @@
 
 \KM{} curves are widely used in medical research to predict patient outcomes by giving the survival probability as a function of time. The curves are constructed empirically based on observed outcomes in a cohort of patients. They can be used to evaluate the performance of biomarkers, by stratifying patients into groups based on the biomarker value and plotting separate \KM{} curves for each group, or to compare the effectiveness of different treatments. By examining the \KM{} curves, we can also predict how long a future patient is likely to survive.
 
-\KM{} curves are often shown without error bands, or with error bands that only take into account the statistical uncertainty resulting from the finite number of patients in the study. In this paper, we present the first method to calculate both statistical and systematic uncertainties on \KM{} curves.
+While it would be desireable, with high data volumes, to estimate survival probability as a function of a continuous biomarker, a more common approach is to stratify patients into discrete categories, such as ``high'' and ``low'' expression of a certain gene or density of a certain cell.  If the curves differ significantly, these biomarkers can be used to guide treatment decisions.
+
+The biomarker measurements are subject to uncertainty, and it is desireable to incorporate this uncertainty into the \KM{} curve estimation. \KM{} curves are often shown without error bands, or with error bands that only take into account the statistical uncertainty resulting from the finite number of patients in the study.
+
+Previous literature~\citep{YiBook} 
+
+In this paper, we present the first method to calculate both statistical and systematic uncertainties on \KM{} curves.
 
 The maximum likelihood techniques and modeling of systematic uncertainties used in our method are based on the \Combine{} package \citep{CAT-23-001}, which was developed by the CMS Collaboration in particle physics\@. \Combine, built on the \RooFit{} framework \citep{RooFit} and the \Minuit{} optimizer \citep{minuit}, is used for high-precision measurements of particle properties, which must account for tens or even hundreds of systematic uncertainties, and was used for such high-profile measurements as the discovery of the Higgs boson \citep{HIG-12-028} and subsequent measurements of its properties.
 
