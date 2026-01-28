@@ -177,7 +177,7 @@ def test_likelihood_scan():
 
   # Best fit result should correspond to minimum 2NLL
   assert abs(best_fit_result.x - twonll_values[min_idx]) < 1e-6
-  assert abs(best_fit_result.hazard_ratio - hazard_ratios[min_idx]) < 1e-6
+  assert abs(best_fit_result.log_hazard_ratio - np.log(hazard_ratios[min_idx])) < 1e-6
 
   # 2NLL should increase away from minimum (at least on one side)
   # Check that there's some curvature
@@ -222,7 +222,7 @@ def test_likelihood_scan_custom_values():
 
   # Verify that best_fit_result corresponds to the minimum in the scan
   min_idx = np.argmin(twonll_values)
-  assert abs(best_fit_result.hazard_ratio - hazard_ratios[min_idx]) < 1e-6
+  assert abs(best_fit_result.log_hazard_ratio - np.log(hazard_ratios[min_idx])) < 1e-6
 
   print("[PASS] Custom likelihood scan tests passed")
 
@@ -373,12 +373,14 @@ def test_known_hazard_ratios():
   and approximate magnitude of the hazard ratio difference.
   """
   # Test several hazard ratio values
-  # Tolerances are set based on expected statistical variability with 50 patients per group
+  # Tolerances are now in log space (absolute difference in log(HR))
+  # For reference: log(0.5) ≈ -0.69, log(2) ≈ 0.69, log(3) ≈ 1.10
+  # With 50 patients per group, expect ~0.3-0.5 log units of variation
   test_cases = [
-    (0.5, 0.4),   # HR = 0.5 (Group 1 has better survival), tolerance 0.4 (40%)
-    (1.0, 0.5),   # HR = 1.0 (equal hazards), tolerance 0.5 (50%)
-    (2.0, 0.6),   # HR = 2.0 (Group 1 has worse survival), tolerance 0.6 (60%)
-    (3.0, 0.8),   # HR = 3.0 (Group 1 has much worse survival), tolerance 0.8 (80%)
+    (0.5, 0.5),   # HR = 0.5 (Group 1 has better survival), log tolerance 0.5
+    (1.0, 0.6),   # HR = 1.0 (equal hazards), log tolerance 0.6 (higher due to noise)
+    (2.0, 0.5),   # HR = 2.0 (Group 1 has worse survival), log tolerance 0.5
+    (3.0, 0.6),   # HR = 3.0 (Group 1 has much worse survival), log tolerance 0.6
   ]
   
   results = []
@@ -409,11 +411,12 @@ def test_known_hazard_ratios():
       hazard_ratio_max=10.0,
     )
     
-    # Check that the best-fit HR is close to the target HR
-    relative_error = abs(best_fit_hr - target_hr) / target_hr
-    assert relative_error < tolerance, \
+    # Check that the best-fit HR is close to the target HR (in log scale)
+    # Use absolute difference in log space to properly compare ratios
+    log_error = abs(np.log(best_fit_hr) - np.log(target_hr))
+    assert log_error < tolerance, \
       f"HR mismatch for target={target_hr}: got {best_fit_hr:.3f}, " \
-      f"relative error {relative_error:.3f} > {tolerance}"
+      f"log error {log_error:.3f} > {tolerance}"
     
     # Check that the target HR is reasonably close to the confidence interval
     # Allow violations up to 20% of the CI width (accounting for statistical fluctuations)
@@ -423,14 +426,14 @@ def test_known_hazard_ratios():
     
     in_tolerance = lower_tolerance <= target_hr <= upper_tolerance
     
-    results.append((target_hr, best_fit_hr, lower_ci, upper_ci, relative_error, in_tolerance))
+    results.append((target_hr, best_fit_hr, lower_ci, upper_ci, log_error, in_tolerance))
     
   # Print results summary
   print("[PASS] Known hazard ratio tests passed:")
-  for target_hr, best_fit_hr, lower_ci, upper_ci, rel_err, in_tol in results:
+  for target_hr, best_fit_hr, lower_ci, upper_ci, log_err, in_tol in results:
     ci_str = "OK" if in_tol else "!!"
     print(f"  Target HR = {target_hr:.2f}: got {best_fit_hr:.3f} "
-          f"[{lower_ci:.3f}, {upper_ci:.3f}], relative error = {rel_err:.3f} ({ci_str})")
+          f"[{lower_ci:.3f}, {upper_ci:.3f}], log error = {log_err:.3f} ({ci_str})")
 
 
 def test_bounds_warning():

@@ -124,7 +124,6 @@ print(f"Minimum 2NLL: {np.min(twonll_values):.2f} at HR = {hazard_ratios[np.argm
 best_fit_from_scan = best_fit_result.hazard_ratio
 print(f"Best fit HR from scan result: {best_fit_from_scan:.3f}")
 print(f"Best fit HR from CI calculation: {best_fit_hr:.3f}")
-print(f"Difference: {abs(best_fit_from_scan - best_fit_hr):.4f}")
 print(f"Difference in log(HR): {abs(np.log(best_fit_from_scan) - np.log(best_fit_hr)):.4f}")
 
 # Verify the reported minimum is actually the minimum
@@ -212,11 +211,11 @@ print(f"  Hazard ratio: {result_alt.hazard_ratio:.3f}")
 
 print(f"\nLikelihood ratio test statistic: {result_null.x - result_alt.x:.2f}")
 
-# Compare with our hazard ratio calculation
+# Compare with our hazard ratio calculation (in log scale for proper comparison)
 print(f"\nConsistency check:")
 print(f"  HR from p-value calc: {result_alt.hazard_ratio:.3f}")
 print(f"  HR from profile likelihood: {best_fit_hr:.3f}")
-print(f"  Difference: {abs(result_alt.hazard_ratio - best_fit_hr):.4f}")
+print(f"  Difference in log(HR): {abs(np.log(result_alt.hazard_ratio) - np.log(best_fit_hr)):.4f}")
 ```
 
 ## Cox-Only Mode
