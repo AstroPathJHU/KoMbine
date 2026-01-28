@@ -25,6 +25,7 @@ from .kaplan_meier_likelihood import (
   KaplanMeierPatientNLL,
 )
 from .kaplan_meier_p_value_MINLP import MINLPforKMPValue
+from .kaplan_meier_hazard_ratio_MINLP import MINLPforKMHazardRatio
 from .utilities import LOG_ZERO_EPSILON_DEFAULT
 
 class Response:

@@ -1,7 +1,7 @@
 ---
 jupyter:
   jupytext:
-    formats: ipynb,md,py
+    formats: ipynb,md,py:percent
     text_representation:
       extension: .md
       format_name: markdown
@@ -62,8 +62,8 @@ print("=" * 60)
 print(f"Loaded {len(datacard_fixed.patients)} patients")
 print(f"Number of deaths: {sum(1 for p in datacard_fixed.patients if not p.censored)}")
 print(f"Number of censored: {sum(1 for p in datacard_fixed.patients if p.censored)}")
-print(f"\nWith fixed observables, patient assignments are deterministic")
-print(f"-> Only Cox error (finite events) contributes to CIs")
+print("\nWith fixed observables, patient assignments are deterministic")
+print("-> Only Cox error (finite events) contributes to CIs")
 ```
 
 ### Calculate Hazard Ratio with Confidence Interval
@@ -98,7 +98,7 @@ print(f"\nBest-fit hazard ratio: {best_fit_hr_fixed:.3f}")
 print(f"68% CI: [{lower_ci_68_fixed:.3f}, {upper_ci_68_fixed:.3f}]")
 print(f"95% CI: [{lower_ci_95_fixed:.3f}, {upper_ci_95_fixed:.3f}]")
 print(f"\n2NLL at best fit: {result_68_fixed.x:.2f}")
-print(f"\nPatient distribution:")
+print("\nPatient distribution:")
 print(f"  Low group: {result_68_fixed.n_total_low} patients ({result_68_fixed.n_alive_low} alive at end)")
 print(f"  High group: {result_68_fixed.n_total_high} patients ({result_68_fixed.n_alive_high} alive at end)")
 ```
@@ -155,11 +155,11 @@ print(f"Number of censored: {sum(1 for p in datacard_poisson_large.patients if p
 nums = [p.observable.numerator for p in datacard_poisson_large.patients]
 areas = [p.observable.denominator for p in datacard_poisson_large.patients]
 densities = [n/a for n, a in zip(nums, areas)]
-print(f"\nCount statistics:")
+print("\nCount statistics:")
 print(f"  Mean count: {np.mean(nums):.1f}")
 print(f"  Range: [{min(nums)}, {max(nums)}]")
 print(f"  Relative uncertainty (√N/N): {np.mean([np.sqrt(n)/n for n in nums]):.1%}")
-print(f"\nWith large counts, Poisson error is small -> Cox error dominates")
+print("\nWith large counts, Poisson error is small -> Cox error dominates")
 ```
 
 ```python
@@ -214,13 +214,13 @@ Let's compare the results. With large counts, the Poisson density results should
 ```python
 print("Comparison: Fixed vs. Poisson (Large Counts)")
 print("=" * 60)
-print(f"                          Fixed      Poisson-Large")
+print("                          Fixed      Poisson-Large")
 print(f"Best-fit HR:             {best_fit_hr_fixed:6.3f}      {best_fit_hr_large:6.3f}")
 print(f"68% CI:          [{lower_ci_68_fixed:5.3f}, {upper_ci_68_fixed:5.3f}]  [{lower_ci_68_large:5.3f}, {upper_ci_68_large:5.3f}]")
 print(f"95% CI:          [{lower_ci_95_fixed:5.3f}, {upper_ci_95_fixed:5.3f}]  [{lower_ci_95_large:5.3f}, {upper_ci_95_large:5.3f}]")
 print(f"\nDifference in log(HR): {abs(np.log(best_fit_hr_fixed) - np.log(best_fit_hr_large)):.4f}")
-print(f"\nAs expected, with large Poisson counts, results are very similar!")
-print(f"The Cox error dominates, and measurement uncertainty is negligible.")
+print("\nAs expected, with large Poisson counts, results are very similar!")
+print("The Cox error dominates, and measurement uncertainty is negligible.")
 ```
 
 ## Example 3: Poisson Density with Moderate Counts
@@ -250,7 +250,7 @@ print(f"Number of censored: {sum(1 for p in datacard_poisson_moderate.patients i
 nums = [p.observable.numerator for p in datacard_poisson_moderate.patients]
 areas = [p.observable.denominator for p in datacard_poisson_moderate.patients]
 densities = [n/a for n, a in zip(nums, areas)]
-print(f"\nCount statistics:")
+print("\nCount statistics:")
 print(f"  Mean count: {np.mean(nums):.1f}")
 print(f"  Range: [{min(nums)}, {max(nums)}]")
 print(f"  Relative uncertainty (√N/N): {np.mean([np.sqrt(n)/n for n in nums]):.1%}")
@@ -265,7 +265,7 @@ if near_threshold:
     rel_unc = np.sqrt(example.observable.numerator) / example.observable.numerator
     print(f"  Example: density={density:.3f}, rel. unc.={rel_unc:.1%}")
     print(f"  -> ~{rel_unc*100:.0f}% chance of crossing threshold")
-print(f"\nWith moderate counts, measurement uncertainty is significant!")
+print("\nWith moderate counts, measurement uncertainty is significant!")
 ```
 
 ```python
@@ -319,23 +319,23 @@ Now let's compare all three examples to see how measurement uncertainty affects 
 ```python
 print("Summary Comparison")
 print("=" * 80)
-print(f"                          Fixed      Poisson-Large  Poisson-Moderate")
+print("                          Fixed      Poisson-Large  Poisson-Moderate")
 print(f"Best-fit HR:             {best_fit_hr_fixed:6.3f}      {best_fit_hr_large:6.3f}          {best_fit_hr_moderate:6.3f}")
 print(f"68% CI width:            {upper_ci_68_fixed - lower_ci_68_fixed:6.3f}      {upper_ci_68_large - lower_ci_68_large:6.3f}          {upper_ci_68_moderate - lower_ci_68_moderate:6.3f}")
 print(f"95% CI width:            {upper_ci_95_fixed - lower_ci_95_fixed:6.3f}      {upper_ci_95_large - lower_ci_95_large:6.3f}          {upper_ci_95_moderate - lower_ci_95_moderate:6.3f}")
 print("=" * 80)
 
 # Calculate CI width ratios
-print(f"\nConfidence interval width ratios (relative to fixed):")
+print("\nConfidence interval width ratios (relative to fixed):")
 print(f"  Poisson-Large   (68%): {(upper_ci_68_large - lower_ci_68_large) / (upper_ci_68_fixed - lower_ci_68_fixed):.2f}x")
 print(f"  Poisson-Large   (95%): {(upper_ci_95_large - lower_ci_95_large) / (upper_ci_95_fixed - lower_ci_95_fixed):.2f}x")
 print(f"  Poisson-Moderate(68%): {(upper_ci_68_moderate - lower_ci_68_moderate) / (upper_ci_68_fixed - lower_ci_68_fixed):.2f}x")
 print(f"  Poisson-Moderate(95%): {(upper_ci_95_moderate - lower_ci_95_moderate) / (upper_ci_95_fixed - lower_ci_95_fixed):.2f}x")
 
-print(f"\nKey observations:")
-print(f"1. Large counts → CIs similar to fixed (measurement error negligible)")
-print(f"2. Moderate counts → CIs noticeably wider (measurement error significant)")
-print(f"3. Best-fit HRs remain similar (same underlying survival distributions)")
+print("\nKey observations:")
+print("1. Large counts → CIs similar to fixed (measurement error negligible)")
+print("2. Moderate counts → CIs noticeably wider (measurement error significant)")
+print("3. Best-fit HRs remain similar (same underlying survival distributions)")
 ```
 
 ## Visualizing the Three Likelihood Scans
@@ -427,7 +427,7 @@ plt.tight_layout()
 plt.savefig('hazard_ratio_likelihood_scan_comparison.pdf', bbox_inches='tight', dpi=300)
 plt.show()
 
-print(f"\nFigure saved as 'hazard_ratio_likelihood_scan_comparison.pdf'")
+print("\nFigure saved as 'hazard_ratio_likelihood_scan_comparison.pdf'")
 ```
 
 ## Key Insights

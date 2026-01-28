@@ -1,7 +1,7 @@
 ---
 jupyter:
   jupytext:
-    formats: ipynb,md,py
+    formats: ipynb,md,py:percent
     text_representation:
       extension: .md
       format_name: markdown
@@ -81,14 +81,14 @@ plt.figure()
 _ = kml_low.plot(
     best_color="blue",
     CL_colors=["dodgerblue", "skyblue"],
-    best_label=f"observable < 0.45",
+    best_label="observable < 0.45",
     create_figure=False,
     include_nominal=False,
 )
 _ = kml_high.plot(
     best_color="red",
     CL_colors=["orangered", "lightcoral"],
-    best_label=f"observable >= 0.45",
+    best_label="observable >= 0.45",
     create_figure=False,
     include_nominal=False,
 )
