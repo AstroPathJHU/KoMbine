@@ -8,7 +8,7 @@ jupyter:
       extension: .md
       format_name: markdown
       format_version: '1.3'
-      jupytext_version: 1.16.4
+      jupytext_version: 1.18.1
 ---
 
 # KoMbine Documentation - Table of Contents
@@ -24,6 +24,8 @@ jupyter:
    - a comparison of our Kaplan-Meier likelihood method to the `lifelines` package
  - `05_command_line_interface.html`
    - documentation for the command line interface (`kombine` and `kombine_twogroups` commands)
+ - `06_hazard_ratio_example.html`
+   - an example of how to calculate hazard ratios and confidence intervals using the likelihood method
 
 # Compilation instructions
 

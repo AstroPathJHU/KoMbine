@@ -976,6 +976,72 @@ class Datacard:
       tie_handling=tie_handling,
     )
 
+  def km_hazard_ratio( #pylint: disable=too-many-arguments
+    self,
+    *,
+    parameter_min: float = -np.inf,
+    parameter_threshold: float,
+    parameter_max: float = np.inf,
+    log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
+    tie_handling: str = "breslow",
+    log_hazard_ratio_bounds: tuple[float, float] = (-10.0, 10.0),
+  ) -> "MINLPforKMHazardRatio":
+    """
+    Generate a MINLPforKMHazardRatio object for calculating hazard ratios for Kaplan-Meier curves
+    using the likelihood method.
+
+    This method creates a hazard ratio calculator that can compute the best-fit hazard ratio,
+    confidence intervals, and perform likelihood scans over hazard ratio values.
+
+    Parameters
+    ----------
+    parameter_min : float, optional
+        The minimum parameter value for the "low" group. Default is -inf.
+    parameter_threshold : float
+        The threshold separating the "low" and "high" groups.
+    parameter_max : float, optional
+        The maximum parameter value for the "high" group. Default is +inf.
+    log_zero_epsilon : float, optional
+        Small epsilon value to avoid log(0). Default from utilities.
+    tie_handling : str, optional
+        Method for handling tied death times. Currently only "breslow" is supported. Default is "breslow".
+    log_hazard_ratio_bounds : tuple[float, float], optional
+        Bounds on log(hazard ratio) for the Gurobi model, as (lower_bound, upper_bound).
+        These correspond to hazard ratio bounds of (exp(lb), exp(ub)).
+        Default is (-10.0, 10.0), allowing HR in [0.000045, 22026].
+        Increase these if you need to explore more extreme hazard ratios.
+
+    Returns
+    -------
+    MINLPforKMHazardRatio
+        A hazard ratio calculator object with methods for computing hazard ratios, confidence intervals,
+        and likelihood scans.
+
+    Examples
+    --------
+    >>> from kombine.datacard import Datacard
+    >>> datacard = Datacard.parse_datacard("datacard.txt")
+    >>> hr_calc = datacard.km_hazard_ratio(parameter_threshold=0.5)
+    >>> best_fit, lower_ci, upper_ci, result = hr_calc.hazard_ratio_confidence_interval()
+    >>> print(f"Hazard ratio: {best_fit:.2f} [{lower_ci:.2f}, {upper_ci:.2f}]")
+    """
+    # Import here to avoid circular import
+    from .kaplan_meier_hazard_ratio_MINLP import MINLPforKMHazardRatio
+    
+    patients = []
+    for p in self.patients:
+      nll = p.get_nll()
+      patients.append(nll)
+    return MINLPforKMHazardRatio(
+      all_patients=patients,
+      parameter_min=parameter_min,
+      parameter_threshold=parameter_threshold,
+      parameter_max=parameter_max,
+      log_zero_epsilon=log_zero_epsilon,
+      tie_handling=tie_handling,
+      log_hazard_ratio_bounds=log_hazard_ratio_bounds,
+    )
+
   def km_p_value_logrank(
     self,
     *,

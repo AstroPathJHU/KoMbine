@@ -35,6 +35,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     parameter_max: float = np.inf,
     log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
     tie_handling: str = "breslow",
+    log_hazard_ratio_bounds: tuple[float, float] = (-10.0, 10.0),
   ):
     if tie_handling not in ["breslow"]:
       raise ValueError(f"tie_handling must be 'breslow', got '{tie_handling}'")
@@ -45,6 +46,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     self.__parameter_max = parameter_max
     self.__log_zero_epsilon = log_zero_epsilon
     self.__tie_handling = tie_handling
+    self.__log_hazard_ratio_bounds = log_hazard_ratio_bounds
     self.__null_hypothesis_constraint = None
     self.__patient_constraints_for_cox_only = None
     self.__patient_wise_only_constraint = None
@@ -81,6 +83,15 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     The maximum parameter value to be included in the "high" Kaplan-Meier curve.
     """
     return self.__parameter_max
+
+  @property
+  def log_hazard_ratio_bounds(self) -> tuple[float, float]:
+    """
+    The bounds on log(hazard ratio) for the Gurobi model.
+    These correspond to hazard ratio bounds of (exp(lb), exp(ub)).
+    Default is (-10.0, 10.0), allowing HR in [0.000045, 22026].
+    """
+    return self.__log_hazard_ratio_bounds
 
   @property
   def tie_handling(self) -> str:
@@ -517,8 +528,10 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
                       name=f"r_total_constraint_{j}")
 
     # log hazard ratio (beta) and its exp (omega)
+    # Use configurable bounds (default -10.0 to 10.0)
+    log_hr_lb, log_hr_ub = self.log_hazard_ratio_bounds
     beta = model.addVar(vtype=gp.GRB.CONTINUOUS,
-                        lb=-6.0, ub=6.0,
+                        lb=log_hr_lb, ub=log_hr_ub,
                         name="log_hazard_ratio")
     omega = model.addVar(vtype=gp.GRB.CONTINUOUS, lb=1e-6,
                         name="hazard_ratio")
