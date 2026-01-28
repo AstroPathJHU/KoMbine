@@ -80,6 +80,11 @@ def generate_synthetic_datacard_with_known_hr(
   all_observables = np.concatenate([observables_0, observables_1])
   
   # Create datacard content
+  # Format the data rows (can't use backslash inside f-string expressions)
+  survival_times_str = '\t'.join(f'{t:.4f}' for t in all_survival_times)
+  censored_str = '\t'.join('1' if c else '0' for c in all_censored)
+  observables_str = '\t'.join(f'{o:.4f}' for o in all_observables)
+  
   datacard_content = f"""observable_type fixed
 ------------
 # Synthetic datacard with known hazard ratio = {target_hr}
@@ -87,9 +92,9 @@ def generate_synthetic_datacard_with_known_hr(
 # Group 1 (above {threshold}): lambda_1 = {lambda_1}
 # Expected HR = lambda_1/lambda_0 = {target_hr}
 ------------
-survival_time\t{'\t'.join(f'{t:.4f}' for t in all_survival_times)}
-censored\t{'\t'.join('1' if c else '0' for c in all_censored)}
-observable\t{'\t'.join(f'{o:.4f}' for o in all_observables)}
+survival_time\t{survival_times_str}
+censored\t{censored_str}
+observable\t{observables_str}
 """
   
   # Write to temporary file and parse
