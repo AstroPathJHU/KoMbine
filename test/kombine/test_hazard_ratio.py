@@ -18,7 +18,7 @@ here = pathlib.Path(__file__).parent
 datacards = here / "datacards" / "simple_examples"
 
 
-def generate_synthetic_datacard_with_known_hr(
+def generate_synthetic_datacard_with_known_hr( #pylint: disable=too-many-locals
   target_hr: float,
   n_patients_per_group: int = 25,
   threshold: float = 0.5,
@@ -26,7 +26,7 @@ def generate_synthetic_datacard_with_known_hr(
 ) -> kombine.datacard.Datacard:
   """
   Generate a synthetic datacard with a known hazard ratio.
-  
+
   Parameters:
   -----------
   target_hr : float
@@ -38,13 +38,13 @@ def generate_synthetic_datacard_with_known_hr(
     Observable threshold separating the groups.
   random_seed : int
     Random seed for reproducibility.
-    
+
   Returns:
   --------
   Datacard
     A datacard with patients having survival times drawn from exponential
     distributions with hazard rates that differ by the target_hr factor.
-    
+
   Notes:
   ------
   - Uses 'fixed' observable type for simplicity and predictability
@@ -54,37 +54,37 @@ def generate_synthetic_datacard_with_known_hr(
   - Censoring applied randomly to ~30% of patients in each group
   """
   np.random.seed(random_seed)
-  
+
   # Base hazard rate for Group 0
   lambda_0 = 0.1
-  
+
   # Hazard rate for Group 1 to achieve target HR
   lambda_1 = target_hr * lambda_0
-  
+
   # Generate survival times from exponential distribution
   # Group 0: below threshold
   survival_times_0 = np.random.exponential(1.0 / lambda_0, size=n_patients_per_group)
   observables_0 = np.random.uniform(0.0, threshold - 0.01, size=n_patients_per_group)
-  
+
   # Group 1: above threshold
   survival_times_1 = np.random.exponential(1.0 / lambda_1, size=n_patients_per_group)
   observables_1 = np.random.uniform(threshold + 0.01, 1.0, size=n_patients_per_group)
-  
+
   # Randomly censor ~30% of patients
   censored_0 = np.random.random(n_patients_per_group) < 0.3
   censored_1 = np.random.random(n_patients_per_group) < 0.3
-  
+
   # Combine all data
   all_survival_times = np.concatenate([survival_times_0, survival_times_1])
   all_censored = np.concatenate([censored_0, censored_1])
   all_observables = np.concatenate([observables_0, observables_1])
-  
+
   # Create datacard content
   # Format the data rows (can't use backslash inside f-string expressions)
   survival_times_str = '\t'.join(f'{t:.4f}' for t in all_survival_times)
   censored_str = '\t'.join('1' if c else '0' for c in all_censored)
   observables_str = '\t'.join(f'{o:.4f}' for o in all_observables)
-  
+
   datacard_content = f"""observable_type fixed
 ------------
 # Synthetic datacard with known hazard ratio = {target_hr}
@@ -96,18 +96,18 @@ survival_time\t{survival_times_str}
 censored\t{censored_str}
 observable\t{observables_str}
 """
-  
+
   # Write to temporary file and parse
   with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
     f.write(datacard_content)
     temp_path = f.name
-  
+
   try:
-    datacard = kombine.datacard.Datacard.parse_datacard(temp_path)
+    datacard = kombine.datacard.Datacard.parse_datacard(pathlib.Path(temp_path))
   finally:
     # Clean up temporary file
     pathlib.Path(temp_path).unlink()
-  
+
   return datacard
 
 
@@ -365,14 +365,14 @@ def test_hazard_ratio_at_null():
   print("[PASS] H=1 null hypothesis consistency test passed")
 
 
-def test_known_hazard_ratios():
+def test_known_hazard_ratios(): #pylint: disable=too-many-locals
   """
   Test hazard ratio calculation with synthetic data having known target HRs.
-  
+
   This test generates synthetic datacards where the true hazard ratio is known
   by construction (from exponential survival distributions with different rates).
   It then verifies that the calculated hazard ratio is close to the target value.
-  
+
   Note: Due to finite sample sizes and random variation, we use relatively loose
   tolerances. The test verifies that the method correctly identifies the direction
   and approximate magnitude of the hazard ratio difference.
@@ -387,9 +387,9 @@ def test_known_hazard_ratios():
     (2.0, 0.5),   # HR = 2.0 (Group 1 has worse survival), log tolerance 0.5
     (3.0, 0.6),   # HR = 3.0 (Group 1 has much worse survival), log tolerance 0.6
   ]
-  
+
   results = []
-  
+
   for target_hr, tolerance in test_cases:
     # Generate synthetic datacard with known HR
     # Use more patients for better statistical power
@@ -399,7 +399,7 @@ def test_known_hazard_ratios():
       threshold=0.5,
       random_seed=42 + int(target_hr * 10)  # Different seed for each case
     )
-    
+
     # Create hazard ratio calculator
     # Use fixed observable type, so parameter_min/max don't matter
     hr_calc = datacard.km_hazard_ratio(
@@ -407,32 +407,32 @@ def test_known_hazard_ratios():
       parameter_min=0.0,
       parameter_max=1.0,
     )
-    
+
     # Calculate best-fit hazard ratio with confidence interval
-    best_fit_hr, lower_ci, upper_ci, best_fit_result = hr_calc.hazard_ratio_confidence_interval(
+    best_fit_hr, lower_ci, upper_ci, _ = hr_calc.hazard_ratio_confidence_interval(
       cox_only=False,
       confidence_level=0.68,
       hazard_ratio_min=0.1,
       hazard_ratio_max=10.0,
     )
-    
+
     # Check that the best-fit HR is close to the target HR (in log scale)
     # Use absolute difference in log space to properly compare ratios
     log_error = abs(np.log(best_fit_hr) - np.log(target_hr))
     assert log_error < tolerance, \
       f"HR mismatch for target={target_hr}: got {best_fit_hr:.3f}, " \
       f"log error {log_error:.3f} > {tolerance}"
-    
+
     # Check that the target HR is reasonably close to the confidence interval
     # Allow violations up to 20% of the CI width (accounting for statistical fluctuations)
     ci_width = upper_ci - lower_ci
     lower_tolerance = lower_ci - 0.2 * ci_width
     upper_tolerance = upper_ci + 0.2 * ci_width
-    
+
     in_tolerance = lower_tolerance <= target_hr <= upper_tolerance
-    
+
     results.append((target_hr, best_fit_hr, lower_ci, upper_ci, log_error, in_tolerance))
-    
+
   # Print results summary
   print("[PASS] Known hazard ratio tests passed:")
   for target_hr, best_fit_hr, lower_ci, upper_ci, log_err, in_tol in results:
@@ -444,7 +444,7 @@ def test_known_hazard_ratios():
 def test_bounds_warning():
   """
   Test that the bounds warning is raised when hazard ratio hits the boundary.
-  
+
   This test verifies that the warning system works by using tight bounds
   that force the best-fit HR to be at the boundary.
   """
@@ -459,7 +459,7 @@ def test_bounds_warning():
     parameter_max=0.99,
     log_hazard_ratio_bounds=(-10.0, 10.0),
   )
-  
+
   # Get best-fit HR
   best_fit_wide, _, _, _ = hr_calc_wide.hazard_ratio_confidence_interval(
     cox_only=False,
@@ -467,14 +467,13 @@ def test_bounds_warning():
     hazard_ratio_min=0.00001,
     hazard_ratio_max=10.0,
   )
-  
+
   # Now create a calculator with bounds that put best-fit at the lower boundary
   # The best-fit for this datacard is very small (~0.001), so set lower bound near it
-  import numpy as np
   log_best_fit = np.log(best_fit_wide)
   # Set lower bound just at or slightly above best-fit
   log_lower_bound = log_best_fit + 0.01  # Just above best-fit
-  
+
   hr_calc_tight = datacard.km_hazard_ratio(
     parameter_threshold=0.5,
     parameter_min=0.01,

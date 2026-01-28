@@ -279,15 +279,17 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
     # Check if best fit from scan is at the scan boundaries
     if best_idx == 0:
       warnings.warn(
-        f"Best-fit hazard ratio {hazard_ratios[0]:.6f} is at the lower limit of the scan range. "
-        f"Consider extending the scan to lower values with hazard_ratio_min < {hazard_ratios[0]:.6f}.",
+        f"Best-fit hazard ratio {hazard_ratios[0]:.6f} is at the lower "
+        f"limit of the scan range. Consider extending the scan to lower "
+        f"values with hazard_ratio_min < {hazard_ratios[0]:.6f}.",
         RuntimeWarning,
         stacklevel=2
       )
     elif best_idx == len(hazard_ratios) - 1:
       warnings.warn(
-        f"Best-fit hazard ratio {hazard_ratios[-1]:.6f} is at the upper limit of the scan range. "
-        f"Consider extending the scan to higher values with hazard_ratio_max > {hazard_ratios[-1]:.6f}.",
+        f"Best-fit hazard ratio {hazard_ratios[-1]:.6f} is at the upper "
+        f"limit of the scan range. Consider extending the scan to higher "
+        f"values with hazard_ratio_max > {hazard_ratios[-1]:.6f}.",
         RuntimeWarning,
         stacklevel=2
       )
@@ -350,9 +352,9 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
     if not result_opt.success:
       raise ValueError("Could not find best-fit hazard ratio")
 
-    best_fit_log_hr = result_opt.x
+    best_fit_log_hr = float(result_opt.x)  # type: ignore[arg-type]
     best_fit_hr = np.exp(best_fit_log_hr)
-    min_twonll = result_opt.fun
+    min_twonll = float(result_opt.fun)  # type: ignore[arg-type]
 
     # Get the best-fit result with full details
     best_fit_result = self.compute_2nll_at_hazard_ratio(best_fit_hr, cox_only=cox_only)
@@ -376,7 +378,7 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
         best_fit_log_hr,
         xtol=tolerance
       )
-      lower_ci = np.exp(lower_log_hr)
+      lower_ci = np.exp(float(lower_log_hr))  # type: ignore[arg-type]
     except ValueError:
       # If no crossing found, the lower bound is at the search limit
       lower_ci = hazard_ratio_min
@@ -389,7 +391,7 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
         np.log(hazard_ratio_max),
         xtol=tolerance
       )
-      upper_ci = np.exp(upper_log_hr)
+      upper_ci = np.exp(float(upper_log_hr))  # type: ignore[arg-type]
     except ValueError:
       # If no crossing found, the upper bound is at the search limit
       upper_ci = hazard_ratio_max

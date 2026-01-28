@@ -1005,9 +1005,11 @@ class Datacard:
     log_zero_epsilon : float, optional
         Small epsilon value to avoid log(0). Default from utilities.
     tie_handling : str, optional
-        Method for handling tied death times. Currently only "breslow" is supported. Default is "breslow".
+        Method for handling tied death times. Currently only "breslow" is
+        supported. Default is "breslow".
     log_hazard_ratio_bounds : tuple[float, float], optional
-        Bounds on log(hazard ratio) for the Gurobi model, as (lower_bound, upper_bound).
+        Bounds on log(hazard ratio) for the Gurobi model, as
+        (lower_bound, upper_bound).
         These correspond to hazard ratio bounds of (exp(lb), exp(ub)).
         Default is (-10.0, 10.0), allowing HR in [0.000045, 22026].
         Increase these if you need to explore more extreme hazard ratios.
@@ -1015,8 +1017,8 @@ class Datacard:
     Returns
     -------
     MINLPforKMHazardRatio
-        A hazard ratio calculator object with methods for computing hazard ratios, confidence intervals,
-        and likelihood scans.
+        A hazard ratio calculator object with methods for computing hazard
+        ratios, confidence intervals, and likelihood scans.
 
     Examples
     --------
@@ -1027,8 +1029,8 @@ class Datacard:
     >>> print(f"Hazard ratio: {best_fit:.2f} [{lower_ci:.2f}, {upper_ci:.2f}]")
     """
     # Import here to avoid circular import
-    from .kaplan_meier_hazard_ratio_MINLP import MINLPforKMHazardRatio
-    
+    from .kaplan_meier_hazard_ratio_MINLP import MINLPforKMHazardRatio  # pylint: disable=redefined-outer-name,import-outside-toplevel
+
     patients = []
     for p in self.patients:
       nll = p.get_nll()
