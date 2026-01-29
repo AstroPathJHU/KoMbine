@@ -65,3 +65,118 @@ plt.show()
 ```
 
 We do, in fact, get 1:1 agreement with `lifelines`.
+
+
+## Comparing Logrank P-Values: Standard vs Yi's Correction
+
+In addition to survival curve estimation, we can compare hypothesis testing approaches. Let's compare:
+1. **Standard logrank test** (lifelines)
+2. **KoMbine logrank** (same as standard for fixed observables)
+3. **Yi's misclassification correction** (accounts for measurement error)
+
+For fixed observables (no measurement error), all three methods should agree.
+
+```python
+# Create a two-group dataset for logrank testing
+# Group 0: patients with low observable values
+# Group 1: patients with high observable values
+
+# Parse the datacard with two groups
+datacard_two_groups = Datacard.parse_datacard(datacardfile)
+
+# Define a threshold to split patients (use median)
+observables = [p.observable.value for p in datacard_two_groups.patients]
+threshold = np.median(observables)
+
+print(f"Splitting patients at threshold: {threshold}")
+print(f"Total patients: {len(datacard_two_groups.patients)}")
+
+# Create groups for lifelines
+group_labels = []
+times = []
+events = []
+
+for p in datacard_two_groups.patients:
+    if p.observable.value < threshold:
+        group_labels.append(0)
+    else:
+        group_labels.append(1)
+    times.append(p.survival_time)
+    events.append(not p.censored)
+
+print(f"Group 0 (low): {sum(1 for g in group_labels if g == 0)} patients")
+print(f"Group 1 (high): {sum(1 for g in group_labels if g == 1)} patients")
+```
+
+### Method 1: Lifelines Logrank Test
+
+```python
+from lifelines.statistics import logrank_test
+
+# Lifelines logrank test
+results_lifelines = logrank_test(
+    durations_A=[t for t, g in zip(times, group_labels) if g == 0],
+    durations_B=[t for t, g in zip(times, group_labels) if g == 1],
+    event_observed_A=[e for e, g in zip(events, group_labels) if g == 0],
+    event_observed_B=[e for e, g in zip(events, group_labels) if g == 1]
+)
+
+print("Lifelines Logrank Test:")
+print(f"  Test statistic: {results_lifelines.test_statistic:.4f}")
+print(f"  P-value: {results_lifelines.p_value:.6f}")
+```
+
+### Method 2: KoMbine Logrank Test
+
+```python
+# KoMbine logrank test (standard, no measurement error for fixed observables)
+p_value_kombine = datacard_two_groups.km_p_value_logrank(
+    parameter_threshold=threshold,
+    parameter_min=-np.inf,
+    parameter_max=np.inf,
+    cox_only=True
+)
+
+print("KoMbine Logrank Test:")
+print(f"  P-value: {p_value_kombine:.6f}")
+```
+
+### Method 3: Yi's Misclassification Correction
+
+```python
+# Yi's correction method (for fixed observables, should match standard)
+result_yi = datacard_two_groups.km_p_value_logrank_yi(
+    parameter_threshold=threshold,
+    parameter_min=-np.inf,
+    parameter_max=np.inf,
+    method='bayesian'
+)
+
+print("Yi's Correction Method:")
+print(f"  Test statistic: {result_yi['logrank_statistic']:.4f}")
+print(f"  P-value: {result_yi['p_value']:.6f}")
+print(f"  Misclassification matrix (diagonal should be ~1.0 for fixed observables):")
+print(f"    Π[0,0] = {result_yi['misclassification_matrix'][0,0]:.4f}")
+print(f"    Π[1,1] = {result_yi['misclassification_matrix'][1,1]:.4f}")
+```
+
+### Comparison Summary
+
+```python
+print("=" * 60)
+print("P-Value Comparison Summary")
+print("=" * 60)
+print(f"{'Method':<30} {'P-value':<15} {'Match?':<10}")
+print("-" * 60)
+print(f"{'Lifelines (standard)':<30} {results_lifelines.p_value:<15.6f} {'Reference':<10}")
+print(f"{'KoMbine (standard)':<30} {p_value_kombine:<15.6f} {'✓' if abs(results_lifelines.p_value - p_value_kombine) < 1e-4 else '✗':<10}")
+print(f"{'Yi correction':<30} {result_yi['p_value']:<15.6f} {'✓' if abs(results_lifelines.p_value - result_yi['p_value']) < 1e-4 else '✗':<10}")
+print("=" * 60)
+
+print("\nKey Observations:")
+print("- For fixed observables (no measurement error), all three methods agree")
+print("- Yi's misclassification matrix is nearly identity (Π[0,0] ≈ Π[1,1] ≈ 1)")
+print("- Yi's method provides a framework for handling measurement uncertainty")
+print("- When measurement error is present (e.g., Poisson counts), Yi's p-value")
+print("  will differ from the standard logrank, properly accounting for uncertainty")
+```

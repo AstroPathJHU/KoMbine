@@ -16,7 +16,11 @@ import scipy.optimize
 import scipy.stats
 
 from .kaplan_meier_MINLP import KaplanMeierPatientNLL, n_choose_d_term_table
-from .utilities import LOG_ZERO_EPSILON_DEFAULT
+from .utilities import (
+  LOG_ZERO_EPSILON_DEFAULT,
+  estimate_misclassification_matrix,
+  invert_misclassification_matrix,
+)
 
 class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-instance-attributes
   """
@@ -1215,3 +1219,198 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     p_value = 1.0 - scipy.stats.chi2.cdf(logrank_statistic, df=1).item()
 
     return p_value
+
+  def survival_curves_pvalue_logrank_yi(  #pylint: disable=too-many-locals
+    self,
+    *,
+    method: str = 'bayesian',
+    prior_alpha: float = 0.5,
+    prior_beta: float = 0.0,
+  ) -> dict:
+    """
+    Calculate p-value using Yi's misclassification correction method (Section 3.7.1).
+    
+    This implements Yi's correction for discrete covariate misclassification applied
+    to the logrank test. Instead of using integer optimization (MINLP), this method
+    uses inverse probability weighting to account for measurement uncertainty.
+    
+    Parameters
+    ----------
+    method : str, optional
+        Method for estimating misclassification probabilities:
+        - 'bayesian': Full Bayesian posterior (default, more accurate)
+        - 'normal_approx': Normal approximation (faster, less accurate for small counts)
+    prior_alpha : float, optional
+        Alpha parameter for Gamma prior (Bayesian method only). Default 0.5 (Jeffreys).
+    prior_beta : float, optional
+        Beta parameter for Gamma prior (Bayesian method only). Default 0.5.
+    
+    Returns
+    -------
+    dict
+        Dictionary containing:
+        - 'p_value' : float
+            The p-value from the corrected logrank test.
+        - 'logrank_statistic' : float
+            The corrected logrank test statistic (chi-square distributed, df=1).
+        - 'U' : float
+            Sum of (observed - expected) weighted deaths for low group.
+        - 'V' : float
+            Sum of weighted variances.
+        - 'misclassification_matrix' : ndarray
+            Estimated 2x2 misclassification matrix Π.
+        - 'inverse_misclassification_matrix' : ndarray
+            Inverse matrix Π^{-1} used for weighting.
+        - 'n_low_observed' : int
+            Number of patients observed in low group.
+        - 'n_high_observed' : int
+            Number of patients observed in high group.
+    
+    Notes
+    -----
+    Yi's method (Statistical Analysis with Measurement Error or Misclassification, 2017)
+    uses inverse probability weighting to correct for misclassification:
+    
+    1. Estimate misclassification matrix Π where Π[i,j] = P(observed=j | true=i)
+    2. Compute inverse matrix Π^{-1} for weighting
+    3. Each patient contributes fractionally to both groups weighted by Π^{-1}
+    4. Compute corrected logrank test using weighted risk sets and event counts
+    
+    The weighted logrank test formula:
+    - At each death time t, compute weighted risk sets r_k^*(t) and deaths d_k^*(t)
+    - U^* = sum_t [d_1^*(t) - r_1^*(t) * (d_0^* + d_1^*) / (r_0^* + r_1^*)]
+    - V^* = sum_t [r_0^* * r_1^* * (d_0^* + d_1^*) * (r_0^* + r_1^* - d_0^* - d_1^*) / 
+                    ((r_0^* + r_1^*)^2 * (r_0^* + r_1^* - 1))]
+    - Logrank statistic = (U^*)^2 / V^* ~ chi^2(1)
+    
+    This differs from KoMbine's MINLP approach:
+    - Yi: Probabilistic weighting (no optimization, fractional assignments)
+    - MINLP: Integer optimization over discrete assignments with NLL penalties
+    
+    See Section 3.7.1 of Yi's book for theoretical foundation. The logrank
+    extension follows naturally from the weighted risk set principle (Equation 3.57).
+    """
+    # Estimate misclassification matrix from patient data
+    Pi = estimate_misclassification_matrix(
+      self.all_patients,
+      self.parameter_threshold,
+      method=method,
+      prior_alpha=prior_alpha,
+      prior_beta=prior_beta,
+    )
+    
+    # Compute inverse matrix for weighting
+    Pi_inv = invert_misclassification_matrix(Pi)
+    
+    # Count patients by observed group
+    n_low_observed = sum(
+      1 for p in self.all_patients 
+      if p.observed_parameter <= self.parameter_threshold
+    )
+    n_high_observed = len(self.all_patients) - n_low_observed
+    
+    # Get all unique death times
+    all_death_times = sorted(set(
+      p.time for p in self.all_patients if not p.censored
+    ))
+    
+    if not all_death_times:
+      raise ValueError("No death events found in patient data.")
+    
+    # Calculate weighted logrank test statistic following Yi's correction
+    U = 0.0  # Sum of (observed - expected) for low group (weighted)
+    V = 0.0  # Sum of variances (weighted)
+    
+    for death_time in all_death_times:
+      # Compute weighted risk sets and death counts at this time
+      r_low_weighted = 0.0
+      r_high_weighted = 0.0
+      d_low_weighted = 0.0
+      d_high_weighted = 0.0
+      
+      for patient in self.all_patients:
+        if patient.time < death_time:
+          # Patient not at risk
+          continue
+        
+        # Determine observed group (0 = low, 1 = high)
+        observed_group = 1 if patient.observed_parameter > self.parameter_threshold else 0
+        
+        # Inverse probability weights for this patient
+        # If observed in group 0 (low):
+        #   Weight for true=0: Pi_inv[0, 0]
+        #   Weight for true=1: Pi_inv[1, 0]
+        # If observed in group 1 (high):
+        #   Weight for true=0: Pi_inv[0, 1]
+        #   Weight for true=1: Pi_inv[1, 1]
+        
+        if observed_group == 0:
+          weight_low = Pi_inv[0, 0]
+          weight_high = Pi_inv[1, 0]
+        else:
+          weight_low = Pi_inv[0, 1]
+          weight_high = Pi_inv[1, 1]
+        
+        # Add to risk sets
+        r_low_weighted += weight_low
+        r_high_weighted += weight_high
+        
+        # If patient dies at this time, add to death counts
+        if patient.time == death_time and not patient.censored:
+          d_low_weighted += weight_low
+          d_high_weighted += weight_high
+      
+      # Compute logrank components for this death time
+      r_total_weighted = r_low_weighted + r_high_weighted
+      d_total_weighted = d_low_weighted + d_high_weighted
+      
+      if r_total_weighted <= 0 or d_total_weighted <= 0:
+        continue
+      
+      # Expected deaths in low group under null hypothesis
+      expected_d_low = r_low_weighted * d_total_weighted / r_total_weighted
+      
+      # Variance for this time point
+      if r_total_weighted > 1:
+        variance_t = (
+          r_low_weighted * r_high_weighted * d_total_weighted * 
+          (r_total_weighted - d_total_weighted)
+        ) / (
+          r_total_weighted * r_total_weighted * (r_total_weighted - 1)
+        )
+      else:
+        variance_t = 0.0
+      
+      # Accumulate test statistic components
+      U += d_low_weighted - expected_d_low
+      V += variance_t
+    
+    if V <= 0:
+      # No variance means no information for comparison
+      return {
+        'p_value': 1.0,
+        'logrank_statistic': 0.0,
+        'U': U,
+        'V': V,
+        'misclassification_matrix': Pi,
+        'inverse_misclassification_matrix': Pi_inv,
+        'n_low_observed': n_low_observed,
+        'n_high_observed': n_high_observed,
+      }
+    
+    # Logrank test statistic
+    logrank_statistic = U * U / V
+    
+    # Calculate p-value using chi-square distribution with 1 degree of freedom
+    p_value = 1.0 - scipy.stats.chi2.cdf(logrank_statistic, df=1).item()
+    
+    return {
+      'p_value': p_value,
+      'logrank_statistic': logrank_statistic,
+      'U': U,
+      'V': V,
+      'misclassification_matrix': Pi,
+      'inverse_misclassification_matrix': Pi_inv,
+      'n_low_observed': n_low_observed,
+      'n_high_observed': n_high_observed,
+    }

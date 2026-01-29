@@ -141,19 +141,19 @@ This demonstrates that when measurement uncertainty is small, KoMbine's results 
 
 ```python
 # Load Poisson density datacard with large counts
-dcfile_poisson_large = datacards_dir / "poisson_density_hr_example_large.txt"
-datacard_poisson_large = Datacard.parse_datacard(dcfile_poisson_large)
+dcfile_poisson_large_counts = datacards_dir / "poisson_density_hr_example_large.txt"
+datacard_poisson_large_counts = Datacard.parse_datacard(dcfile_poisson_large_counts)
 
 print("=" * 60)
 print("POISSON DENSITY - LARGE COUNTS")
 print("=" * 60)
-print(f"Loaded {len(datacard_poisson_large.patients)} patients")
-print(f"Number of deaths: {sum(1 for p in datacard_poisson_large.patients if not p.censored)}")
-print(f"Number of censored: {sum(1 for p in datacard_poisson_large.patients if p.censored)}")
+print(f"Loaded {len(datacard_poisson_large_counts.patients)} patients")
+print(f"Number of deaths: {sum(1 for p in datacard_poisson_large_counts.patients if not p.censored)}")
+print(f"Number of censored: {sum(1 for p in datacard_poisson_large_counts.patients if p.censored)}")
 
 # Check the counts to show they're large
-nums = [p.observable.numerator for p in datacard_poisson_large.patients]  # type: ignore[union-attr]
-areas = [p.observable.denominator for p in datacard_poisson_large.patients]  # type: ignore[union-attr]
+nums = [p.observable.numerator for p in datacard_poisson_large_counts.patients]  # type: ignore[union-attr]
+areas = [p.observable.denominator for p in datacard_poisson_large_counts.patients]  # type: ignore[union-attr]
 densities = [n/a for n, a in zip(nums, areas)]
 print("\nCount statistics:")
 print(f"  Mean count: {np.mean(nums):.1f}")
@@ -165,21 +165,21 @@ print("\nWith large counts, Poisson error is small -> Cox error dominates")
 ```python
 # Create hazard ratio calculator for Poisson density (large counts)
 # For poisson_density, we need parameter_min/max for the density parameter
-hr_calc_poisson_large = datacard_poisson_large.km_hazard_ratio(
+hr_calc_poisson_large_counts = datacard_poisson_large_counts.km_hazard_ratio(
     parameter_threshold=0.5,
     parameter_min=0.01,
     parameter_max=0.99,
 )
 
 # Calculate confidence intervals
-best_fit_hr_large, lower_ci_68_large, upper_ci_68_large, result_68_large = hr_calc_poisson_large.hazard_ratio_confidence_interval(
+best_fit_hr_large, lower_ci_68_large, upper_ci_68_large, result_68_large = hr_calc_poisson_large_counts.hazard_ratio_confidence_interval(
     cox_only=False,
     confidence_level=0.68,
     hazard_ratio_min=0.5,
     hazard_ratio_max=10.0,
 )
 
-_, lower_ci_95_large, upper_ci_95_large, _ = hr_calc_poisson_large.hazard_ratio_confidence_interval(
+_, lower_ci_95_large, upper_ci_95_large, _ = hr_calc_poisson_large_counts.hazard_ratio_confidence_interval(
     cox_only=False,
     confidence_level=0.95,
 )
@@ -190,7 +190,7 @@ print(f"95% CI: [{lower_ci_95_large:.3f}, {upper_ci_95_large:.3f}]")
 print(f"\n2NLL at best fit: {result_68_large.x:.2f}")
 
 # Perform likelihood scan
-hazard_ratios_large, twonll_values_large, best_fit_result_large = hr_calc_poisson_large.likelihood_scan_hazard_ratio(
+hazard_ratios_large, twonll_values_large, best_fit_result_large = hr_calc_poisson_large_counts.likelihood_scan_hazard_ratio(
     n_points=50,
     hazard_ratio_min=0.5,
     hazard_ratio_max=6.0,
@@ -198,7 +198,7 @@ hazard_ratios_large, twonll_values_large, best_fit_result_large = hr_calc_poisso
 )
 
 # Store for comparison
-poisson_large_scan_data = {
+poisson_large_counts_scan_data = {
     'hrs': hazard_ratios_large,
     'twonll': twonll_values_large,
     'best_fit': best_fit_hr_large,
@@ -236,19 +236,19 @@ This demonstrates KoMbine's key advantage: properly accounting for biomarker mea
 
 ```python
 # Load Poisson density datacard with moderate counts
-dcfile_poisson_moderate = datacards_dir / "poisson_density_hr_example_moderate.txt"
-datacard_poisson_moderate = Datacard.parse_datacard(dcfile_poisson_moderate)
+dcfile_poisson_moderate_counts = datacards_dir / "poisson_density_hr_example_moderate.txt"
+datacard_poisson_moderate_counts = Datacard.parse_datacard(dcfile_poisson_moderate_counts)
 
 print("=" * 60)
 print("POISSON DENSITY - MODERATE COUNTS")
 print("=" * 60)
-print(f"Loaded {len(datacard_poisson_moderate.patients)} patients")
-print(f"Number of deaths: {sum(1 for p in datacard_poisson_moderate.patients if not p.censored)}")
-print(f"Number of censored: {sum(1 for p in datacard_poisson_moderate.patients if p.censored)}")
+print(f"Loaded {len(datacard_poisson_moderate_counts.patients)} patients")
+print(f"Number of deaths: {sum(1 for p in datacard_poisson_moderate_counts.patients if not p.censored)}")
+print(f"Number of censored: {sum(1 for p in datacard_poisson_moderate_counts.patients if p.censored)}")
 
 # Check the counts to show they're moderate
-nums = [p.observable.numerator for p in datacard_poisson_moderate.patients]  # type: ignore[union-attr]
-areas = [p.observable.denominator for p in datacard_poisson_moderate.patients]  # type: ignore[union-attr]
+nums = [p.observable.numerator for p in datacard_poisson_moderate_counts.patients]  # type: ignore[union-attr]
+areas = [p.observable.denominator for p in datacard_poisson_moderate_counts.patients]  # type: ignore[union-attr]
 densities = [n/a for n, a in zip(nums, areas)]
 print("\nCount statistics:")
 print(f"  Mean count: {np.mean(nums):.1f}")
@@ -256,7 +256,7 @@ print(f"  Range: [{min(nums)}, {max(nums)}]")
 print(f"  Relative uncertainty (√N/N): {np.mean([np.sqrt(n)/n for n in nums]):.1%}")
 
 # Estimate probability of crossing threshold for patients near it
-near_threshold = [p for p in datacard_poisson_moderate.patients if 0.4 <= p.observable.numerator/p.observable.denominator <= 0.6]  # type: ignore[union-attr]
+near_threshold = [p for p in datacard_poisson_moderate_counts.patients if 0.4 <= p.observable.numerator/p.observable.denominator <= 0.6]  # type: ignore[union-attr]
 print(f"\nPatients near threshold (density 0.4-0.6): {len(near_threshold)}")
 if near_threshold:
     # Rough estimate: probability that observed density ± √N/N crosses threshold
@@ -270,21 +270,21 @@ print("\nWith moderate counts, measurement uncertainty is significant!")
 
 ```python
 # Create hazard ratio calculator for Poisson density (moderate counts)
-hr_calc_poisson_moderate = datacard_poisson_moderate.km_hazard_ratio(
+hr_calc_poisson_moderate_counts = datacard_poisson_moderate_counts.km_hazard_ratio(
     parameter_threshold=0.5,
     parameter_min=0.01,
     parameter_max=0.99,
 )
 
 # Calculate confidence intervals
-best_fit_hr_moderate, lower_ci_68_moderate, upper_ci_68_moderate, result_68_moderate = hr_calc_poisson_moderate.hazard_ratio_confidence_interval(
+best_fit_hr_moderate, lower_ci_68_moderate, upper_ci_68_moderate, result_68_moderate = hr_calc_poisson_moderate_counts.hazard_ratio_confidence_interval(
     cox_only=False,
     confidence_level=0.68,
     hazard_ratio_min=0.5,
     hazard_ratio_max=10.0,
 )
 
-_, lower_ci_95_moderate, upper_ci_95_moderate, _ = hr_calc_poisson_moderate.hazard_ratio_confidence_interval(
+_, lower_ci_95_moderate, upper_ci_95_moderate, _ = hr_calc_poisson_moderate_counts.hazard_ratio_confidence_interval(
     cox_only=False,
     confidence_level=0.95,
 )
@@ -295,7 +295,7 @@ print(f"95% CI: [{lower_ci_95_moderate:.3f}, {upper_ci_95_moderate:.3f}]")
 print(f"\n2NLL at best fit: {result_68_moderate.x:.2f}")
 
 # Perform likelihood scan
-hazard_ratios_moderate, twonll_values_moderate, best_fit_result_moderate = hr_calc_poisson_moderate.likelihood_scan_hazard_ratio(
+hazard_ratios_moderate, twonll_values_moderate, best_fit_result_moderate = hr_calc_poisson_moderate_counts.likelihood_scan_hazard_ratio(
     n_points=50,
     hazard_ratio_min=0.5,
     hazard_ratio_max=6.0,
@@ -303,7 +303,7 @@ hazard_ratios_moderate, twonll_values_moderate, best_fit_result_moderate = hr_ca
 )
 
 # Store for comparison
-poisson_moderate_scan_data = {
+poisson_moderate_counts_scan_data = {
     'hrs': hazard_ratios_moderate,
     'twonll': twonll_values_moderate,
     'best_fit': best_fit_hr_moderate,
@@ -478,3 +478,174 @@ This notebook demonstrated:
 5. ✅ Understanding when KoMbine's full model provides value over standard Cox analysis
 
 The hazard ratio provides a clinically interpretable effect size that complements the p-value from hypothesis testing, and KoMbine ensures that biomarker measurement uncertainty is properly incorporated into the analysis.
+
+## Comparison with Yi's Misclassification Correction Method
+
+Now let's compare our MINLP approach with Yi's misclassification correction method from Section 3.7.1 of *Statistical Analysis with Measurement Error or Misclassification* (2017).
+
+Yi's method uses inverse probability weighting to correct for misclassification when the covariate is measured with error. Unlike our MINLP approach that searches for optimal classification boundaries, Yi's method assumes we know the misclassification probabilities (or can estimate them from the data using Bayesian methods).
+
+Let's compute hazard ratios using both methods and compare the results. We'll use the large Poisson count example (small but nonzero measurement errors) where we expect the best agreement between methods:
+
+```python
+# Use the large counts example for comparison (small Poisson errors)
+# This should show best agreement between MINLP and Yi's method
+datacard = datacard_poisson_large_counts
+threshold = 0.5
+
+# Create calculator once (reuse from earlier in notebook)
+hr_calc = hr_calc_poisson_large_counts
+
+# Compare MINLP vs Yi's method at multiple hazard ratios
+hazard_ratios_to_test = [1.0, 1.5, 2.0, 2.5, 3.0]
+
+print("Comparing MINLP vs Yi's Method")
+print("=" * 60)
+print(f"{'HR':<8} {'MINLP 2NLL':<15} {'Yi 2NLL':<15} {'Difference':<12}")
+print("-" * 60)
+
+for hr_test in hazard_ratios_to_test:
+    # MINLP approach - use compute_2nll_at_hazard_ratio
+    result_minlp = hr_calc.compute_2nll_at_hazard_ratio(
+        hazard_ratio=hr_test,
+        cox_only=False
+    )
+    
+    # Yi's method
+    result_yi = datacard.km_hazard_ratio_yi(
+        parameter_threshold=threshold,
+        hazard_ratio=hr_test,
+        parameter_min=0.01,
+        parameter_max=0.99,
+        method='bayesian',
+    )
+    
+    diff = result_minlp.x - result_yi['x']
+    print(f"{hr_test:<8.1f} {result_minlp.x:<15.4f} {result_yi['x']:<15.4f} {diff:<12.4f}")
+```
+
+### Visualizing Misclassification Probabilities
+
+Let's examine the misclassification matrix Π used by Yi's method. This matrix shows the probability that a patient in the true high-risk group is observed in the high-risk group (and vice versa):
+
+```python
+# Show misclassification matrices for both datasets
+for datacard_name, datacard in [
+    ("LARGE COUNTS", datacard_poisson_large_counts),
+    ("MODERATE COUNTS", datacard_poisson_moderate_counts)
+]:
+    result_yi = datacard.km_hazard_ratio_yi(
+        parameter_threshold=threshold,
+        hazard_ratio=2.0,
+        parameter_min=0.01,
+        parameter_max=0.99,
+        method='bayesian',
+    )
+    
+    print(f"\n{datacard_name} - Misclassification Matrix (Π):")
+    print("=" * 70)
+    print("(Rows = true group, Columns = observed group)")
+    print(f"                    Observed Low    Observed High")
+    print(f"True Low:           {result_yi['misclassification_matrix'][0,0]:12.4f}    {result_yi['misclassification_matrix'][0,1]:13.4f}")
+    print(f"True High:          {result_yi['misclassification_matrix'][1,0]:12.4f}    {result_yi['misclassification_matrix'][1,1]:13.4f}")
+    print()
+    print("Inverse Misclassification Matrix (Π⁻¹):")
+    print(f"                    Observed Low    Observed High")
+    print(f"True Low:           {result_yi['inverse_misclassification_matrix'][0,0]:12.4f}    {result_yi['inverse_misclassification_matrix'][0,1]:13.4f}")
+    print(f"True High:          {result_yi['inverse_misclassification_matrix'][1,0]:12.4f}    {result_yi['inverse_misclassification_matrix'][1,1]:13.4f}")
+    print()
+    print("Interpretation:")
+    print(f"  P(observed high | true high) = {result_yi['misclassification_matrix'][1,1]:.4f}")
+    print(f"  P(observed low | true low)   = {result_yi['misclassification_matrix'][0,0]:.4f}")
+    print(f"  P(observed high | true low)  = {result_yi['misclassification_matrix'][0,1]:.4f}")
+    print(f"  P(observed low | true high)  = {result_yi['misclassification_matrix'][1,0]:.4f}")
+    
+    if datacard_name == "LARGE COUNTS":
+        print("  → Near-identity matrix: minimal misclassification (small Poisson errors)")
+    else:
+        print("  → Non-trivial off-diagonal: significant misclassification probability")
+```
+
+### Likelihood Scan Comparison
+
+Let's create a visual comparison of the likelihood scans from both methods:
+
+```python
+# Compare likelihood scans for both datasets
+hazard_ratios_scan = np.linspace(0.5, 4.0, 50)
+
+# Create side-by-side plots for large and moderate counts
+fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+
+for col_idx, (datacard_name, datacard, hr_calc) in enumerate([
+    ("Large Counts", datacard_poisson_large_counts, hr_calc_poisson_large_counts),
+    ("Moderate Counts", datacard_poisson_moderate_counts, hr_calc_poisson_moderate_counts)
+]):
+    nll_minlp = []
+    nll_yi = []
+    
+    # Compute likelihood scans
+    for hr in hazard_ratios_scan:
+        # MINLP approach
+        result_minlp = hr_calc.compute_2nll_at_hazard_ratio(
+            hazard_ratio=hr,
+            cox_only=False
+        )
+        nll_minlp.append(result_minlp.x)
+        
+        # Yi's method
+        result_yi = datacard.km_hazard_ratio_yi(
+            parameter_threshold=threshold,
+            hazard_ratio=hr,
+            parameter_min=0.01,
+            parameter_max=0.99,
+            method='bayesian',
+        )
+        nll_yi.append(result_yi['x'])
+    
+    # Convert to arrays and compute minima
+    nll_minlp = np.array(nll_minlp)
+    nll_yi = np.array(nll_yi)
+    minlp_min = np.min(nll_minlp)
+    yi_min = np.min(nll_yi)
+    
+    # Compute -2Δ(NLL) relative to each method's minimum
+    delta_nll_minlp = nll_minlp - minlp_min
+    delta_nll_yi = nll_yi - yi_min
+    
+    # Top row: -2Δ ln L (CMS convention)
+    ax1 = axes[0, col_idx]
+    ax1.plot(hazard_ratios_scan, delta_nll_minlp, 'b-', label='MINLP', linewidth=2)
+    ax1.plot(hazard_ratios_scan, delta_nll_yi, 'r--', label="Yi's Method", linewidth=2)
+    ax1.set_xlabel('Hazard Ratio', fontsize=11)
+    ax1.set_ylabel(r'$-2 \Delta \ln L$', fontsize=11)
+    ax1.set_title(f'{datacard_name}: MINLP vs Yi\'s Method', fontsize=12, fontweight='bold')
+    ax1.legend(fontsize=10)
+    ax1.grid(True, alpha=0.3)
+    ax1.set_ylim([0, max(np.max(delta_nll_minlp), np.max(delta_nll_yi)) * 1.1])
+    
+    # Bottom row: Absolute -2 ln L (shows offset)
+    ax2 = axes[1, col_idx]
+    ax2.plot(hazard_ratios_scan, nll_minlp, 'b-', label='MINLP', linewidth=2)
+    ax2.plot(hazard_ratios_scan, nll_yi, 'r--', label="Yi's Method", linewidth=2)
+    ax2.set_xlabel('Hazard Ratio', fontsize=11)
+    ax2.set_ylabel(r'$-2 \ln L$ (absolute)', fontsize=11)
+    ax2.set_title(f'{datacard_name}: Absolute Likelihood', fontsize=12, fontweight='bold')
+    ax2.legend(fontsize=10)
+    ax2.grid(True, alpha=0.3)
+    
+    # Print statistics
+    diff_absolute = nll_minlp - nll_yi
+    diff_delta = delta_nll_minlp - delta_nll_yi
+    print(f"\n{datacard_name} Statistics:")
+    print(f"  Absolute -2 ln L offset: {np.mean(diff_absolute):.4f} ± {np.std(diff_absolute):.4f}")
+    print(f"  Max absolute diff in -2Δ ln L: {np.max(np.abs(diff_delta)):.4f}")
+    print(f"  Mean absolute diff in -2Δ ln L: {np.mean(np.abs(diff_delta)):.4f}")
+
+plt.tight_layout()
+plt.show()
+```
+
+```python
+
+```

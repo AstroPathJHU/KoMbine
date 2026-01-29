@@ -1087,6 +1087,165 @@ class Datacard:
       cox_only=cox_only,
     )
 
+  def km_p_value_logrank_yi(
+    self,
+    *,
+    parameter_threshold: float,
+    parameter_min: float = -np.inf,
+    parameter_max: float = np.inf,
+    method: str = 'bayesian',
+    prior_alpha: float = 0.5,
+    prior_beta: float = 0.5,
+  ) -> dict:
+    """
+    Calculate p-value using Yi's misclassification correction method (Section 3.7.1).
+    
+    This is a convenience method that creates a MINLPforKMPValue object
+    and calls its survival_curves_pvalue_logrank_yi method.
+    
+    Yi's method uses inverse probability weighting to account for measurement uncertainty,
+    providing an alternative to KoMbine's MINLP optimization approach.
+    
+    Parameters
+    ----------
+    parameter_threshold : float
+        The threshold value that separates the two groups.
+    parameter_min : float, optional
+        The minimum parameter value to include in the analysis. Default is -inf.
+    parameter_max : float, optional
+        The maximum parameter value to include in the analysis. Default is +inf.
+    method : str, optional
+        Method for estimating misclassification probabilities:
+        - 'bayesian': Full Bayesian posterior (default, more accurate)
+        - 'normal_approx': Normal approximation (faster, less accurate for small counts)
+    prior_alpha : float, optional
+        Alpha parameter for Gamma prior (Bayesian method only). Default 0.5 (Jeffreys).
+    prior_beta : float, optional
+        Beta parameter for Gamma prior (Bayesian method only). Default 0.5.
+    
+    Returns
+    -------
+    dict
+        Dictionary containing:
+        - 'p_value' : float - The p-value from the corrected logrank test.
+        - 'logrank_statistic' : float - The corrected test statistic.
+        - 'U' : float - Weighted observed minus expected.
+        - 'V' : float - Weighted variance.
+        - 'misclassification_matrix' : ndarray - Estimated Π matrix.
+        - 'inverse_misclassification_matrix' : ndarray - Inverse Π^{-1} matrix.
+        - 'n_low_observed' : int - Patients observed in low group.
+        - 'n_high_observed' : int - Patients observed in high group.
+    
+    Notes
+    -----
+    See Yi (2017) "Statistical Analysis with Measurement Error or Misclassification",
+    Section 3.7.1 for theoretical foundation.
+    
+    Examples
+    --------
+    >>> from kombine.datacard import Datacard
+    >>> datacard = Datacard.parse_datacard("datacard.txt")
+    >>> result = datacard.km_p_value_logrank_yi(parameter_threshold=0.5)
+    >>> print(f"Yi's corrected p-value: {result['p_value']:.4f}")
+    """
+    minlp_pvalue = self.km_p_value(
+      parameter_min=parameter_min,
+      parameter_threshold=parameter_threshold,
+      parameter_max=parameter_max,
+    )
+
+    return minlp_pvalue.survival_curves_pvalue_logrank_yi(
+      method=method,
+      prior_alpha=prior_alpha,
+      prior_beta=prior_beta,
+    )
+
+  def km_hazard_ratio_yi(  #pylint: disable=too-many-arguments
+    self,
+    *,
+    parameter_threshold: float,
+    hazard_ratio: float,
+    parameter_min: float = -np.inf,
+    parameter_max: float = np.inf,
+    method: str = 'bayesian',
+    prior_alpha: float = 0.5,
+    prior_beta: float = 0.0,
+    log_hazard_ratio_bounds: tuple[float, float] = (-10.0, 10.0),
+  ) -> scipy.optimize.OptimizeResult:
+    """
+    Compute 2NLL at a hazard ratio using Yi's misclassification correction.
+    
+    This is a convenience method that creates a MINLPforKMHazardRatio object
+    and calls its compute_2nll_at_hazard_ratio_yi method.
+    
+    Yi's method uses inverse probability weighting to account for measurement uncertainty,
+    providing an alternative to KoMbine's MINLP optimization approach.
+    
+    Parameters
+    ----------
+    parameter_threshold : float
+        The threshold value that separates the two groups.
+    hazard_ratio : float
+        The hazard ratio value at which to evaluate the 2NLL.
+        H = 1 corresponds to equal hazards (null hypothesis).
+    parameter_min : float, optional
+        The minimum parameter value to include in the analysis. Default is -inf.
+    parameter_max : float, optional
+        The maximum parameter value to include in the analysis. Default is +inf.
+    method : str, optional
+        Method for estimating misclassification probabilities:
+        - 'bayesian': Full Bayesian posterior (default, more accurate)
+        - 'normal_approx': Normal approximation (faster, less accurate for small counts)
+    prior_alpha : float, optional
+        Alpha parameter for Gamma prior (Bayesian method only). Default 0.5 (Jeffreys).
+    prior_beta : float, optional
+        Beta parameter for Gamma prior (Bayesian method only). Default 0.5.
+    log_hazard_ratio_bounds : tuple[float, float], optional
+        Bounds on log(hazard ratio) for compatibility. Not used in Yi's method.
+        Default is (-10.0, 10.0).
+    
+    Returns
+    -------
+    scipy.optimize.OptimizeResult
+        Optimization result with attributes:
+        - x : float - The 2NLL value.
+        - success : bool - Always True for Yi's method.
+        - hazard_ratio : float - The hazard ratio value.
+        - log_hazard_ratio : float - Natural log of hazard ratio.
+        - cox_2NLL : float - Twice the corrected Cox partial likelihood.
+        - misclassification_matrix : ndarray - Estimated Π matrix.
+        - inverse_misclassification_matrix : ndarray - Inverse Π^{-1} matrix.
+    
+    Notes
+    -----
+    See Yi (2017) "Statistical Analysis with Measurement Error or Misclassification",
+    Section 3.7.1 for theoretical foundation.
+    
+    Examples
+    --------
+    >>> from kombine.datacard import Datacard
+    >>> datacard = Datacard.parse_datacard("datacard.txt")
+    >>> result = datacard.km_hazard_ratio_yi(
+    ...     parameter_threshold=0.5,
+    ...     hazard_ratio=2.0
+    ... )
+    >>> print(f"2NLL at HR=2.0: {result.x:.2f}")
+    """
+    hr_calc = self.km_hazard_ratio(
+      parameter_min=parameter_min,
+      parameter_threshold=parameter_threshold,
+      parameter_max=parameter_max,
+      log_hazard_ratio_bounds=log_hazard_ratio_bounds,
+    )
+
+    return hr_calc.compute_2nll_at_hazard_ratio_yi(
+      hazard_ratio=hazard_ratio,
+      original_patients=self.patients,  # Pass original patients for misclassification estimation
+      method=method,
+      prior_alpha=prior_alpha,
+      prior_beta=prior_beta,
+    )
+
   def clear_distributions(self):
     """
     Delete the distributions for all patients.
