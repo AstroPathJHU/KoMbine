@@ -152,8 +152,8 @@ print(f"Number of deaths: {sum(1 for p in datacard_poisson_large.patients if not
 print(f"Number of censored: {sum(1 for p in datacard_poisson_large.patients if p.censored)}")
 
 # Check the counts to show they're large
-nums = [p.observable.numerator for p in datacard_poisson_large.patients]
-areas = [p.observable.denominator for p in datacard_poisson_large.patients]
+nums = [p.observable.numerator for p in datacard_poisson_large.patients]  # type: ignore[union-attr]
+areas = [p.observable.denominator for p in datacard_poisson_large.patients]  # type: ignore[union-attr]
 densities = [n/a for n, a in zip(nums, areas)]
 print("\nCount statistics:")
 print(f"  Mean count: {np.mean(nums):.1f}")
@@ -247,8 +247,8 @@ print(f"Number of deaths: {sum(1 for p in datacard_poisson_moderate.patients if 
 print(f"Number of censored: {sum(1 for p in datacard_poisson_moderate.patients if p.censored)}")
 
 # Check the counts to show they're moderate
-nums = [p.observable.numerator for p in datacard_poisson_moderate.patients]
-areas = [p.observable.denominator for p in datacard_poisson_moderate.patients]
+nums = [p.observable.numerator for p in datacard_poisson_moderate.patients]  # type: ignore[union-attr]
+areas = [p.observable.denominator for p in datacard_poisson_moderate.patients]  # type: ignore[union-attr]
 densities = [n/a for n, a in zip(nums, areas)]
 print("\nCount statistics:")
 print(f"  Mean count: {np.mean(nums):.1f}")
@@ -256,13 +256,13 @@ print(f"  Range: [{min(nums)}, {max(nums)}]")
 print(f"  Relative uncertainty (√N/N): {np.mean([np.sqrt(n)/n for n in nums]):.1%}")
 
 # Estimate probability of crossing threshold for patients near it
-near_threshold = [p for p in datacard_poisson_moderate.patients if 0.4 <= p.observable.numerator/p.observable.denominator <= 0.6]
+near_threshold = [p for p in datacard_poisson_moderate.patients if 0.4 <= p.observable.numerator/p.observable.denominator <= 0.6]  # type: ignore[union-attr]
 print(f"\nPatients near threshold (density 0.4-0.6): {len(near_threshold)}")
 if near_threshold:
     # Rough estimate: probability that observed density ± √N/N crosses threshold
     example = near_threshold[0]
-    density = example.observable.numerator / example.observable.denominator
-    rel_unc = np.sqrt(example.observable.numerator) / example.observable.numerator
+    density = example.observable.numerator / example.observable.denominator  # type: ignore[union-attr]
+    rel_unc = np.sqrt(example.observable.numerator) / example.observable.numerator  # type: ignore[union-attr]
     print(f"  Example: density={density:.3f}, rel. unc.={rel_unc:.1%}")
     print(f"  -> ~{rel_unc*100:.0f}% chance of crossing threshold")
 print("\nWith moderate counts, measurement uncertainty is significant!")
