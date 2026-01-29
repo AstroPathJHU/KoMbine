@@ -762,7 +762,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     )
     model.update()
 
-    return (
+    return (  # pylint: disable=duplicate-code
       model,
       null_hypothesis_indicator,
       a,
@@ -969,7 +969,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     if MIPGapAbs is None:
       MIPGapAbs = self.__default_MIPGapAbs
 
-    (
+    (  # pylint: disable=duplicate-code
       model,
       null_hypothesis_indicator,
       a,

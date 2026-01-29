@@ -127,7 +127,7 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
         - model : gp.Model
             The Gurobi model (for advanced users).
     """
-    (
+    (  # pylint: disable=duplicate-code
       model,
       null_hypothesis_indicator,
       a,
