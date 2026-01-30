@@ -490,49 +490,52 @@ Yi's method uses inverse probability weighting to correct for misclassification 
 Let's compute hazard ratios using both methods and compare the results. We'll use the large Poisson count example (small but nonzero measurement errors) where we expect the best agreement between methods:
 
 ```python
-# Use the large counts example for comparison (small Poisson errors)
-# This should show best agreement between MINLP and Yi's method
-datacard = datacard_poisson_large_counts
+# Compare all three datasets: fixed, large counts, and moderate counts
 threshold = 0.5
-
-# Create calculator once (reuse from earlier in notebook)
-hr_calc = hr_calc_poisson_large_counts
-
-# Compare MINLP vs Yi's method at multiple hazard ratios
 hazard_ratios_to_test = [1.0, 1.5, 2.0, 2.5, 3.0]
 
-print("Comparing MINLP vs Yi's Method")
-print("=" * 60)
-print(f"{'HR':<8} {'MINLP 2NLL':<15} {'Yi 2NLL':<15} {'Difference':<12}")
-print("-" * 60)
-
-for hr_test in hazard_ratios_to_test:
-    # MINLP approach - use compute_2nll_at_hazard_ratio
-    result_minlp = hr_calc.compute_2nll_at_hazard_ratio(
-        hazard_ratio=hr_test,
-        cox_only=False
-    )
+for datacard_name, datacard, hr_calc in [
+    ("FIXED (No Measurement Uncertainty)", datacard_fixed, hr_calc_fixed),
+    ("LARGE COUNTS (Small Poisson Errors)", datacard_poisson_large_counts, hr_calc_poisson_large_counts),
+    ("MODERATE COUNTS (Larger Poisson Errors)", datacard_poisson_moderate_counts, hr_calc_poisson_moderate_counts)
+]:
+    print(f"\n{datacard_name} - Comparing MINLP vs Yi's Method")
+    print("=" * 70)
+    print(f"{'HR':<8} {'MINLP 2NLL':<15} {'Yi 2NLL':<15} {'Difference':<12}")
+    print("-" * 70)
     
-    # Yi's method
-    result_yi = datacard.km_hazard_ratio_yi(
-        parameter_threshold=threshold,
-        hazard_ratio=hr_test,
-        parameter_min=0.01,
-        parameter_max=0.99,
-        method='bayesian',
-    )
-    
-    diff = result_minlp.x - result_yi['x']
-    print(f"{hr_test:<8.1f} {result_minlp.x:<15.4f} {result_yi['x']:<15.4f} {diff:<12.4f}")
+    for hr_test in hazard_ratios_to_test:
+        # MINLP approach
+        result_minlp = hr_calc.compute_2nll_at_hazard_ratio(
+            hazard_ratio=hr_test,
+            cox_only=False
+        )
+        
+        # Yi's method
+        result_yi = datacard.km_hazard_ratio_yi(
+            parameter_threshold=threshold,
+            hazard_ratio=hr_test,
+            parameter_min=0.01,
+            parameter_max=0.99,
+            method='bayesian',
+        )
+        
+        diff = result_minlp.x - result_yi['x']
+        print(f"{hr_test:<8.1f} {result_minlp.x:<15.4f} {result_yi['x']:<15.4f} {diff:<12.4f}")
 ```
 
 ### Visualizing Misclassification Probabilities
 
-Let's examine the misclassification matrix Π used by Yi's method. This matrix shows the probability that a patient in the true high-risk group is observed in the high-risk group (and vice versa):
+Let's examine the misclassification matrix Π used by Yi's method. This matrix shows the probability that a patient in a true group is observed in an observed group:
+
+- **Fixed datacard**: Should be exactly identity (no measurement uncertainty)
+- **Large counts**: Near-identity (minimal misclassification due to small Poisson errors)
+- **Moderate counts**: Non-trivial off-diagonal elements (~4-7% misclassification probabilities)
 
 ```python
-# Show misclassification matrices for both datasets
+# Show misclassification matrices for all three datasets
 for datacard_name, datacard in [
+    ("FIXED", datacard_fixed),
     ("LARGE COUNTS", datacard_poisson_large_counts),
     ("MODERATE COUNTS", datacard_poisson_moderate_counts)
 ]:
@@ -551,24 +554,37 @@ for datacard_name, datacard in [
     print(f"True Low:           {result_yi['misclassification_matrix'][0,0]:12.4f}    {result_yi['misclassification_matrix'][0,1]:13.4f}")
     print(f"True High:          {result_yi['misclassification_matrix'][1,0]:12.4f}    {result_yi['misclassification_matrix'][1,1]:13.4f}")
     print()
-    print("Inverse Misclassification Matrix (Π⁻¹):")
-    print(f"                    Observed Low    Observed High")
-    print(f"True Low:           {result_yi['inverse_misclassification_matrix'][0,0]:12.4f}    {result_yi['inverse_misclassification_matrix'][0,1]:13.4f}")
-    print(f"True High:          {result_yi['inverse_misclassification_matrix'][1,0]:12.4f}    {result_yi['inverse_misclassification_matrix'][1,1]:13.4f}")
+    print("Interpretation:")
+    print(f"  P(observed high | true high) = {result_yi['misclassification_matrix'][1,1]:.4f}")
+    print(f"  P(observed low | true low)   = {result_yi['misclassification_matrix'][0,0]:.4f}")
+    print(f"  P(observed high | true low)  = {result_yi['misclassification_matrix'][0,1]:.4f}")
+    print(f"  P(observed low | true high)  = {result_yi['misclassification_matrix'][1,0]:.4f}")
+    
+    if datacard_name == "FIXED":
+        print("  → Identity matrix: perfect classification (no measurement error)")
+    elif datacard_name == "LARGE COUNTS":
+        print("  → Near-identity: minimal misclassification (small Poisson errors)")
+    else:
+        print("  → Non-trivial off-diagonal: significant misclassification probability")
 ```
 
 ### Likelihood Scan Comparison
 
-Let's create a visual comparison of the likelihood scans from both methods:
+Let's create a visual comparison of the likelihood scans from both methods across all three datasets:
+
+- **Fixed**: MINLP and Yi should be in perfect agreement (both assign patients deterministically)
+- **Large counts**: Near-perfect agreement (measurement uncertainty negligible)
+- **Moderate counts**: Still excellent agreement, but Yi's method uses probabilistic weighting
 
 ```python
-# Compare likelihood scans for both datasets
+# Compare likelihood scans for all three datasets
 hazard_ratios_scan = np.linspace(0.5, 4.0, 50)
 
-# Create side-by-side plots for large and moderate counts
-fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+# Create 3x2 plot grid (3 rows for fixed/large/moderate, 2 columns for delta and absolute)
+fig, axes = plt.subplots(3, 2, figsize=(14, 16))
 
-for col_idx, (datacard_name, datacard, hr_calc) in enumerate([
+for row_idx, (datacard_name, datacard, hr_calc) in enumerate([
+    ("Fixed", datacard_fixed, hr_calc_fixed),
     ("Large Counts", datacard_poisson_large_counts, hr_calc_poisson_large_counts),
     ("Moderate Counts", datacard_poisson_moderate_counts, hr_calc_poisson_moderate_counts)
 ]):
@@ -604,34 +620,34 @@ for col_idx, (datacard_name, datacard, hr_calc) in enumerate([
     delta_nll_minlp = nll_minlp - minlp_min
     delta_nll_yi = nll_yi - yi_min
     
-    # Top row: -2Δ ln L (CMS convention)
-    ax1 = axes[0, col_idx]
-    ax1.plot(hazard_ratios_scan, delta_nll_minlp, 'b-', label='MINLP', linewidth=2)
-    ax1.plot(hazard_ratios_scan, delta_nll_yi, 'r--', label="Yi's Method", linewidth=2)
-    ax1.set_xlabel('Hazard Ratio', fontsize=11)
-    ax1.set_ylabel(r'$-2 \Delta \ln L$', fontsize=11)
-    ax1.set_title(f'{datacard_name}: MINLP vs Yi\'s Method', fontsize=12, fontweight='bold')
-    ax1.legend(fontsize=10)
-    ax1.grid(True, alpha=0.3)
-    ax1.set_ylim([0, max(np.max(delta_nll_minlp), np.max(delta_nll_yi)) * 1.1])
+    # Left column: -2Δ ln L (CMS convention)
+    ax_delta = axes[row_idx, 0]
+    ax_delta.plot(hazard_ratios_scan, delta_nll_minlp, 'b-', label='MINLP', linewidth=2)
+    ax_delta.plot(hazard_ratios_scan, delta_nll_yi, 'r--', label="Yi's Method", linewidth=2)
+    ax_delta.set_xlabel('Hazard Ratio', fontsize=11)
+    ax_delta.set_ylabel(r'$-2 \Delta \ln L$', fontsize=11)
+    ax_delta.set_title(f'{datacard_name}: Profile Likelihood', fontsize=12, fontweight='bold')
+    ax_delta.legend(fontsize=10)
+    ax_delta.grid(True, alpha=0.3)
+    ax_delta.set_ylim([0, max(np.max(delta_nll_minlp), np.max(delta_nll_yi)) * 1.1])
     
-    # Bottom row: Absolute -2 ln L (shows offset)
-    ax2 = axes[1, col_idx]
-    ax2.plot(hazard_ratios_scan, nll_minlp, 'b-', label='MINLP', linewidth=2)
-    ax2.plot(hazard_ratios_scan, nll_yi, 'r--', label="Yi's Method", linewidth=2)
-    ax2.set_xlabel('Hazard Ratio', fontsize=11)
-    ax2.set_ylabel(r'$-2 \ln L$ (absolute)', fontsize=11)
-    ax2.set_title(f'{datacard_name}: Absolute Likelihood', fontsize=12, fontweight='bold')
-    ax2.legend(fontsize=10)
-    ax2.grid(True, alpha=0.3)
+    # Right column: Absolute -2 ln L (shows offset)
+    ax_abs = axes[row_idx, 1]
+    ax_abs.plot(hazard_ratios_scan, nll_minlp, 'b-', label='MINLP', linewidth=2)
+    ax_abs.plot(hazard_ratios_scan, nll_yi, 'r--', label="Yi's Method", linewidth=2)
+    ax_abs.set_xlabel('Hazard Ratio', fontsize=11)
+    ax_abs.set_ylabel(r'$-2 \ln L$ (absolute)', fontsize=11)
+    ax_abs.set_title(f'{datacard_name}: Absolute Likelihood', fontsize=12, fontweight='bold')
+    ax_abs.legend(fontsize=10)
+    ax_abs.grid(True, alpha=0.3)
     
     # Print statistics
     diff_absolute = nll_minlp - nll_yi
     diff_delta = delta_nll_minlp - delta_nll_yi
     print(f"\n{datacard_name} Statistics:")
     print(f"  Absolute -2 ln L offset: {np.mean(diff_absolute):.4f} ± {np.std(diff_absolute):.4f}")
-    print(f"  Max absolute diff in -2Δ ln L: {np.max(np.abs(diff_delta)):.4f}")
-    print(f"  Mean absolute diff in -2Δ ln L: {np.mean(np.abs(diff_delta)):.4f}")
+    print(f"  Max absolute diff in -2Δ ln L: {np.max(np.abs(diff_delta)):.6f}")
+    print(f"  Mean absolute diff in -2Δ ln L: {np.mean(np.abs(diff_delta)):.6f}")
 
 plt.tight_layout()
 plt.show()

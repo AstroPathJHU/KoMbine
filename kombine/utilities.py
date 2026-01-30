@@ -264,6 +264,9 @@ def estimate_misclassification_matrix(
       obs = patient.observable
       if hasattr(obs, 'numerator') and hasattr(obs, 'denominator'):
         observed = obs.numerator / obs.denominator
+      elif hasattr(obs, 'value'):
+        # For FixedObservable or similar types
+        observed = obs.value
       else:
         # For other observable types, try to get a nominal value
         observed = getattr(obs, 'nominal', None)
@@ -316,6 +319,8 @@ def estimate_misclassification_matrix(
           obs = patient.observable
           if hasattr(obs, 'numerator') and hasattr(obs, 'denominator'):
             observed_val = obs.numerator / obs.denominator
+          elif hasattr(obs, 'value'):
+            observed_val = obs.value
           else:
             observed_val = getattr(obs, 'nominal', 0.0)
         else:
@@ -369,6 +374,8 @@ def estimate_misclassification_matrix(
           obs = patient.observable
           if hasattr(obs, 'numerator') and hasattr(obs, 'denominator'):
             observed_val = obs.numerator / obs.denominator
+          elif hasattr(obs, 'value'):
+            observed_val = obs.value
           else:
             observed_val = getattr(obs, 'nominal', 0.0)
         else:
