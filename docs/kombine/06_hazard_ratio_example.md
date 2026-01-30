@@ -400,6 +400,7 @@ ax.errorbar(x_pos, best_fits,
 
 ax.set_xticks(x_pos)
 ax.set_xticklabels(cases)
+ax.set_yscale("log")
 ax.set_ylabel('Hazard Ratio', fontsize=12)
 ax.set_title('68% Confidence Intervals', fontsize=14, fontweight='bold')
 ax.grid(True, alpha=0.3, axis='y')
@@ -419,6 +420,7 @@ ax.errorbar(x_pos, best_fits,
 ax.set_xticks(x_pos)
 ax.set_xticklabels(cases)
 ax.set_ylabel('Hazard Ratio', fontsize=12)
+ax.set_yscale("log")
 ax.set_title('95% Confidence Intervals', fontsize=14, fontweight='bold')
 ax.grid(True, alpha=0.3, axis='y')
 ax.legend()
@@ -553,17 +555,6 @@ for datacard_name, datacard in [
     print(f"                    Observed Low    Observed High")
     print(f"True Low:           {result_yi['inverse_misclassification_matrix'][0,0]:12.4f}    {result_yi['inverse_misclassification_matrix'][0,1]:13.4f}")
     print(f"True High:          {result_yi['inverse_misclassification_matrix'][1,0]:12.4f}    {result_yi['inverse_misclassification_matrix'][1,1]:13.4f}")
-    print()
-    print("Interpretation:")
-    print(f"  P(observed high | true high) = {result_yi['misclassification_matrix'][1,1]:.4f}")
-    print(f"  P(observed low | true low)   = {result_yi['misclassification_matrix'][0,0]:.4f}")
-    print(f"  P(observed high | true low)  = {result_yi['misclassification_matrix'][0,1]:.4f}")
-    print(f"  P(observed low | true high)  = {result_yi['misclassification_matrix'][1,0]:.4f}")
-    
-    if datacard_name == "LARGE COUNTS":
-        print("  → Near-identity matrix: minimal misclassification (small Poisson errors)")
-    else:
-        print("  → Non-trivial off-diagonal: significant misclassification probability")
 ```
 
 ### Likelihood Scan Comparison
