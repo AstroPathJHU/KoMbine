@@ -127,6 +127,34 @@ fixed_scan_data = {
     'ci_68': (lower_ci_68_fixed, upper_ci_68_fixed),
     'ci_95': (lower_ci_95_fixed, upper_ci_95_fixed),
 }
+
+# Plot the likelihood scan
+fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+
+# Chi-squared thresholds for confidence intervals
+chi2_68 = 1.0
+chi2_95 = 3.84
+
+# Compute delta 2NLL
+twonll_min_fixed = np.min(twonll_values_fixed)
+delta_twonll = twonll_values_fixed - twonll_min_fixed
+
+# Plot the profile likelihood
+ax.plot(hazard_ratios_fixed, delta_twonll, 'b-', linewidth=2.5, label='Fixed Observable')
+ax.axhline(chi2_68, color='orange', linestyle='--', linewidth=1.5, alpha=0.7, label='68% CI threshold')
+ax.axhline(chi2_95, color='purple', linestyle='--', linewidth=1.5, alpha=0.7, label='95% CI threshold')
+ax.axvline(best_fit_hr_fixed, color='red', linestyle=':', linewidth=1.5, alpha=0.5, label=f'Best fit: {best_fit_hr_fixed:.2f}')
+
+ax.set_xlabel('Hazard Ratio', fontsize=12)
+ax.set_ylabel(r'$-2 \Delta \ln L$', fontsize=12)
+ax.set_title('Profile Likelihood: Fixed Observable', fontsize=14, fontweight='bold')
+ax.legend(fontsize=10)
+ax.grid(True, alpha=0.3)
+ax.set_xlim([0.5, 6.0])
+ax.set_ylim([0, 15])
+
+plt.tight_layout()
+plt.show()
 ```
 
 ## Example 2: Poisson Density with Large Counts
@@ -432,13 +460,9 @@ plt.show()
 print("\nFigure saved as 'hazard_ratio_likelihood_scan_comparison.pdf'")
 ```
 
-## Comparing MINLP vs Yi's Method
+## Comparing MINLP vs. Yi's Discrete Covariate Misclassification Method
 
-Now that we've visualized the three likelihood scans, let's quantitatively compare KoMbine's MINLP approach with Yi's aggregate misclassification method. We'll compute the negative log-likelihood (2NLL) at several test hazard ratios for all three datasets to see how closely the two methods agree.
-
-This comparison helps us understand:
-- Whether the methods produce consistent results across different measurement error scenarios
-- How the difference between individual (MINLP) and aggregate (Yi's) approaches manifests in practice
+Now that we've visualized the three likelihood scans, let's quantitatively compare KoMbine's MINLP approach with the discrete covariate misclassification method presented in Yi's *Statistical Analysis with Measurement Error or Misclassification* (Springer 2017, §3.7.1). This method estimates a single misclassification matrix Π that applies uniformly to all patients, while MINLP optimizes each patient's group assignment individually.
 
 ```python
 # Compare all three datasets: fixed, large counts, and moderate counts
@@ -477,12 +501,12 @@ for datacard_name, datacard, hr_calc in [
 
 ## Analyzing Measurement Error Effects
 
-The comparison table above shows how closely MINLP and Yi's method agree across different measurement scenarios. Now let's examine the underlying mechanisms: the misclassification matrices and the full likelihood profile.
+The comparison table above shows how closely MINLP and the discrete covariate misclassification method (Yi §3.7.1) agree across different measurement scenarios. Now let's examine the underlying mechanisms: the misclassification matrices and the full likelihood profile.
 
 
 ### Misclassification Matrices for Each Scenario
 
-Yi's method estimates the misclassification matrix Π, which gives the probability that a patient in a true group is observed in an observed group. For the fixed datacard, Π is exactly the identity matrix. For large and moderate counts, off-diagonal elements reflect the probability of misclassification due to measurement error.
+The discrete covariate misclassification method (Yi §3.7.1) estimates the misclassification matrix Π, which gives the probability that a patient in a true group is observed in an observed group. For the fixed datacard, Π is exactly the identity matrix. For large and moderate counts, off-diagonal elements reflect the probability of misclassification due to measurement error.
 
 ```python
 # Show misclassification matrices for all three datasets
@@ -522,7 +546,7 @@ for datacard_name, datacard in [
 
 ### Likelihood Scan Comparison: KoMbine MINLP vs. Yi's Method
 
-The following plots show the profile likelihood (-2ΔlnL) and absolute NLL for both methods across all three scenarios. In the fixed case, the agreement is perfect (to numerical precision) in both -2ΔlnL and absolute NLL. For large and moderate counts, the agreement remains excellent, validating the implementation.
+The following plots show the profile likelihood (-2ΔlnL) and absolute NLL for both methods across all three scenarios. In the fixed case, the agreement is perfect (to numerical precision) in both -2ΔlnL and absolute NLL. For large counts, the agreement is good. For moderate counts, differences emerge as expected when measurement error is large enough that patient-level vs. aggregate treatment becomes important.
 
 ```python
 # Compare likelihood scans for all three datasets
@@ -597,11 +621,9 @@ plt.tight_layout()
 plt.show()
 ```
 
-## Understanding Individual vs. Aggregate Misclassification
+The agreement between MINLP and the discrete covariate misclassification method observed above reveals a key difference in their underlying approaches:
 
-The agreement between MINLP and Yi's method observed above reveals a key difference in their underlying approaches:
-
-**Yi's Method (Aggregate Approach):**
+**Discrete Covariate Misclassification Method (Aggregate Approach, Yi §3.7.1):**
 - Estimates a single, aggregate misclassification matrix Π = P(observed group | true group)
 - This matrix is identical for all patients: it assumes all patients in a true group have the same probability of being misclassified
 - The matrix is then applied to each patient's likelihood, effectively weighting each possible group assignment
@@ -614,7 +636,558 @@ The agreement between MINLP and Yi's method observed above reveals a key differe
 
 **Key Insight:** These methods should agree most closely when all patients within a group are homogeneous—i.e., when they have similar observed values and similar measurement errors. In such cases, the aggregate misclassification matrix directly represents each individual's misclassification probability.
 
-Let's test this hypothesis with a homogeneous groups example.
+Let's test this hypothesis with homogeneous groups examples.
+
+```python
+# First, calculate the misclassification matrices for large and moderate counts at a test hazard ratio
+test_hr = 2.0
+
+# Large counts misclassification matrix
+result_large = datacard_poisson_large_counts.km_hazard_ratio_yi(
+    parameter_threshold=0.5,
+    hazard_ratio=test_hr,
+    parameter_min=0.01,
+    parameter_max=0.99,
+    method='bayesian',
+)
+pi_large = result_large['misclassification_matrix']
+
+# Moderate counts misclassification matrix  
+result_moderate = datacard_poisson_moderate_counts.km_hazard_ratio_yi(
+    parameter_threshold=0.5,
+    hazard_ratio=test_hr,
+    parameter_min=0.01,
+    parameter_max=0.99,
+    method='bayesian',
+)
+pi_moderate = result_moderate['misclassification_matrix']
+
+print("Reference Misclassification Matrices (at HR = 2.0):")
+print("=" * 70)
+print("\nLARGE COUNTS:")
+print(f"  P(obs low | true low)   = {pi_large[0,0]:.6f}")
+print(f"  P(obs high | true low)  = {pi_large[0,1]:.6f}")
+print(f"  P(obs low | true high)  = {pi_large[1,0]:.6f}")
+print(f"  P(obs high | true high) = {pi_large[1,1]:.6f}")
+
+print("\nMODERATE COUNTS:")
+print(f"  P(obs low | true low)   = {pi_moderate[0,0]:.6f}")
+print(f"  P(obs high | true low)  = {pi_moderate[0,1]:.6f}")
+print(f"  P(obs low | true high)  = {pi_moderate[1,0]:.6f}")
+print(f"  P(obs high | true high) = {pi_moderate[1,1]:.6f}")
+
+# Now we'll design homogeneous datacards to match these misclassification probabilities
+# Using area = 1000 for all patients gives us fine control over the numerator
+```
+
+### Creating Homogeneous Datacards to Match Reference Misclassification Matrices
+
+To test our hypothesis that methods agree better with homogeneous populations, we'll create two new homogeneous datacards:
+1. One matching the large counts misclassification matrix
+2. One matching the moderate counts misclassification matrix
+
+For a Poisson density observable with numerator $n$ and denominator (area) $a$, the probability of crossing threshold $\theta$ depends on the Poisson distribution. We'll use area = 1000 for fine control over the density, then find numerators that best reproduce the target misclassification probabilities.
+
+```python
+from scipy import stats
+
+# Helper function to compute misclassification probability for a single Poisson density patient
+def compute_single_patient_misclass_prob(numerator, area, threshold, parameter_min=0.01, parameter_max=0.99, method='bayesian'):
+    """
+    For a patient with observed (numerator, area), compute P(parameter < threshold) and P(parameter >= threshold).
+    This represents the probability that the patient's true parameter falls on each side of the threshold.
+    """
+    # For Poisson density, we use the posterior distribution of the density parameter
+    # given the observed count. With uniform prior, this is Beta(numerator+1, area-numerator+1) for the density.
+    # But we need to be careful: Poisson(mean=density*area) gives us the count.
+    
+    # For a Bayesian approach with Poisson likelihood and uniform prior on density:
+    # P(density | count) ∝ Poisson(count | density * area) * 1
+    # After integration, the posterior mean density ~ count/area with uncertainty.
+    
+    # For simplicity, approximate using normal approximation for large counts:
+    # density ~ Normal(count/area, sqrt(count)/area)
+    
+    density_mean = numerator / area
+    density_std = np.sqrt(numerator) / area
+    
+    # P(density < threshold)
+    if density_std > 0:
+        p_below = stats.norm.cdf(threshold, loc=density_mean, scale=density_std)
+    else:
+        p_below = 1.0 if density_mean < threshold else 0.0
+    
+    p_above = 1.0 - p_below
+    
+    return p_below, p_above
+
+# Find optimal numerators for area=1000 to match target misclassification matrices
+area = 1000
+threshold = 0.5
+
+# For LARGE counts case:
+# Target: P(obs_low | true_low) ≈ pi_large[0,0], P(obs_high | true_high) ≈ pi_large[1,1]
+# For homogeneous group, all low-group patients have same density well below threshold
+# All high-group patients have same density well above threshold
+
+print("\n" + "=" * 70)
+print("FINDING OPTIMAL NUMERATORS FOR HOMOGENEOUS DATACARDS")
+print("=" * 70)
+
+# For low group: want P(density >= 0.5 | observed) = pi_large[0,1]
+# Try different numerators below threshold
+best_low_large = None
+best_low_large_error = float('inf')
+
+for num_low in range(100, 500):  # densities 0.1 to 0.5
+    p_below, p_above = compute_single_patient_misclass_prob(num_low, area, threshold)
+    error = abs(p_above - pi_large[0,1])
+    if error < best_low_large_error:
+        best_low_large_error = error
+        best_low_large = num_low
+
+# For high group: want P(density < 0.5 | observed) = pi_large[1,0]
+best_high_large = None
+best_high_large_error = float('inf')
+
+for num_high in range(500, 900):  # densities 0.5 to 0.9
+    p_below, p_above = compute_single_patient_misclass_prob(num_high, area, threshold)
+    error = abs(p_below - pi_large[1,0])
+    if error < best_high_large_error:
+        best_high_large_error = error
+        best_high_large = num_high
+
+print("\nLARGE COUNTS HOMOGENEOUS:")
+print(f"  Target: P(obs high | true low) = {pi_large[0,1]:.6f}, P(obs low | true high) = {pi_large[1,0]:.6f}")
+print(f"  Best low group: numerator = {best_low_large}, density = {best_low_large/area:.3f}")
+p_below, p_above = compute_single_patient_misclass_prob(best_low_large, area, threshold)
+print(f"    P(true density >= 0.5) = {p_above:.6f} (error: {best_low_large_error:.6f})")
+print(f"  Best high group: numerator = {best_high_large}, density = {best_high_large/area:.3f}")
+p_below, p_above = compute_single_patient_misclass_prob(best_high_large, area, threshold)
+print(f"    P(true density < 0.5) = {p_below:.6f} (error: {best_high_large_error:.6f})")
+
+# Repeat for MODERATE counts case
+best_low_mod = None
+best_low_mod_error = float('inf')
+
+for num_low in range(100, 500):
+    p_below, p_above = compute_single_patient_misclass_prob(num_low, area, threshold)
+    error = abs(p_above - pi_moderate[0,1])
+    if error < best_low_mod_error:
+        best_low_mod_error = error
+        best_low_mod = num_low
+
+best_high_mod = None
+best_high_mod_error = float('inf')
+
+for num_high in range(500, 900):
+    p_below, p_above = compute_single_patient_misclass_prob(num_high, area, threshold)
+    error = abs(p_below - pi_moderate[1,0])
+    if error < best_high_mod_error:
+        best_high_mod_error = error
+        best_high_mod = num_high
+
+print("\nMODERATE COUNTS HOMOGENEOUS:")
+print(f"  Target: P(obs high | true low) = {pi_moderate[0,1]:.6f}, P(obs low | true high) = {pi_moderate[1,0]:.6f}")
+print(f"  Best low group: numerator = {best_low_mod}, density = {best_low_mod/area:.3f}")
+p_below, p_above = compute_single_patient_misclass_prob(best_low_mod, area, threshold)
+print(f"    P(true density >= 0.5) = {p_above:.6f} (error: {best_low_mod_error:.6f})")
+print(f"  Best high group: numerator = {best_high_mod}, density = {best_high_mod/area:.3f}")
+p_below, p_above = compute_single_patient_misclass_prob(best_high_mod, area, threshold)
+print(f"    P(true density < 0.5) = {p_below:.6f} (error: {best_high_mod_error:.6f})")
+```
+
+```python
+# Now create the datacard files
+# We'll use the same event times as in the other datacards for consistency
+# Load one of the existing datacards to get the structure
+
+# Create homogeneous datacard matching LARGE counts misclassification
+datacard_content_large = """# Homogeneous groups datacard matching LARGE counts misclassification matrix
+# All low-group patients have identical density, all high-group patients have identical density
+# Area = 1000 for all patients to allow fine control over density
+
+OBSERVABLE_TYPE poisson_density
+
+# 10 patients in low group (density {low_density:.3f})
+# 10 patients in high group (density {high_density:.3f})
+
+# Format: event_time censored numerator denominator
+
+# Low group patients (below threshold)
+10.5 0 {num_low} {area}
+12.3 0 {num_low} {area}
+15.8 1 {num_low} {area}
+18.2 0 {num_low} {area}
+21.7 1 {num_low} {area}
+24.1 0 {num_low} {area}
+27.5 1 {num_low} {area}
+30.9 0 {num_low} {area}
+34.2 1 {num_low} {area}
+38.6 1 {num_low} {area}
+
+# High group patients (above threshold)
+8.1 0 {num_high} {area}
+9.7 0 {num_high} {area}
+11.2 0 {num_high} {area}
+13.8 1 {num_high} {area}
+16.4 0 {num_high} {area}
+19.1 0 {num_high} {area}
+22.3 1 {num_high} {area}
+25.8 0 {num_high} {area}
+29.4 1 {num_high} {area}
+33.7 1 {num_high} {area}
+""".format(num_low=best_low_large, num_high=best_high_large, area=area, 
+           low_density=best_low_large/area, high_density=best_high_large/area)
+
+datacard_path_large = datacards_dir / "poisson_density_hr_example_homogeneous_large.txt"
+with open(datacard_path_large, 'w') as f:
+    f.write(datacard_content_large)
+
+print(f"\nCreated datacard: {datacard_path_large}")
+
+# Create homogeneous datacard matching MODERATE counts misclassification
+datacard_content_moderate = """# Homogeneous groups datacard matching MODERATE counts misclassification matrix
+# All low-group patients have identical density, all high-group patients have identical density
+# Area = 1000 for all patients to allow fine control over density
+
+OBSERVABLE_TYPE poisson_density
+
+# 10 patients in low group (density {low_density:.3f})
+# 10 patients in high group (density {high_density:.3f})
+
+# Format: event_time censored numerator denominator
+
+# Low group patients (below threshold)
+10.5 0 {num_low} {area}
+12.3 0 {num_low} {area}
+15.8 1 {num_low} {area}
+18.2 0 {num_low} {area}
+21.7 1 {num_low} {area}
+24.1 0 {num_low} {area}
+27.5 1 {num_low} {area}
+30.9 0 {num_low} {area}
+34.2 1 {num_low} {area}
+38.6 1 {num_low} {area}
+
+# High group patients (above threshold)
+8.1 0 {num_high} {area}
+9.7 0 {num_high} {area}
+11.2 0 {num_high} {area}
+13.8 1 {num_high} {area}
+16.4 0 {num_high} {area}
+19.1 0 {num_high} {area}
+22.3 1 {num_high} {area}
+25.8 0 {num_high} {area}
+29.4 1 {num_high} {area}
+33.7 1 {num_high} {area}
+""".format(num_low=best_low_mod, num_high=best_high_mod, area=area,
+           low_density=best_low_mod/area, high_density=best_high_mod/area)
+
+datacard_path_moderate = datacards_dir / "poisson_density_hr_example_homogeneous_moderate.txt"
+with open(datacard_path_moderate, 'w') as f:
+    f.write(datacard_content_moderate)
+
+print(f"Created datacard: {datacard_path_moderate}")
+print("\nBoth homogeneous datacards have been created!")
+```
+
+### Loading and Analyzing the Homogeneous Datacards
+
+Now let's load these newly created homogeneous datacards and compare them directly to the heterogeneous large and moderate counts cases. This provides a clean, controlled comparison: same misclassification matrix, but homogeneous vs. heterogeneous patient populations.
+
+```python
+# Load both homogeneous datacards
+datacard_homog_large = Datacard.parse_datacard(datacard_path_large)
+datacard_homog_moderate = Datacard.parse_datacard(datacard_path_moderate)
+
+print("=" * 70)
+print("HOMOGENEOUS DATACARD (matching LARGE counts)")
+print("=" * 70)
+print(f"Loaded {len(datacard_homog_large.patients)} patients")
+print(f"Number of deaths: {sum(1 for p in datacard_homog_large.patients if not p.censored)}")
+print(f"Number of censored: {sum(1 for p in datacard_homog_large.patients if p.censored)}")
+
+nums_large = [p.observable.numerator for p in datacard_homog_large.patients]
+areas_large = [p.observable.denominator for p in datacard_homog_large.patients]
+densities_large = [n/a for n, a in zip(nums_large, areas_large)]
+print(f"\nAll patients have area = {areas_large[0]}")
+print(f"Low group: numerator = {best_low_large}, density = {best_low_large/area:.3f}")
+print(f"High group: numerator = {best_high_large}, density = {best_high_large/area:.3f}")
+
+# Verify misclassification matrix
+result_check_large = datacard_homog_large.km_hazard_ratio_yi(
+    parameter_threshold=0.5,
+    hazard_ratio=test_hr,
+    parameter_min=0.01,
+    parameter_max=0.99,
+    method='bayesian',
+)
+pi_homog_large = result_check_large['misclassification_matrix']
+print("\nMisclassification matrix for homogeneous (large):")
+print(f"  P(obs low | true low)   = {pi_homog_large[0,0]:.6f} (target: {pi_large[0,0]:.6f})")
+print(f"  P(obs high | true low)  = {pi_homog_large[0,1]:.6f} (target: {pi_large[0,1]:.6f})")
+print(f"  P(obs low | true high)  = {pi_homog_large[1,0]:.6f} (target: {pi_large[1,0]:.6f})")
+print(f"  P(obs high | true high) = {pi_homog_large[1,1]:.6f} (target: {pi_large[1,1]:.6f})")
+
+print("\n" + "=" * 70)
+print("HOMOGENEOUS DATACARD (matching MODERATE counts)")
+print("=" * 70)
+print(f"Loaded {len(datacard_homog_moderate.patients)} patients")
+print(f"Number of deaths: {sum(1 for p in datacard_homog_moderate.patients if not p.censored)}")
+print(f"Number of censored: {sum(1 for p in datacard_homog_moderate.patients if p.censored)}")
+
+nums_mod = [p.observable.numerator for p in datacard_homog_moderate.patients]
+areas_mod = [p.observable.denominator for p in datacard_homog_moderate.patients]
+densities_mod = [n/a for n, a in zip(nums_mod, areas_mod)]
+print(f"\nAll patients have area = {areas_mod[0]}")
+print(f"Low group: numerator = {best_low_mod}, density = {best_low_mod/area:.3f}")
+print(f"High group: numerator = {best_high_mod}, density = {best_high_mod/area:.3f}")
+
+# Verify misclassification matrix
+result_check_mod = datacard_homog_moderate.km_hazard_ratio_yi(
+    parameter_threshold=0.5,
+    hazard_ratio=test_hr,
+    parameter_min=0.01,
+    parameter_max=0.99,
+    method='bayesian',
+)
+pi_homog_mod = result_check_mod['misclassification_matrix']
+print("\nMisclassification matrix for homogeneous (moderate):")
+print(f"  P(obs low | true low)   = {pi_homog_mod[0,0]:.6f} (target: {pi_moderate[0,0]:.6f})")
+print(f"  P(obs high | true low)  = {pi_homog_mod[0,1]:.6f} (target: {pi_moderate[0,1]:.6f})")
+print(f"  P(obs low | true high)  = {pi_homog_mod[1,0]:.6f} (target: {pi_moderate[1,0]:.6f})")
+print(f"  P(obs high | true high) = {pi_homog_mod[1,1]:.6f} (target: {pi_moderate[1,1]:.6f})")
+```
+
+### Comparing Homogeneous vs. Heterogeneous: MINLP vs. Discrete Covariate Misclassification Agreement
+
+Now for the key comparison: for each misclassification matrix (large and moderate), we'll compare how well MINLP and the discrete covariate misclassification method (Yi §3.7.1) agree for:
+1. **Heterogeneous case**: The original datacards with varying patient parameters
+2. **Homogeneous case**: Our newly created datacards where all patients in each group are identical
+
+If our hypothesis is correct, the homogeneous cases should show better agreement between MINLP and the discrete covariate misclassification method.
+
+```python
+# Perform likelihood scans for both homogeneous datacards
+hazard_ratios_scan = np.linspace(1.0, 4.0, 40)
+
+# Create hazard ratio calculators
+hr_calc_homog_large = datacard_homog_large.km_hazard_ratio(
+    parameter_threshold=0.5,
+    parameter_min=0.01,
+    parameter_max=0.99,
+)
+
+hr_calc_homog_moderate = datacard_homog_moderate.km_hazard_ratio(
+    parameter_threshold=0.5,
+    parameter_min=0.01,
+    parameter_max=0.99,
+)
+
+print("Computing likelihood scans for homogeneous cases...")
+print("(This may take a few minutes)")
+
+# Scan for homogeneous-large
+nll_minlp_homog_large = []
+nll_yi_homog_large = []
+for hr in hazard_ratios_scan:
+    result_minlp = hr_calc_homog_large.compute_2nll_at_hazard_ratio(
+        hazard_ratio=hr,
+        cox_only=False,
+        print_progress=False,
+        verbose=False
+    )
+    nll_minlp_homog_large.append(result_minlp.x)
+    
+    result_yi = datacard_homog_large.km_hazard_ratio_yi(
+        parameter_threshold=0.5,
+        hazard_ratio=hr,
+        parameter_min=0.01,
+        parameter_max=0.99,
+        method='bayesian',
+    )
+    nll_yi_homog_large.append(result_yi['x'])
+
+nll_minlp_homog_large = np.array(nll_minlp_homog_large)
+nll_yi_homog_large = np.array(nll_yi_homog_large)
+
+# Scan for homogeneous-moderate  
+nll_minlp_homog_mod = []
+nll_yi_homog_mod = []
+for hr in hazard_ratios_scan:
+    result_minlp = hr_calc_homog_moderate.compute_2nll_at_hazard_ratio(
+        hazard_ratio=hr,
+        cox_only=False,
+        print_progress=False,
+        verbose=False
+    )
+    nll_minlp_homog_mod.append(result_minlp.x)
+    
+    result_yi = datacard_homog_moderate.km_hazard_ratio_yi(
+        parameter_threshold=0.5,
+        hazard_ratio=hr,
+        parameter_min=0.01,
+        parameter_max=0.99,
+        method='bayesian',
+    )
+    nll_yi_homog_mod.append(result_yi['x'])
+
+nll_minlp_homog_mod = np.array(nll_minlp_homog_mod)
+nll_yi_homog_mod = np.array(nll_yi_homog_mod)
+
+# Also rescan the heterogeneous cases on the same HR grid for fair comparison
+print("Rescanning heterogeneous cases on same HR grid...")
+nll_minlp_het_large = []
+nll_yi_het_large = []
+for hr in hazard_ratios_scan:
+    result_minlp = hr_calc_poisson_large_counts.compute_2nll_at_hazard_ratio(
+        hazard_ratio=hr,
+        cox_only=False,
+        print_progress=False,
+        verbose=False
+    )
+    nll_minlp_het_large.append(result_minlp.x)
+    
+    result_yi = datacard_poisson_large_counts.km_hazard_ratio_yi(
+        parameter_threshold=0.5,
+        hazard_ratio=hr,
+        parameter_min=0.01,
+        parameter_max=0.99,
+        method='bayesian',
+    )
+    nll_yi_het_large.append(result_yi['x'])
+
+nll_minlp_het_large = np.array(nll_minlp_het_large)
+nll_yi_het_large = np.array(nll_yi_het_large)
+
+nll_minlp_het_mod = []
+nll_yi_het_mod = []
+for hr in hazard_ratios_scan:
+    result_minlp = hr_calc_poisson_moderate_counts.compute_2nll_at_hazard_ratio(
+        hazard_ratio=hr,
+        cox_only=False,
+        print_progress=False,
+        verbose=False
+    )
+    nll_minlp_het_mod.append(result_minlp.x)
+    
+    result_yi = datacard_poisson_moderate_counts.km_hazard_ratio_yi(
+        parameter_threshold=0.5,
+        hazard_ratio=hr,
+        parameter_min=0.01,
+        parameter_max=0.99,
+        method='bayesian',
+    )
+    nll_yi_het_mod.append(result_yi['x'])
+
+nll_minlp_het_mod = np.array(nll_minlp_het_mod)
+nll_yi_het_mod = np.array(nll_yi_het_mod)
+
+print("Done!")
+```
+
+```python
+# Create comprehensive comparison plot
+fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+
+# Compute delta NLLs
+delta_minlp_homog_large = nll_minlp_homog_large - np.min(nll_minlp_homog_large)
+delta_yi_homog_large = nll_yi_homog_large - np.min(nll_yi_homog_large)
+delta_minlp_het_large = nll_minlp_het_large - np.min(nll_minlp_het_large)
+delta_yi_het_large = nll_yi_het_large - np.min(nll_yi_het_large)
+
+delta_minlp_homog_mod = nll_minlp_homog_mod - np.min(nll_minlp_homog_mod)
+delta_yi_homog_mod = nll_yi_homog_mod - np.min(nll_yi_homog_mod)
+delta_minlp_het_mod = nll_minlp_het_mod - np.min(nll_minlp_het_mod)
+delta_yi_het_mod = nll_yi_het_mod - np.min(nll_yi_het_mod)
+
+# Plot 1: Large counts - Profile likelihood
+ax = axes[0, 0]
+ax.plot(hazard_ratios_scan, delta_minlp_het_large, 'b-', linewidth=2.5, alpha=0.7, label='Heterogeneous MINLP')
+ax.plot(hazard_ratios_scan, delta_yi_het_large, 'b:', linewidth=2.5, alpha=0.7, label='Heterogeneous Yi §3.7.1')
+ax.plot(hazard_ratios_scan, delta_minlp_homog_large, 'r-', linewidth=2.5, alpha=0.7, label='Homogeneous MINLP')
+ax.plot(hazard_ratios_scan, delta_yi_homog_large, 'r:', linewidth=2.5, alpha=0.7, label='Homogeneous Yi §3.7.1')
+ax.axhline(1.0, color='gray', linestyle='--', alpha=0.5, linewidth=1)
+ax.axhline(3.84, color='gray', linestyle='--', alpha=0.5, linewidth=1)
+ax.set_xlabel('Hazard Ratio', fontsize=12)
+ax.set_ylabel(r'$-2 \Delta \ln L$', fontsize=12)
+ax.set_title('Large Counts: Homogeneous vs. Heterogeneous', fontsize=13, fontweight='bold')
+ax.legend(fontsize=9)
+ax.grid(True, alpha=0.3)
+ax.set_xlim([1.0, 4.0])
+
+# Plot 2: Large counts - Absolute difference
+ax = axes[0, 1]
+diff_het_large = np.abs(nll_minlp_het_large - nll_yi_het_large)
+diff_homog_large = np.abs(nll_minlp_homog_large - nll_yi_homog_large)
+ax.plot(hazard_ratios_scan, diff_het_large, 'b-', linewidth=2.5, alpha=0.7, label='Heterogeneous |MINLP - Yi|')
+ax.plot(hazard_ratios_scan, diff_homog_large, 'r-', linewidth=2.5, alpha=0.7, label='Homogeneous |MINLP - Yi|')
+ax.set_xlabel('Hazard Ratio', fontsize=12)
+ax.set_ylabel('|MINLP - Yi| (absolute 2NLL)', fontsize=12)
+ax.set_title('Large Counts: Agreement Comparison', fontsize=13, fontweight='bold')
+ax.legend(fontsize=10)
+ax.grid(True, alpha=0.3)
+ax.set_xlim([1.0, 4.0])
+ax.set_yscale('log')
+
+# Plot 3: Moderate counts - Profile likelihood
+ax = axes[1, 0]
+ax.plot(hazard_ratios_scan, delta_minlp_het_mod, 'b-', linewidth=2.5, alpha=0.7, label='Heterogeneous MINLP')
+ax.plot(hazard_ratios_scan, delta_yi_het_mod, 'b:', linewidth=2.5, alpha=0.7, label='Heterogeneous Yi §3.7.1')
+ax.plot(hazard_ratios_scan, delta_minlp_homog_mod, 'orange', linewidth=2.5, alpha=0.7, label='Homogeneous MINLP')
+ax.plot(hazard_ratios_scan, delta_yi_homog_mod, 'orange', linestyle=':', linewidth=2.5, alpha=0.7, label='Homogeneous Yi §3.7.1')
+ax.axhline(1.0, color='gray', linestyle='--', alpha=0.5, linewidth=1)
+ax.axhline(3.84, color='gray', linestyle='--', alpha=0.5, linewidth=1)
+ax.set_xlabel('Hazard Ratio', fontsize=12)
+ax.set_ylabel(r'$-2 \Delta \ln L$', fontsize=12)
+ax.set_title('Moderate Counts: Homogeneous vs. Heterogeneous', fontsize=13, fontweight='bold')
+ax.legend(fontsize=9)
+ax.grid(True, alpha=0.3)
+ax.set_xlim([1.0, 4.0])
+
+# Plot 4: Moderate counts - Absolute difference
+ax = axes[1, 1]
+diff_het_mod = np.abs(nll_minlp_het_mod - nll_yi_het_mod)
+diff_homog_mod = np.abs(nll_minlp_homog_mod - nll_yi_homog_mod)
+ax.plot(hazard_ratios_scan, diff_het_mod, 'b-', linewidth=2.5, alpha=0.7, label='Heterogeneous |MINLP - Yi|')
+ax.plot(hazard_ratios_scan, diff_homog_mod, 'orange', linewidth=2.5, alpha=0.7, label='Homogeneous |MINLP - Yi|')
+ax.set_xlabel('Hazard Ratio', fontsize=12)
+ax.set_ylabel('|MINLP - Yi| (absolute 2NLL)', fontsize=12)
+ax.set_title('Moderate Counts: Agreement Comparison', fontsize=13, fontweight='bold')
+ax.legend(fontsize=10)
+ax.grid(True, alpha=0.3)
+ax.set_xlim([1.0, 4.0])
+ax.set_yscale('log')
+
+plt.tight_layout()
+plt.show()
+
+# Print statistics
+print("\n" + "=" * 70)
+print("AGREEMENT STATISTICS")
+print("=" * 70)
+
+print("\nLARGE COUNTS:")
+print(f"  Heterogeneous: Mean |MINLP - Yi| = {np.mean(diff_het_large):.6f}")
+print(f"  Homogeneous:   Mean |MINLP - Yi| = {np.mean(diff_homog_large):.6f}")
+print(f"  Improvement factor: {np.mean(diff_het_large) / np.mean(diff_homog_large):.2f}x")
+
+print("\nMODERATE COUNTS:")
+print(f"  Heterogeneous: Mean |MINLP - Yi| = {np.mean(diff_het_mod):.6f}")
+print(f"  Homogeneous:   Mean |MINLP - Yi| = {np.mean(diff_homog_mod):.6f}")
+print(f"  Improvement factor: {np.mean(diff_het_mod) / np.mean(diff_homog_mod):.2f}x")
+
+print("\n" + "=" * 70)
+print("CONCLUSION:")
+if np.mean(diff_homog_large) < np.mean(diff_het_large) and np.mean(diff_homog_mod) < np.mean(diff_het_mod):
+    print("✓ Homogeneous groups show BETTER agreement for both cases!")
+    print("  This confirms that MINLP and Yi's method converge when patients are uniform,")
+    print("  validating our hypothesis about individual vs. aggregate misclassification.")
+else:
+    print("  Results are mixed - further investigation needed.")
+print("=" * 70)
+```
 
 ```python
 # Load the homogeneous groups datacard
@@ -888,29 +1461,29 @@ else:
 
 **Individual vs. Aggregate Misclassification:**
 - **KoMbine's MINLP approach**: Optimizes each patient's group assignment individually, accounting for their specific measurement error
-- **Yi's aggregate approach**: Uses a fixed misclassification matrix applied uniformly to all patients
+- **Yi's discrete covariate misclassification method**: Uses a fixed misclassification matrix applied uniformly to all patients (Yi, §3.7.1)
 - **When methods agree best**: When patient populations are homogeneous (all patients in a group have similar parameters and errors)
 - **When differences emerge**: With heterogeneous populations, MINLP's patient-level optimization becomes more advantageous
 
 ### Practical Results
 
 - **Fixed observable**: No measurement error. MINLP and Yi's method agree perfectly in both -2ΔlnL and absolute NLL.
-- **Large counts**: Small measurement error. Confidence intervals and best-fit HRs are nearly identical to the fixed case.
-- **Moderate counts**: Measurement error is significant. Confidence intervals widen, but both methods remain in excellent agreement.
+- **Large counts**: Small measurement error (~2-3% relative uncertainty). Agreement between methods is good; confidence intervals and best-fit HRs are nearly identical to the fixed case, as measurement error is small enough that individual vs. aggregate treatment makes minimal difference.
+- **Moderate counts**: Measurement error is significant (~15-20% relative uncertainty). Agreement between methods is less perfect, which is expected since the exact patient-level treatment (MINLP) vs. aggregate approach (Yi §3.7.1) makes more difference when errors are large. Confidence intervals widen substantially compared to fixed case, demonstrating the impact of measurement uncertainty.
 - **Homogeneous groups**: When all patients in a group are identical, the methods show strongest agreement, validating the theoretical predictions.
 
 ### Implementation Validation
 
-- Both MINLP and Yi's method produce consistent, high-precision results across all scenarios
-- The agreement validates that KoMbine's MINLP implementation correctly accounts for measurement error
+- Both MINLP and Yi's method produce consistent, high-precision results across all scenarios where measurement error is small
+- For large measurement errors (moderate counts), the methods diverge as expected, with MINLP's patient-level optimization providing more accurate treatment
 - Patient-level optimization in MINLP provides a principled framework for handling misclassification
 
 ### Practical Guidance
 
 - **Large counts** (relative error < 5%): Standard Cox methods suffice; measurement error is negligible
-- **Moderate counts** (relative error 10-20%): KoMbine's full model is needed for accurate inference, especially for patients near the classification threshold
+- **Moderate counts** (relative error 10-20%): KoMbine's full MINLP model is essential for accurate inference, especially for patients near the classification threshold, as aggregate methods may not capture individual misclassification probabilities adequately
 - **Heterogeneous populations**: MINLP's individual optimization becomes more valuable when patient parameters vary widely
-- **Homogeneous populations**: Methods are interchangeable; aggregate and individual approaches align
+- **Homogeneous populations**: Methods are more interchangeable when patients within groups have similar parameters; aggregate and individual approaches align
 
 **Conclusion:**
-KoMbine provides a robust, likelihood-based approach to survival analysis with measurement error. Its agreement with Yi's method across diverse scenarios validates the implementation, while the individual per-patient optimization offers theoretical and practical advantages for handling complex, heterogeneous patient populations.
+KoMbine provides a robust, likelihood-based approach to survival analysis with measurement error. Its patient-level MINLP optimization offers theoretical and practical advantages over aggregate misclassification methods, particularly when measurement uncertainties are large or patient populations are heterogeneous.

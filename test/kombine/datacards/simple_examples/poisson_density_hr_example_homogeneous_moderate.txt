@@ -1,0 +1,34 @@
+# Homogeneous groups datacard matching MODERATE counts misclassification matrix
+# All low-group patients have identical density, all high-group patients have identical density
+# Area = 1000 for all patients to allow fine control over density
+
+OBSERVABLE_TYPE poisson_density
+
+# 10 patients in low group (density 0.462)
+# 10 patients in high group (density 0.533)
+
+# Format: event_time censored numerator denominator
+
+# Low group patients (below threshold)
+10.5 0 462 1000
+12.3 0 462 1000
+15.8 1 462 1000
+18.2 0 462 1000
+21.7 1 462 1000
+24.1 0 462 1000
+27.5 1 462 1000
+30.9 0 462 1000
+34.2 1 462 1000
+38.6 1 462 1000
+
+# High group patients (above threshold)
+8.1 0 533 1000
+9.7 0 533 1000
+11.2 0 533 1000
+13.8 1 533 1000
+16.4 0 533 1000
+19.1 0 533 1000
+22.3 1 533 1000
+25.8 0 533 1000
+29.4 1 533 1000
+33.7 1 533 1000
