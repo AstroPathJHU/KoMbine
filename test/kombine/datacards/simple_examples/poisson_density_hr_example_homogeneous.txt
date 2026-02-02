@@ -1,0 +1,25 @@
+observable_type poisson_density
+------------
+# Poisson density example with HOMOGENEOUS groups
+# All patients in the LOW group have the same parameter (0.3) and error
+# All patients in the HIGH group have the same parameter (0.7) and error
+# 
+# This tests whether MINLP and Yi's method converge when:
+# 1. All patients within a group are identical (no within-group heterogeneity)
+# 2. Only misclassification due to measurement error exists
+#
+# Group 0 (low density = 0.3): Better survival (later death times)
+# Group 1 (high density = 0.7): Worse survival (earlier death times)
+#
+# All patients have the same count (30 for low, 70 for high), so relative uncertainty is ~14%
+# -> All patients in low group have ~14% chance of being misclassified as high
+# -> All patients in high group have ~14% chance of being misclassified as low
+# 
+# With homogeneous groups, the aggregate misclassification matrix should
+# match the per-patient misclassification probability, so MINLP and Yi's
+# method should show better agreement (vs. heterogeneous cases).
+------------
+survival_time	10	12	15	18	20	24	28	30	35	40	3	5	7	9	12	15	18	20	25	30
+censored	0	0	0	1	1	1	1	1	1	1	0	0	0	0	0	1	1	1	1	1
+num	30	30	30	30	30	30	30	30	30	30	70	70	70	70	70	70	70	70	70	70
+area	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100

@@ -6,6 +6,8 @@ of the hazard ratio H, enabling profile likelihood analyses and confidence inter
 # pylint: disable=too-many-lines
 
 import warnings
+import os
+import datetime
 from typing import Optional
 
 from gurobipy import GRB
@@ -77,6 +79,14 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
     hazard_ratio: float,
     *,
     cox_only: bool = False,
+    verbose: bool = False,
+    print_progress: bool = False,
+    MIPGap: float | None = None,
+    MIPGapAbs: float | None = None,
+    TimeLimit: float | None = None,
+    Threads: int | None = None,
+    MIPFocus: int | None = None,
+    LogFile: Optional[os.PathLike] = None,
   ) -> scipy.optimize.OptimizeResult:
     """
     Compute the twice negative log likelihood (2NLL) at a specific hazard ratio.
@@ -131,6 +141,9 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
         - model : gp.Model
             The Gurobi model (for advanced users).
     """
+    if print_progress or verbose:
+        print(f"Computing 2NLL at hazard ratio {hazard_ratio} at {datetime.datetime.now()}")
+
     (  # pylint: disable=duplicate-code
       model,
       null_hypothesis_indicator,
@@ -174,8 +187,27 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
       use_cox_penalty_indicator=use_cox_penalty_indicator,
     )
 
+    # Initial Gurobi parameters
+    initial_gurobi_params = {
+        'OutputFlag': 1 if verbose else 0,
+        'MIPGap': MIPGap,
+        'MIPGapAbs': MIPGapAbs,
+        'NonConvex': 2,
+        'TimeLimit': TimeLimit,
+        'Threads': Threads,
+        'MIPFocus': MIPFocus,
+    }
+    if LogFile is not None:
+        initial_gurobi_params['LogFile'] = os.fspath(LogFile)
+
+    # Define fallback strategies
+    fallback_strategies = [
+        ({'MIPFocus': 2}, "MIPFocus set to 2 (optimality focus)"),
+        ({'NumericFocus': 3}, "NumericFocus set to 3 (highest precision)"),
+    ]
+
     # Optimize
-    model.optimize()
+    model = self._optimize_with_fallbacks(model, initial_gurobi_params, fallback_strategies, verbose)
 
     if model.status != GRB.OPTIMAL:
       raise ValueError(f"Optimization failed with status {model.status}")

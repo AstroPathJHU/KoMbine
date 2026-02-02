@@ -7,6 +7,8 @@ The p-value is computed via the likelihood ratio test.
 # pylint: disable=too-many-lines
 
 import functools
+import os
+import datetime
 
 import gurobipy as gp
 from gurobipy import GRB
@@ -729,6 +731,57 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     return penalty
 
+  def _set_gurobi_params(self, model: gp.Model, params: dict):
+    """
+    Helper function to set multiple Gurobi parameters from a dictionary.
+    """
+    for param, value in params.items():
+      if value is not None:
+        model.setParam(param, value)
+
+  def _optimize_with_fallbacks(
+    self,
+    model: gp.Model,
+    initial_params: dict,
+    fallback_strategies: list[tuple[dict, str]],
+    verbose: bool,
+  ):
+    """
+    Attempts to optimize the Gurobi model, applying fallback strategies
+    if the initial optimization is suboptimal.
+
+    Args:
+        model: The Gurobi model to optimize.
+        initial_params: A dictionary of initial Gurobi parameters to apply.
+        fallback_strategies: A list of tuples, where each tuple contains:
+            - A dictionary of Gurobi parameters to apply for the fallback.
+            - A string description of the fallback strategy.
+        verbose: If True, print detailed optimization progress.
+
+    Returns:
+        The Gurobi model after optimization.
+    """
+    # Apply initial parameters
+    self._set_gurobi_params(model, initial_params)
+
+    if verbose:
+      print("Attempting initial optimization...")
+    model.optimize()
+
+    # Check for suboptimal status and apply fallbacks
+    if model.status == GRB.SUBOPTIMAL:
+      for i, (fallback_params, description) in enumerate(fallback_strategies):
+        if verbose:
+          print(f"Model returned suboptimal solution. Applying fallback {i+1}: {description}")
+          print(f"  New parameters: {fallback_params}")
+        self._set_gurobi_params(model, fallback_params)
+        model.optimize()
+        if model.status == GRB.OPTIMAL:
+          if verbose:
+            print(f"Fallback {i+1} successful. Model is now optimal.")
+          break
+    return model
+
   def _make_gurobi_model(self):
     """
     Create the Gurobi model for the Kaplan-Meier p-value MINLP.
@@ -941,9 +994,14 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     *,
     cox_only: bool = False,
     patient_wise_only: bool = False,
-    gurobi_verbose: bool = False,
+    verbose: bool = False,
+    print_progress: bool = False,
     MIPGap: float | None = None,
     MIPGapAbs: float | None = None,
+    TimeLimit: float | None = None,
+    Threads: int | None = None,
+    MIPFocus: int | None = None,
+    LogFile: os.PathLike | None = None,
   ):
     """
     Solve the MINLP and return the p value.
@@ -957,9 +1015,11 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
         If True, only consider patient-wise errors and constrain the curves
         to be flipped relative to nominal at each death time point under the null hypothesis.
         Default is False.
-    gurobi_verbose : bool, optional
+    verbose : bool, optional
         If True, enable verbose output from Gurobi solver. Default is False.
     """
+    if print_progress or verbose:
+      print(f"Running p-value MINLP at {datetime.datetime.now()}")
     if cox_only and patient_wise_only:
       raise ValueError("cox_only and patient_wise_only cannot both be True")
 
@@ -995,13 +1055,29 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       use_cox_penalty_indicator=use_cox_penalty_indicator,
     )
 
-    # Set Gurobi verbose output parameter
-    model.setParam('OutputFlag', 1 if gurobi_verbose else 0)
-    model.setParam('MIPGap', MIPGap)
-    model.setParam('MIPGapAbs', MIPGapAbs)
+    # Initial Gurobi parameters
+    initial_gurobi_params = {
+      'OutputFlag': 1 if verbose else 0,
+      'MIPGap': MIPGap,
+      'MIPGapAbs': MIPGapAbs,
+      'NonConvex': 2,
+      'TimeLimit': TimeLimit,
+      'Threads': Threads,
+      'MIPFocus': MIPFocus,
+    }
+    if LogFile is not None:
+      initial_gurobi_params['LogFile'] = os.fspath(LogFile)
 
+    # Define fallback strategies
+    fallback_strategies = [
+        ({'MIPFocus': 2}, "MIPFocus set to 2 (optimality focus)"),
+        ({'NumericFocus': 3}, "NumericFocus set to 3 (highest precision)"),
+    ]
+
+    if print_progress or verbose:
+      print("Solving for null hypothesis...")
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, True)
-    model.optimize()
+    model = self._optimize_with_fallbacks(model, initial_gurobi_params, fallback_strategies, verbose)
     if model.status != GRB.OPTIMAL:
       raise ValueError(f"Null model failed with status {model.status}")
     twonll_null = model.ObjVal
@@ -1042,8 +1118,10 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       model=model,
     )
 
+    if print_progress or verbose:
+      print("Solving for alternative hypothesis...")
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, False)
-    model.optimize()
+    model = self._optimize_with_fallbacks(model, initial_gurobi_params, fallback_strategies, verbose)
     if model.status != GRB.OPTIMAL:
       raise ValueError(f"Alternative model failed with status {model.status}")
     twonll_alt = model.ObjVal
