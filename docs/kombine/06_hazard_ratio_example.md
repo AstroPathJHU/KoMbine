@@ -432,6 +432,14 @@ plt.show()
 print("\nFigure saved as 'hazard_ratio_likelihood_scan_comparison.pdf'")
 ```
 
+## Comparing MINLP vs Yi's Method
+
+Now that we've visualized the three likelihood scans, let's quantitatively compare KoMbine's MINLP approach with Yi's aggregate misclassification method. We'll compute the negative log-likelihood (2NLL) at several test hazard ratios for all three datasets to see how closely the two methods agree.
+
+This comparison helps us understand:
+- Whether the methods produce consistent results across different measurement error scenarios
+- How the difference between individual (MINLP) and aggregate (Yi's) approaches manifests in practice
+
 ```python
 # Compare all three datasets: fixed, large counts, and moderate counts
 # Gurobi output is suppressed for readability; progress dots will be shown.
@@ -452,7 +460,7 @@ for datacard_name, datacard, hr_calc in [
         result_minlp = hr_calc.compute_2nll_at_hazard_ratio(
             hazard_ratio=hr_test,
             cox_only=False,
-            print_progress=True,
+            print_progress=False,
             verbose=False
         )
         # Yi's method
@@ -466,6 +474,11 @@ for datacard_name, datacard, hr_calc in [
         diff = result_minlp.x - result_yi['x']
         print(f"{hr_test:<8.1f} {result_minlp.x:<15.4f} {result_yi['x']:<15.4f} {diff:<12.4f}")
 ```
+
+## Analyzing Measurement Error Effects
+
+The comparison table above shows how closely MINLP and Yi's method agree across different measurement scenarios. Now let's examine the underlying mechanisms: the misclassification matrices and the full likelihood profile.
+
 
 ### Misclassification Matrices for Each Scenario
 
@@ -532,7 +545,7 @@ for row_idx, (datacard_name, datacard, hr_calc) in enumerate([
         result_minlp = hr_calc.compute_2nll_at_hazard_ratio(
             hazard_ratio=hr,
             cox_only=False,
-            print_progress=True,
+            print_progress=False,
             verbose=False
         )
         nll_minlp.append(result_minlp.x)
@@ -558,7 +571,7 @@ for row_idx, (datacard_name, datacard, hr_calc) in enumerate([
     ax_delta.plot(hazard_ratios_scan, delta_nll_minlp, 'b-', label='MINLP', linewidth=2)
     ax_delta.plot(hazard_ratios_scan, delta_nll_yi, 'r--', label="Yi's Method", linewidth=2)
     ax_delta.set_xlabel('Hazard Ratio', fontsize=11)
-    ax_delta.set_ylabel(r'$-2 \\Delta \\ln L$', fontsize=11)
+    ax_delta.set_ylabel(r'$-2 \Delta \ln L$', fontsize=11)
     ax_delta.set_title(f'{datacard_name}: Profile Likelihood', fontsize=12, fontweight='bold')
     ax_delta.legend(fontsize=10)
     ax_delta.grid(True, alpha=0.3)
@@ -568,7 +581,7 @@ for row_idx, (datacard_name, datacard, hr_calc) in enumerate([
     ax_abs.plot(hazard_ratios_scan, nll_minlp, 'b-', label='MINLP', linewidth=2)
     ax_abs.plot(hazard_ratios_scan, nll_yi, 'r--', label="Yi's Method", linewidth=2)
     ax_abs.set_xlabel('Hazard Ratio', fontsize=11)
-    ax_abs.set_ylabel(r'$-2 \\ln L$ (absolute)', fontsize=11)
+    ax_abs.set_ylabel(r'$-2 \ln L$ (absolute)', fontsize=11)
     ax_abs.set_title(f'{datacard_name}: Absolute Likelihood', fontsize=12, fontweight='bold')
     ax_abs.legend(fontsize=10)
     ax_abs.grid(True, alpha=0.3)
@@ -584,35 +597,24 @@ plt.tight_layout()
 plt.show()
 ```
 
-```python
+## Understanding Individual vs. Aggregate Misclassification
 
-```
-
-## Individual vs. Aggregate Misclassification: Understanding the Methodological Difference
-
-A key distinction between KoMbine's MINLP approach and Yi's method lies in how they handle measurement error and misclassification:
+The agreement between MINLP and Yi's method observed above reveals a key difference in their underlying approaches:
 
 **Yi's Method (Aggregate Approach):**
 - Estimates a single, aggregate misclassification matrix Π = P(observed group | true group)
-- This matrix is identical for all patients: a patient in the true high group has the same fixed probability of being observed in the low group regardless of their individual data
-- The matrix is then applied to each patient's likelihood, effectively weighting the contribution of each possible group assignment
-- **Assumes**: All patients have the same error distribution (or an aggregate error distribution)
+- This matrix is identical for all patients: it assumes all patients in a true group have the same probability of being misclassified
+- The matrix is then applied to each patient's likelihood, effectively weighting each possible group assignment
 
 **KoMbine's MINLP Method (Individual Approach):**
 - Simultaneously optimizes both the parameters AND each patient's true group assignment
-- Each patient's optimal group is determined based on their specific observable data AND error model
-- Patients near the threshold can be assigned to different groups based on their likelihood contribution, accounting for their individual measurement error
-- **Effectively**: Each patient's misclassification probability is estimated individually based on their observed value and error, not from a pre-computed aggregate matrix
+- Each patient's optimal group is determined based on their *specific* observable data and error model
+- Patients with different measurements can be assigned different groups, even if they're in the same true group
+- This accounts for individual variation in measurement uncertainty
 
-**When Methods Should Agree:**
+**Key Insight:** These methods should agree most closely when all patients within a group are homogeneous—i.e., when they have similar observed values and similar measurement errors. In such cases, the aggregate misclassification matrix directly represents each individual's misclassification probability.
 
-The methods should show better agreement when the patient population is **homogeneous** — i.e., when:
-- All patients in the low group have similar observed parameters and similar errors
-- All patients in the high group have similar observed parameters and similar errors
-
-In this case, the aggregate misclassification matrix mirrors the individual per-patient misclassification probabilities, reducing the difference between the approaches.
-
-Let's test this hypothesis with a homogeneous groups datacard.
+Let's test this hypothesis with a homogeneous groups example.
 
 ```python
 # Load the homogeneous groups datacard
@@ -674,13 +676,13 @@ print(f"68% CI: [{lower_ci_68_homogeneous:.3f}, {upper_ci_68_homogeneous:.3f}]")
 print(f"95% CI: [{lower_ci_95_homogeneous:.3f}, {upper_ci_95_homogeneous:.3f}]")
 ```
 
-### Example 4: Homogeneous Groups (Testing Individual vs. Aggregate)
+### Example 4: Homogeneous Groups (Testing the Methodological Hypothesis)
 
-To test whether methods agree better with homogeneous patient populations, we create a datacard where:
-- **Low group**: All 10 patients have density 0.3 (below threshold) with moderate counts (30), giving ~18% relative uncertainty
-- **High group**: All 10 patients have density 0.7 (above threshold) with moderate counts (70), giving ~12% relative uncertainty
+To test whether methods truly agree better with homogeneous patient populations, we create a controlled datacard where:
+- **Low group**: All 10 patients have density 0.3 (well below threshold) with moderate counts (30), giving ~18% relative uncertainty
+- **High group**: All 10 patients have density 0.7 (well above threshold) with moderate counts (70), giving ~12% relative uncertainty
 
-Since all patients within each group are identical, the aggregate misclassification matrix should directly represent each patient's individual misclassification probability.
+Since all patients within each group are identical, the aggregate misclassification matrix should perfectly represent each patient's individual misclassification probability. This provides a clean test of our hypothesis.
 
 ```python
 # Show misclassification matrix for homogeneous datacard
@@ -725,7 +727,7 @@ for hr_test in hazard_ratios_to_test:
     result_minlp = hr_calc_homogeneous.compute_2nll_at_hazard_ratio(
         hazard_ratio=hr_test,
         cox_only=False,
-        print_progress=True,
+        print_progress=False,
         verbose=False
     )
     # Yi's method
@@ -774,7 +776,7 @@ for hr in hazard_ratios_scan:
     result_minlp = hr_calc_homogeneous.compute_2nll_at_hazard_ratio(
         hazard_ratio=hr,
         cox_only=False,
-        print_progress=True,
+        print_progress=False,
         verbose=False
     )
     nll_minlp_homogeneous.append(result_minlp.x)
@@ -814,7 +816,7 @@ for hr in hazard_ratios_moderate_rescan:
     result_minlp = hr_calc_poisson_moderate_counts.compute_2nll_at_hazard_ratio(
         hazard_ratio=hr,
         cox_only=False,
-        print_progress=True,
+        print_progress=False,
         verbose=False
     )
     nll_minlp_moderate_rescan.append(result_minlp.x)
