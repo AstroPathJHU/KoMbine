@@ -1335,10 +1335,6 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
             Sum of (observed - expected) weighted deaths for low group.
         - 'V' : float
             Sum of weighted variances.
-        - 'misclassification_matrix' : ndarray
-            Estimated 2x2 misclassification matrix Π.
-        - 'inverse_misclassification_matrix' : ndarray
-            Inverse matrix Π^{-1} used for weighting.
         - 'n_low_observed' : int
             Number of patients observed in low group.
         - 'n_high_observed' : int
@@ -1347,12 +1343,12 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     Notes
     -----
     Yi's method (Statistical Analysis with Measurement Error or Misclassification, 2017)
-    uses inverse probability weighting to correct for misclassification:
+    uses inverse probability weighting to correct for misclassification.
     
-    1. Estimate misclassification matrix Π where Π[i,j] = P(observed=j | true=i)
-    2. Compute inverse matrix Π^{-1} for weighting
-    3. Each patient contributes fractionally to both groups weighted by Π^{-1}
-    4. Compute corrected logrank test using weighted risk sets and event counts
+    This improved implementation uses per-patient probability weighting:
+    1. For each patient, compute P(true group = high | observed data)
+    2. Weight patient's contributions by their individual probabilities
+    3. Compute corrected logrank test using weighted risk sets and event counts
     
     The weighted logrank test formula:
     - At each death time t, compute weighted risk sets r_k^*(t) and deaths d_k^*(t)
@@ -1365,20 +1361,14 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     - Yi: Probabilistic weighting (no optimization, fractional assignments)
     - MINLP: Integer optimization over discrete assignments with NLL penalties
     
+    The per-patient approach is more accurate than aggregate misclassification
+    matrices, as it accounts for individual measurement uncertainty.
+    
     See Section 3.7.1 of Yi's book for theoretical foundation. The logrank
     extension follows naturally from the weighted risk set principle (Equation 3.57).
     """
-    # Estimate misclassification matrix from patient data
-    Pi = estimate_misclassification_matrix(
-      self.all_patients,
-      self.parameter_threshold,
-      method=method,
-      prior_alpha=prior_alpha,
-      prior_beta=prior_beta,
-    )
-    
-    # Compute inverse matrix for weighting
-    Pi_inv = invert_misclassification_matrix(Pi)
+    # Import here to avoid circular dependency
+    from .utilities import prob_poisson_density_exceeds_threshold
     
     # Count patients by observed group
     n_low_observed = sum(
@@ -1395,7 +1385,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     if not all_death_times:
       raise ValueError("No death events found in patient data.")
     
-    # Calculate weighted logrank test statistic following Yi's correction
+    # Calculate weighted logrank test statistic using per-patient probabilities
     U = 0.0  # Sum of (observed - expected) for low group (weighted)
     V = 0.0  # Sum of variances (weighted)
     
@@ -1411,32 +1401,36 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
           # Patient not at risk
           continue
         
-        # Determine observed group (0 = low, 1 = high)
-        observed_group = 1 if patient.observed_parameter > self.parameter_threshold else 0
+        # Compute this patient's probability of being in high group
+        # based on their individual measurement
+        prob_high = None
+        if hasattr(patient, 'observable') and patient.observable is not None:
+          obs = patient.observable  # type: ignore
+          if hasattr(obs, 'numerator') and hasattr(obs, 'denominator'):
+            # Poisson density measurement
+            prob_high = prob_poisson_density_exceeds_threshold(
+              obs.numerator,
+              obs.denominator,
+              self.parameter_threshold,
+              method=method,
+              prior_alpha=prior_alpha,
+              prior_beta=prior_beta,
+            )
         
-        # Inverse probability weights for this patient
-        # If observed in group 0 (low):
-        #   Weight for true=0: Pi_inv[0, 0]
-        #   Weight for true=1: Pi_inv[1, 0]
-        # If observed in group 1 (high):
-        #   Weight for true=0: Pi_inv[0, 1]
-        #   Weight for true=1: Pi_inv[1, 1]
+        # Fallback: use observed parameter for deterministic assignment
+        if prob_high is None:
+          prob_high = 1.0 if patient.observed_parameter > self.parameter_threshold else 0.0
         
-        if observed_group == 0:
-          weight_low = Pi_inv[0, 0]
-          weight_high = Pi_inv[1, 0]
-        else:
-          weight_low = Pi_inv[0, 1]
-          weight_high = Pi_inv[1, 1]
+        prob_low = 1.0 - prob_high
         
-        # Add to risk sets
-        r_low_weighted += weight_low
-        r_high_weighted += weight_high
+        # Add to risk sets weighted by individual probabilities
+        r_low_weighted += prob_low
+        r_high_weighted += prob_high
         
         # If patient dies at this time, add to death counts
         if patient.time == death_time and not patient.censored:
-          d_low_weighted += weight_low
-          d_high_weighted += weight_high
+          d_low_weighted += prob_low
+          d_high_weighted += prob_high
       
       # Compute logrank components for this death time
       r_total_weighted = r_low_weighted + r_high_weighted
@@ -1470,8 +1464,6 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
         'logrank_statistic': 0.0,
         'U': U,
         'V': V,
-        'misclassification_matrix': Pi,
-        'inverse_misclassification_matrix': Pi_inv,
         'n_low_observed': n_low_observed,
         'n_high_observed': n_high_observed,
       }
@@ -1487,8 +1479,6 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       'logrank_statistic': logrank_statistic,
       'U': U,
       'V': V,
-      'misclassification_matrix': Pi,
-      'inverse_misclassification_matrix': Pi_inv,
       'n_low_observed': n_low_observed,
       'n_high_observed': n_high_observed,
     }

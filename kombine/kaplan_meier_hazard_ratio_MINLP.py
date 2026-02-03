@@ -19,8 +19,7 @@ import scipy.stats
 from .kaplan_meier_p_value_MINLP import MINLPforKMPValue
 from .utilities import (
   LOG_ZERO_EPSILON_DEFAULT,
-  estimate_misclassification_matrix,
-  invert_misclassification_matrix,
+  prob_poisson_density_exceeds_threshold,
 )
 
 
@@ -300,46 +299,34 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
             Natural logarithm of the hazard ratio.
         - cox_2NLL : float
             Twice the corrected Cox partial likelihood contribution.
-        - misclassification_matrix : ndarray
-            Estimated 2x2 misclassification matrix Π.
-        - inverse_misclassification_matrix : ndarray
-            Inverse matrix Π^{-1} used for weighting.
     
     Notes
     -----
     Yi's method (Statistical Analysis with Measurement Error or Misclassification, 2017)
-    uses inverse probability weighting to correct for misclassification:
+    uses inverse probability weighting to correct for misclassification.
     
-    1. Estimate misclassification matrix Π where Π[i,j] = P(observed=j | true=i)
-    2. Compute inverse matrix Π^{-1} for weighting
-    3. Each patient contributes fractionally to both groups weighted by Π^{-1}
-    4. Compute corrected Cox partial likelihood using weighted risk sets
+    This improved implementation uses per-patient probability weighting:
+    1. For each patient, compute P(true group = high | observed data)
+    2. Weight patient's contributions by their individual probabilities
+    3. Compute corrected Cox partial likelihood using weighted risk sets
     
     This differs from KoMbine's MINLP approach:
     - Yi: Probabilistic weighting (no optimization, fractional assignments)
     - MINLP: Integer optimization over discrete assignments with NLL penalties
     
+    The per-patient approach is more accurate than aggregate misclassification
+    matrices, as it accounts for individual measurement uncertainty rather than
+    assuming uniform misclassification probabilities within groups.
+    
     See Section 3.7.1 of Yi's book for theoretical foundation.
     """
     log_hazard_ratio = np.log(hazard_ratio)
     
-    # Use original patients for misclassification estimation if provided
+    # Use original patients for probability calculation if provided
     # (needed to access observable counts/areas), otherwise fall back to NLL patients
     patients_for_estimation = original_patients if original_patients is not None else self.all_patients
     
-    # Estimate misclassification matrix from patient data
-    Pi = estimate_misclassification_matrix(
-      patients_for_estimation,
-      self.parameter_threshold,
-      method=method,
-      prior_alpha=prior_alpha,
-      prior_beta=prior_beta,
-    )
-    
-    # Compute inverse matrix for weighting
-    Pi_inv = invert_misclassification_matrix(Pi)
-    
-    # Separate patients by observed group for initial assignment
+    # Separate patients by observed group for reporting
     patients_observed_low = []
     patients_observed_high = []
     
@@ -354,14 +341,14 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
       p.time for p in self.all_patients if not p.censored
     ))
     
-    # Compute corrected Cox partial likelihood using Yi's weighted risk sets
-    # Following Yi Section 3.7.1, Equation 3.57-3.58
+    # Compute corrected Cox partial likelihood using per-patient weighted risk sets
+    # Following Yi Section 3.7.1, but with individual patient probabilities
     
     log_likelihood = 0.0
     
     for t_death in death_times:
       # For each death time, compute weighted risk sets
-      # r_k^*(t) = sum over patients at risk of their weighted contributions
+      # Each patient contributes to both groups weighted by their probability
       
       # Weighted contributions for patients at risk at time t_death
       r_low_weighted = 0.0
@@ -371,37 +358,44 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
       d_low_weighted = 0.0
       d_high_weighted = 0.0
       
-      for i, p in enumerate(self.all_patients):
-        if p.time < t_death:
+      for i, p_nll in enumerate(self.all_patients):
+        if p_nll.time < t_death:
           # Patient not at risk
           continue
         
-        # Determine observed group
-        observed_group = 1 if p.observed_parameter > self.parameter_threshold else 0
+        # Get original patient for observable data if available
+        p_obs = patients_for_estimation[i] if i < len(patients_for_estimation) else p_nll
         
-        # Inverse probability weights for this patient
-        # If observed in group 0 (low):
-        #   Weight for true=0: Pi_inv[0, 0]
-        #   Weight for true=1: Pi_inv[1, 0]
-        # If observed in group 1 (high):
-        #   Weight for true=0: Pi_inv[0, 1]
-        #   Weight for true=1: Pi_inv[1, 1]
+        # Compute this patient's probability of being in high group
+        # based on their individual measurement
+        prob_high = None
+        if hasattr(p_obs, 'observable') and p_obs.observable is not None:  # type: ignore
+          obs = p_obs.observable  # type: ignore
+          if hasattr(obs, 'numerator') and hasattr(obs, 'denominator'):
+            # Poisson density measurement
+            prob_high = prob_poisson_density_exceeds_threshold(
+              obs.numerator,
+              obs.denominator,
+              self.parameter_threshold,
+              method=method,
+              prior_alpha=prior_alpha,
+              prior_beta=prior_beta,
+            )
         
-        if observed_group == 0:
-          weight_low = Pi_inv[0, 0]
-          weight_high = Pi_inv[1, 0]
-        else:
-          weight_low = Pi_inv[0, 1]
-          weight_high = Pi_inv[1, 1]
+        # Fallback: use observed parameter for deterministic assignment
+        if prob_high is None:
+          prob_high = 1.0 if p_nll.observed_parameter > self.parameter_threshold else 0.0
         
-        # Add to risk sets
-        r_low_weighted += weight_low
-        r_high_weighted += weight_high
+        prob_low = 1.0 - prob_high
+        
+        # Add to risk sets weighted by individual probabilities
+        r_low_weighted += prob_low
+        r_high_weighted += prob_high
         
         # If patient dies at this time, add to death counts
-        if p.time == t_death and not p.censored:
-          d_low_weighted += weight_low
-          d_high_weighted += weight_high
+        if p_nll.time == t_death and not p_nll.censored:
+          d_low_weighted += prob_low
+          d_high_weighted += prob_high
       
       # Compute Cox partial likelihood contribution at this death time
       # Following Breslow approximation for tied deaths:
@@ -443,8 +437,6 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
       log_hazard_ratio=log_hazard_ratio,
       cox_2NLL=cox_2nll,
       patient_2NLL=patient_2nll,
-      misclassification_matrix=Pi,
-      inverse_misclassification_matrix=Pi_inv,
       method='yi_correction',
     )
     
