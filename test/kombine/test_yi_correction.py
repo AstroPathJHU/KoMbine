@@ -58,7 +58,10 @@ def test_prob_poisson_density_exceeds_threshold_bayesian():
     threshold=48.0,
     method='bayesian',
   )
-  assert 0.5 < prob < 0.9, f"Expected prob in (0.5, 0.9) for count slightly above threshold, got {prob}"
+  if not (0.5 < prob < 0.9):
+    raise AssertionError(
+      f"Expected prob in (0.5, 0.9) for count near threshold, got {prob}"
+    )
 
   # Test 4: Zero count (edge case)
   prob = prob_poisson_density_exceeds_threshold(
@@ -154,7 +157,7 @@ observable\t{observables_str}
   # Write to temporary file and parse
   with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
     f.write(datacard_content)
-    temp_path = f.name
+    temp_path = pathlib.Path(f.name)
 
   datacard = kombine.datacard.Datacard.parse_datacard(temp_path)
   pathlib.Path(temp_path).unlink()  # Clean up temp file

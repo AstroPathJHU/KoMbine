@@ -18,7 +18,8 @@ import scipy.optimize
 import scipy.stats
 
 from .kaplan_meier_MINLP import KaplanMeierPatientNLL, n_choose_d_term_table
-from .utilities import LOG_ZERO_EPSILON_DEFAULT
+from .utilities import LOG_ZERO_EPSILON_DEFAULT, prob_poisson_density_exceeds_threshold
+
 
 class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-instance-attributes
   """
@@ -1073,7 +1074,9 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     if print_progress or verbose:
       print("Solving for null hypothesis...")
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, True)
-    model = self._optimize_with_fallbacks(model, initial_gurobi_params, fallback_strategies, verbose)
+    model = self._optimize_with_fallbacks(
+      model, initial_gurobi_params, fallback_strategies, verbose
+    )
     if model.status != GRB.OPTIMAL:
       raise ValueError(f"Null model failed with status {model.status}")
     twonll_null = model.ObjVal
@@ -1117,7 +1120,9 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     if print_progress or verbose:
       print("Solving for alternative hypothesis...")
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, False)
-    model = self._optimize_with_fallbacks(model, initial_gurobi_params, fallback_strategies, verbose)
+    model = self._optimize_with_fallbacks(
+      model, initial_gurobi_params, fallback_strategies, verbose
+    )
     if model.status != GRB.OPTIMAL:
       raise ValueError(f"Alternative model failed with status {model.status}")
     twonll_alt = model.ObjVal
@@ -1303,11 +1308,11 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
   ) -> dict:
     """
     Calculate p-value using Yi's misclassification correction method (Section 3.7.1).
-    
+
     This implements Yi's correction for discrete covariate misclassification applied
     to the logrank test. Instead of using integer optimization (MINLP), this method
     uses inverse probability weighting to account for measurement uncertainty.
-    
+
     Parameters
     ----------
     method : str, optional
@@ -1318,7 +1323,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
         Alpha parameter for Gamma prior (Bayesian method only). Default 0.5 (Jeffreys).
     prior_beta : float, optional
         Beta parameter for Gamma prior (Bayesian method only). Default 0.5.
-    
+
     Returns
     -------
     dict
@@ -1335,68 +1340,66 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
             Number of patients observed in low group.
         - 'n_high_observed' : int
             Number of patients observed in high group.
-    
+
     Notes
     -----
     Yi's method (Statistical Analysis with Measurement Error or Misclassification, 2017)
     uses inverse probability weighting to correct for misclassification.
-    
+
     This improved implementation uses per-patient probability weighting:
     1. For each patient, compute P(true group = high | observed data)
     2. Weight patient's contributions by their individual probabilities
     3. Compute corrected logrank test using weighted risk sets and event counts
-    
+
     The weighted logrank test formula:
     - At each death time t, compute weighted risk sets r_k^*(t) and deaths d_k^*(t)
     - U^* = sum_t [d_1^*(t) - r_1^*(t) * (d_0^* + d_1^*) / (r_0^* + r_1^*)]
-    - V^* = sum_t [r_0^* * r_1^* * (d_0^* + d_1^*) * (r_0^* + r_1^* - d_0^* - d_1^*) / 
+    - V^* = sum_t [r_0^* * r_1^* * (d_0^* + d_1^*) * (r_0^* + r_1^* - d_0^* - d_1^*) /
                     ((r_0^* + r_1^*)^2 * (r_0^* + r_1^* - 1))]
     - Logrank statistic = (U^*)^2 / V^* ~ chi^2(1)
-    
+
     This differs from KoMbine's MINLP approach:
     - Yi: Probabilistic weighting (no optimization, fractional assignments)
     - MINLP: Integer optimization over discrete assignments with NLL penalties
-    
+
     The per-patient approach is more accurate than aggregate misclassification
     matrices, as it accounts for individual measurement uncertainty.
-    
+
     See Section 3.7.1 of Yi's book for theoretical foundation. The logrank
     extension follows naturally from the weighted risk set principle (Equation 3.57).
     """
-    # Import here to avoid circular dependency
-    from .utilities import prob_poisson_density_exceeds_threshold
-    
+
     # Count patients by observed group
     n_low_observed = sum(
-      1 for p in self.all_patients 
+      1 for p in self.all_patients
       if p.observed_parameter <= self.parameter_threshold
     )
     n_high_observed = len(self.all_patients) - n_low_observed
-    
+
     # Get all unique death times
     all_death_times = sorted(set(
       p.time for p in self.all_patients if not p.censored
     ))
-    
+
     if not all_death_times:
       raise ValueError("No death events found in patient data.")
-    
+
     # Calculate weighted logrank test statistic using per-patient probabilities
     U = 0.0  # Sum of (observed - expected) for low group (weighted)
     V = 0.0  # Sum of variances (weighted)
-    
+
     for death_time in all_death_times:
       # Compute weighted risk sets and death counts at this time
       r_low_weighted = 0.0
       r_high_weighted = 0.0
       d_low_weighted = 0.0
       d_high_weighted = 0.0
-      
+
       for patient in self.all_patients:
         if patient.time < death_time:
           # Patient not at risk
           continue
-        
+
         # Compute this patient's probability of being in high group
         # based on their individual measurement
         prob_high = None
@@ -1413,47 +1416,47 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
               prior_alpha=prior_alpha,
               prior_beta=prior_beta,
             )
-        
+
         # Fallback: use observed parameter for deterministic assignment
         if prob_high is None:
           prob_high = 1.0 if patient.observed_parameter > self.parameter_threshold else 0.0
-        
+
         prob_low = 1.0 - prob_high
-        
+
         # Add to risk sets weighted by individual probabilities
         r_low_weighted += prob_low
         r_high_weighted += prob_high
-        
+
         # If patient dies at this time, add to death counts
         if patient.time == death_time and not patient.censored:
           d_low_weighted += prob_low
           d_high_weighted += prob_high
-      
+
       # Compute logrank components for this death time
       r_total_weighted = r_low_weighted + r_high_weighted
       d_total_weighted = d_low_weighted + d_high_weighted
-      
+
       if r_total_weighted <= 0 or d_total_weighted <= 0:
         continue
-      
+
       # Expected deaths in low group under null hypothesis
       expected_d_low = r_low_weighted * d_total_weighted / r_total_weighted
-      
+
       # Variance for this time point
       if r_total_weighted > 1:
         variance_t = (
-          r_low_weighted * r_high_weighted * d_total_weighted * 
+          r_low_weighted * r_high_weighted * d_total_weighted *
           (r_total_weighted - d_total_weighted)
         ) / (
           r_total_weighted * r_total_weighted * (r_total_weighted - 1)
         )
       else:
         variance_t = 0.0
-      
+
       # Accumulate test statistic components
       U += d_low_weighted - expected_d_low
       V += variance_t
-    
+
     if V <= 0:
       # No variance means no information for comparison
       return {
@@ -1464,13 +1467,13 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
         'n_low_observed': n_low_observed,
         'n_high_observed': n_high_observed,
       }
-    
+
     # Logrank test statistic
     logrank_statistic = U * U / V
-    
+
     # Calculate p-value using chi-square distribution with 1 degree of freedom
     p_value = 1.0 - scipy.stats.chi2.cdf(logrank_statistic, df=1).item()
-    
+
     return {
       'p_value': p_value,
       'logrank_statistic': logrank_statistic,

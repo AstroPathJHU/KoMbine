@@ -73,7 +73,7 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
       log_hazard_ratio_bounds=log_hazard_ratio_bounds,
     )
 
-  def compute_2nll_at_hazard_ratio(  # pylint: disable=too-many-locals
+  def compute_2nll_at_hazard_ratio(  # pylint: disable=too-many-locals, too-many-arguments
     self,
     hazard_ratio: float,
     *,
@@ -141,7 +141,7 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
             The Gurobi model (for advanced users).
     """
     if print_progress or verbose:
-        print(f"Computing 2NLL at hazard ratio {hazard_ratio} at {datetime.datetime.now()}")
+      print(f"Computing 2NLL at hazard ratio {hazard_ratio} at {datetime.datetime.now()}")
 
     (  # pylint: disable=duplicate-code
       model,
@@ -197,7 +197,7 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
         'MIPFocus': MIPFocus,
     }
     if LogFile is not None:
-        initial_gurobi_params['LogFile'] = os.fspath(LogFile)
+      initial_gurobi_params['LogFile'] = os.fspath(LogFile)
 
     # Define fallback strategies
     fallback_strategies = [
@@ -206,7 +206,9 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
     ]
 
     # Optimize
-    model = self._optimize_with_fallbacks(model, initial_gurobi_params, fallback_strategies, verbose)
+    model = self._optimize_with_fallbacks(
+      model, initial_gurobi_params, fallback_strategies, verbose
+    )
 
     if model.status != GRB.OPTIMAL:
       raise ValueError(f"Optimization failed with status {model.status}")
@@ -248,7 +250,7 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
 
     return result
 
-  def compute_2nll_at_hazard_ratio_yi(  # pylint: disable=too-many-locals
+  def compute_2nll_at_hazard_ratio_yi(  # pylint: disable=too-many-locals, too-many-arguments
     self,
     hazard_ratio: float,
     *,
@@ -259,12 +261,12 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
   ) -> scipy.optimize.OptimizeResult:
     """
     Compute 2NLL at a specific hazard ratio using Yi's misclassification correction.
-    
+
     This implements Yi's misclassification correction method (Section 3.7.1) for
     the Cox proportional hazards model with discrete misclassified covariates.
     Instead of using integer optimization (MINLP), this method uses inverse probability
     weighting to account for measurement uncertainty.
-    
+
     Parameters
     ----------
     hazard_ratio : float
@@ -280,7 +282,7 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
         Alpha parameter for Gamma prior (Bayesian method only). Default 0.5 (Jeffreys).
     prior_beta : float, optional
         Beta parameter for Gamma prior (Bayesian method only). Default 0.5.
-    
+
     Returns
     -------
     scipy.optimize.OptimizeResult
@@ -299,73 +301,75 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
             Natural logarithm of the hazard ratio.
         - cox_2NLL : float
             Twice the corrected Cox partial likelihood contribution.
-    
+
     Notes
     -----
     Yi's method (Statistical Analysis with Measurement Error or Misclassification, 2017)
     uses inverse probability weighting to correct for misclassification.
-    
+
     This improved implementation uses per-patient probability weighting:
     1. For each patient, compute P(true group = high | observed data)
     2. Weight patient's contributions by their individual probabilities
     3. Compute corrected Cox partial likelihood using weighted risk sets
-    
+
     This differs from KoMbine's MINLP approach:
     - Yi: Probabilistic weighting (no optimization, fractional assignments)
     - MINLP: Integer optimization over discrete assignments with NLL penalties
-    
+
     The per-patient approach is more accurate than aggregate misclassification
     matrices, as it accounts for individual measurement uncertainty rather than
     assuming uniform misclassification probabilities within groups.
-    
+
     See Section 3.7.1 of Yi's book for theoretical foundation.
     """
     log_hazard_ratio = np.log(hazard_ratio)
-    
+
     # Use original patients for probability calculation if provided
     # (needed to access observable counts/areas), otherwise fall back to NLL patients
-    patients_for_estimation = original_patients if original_patients is not None else self.all_patients
-    
+    patients_for_estimation = (
+      original_patients if original_patients is not None else self.all_patients
+    )
+
     # Separate patients by observed group for reporting
     patients_observed_low = []
     patients_observed_high = []
-    
+
     for i, p in enumerate(self.all_patients):
       if p.observed_parameter > self.parameter_threshold:
         patients_observed_high.append(i)
       else:
         patients_observed_low.append(i)
-    
+
     # Collect unique death times
     death_times = sorted(set(
       p.time for p in self.all_patients if not p.censored
     ))
-    
+
     # Compute corrected Cox partial likelihood using per-patient weighted risk sets
     # Following Yi Section 3.7.1, but with individual patient probabilities
-    
+
     log_likelihood = 0.0
-    
+
     for t_death in death_times:
       # For each death time, compute weighted risk sets
       # Each patient contributes to both groups weighted by their probability
-      
+
       # Weighted contributions for patients at risk at time t_death
       r_low_weighted = 0.0
       r_high_weighted = 0.0
-      
+
       # Weighted death counts at this time
       d_low_weighted = 0.0
       d_high_weighted = 0.0
-      
+
       for i, p_nll in enumerate(self.all_patients):
         if p_nll.time < t_death:
           # Patient not at risk
           continue
-        
+
         # Get original patient for observable data if available
         p_obs = patients_for_estimation[i] if i < len(patients_for_estimation) else p_nll
-        
+
         # Compute this patient's probability of being in high group
         # based on their individual measurement
         prob_high = None
@@ -381,53 +385,53 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
               prior_alpha=prior_alpha,
               prior_beta=prior_beta,
             )
-        
+
         # Fallback: use observed parameter for deterministic assignment
         if prob_high is None:
           prob_high = 1.0 if p_nll.observed_parameter > self.parameter_threshold else 0.0
-        
+
         prob_low = 1.0 - prob_high
-        
+
         # Add to risk sets weighted by individual probabilities
         r_low_weighted += prob_low
         r_high_weighted += prob_high
-        
+
         # If patient dies at this time, add to death counts
         if p_nll.time == t_death and not p_nll.censored:
           d_low_weighted += prob_low
           d_high_weighted += prob_high
-      
+
       # Compute Cox partial likelihood contribution at this death time
       # Following Breslow approximation for tied deaths:
       # L_i = [H^d_high * (r_low + H*r_high)^{-d_total}]
       # where d_total = d_low + d_high
-      
+
       d_total_weighted = d_low_weighted + d_high_weighted
-      
+
       if d_total_weighted > 0:
         # Numerator: H^{d_high}
         numerator_log = d_high_weighted * log_hazard_ratio
-        
+
         # Denominator: (r_low + H*r_high)^{d_total}
         denominator = r_low_weighted + hazard_ratio * r_high_weighted
-        
+
         if denominator <= 0:
           # Avoid log(0) or log(negative)
           # This shouldn't happen with proper weighting, but handle gracefully
           denominator = LOG_ZERO_EPSILON_DEFAULT
-        
+
         denominator_log = d_total_weighted * np.log(denominator)
-        
+
         # Add to log likelihood
         log_likelihood += numerator_log - denominator_log
-    
+
     # Convert to 2NLL
     cox_2nll = -2.0 * log_likelihood
-    
+
     # For Yi's method, there are no patient-wise penalties (all uncertainty is in weights)
     patient_2nll = 0.0
     twonll = cox_2nll + patient_2nll
-    
+
     result = scipy.optimize.OptimizeResult(
       x=twonll,
       success=True,
@@ -439,7 +443,7 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
       patient_2NLL=patient_2nll,
       method='yi_correction',
     )
-    
+
     return result
 
   def likelihood_scan_hazard_ratio(  # pylint: disable=too-many-arguments,too-many-locals

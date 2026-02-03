@@ -1,7 +1,7 @@
 ---
 jupyter:
   jupytext:
-    formats: ipynb,md,py
+    formats: ipynb,md,py:percent
     text_representation:
       extension: .md
       format_name: markdown
@@ -155,9 +155,6 @@ result_yi = datacard_two_groups.km_p_value_logrank_yi(
 print("Yi's Correction Method:")
 print(f"  Test statistic: {result_yi['logrank_statistic']:.4f}")
 print(f"  P-value: {result_yi['p_value']:.6f}")
-print(f"  Misclassification matrix (diagonal should be ~1.0 for fixed observables):")
-print(f"    Π[0,0] = {result_yi['misclassification_matrix'][0,0]:.4f}")
-print(f"    Π[1,1] = {result_yi['misclassification_matrix'][1,1]:.4f}")
 ```
 
 ### Comparison Summary
