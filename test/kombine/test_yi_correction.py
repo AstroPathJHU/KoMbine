@@ -58,7 +58,7 @@ def test_prob_poisson_density_exceeds_threshold_bayesian():
     threshold=48.0,
     method='bayesian',
   )
-  if not (0.5 < prob < 0.9):
+  if not 0.5 < prob < 0.9:
     raise AssertionError(
       f"Expected prob in (0.5, 0.9) for count near threshold, got {prob}"
     )
@@ -98,7 +98,7 @@ def test_prob_poisson_density_exceeds_threshold_normal_approx():
   )
 
 
-def generate_synthetic_datacard_with_perfect_classification(
+def generate_synthetic_datacard_with_perfect_classification( # pylint: disable=too-many-locals, too-many-arguments
   target_hr: float = 2.0,
   n_patients_per_group: int = 30,
   threshold: float = 100.0,
@@ -106,7 +106,7 @@ def generate_synthetic_datacard_with_perfect_classification(
 ) -> kombine.datacard.Datacard:
   """
   Generate a synthetic datacard with perfect classification (no measurement error).
-  
+
   Uses 'fixed' observable type to ensure no measurement uncertainty.
   This allows testing Yi's method under the condition where it should
   reduce to the standard logrank test.
@@ -168,7 +168,7 @@ observable\t{observables_str}
 def test_yi_logrank_perfect_classification():
   """
   Test Yi's logrank method with perfect classification.
-  
+
   Under perfect classification (no measurement error), Yi's method should
   give essentially the same p-value as the standard logrank test.
   """
@@ -214,7 +214,7 @@ def test_yi_logrank_perfect_classification():
 def test_yi_hazard_ratio_perfect_classification():
   """
   Test Yi's hazard ratio method with perfect classification.
-  
+
   Under perfect classification, Yi's method should give essentially
   the same 2NLL values as the standard MINLP method.
   """
