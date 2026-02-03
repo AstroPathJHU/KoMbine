@@ -35,6 +35,13 @@ import matplotlib.pyplot as plt  #noqa: E402
 import numpy as np  #noqa: E402
 
 from roc_picker.datacard import Datacard  #noqa: E402
+
+# Try to import Pandas4Warning for pandas v3 compatibility
+# On older pandas versions, this doesn't exist
+try:
+    from pandas.errors import Pandas4Warning
+except ImportError:
+    Pandas4Warning = None
 ```
 
 ```python
@@ -114,12 +121,17 @@ print(f"Group 1 (high): {sum(1 for g in group_labels if g == 1)} patients")
 from lifelines.statistics import logrank_test
 
 # Lifelines logrank test
-results_lifelines = logrank_test(
-    durations_A=[t for t, g in zip(times, group_labels) if g == 0],
-    durations_B=[t for t, g in zip(times, group_labels) if g == 1],
-    event_observed_A=[e for e, g in zip(events, group_labels) if g == 0],
-    event_observed_B=[e for e, g in zip(events, group_labels) if g == 1]
-)
+# Temporarily allow Pandas4Warning (if it exists) since we can't control lifelines code
+with warnings.catch_warnings():
+    if Pandas4Warning is not None:
+        warnings.simplefilter("default", Pandas4Warning)
+    
+    results_lifelines = logrank_test(
+        durations_A=[t for t, g in zip(times, group_labels) if g == 0],
+        durations_B=[t for t, g in zip(times, group_labels) if g == 1],
+        event_observed_A=[e for e, g in zip(events, group_labels) if g == 0],
+        event_observed_B=[e for e, g in zip(events, group_labels) if g == 1]
+    )
 
 print("Lifelines Logrank Test:")
 print(f"  Test statistic: {results_lifelines.test_statistic:.4f}")
