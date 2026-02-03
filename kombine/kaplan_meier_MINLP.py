@@ -21,7 +21,7 @@ from .kaplan_meier import (
   KaplanMeierPatientBase,
   KaplanMeierPatient,
 )
-from .utilities import LOG_ZERO_EPSILON_DEFAULT
+from .utilities import LOG_ZERO_EPSILON_DEFAULT, GurobiOptimizerMixin
 
 def n_choose_d_term_table(n_patients) -> dict[tuple[int, int], float]:
   """
@@ -426,7 +426,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       parameter=self.observed_parameter,
     )
 
-class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-attributes
+class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-methods, too-many-instance-attributes
   """
   Mixed Integer Nonlinear Programming for a point on the Kaplan-Meier curve.
   """
@@ -1642,57 +1642,6 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
           )
 
     model.update()
-
-  def _set_gurobi_params(self, model: gp.Model, params: dict):
-    """
-    Helper function to set multiple Gurobi parameters from a dictionary.
-    """
-    for param, value in params.items():
-      if value is not None:
-        model.setParam(param, value)
-
-  def _optimize_with_fallbacks(
-    self,
-    model: gp.Model,
-    initial_params: dict,
-    fallback_strategies: list[tuple[dict, str]],
-    verbose: bool,
-  ):
-    """
-    Attempts to optimize the Gurobi model, applying fallback strategies
-    if the initial optimization is suboptimal.
-
-    Args:
-        model: The Gurobi model to optimize.
-        initial_params: A dictionary of initial Gurobi parameters to apply.
-        fallback_strategies: A list of tuples, where each tuple contains:
-            - A dictionary of Gurobi parameters to apply for the fallback.
-            - A string description of the fallback strategy.
-        verbose: If True, print detailed optimization progress.
-
-    Returns:
-        The Gurobi model after optimization.
-    """
-    # Apply initial parameters
-    self._set_gurobi_params(model, initial_params)
-
-    if verbose:
-      print("Attempting initial optimization...")
-    model.optimize()
-
-    # Check for suboptimal status and apply fallbacks
-    if model.status == GRB.SUBOPTIMAL:
-      for i, (fallback_params, description) in enumerate(fallback_strategies):
-        if verbose:
-          print(f"Model returned suboptimal solution. Applying fallback {i+1}: {description}")
-          print(f"  New parameters: {fallback_params}")
-        self._set_gurobi_params(model, fallback_params)
-        model.optimize()
-        if model.status == GRB.OPTIMAL:
-          if verbose:
-            print(f"Fallback {i+1} successful. Model is now optimal.")
-          break
-    return model
 
   def run_MINLP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
     self,

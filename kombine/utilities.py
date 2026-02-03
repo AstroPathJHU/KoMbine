@@ -177,3 +177,166 @@ def prob_poisson_density_exceeds_threshold(  # pylint: disable=too-many-argument
     return float(prob_exceeds)
 
   raise ValueError(f"Unknown method '{method}'. Must be 'bayesian' or 'normal_approx'.")
+
+
+# ============================================================================
+# Gurobi Optimization Helper Mixin
+# ============================================================================
+
+class GurobiOptimizerMixin:  # pylint: disable=too-few-public-methods
+  """
+  Mixin class providing common Gurobi optimization utilities.
+  """
+
+  def _set_gurobi_params(self, model, params: dict):
+    """
+    Helper function to set multiple Gurobi parameters from a dictionary.
+    """
+    for param, value in params.items():
+      if value is not None:
+        model.setParam(param, value)
+
+  def _create_gurobi_params(  # pylint: disable=too-many-arguments
+    self,
+    *,
+    verbose: bool = False,
+    MIPGap: float,
+    MIPGapAbs: float,
+    TimeLimit: float | None = None,
+    Threads: int | None = None,
+    MIPFocus: int | None = None,
+    LogFile=None,
+  ) -> dict:
+    """
+    Create a standard Gurobi parameter dictionary.
+
+    Args:
+        verbose: If True, enable Gurobi output.
+        MIPGap: Relative MIP optimality gap.
+        MIPGapAbs: Absolute MIP optimality gap.
+        TimeLimit: Time limit in seconds (optional).
+        Threads: Number of threads to use (optional).
+        MIPFocus: MIP focus setting (0=balanced, 1=feasibility, 2=optimality, 3=bound).
+        LogFile: Path to log file (optional).
+
+    Returns:
+        Dictionary of Gurobi parameters.
+    """
+    import os  # pylint: disable=import-outside-toplevel
+
+    params = {
+      'OutputFlag': 1 if verbose else 0,
+      'MIPGap': MIPGap,
+      'MIPGapAbs': MIPGapAbs,
+      'NonConvex': 2,
+      'TimeLimit': TimeLimit,
+      'Threads': Threads,
+      'MIPFocus': MIPFocus,
+    }
+    if LogFile is not None:
+      params['LogFile'] = os.fspath(LogFile)
+    return params
+
+  def _create_fallback_strategies(self) -> list[tuple[dict, str]]:
+    """
+    Create standard fallback strategies for Gurobi optimization.
+
+    Returns:
+        List of (parameters_dict, description) tuples.
+    """
+    return [
+      ({'MIPFocus': 2}, "MIPFocus set to 2 (optimality focus)"),
+      ({'NumericFocus': 3}, "NumericFocus set to 3 (highest precision)"),
+    ]
+
+  def _setup_and_optimize(  # pylint: disable=too-many-arguments
+    self,
+    model,
+    *,
+    verbose: bool = False,
+    MIPGap: float,
+    MIPGapAbs: float,
+    TimeLimit: float | None = None,
+    Threads: int | None = None,
+    MIPFocus: int | None = None,
+    LogFile=None,
+  ):
+    """
+    Setup Gurobi parameters and optimize with fallback strategies.
+
+    This combines parameter creation and optimization in one method to reduce
+    code duplication in calling code.
+
+    Args:
+        model: The Gurobi model to optimize.
+        verbose: If True, enable Gurobi output.
+        MIPGap: Relative MIP optimality gap.
+        MIPGapAbs: Absolute MIP optimality gap.
+        TimeLimit: Time limit in seconds (optional).
+        Threads: Number of threads to use (optional).
+        MIPFocus: MIP focus setting (0=balanced, 1=feasibility, 2=optimality, 3=bound).
+        LogFile: Path to log file (optional).
+
+    Returns:
+        The optimized Gurobi model.
+    """
+    initial_gurobi_params = self._create_gurobi_params(
+      verbose=verbose,
+      MIPGap=MIPGap,
+      MIPGapAbs=MIPGapAbs,
+      TimeLimit=TimeLimit,
+      Threads=Threads,
+      MIPFocus=MIPFocus,
+      LogFile=LogFile,
+    )
+    fallback_strategies = self._create_fallback_strategies()
+
+    return self._optimize_with_fallbacks(
+      model, initial_gurobi_params, fallback_strategies, verbose
+    )
+
+  def _optimize_with_fallbacks(
+    self,
+    model,
+    initial_params: dict,
+    fallback_strategies: list[tuple[dict, str]],
+    verbose: bool,
+  ):
+    """
+    Attempts to optimize the Gurobi model, applying fallback strategies
+    if the initial optimization is suboptimal.
+
+    Args:
+        model: The Gurobi model to optimize.
+        initial_params: A dictionary of initial Gurobi parameters to apply.
+        fallback_strategies: A list of tuples, where each tuple contains:
+            - A dictionary of Gurobi parameters to apply for the fallback.
+            - A string description of the fallback strategy.
+        verbose: If True, print detailed optimization progress.
+
+    Returns:
+        The Gurobi model after optimization.
+    """
+    # Import GRB here to avoid circular imports
+    from gurobipy import GRB  # pylint: disable=import-outside-toplevel
+
+    # Apply initial parameters
+    self._set_gurobi_params(model, initial_params)
+
+    if verbose:
+      print("Attempting initial optimization...")
+    model.optimize()
+
+    # Check for suboptimal status and apply fallbacks
+    if model.status == GRB.SUBOPTIMAL:
+      for i, (fallback_params, description) in enumerate(fallback_strategies):
+        if verbose:
+          print(f"Model returned suboptimal solution. Applying fallback {i+1}: {description}")
+          print(f"  New parameters: {fallback_params}")
+        self._set_gurobi_params(model, fallback_params)
+        model.optimize()
+        if model.status == GRB.OPTIMAL:
+          if verbose:
+            print(f"Fallback {i+1} successful. Model is now optimal.")
+          break
+    return model

@@ -17,10 +17,7 @@ import scipy.optimize
 import scipy.stats
 
 from .kaplan_meier_p_value_MINLP import MINLPforKMPValue
-from .utilities import (
-  LOG_ZERO_EPSILON_DEFAULT,
-  prob_poisson_density_exceeds_threshold,
-)
+from .utilities import LOG_ZERO_EPSILON_DEFAULT
 
 
 class MINLPforKMHazardRatio(MINLPforKMPValue):
@@ -186,32 +183,22 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
       use_cox_penalty_indicator=use_cox_penalty_indicator,
     )
 
-    # Initial Gurobi parameters
-    initial_gurobi_params = {
-        'OutputFlag': 1 if verbose else 0,
-        'MIPGap': MIPGap,
-        'MIPGapAbs': MIPGapAbs,
-        'NonConvex': 2,
-        'TimeLimit': TimeLimit,
-        'Threads': Threads,
-        'MIPFocus': MIPFocus,
-    }
-    if LogFile is not None:
-      initial_gurobi_params['LogFile'] = os.fspath(LogFile)
-
-    # Define fallback strategies
-    fallback_strategies = [
-        ({'MIPFocus': 2}, "MIPFocus set to 2 (optimality focus)"),
-        ({'NumericFocus': 3}, "NumericFocus set to 3 (highest precision)"),
-    ]
-
-    # Optimize
-    model = self._optimize_with_fallbacks(
-      model, initial_gurobi_params, fallback_strategies, verbose
+    # Setup and optimize with standard parameters and fallback strategies
+    # pylint: disable=duplicate-code
+    model = self._setup_and_optimize(
+      model,
+      verbose=verbose,
+      MIPGap=MIPGap,
+      MIPGapAbs=MIPGapAbs,
+      TimeLimit=TimeLimit,
+      Threads=Threads,
+      MIPFocus=MIPFocus,
+      LogFile=LogFile,
     )
 
     if model.status != GRB.OPTIMAL:
       raise ValueError(f"Optimization failed with status {model.status}")
+    # pylint: enable=duplicate-code
 
     # Extract results
     twonll = model.ObjVal
@@ -371,24 +358,12 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
         p_obs = patients_for_estimation[i] if i < len(patients_for_estimation) else p_nll
 
         # Compute this patient's probability of being in high group
-        # based on their individual measurement
-        prob_high = None
-        if hasattr(p_obs, 'observable') and p_obs.observable is not None:  # type: ignore
-          obs = p_obs.observable  # type: ignore
-          if hasattr(obs, 'numerator') and hasattr(obs, 'denominator'):
-            # Poisson density measurement
-            prob_high = prob_poisson_density_exceeds_threshold(
-              obs.numerator,
-              obs.denominator,
-              self.parameter_threshold,
-              method=method,
-              prior_alpha=prior_alpha,
-              prior_beta=prior_beta,
-            )
-
-        # Fallback: use observed parameter for deterministic assignment
-        if prob_high is None:
-          prob_high = 1.0 if p_nll.observed_parameter > self.parameter_threshold else 0.0
+        prob_high = self.compute_patient_prob_high(
+          p_obs,
+          method=method,
+          prior_alpha=prior_alpha,
+          prior_beta=prior_beta,
+        )
 
         prob_low = 1.0 - prob_high
 

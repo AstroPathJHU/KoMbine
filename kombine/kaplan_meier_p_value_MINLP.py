@@ -18,10 +18,14 @@ import scipy.optimize
 import scipy.stats
 
 from .kaplan_meier_MINLP import KaplanMeierPatientNLL, n_choose_d_term_table
-from .utilities import LOG_ZERO_EPSILON_DEFAULT, prob_poisson_density_exceeds_threshold
+from .utilities import (
+  LOG_ZERO_EPSILON_DEFAULT,
+  prob_poisson_density_exceeds_threshold,
+  GurobiOptimizerMixin,
+)
 
 
-class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-instance-attributes
+class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-methods, too-many-instance-attributes
   """
   MINLP solver for calculating p-values for two Kaplan-Meier curves.
   """
@@ -134,6 +138,47 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     The observed parameters of all patients.
     """
     return np.array([p.observed_parameter for p in self.all_patients])
+
+  def compute_patient_prob_high(  # pylint: disable=too-many-arguments
+    self,
+    patient,
+    *,
+    method: str = 'bayesian',
+    prior_alpha: float = 1.0,
+    prior_beta: float = 1.0,
+  ) -> float:
+    """
+    Compute the probability that a patient belongs to the high group.
+
+    Args:
+        patient: The patient to compute probability for.
+        method: Method for probability calculation ('bayesian' or 'normal_approx').
+        prior_alpha: Alpha parameter for Bayesian prior.
+        prior_beta: Beta parameter for Bayesian prior.
+
+    Returns:
+        Probability that patient is in the high group (0.0 to 1.0).
+    """
+    prob_high = None
+    obs = getattr(patient, 'observable', None)
+    if obs is not None:
+      obs = patient.observable  # type: ignore
+      if hasattr(obs, 'numerator') and hasattr(obs, 'denominator'):
+        # Poisson density measurement
+        prob_high = prob_poisson_density_exceeds_threshold(
+          obs.numerator,
+          obs.denominator,
+          self.parameter_threshold,
+          method=method,
+          prior_alpha=prior_alpha,
+          prior_beta=prior_beta,
+        )
+
+    # Fallback: use observed parameter for deterministic assignment
+    if prob_high is None:
+      prob_high = 1.0 if patient.observed_parameter > self.parameter_threshold else 0.0
+
+    return prob_high
   @functools.cached_property
   def parameter_in_range(self) -> npt.NDArray[np.bool_]:
     """
@@ -728,57 +773,6 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
 
     return penalty
 
-  def _set_gurobi_params(self, model: gp.Model, params: dict):
-    """
-    Helper function to set multiple Gurobi parameters from a dictionary.
-    """
-    for param, value in params.items():
-      if value is not None:
-        model.setParam(param, value)
-
-  def _optimize_with_fallbacks(
-    self,
-    model: gp.Model,
-    initial_params: dict,
-    fallback_strategies: list[tuple[dict, str]],
-    verbose: bool,
-  ):
-    """
-    Attempts to optimize the Gurobi model, applying fallback strategies
-    if the initial optimization is suboptimal.
-
-    Args:
-        model: The Gurobi model to optimize.
-        initial_params: A dictionary of initial Gurobi parameters to apply.
-        fallback_strategies: A list of tuples, where each tuple contains:
-            - A dictionary of Gurobi parameters to apply for the fallback.
-            - A string description of the fallback strategy.
-        verbose: If True, print detailed optimization progress.
-
-    Returns:
-        The Gurobi model after optimization.
-    """
-    # Apply initial parameters
-    self._set_gurobi_params(model, initial_params)
-
-    if verbose:
-      print("Attempting initial optimization...")
-    model.optimize()
-
-    # Check for suboptimal status and apply fallbacks
-    if model.status == GRB.SUBOPTIMAL:
-      for i, (fallback_params, description) in enumerate(fallback_strategies):
-        if verbose:
-          print(f"Model returned suboptimal solution. Applying fallback {i+1}: {description}")
-          print(f"  New parameters: {fallback_params}")
-        self._set_gurobi_params(model, fallback_params)
-        model.optimize()
-        if model.status == GRB.OPTIMAL:
-          if verbose:
-            print(f"Fallback {i+1} successful. Model is now optimal.")
-          break
-    return model
-
   def _make_gurobi_model(self):
     """
     Create the Gurobi model for the Kaplan-Meier p-value MINLP.
@@ -1052,33 +1046,24 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       use_cox_penalty_indicator=use_cox_penalty_indicator,
     )
 
-    # Initial Gurobi parameters
-    initial_gurobi_params = {
-      'OutputFlag': 1 if verbose else 0,
-      'MIPGap': MIPGap,
-      'MIPGapAbs': MIPGapAbs,
-      'NonConvex': 2,
-      'TimeLimit': TimeLimit,
-      'Threads': Threads,
-      'MIPFocus': MIPFocus,
-    }
-    if LogFile is not None:
-      initial_gurobi_params['LogFile'] = os.fspath(LogFile)
-
-    # Define fallback strategies
-    fallback_strategies = [
-        ({'MIPFocus': 2}, "MIPFocus set to 2 (optimality focus)"),
-        ({'NumericFocus': 3}, "NumericFocus set to 3 (highest precision)"),
-    ]
-
+    # Setup and optimize with standard parameters and fallback strategies
     if print_progress or verbose:
       print("Solving for null hypothesis...")
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, True)
-    model = self._optimize_with_fallbacks(
-      model, initial_gurobi_params, fallback_strategies, verbose
+    # pylint: disable=duplicate-code
+    model = self._setup_and_optimize(
+      model,
+      verbose=verbose,
+      MIPGap=MIPGap,
+      MIPGapAbs=MIPGapAbs,
+      TimeLimit=TimeLimit,
+      Threads=Threads,
+      MIPFocus=MIPFocus,
+      LogFile=LogFile,
     )
     if model.status != GRB.OPTIMAL:
       raise ValueError(f"Null model failed with status {model.status}")
+    # pylint: enable=duplicate-code
     twonll_null = model.ObjVal
 
     # Extract detailed information for null hypothesis result
@@ -1120,11 +1105,20 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     if print_progress or verbose:
       print("Solving for alternative hypothesis...")
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, False)
-    model = self._optimize_with_fallbacks(
-      model, initial_gurobi_params, fallback_strategies, verbose
+    # pylint: disable=duplicate-code
+    model = self._setup_and_optimize(
+      model,
+      verbose=verbose,
+      MIPGap=MIPGap,
+      MIPGapAbs=MIPGapAbs,
+      TimeLimit=TimeLimit,
+      Threads=Threads,
+      MIPFocus=MIPFocus,
+      LogFile=LogFile,
     )
     if model.status != GRB.OPTIMAL:
       raise ValueError(f"Alternative model failed with status {model.status}")
+    # pylint: enable=duplicate-code
     twonll_alt = model.ObjVal
 
     # Extract detailed information for alternative hypothesis result
@@ -1401,25 +1395,12 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
           continue
 
         # Compute this patient's probability of being in high group
-        # based on their individual measurement
-        prob_high = None
-        obs = getattr(patient, 'observable', None)
-        if obs is not None:
-          obs = patient.observable  # type: ignore
-          if hasattr(obs, 'numerator') and hasattr(obs, 'denominator'):
-            # Poisson density measurement
-            prob_high = prob_poisson_density_exceeds_threshold(
-              obs.numerator,
-              obs.denominator,
-              self.parameter_threshold,
-              method=method,
-              prior_alpha=prior_alpha,
-              prior_beta=prior_beta,
-            )
-
-        # Fallback: use observed parameter for deterministic assignment
-        if prob_high is None:
-          prob_high = 1.0 if patient.observed_parameter > self.parameter_threshold else 0.0
+        prob_high = self.compute_patient_prob_high(
+          patient,
+          method=method,
+          prior_alpha=prior_alpha,
+          prior_beta=prior_beta,
+        )
 
         prob_low = 1.0 - prob_high
 

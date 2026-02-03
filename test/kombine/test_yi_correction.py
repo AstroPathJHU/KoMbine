@@ -13,6 +13,7 @@ import numpy as np
 
 import kombine.datacard
 from kombine.utilities import prob_poisson_density_exceeds_threshold
+from ..utility_testing_functions import generate_two_group_datacard_from_hr
 
 # Treat all warnings as errors
 warnings.simplefilter("error")
@@ -109,46 +110,16 @@ def generate_synthetic_datacard_with_perfect_classification( # pylint: disable=t
   """
   np.random.seed(random_seed)
 
-  # Base hazard rate for Group 0
-  lambda_0 = 0.1
-
-  # Hazard rate for Group 1 to achieve target HR
-  lambda_1 = target_hr * lambda_0
-
-  # Generate survival times from exponential distribution
-  # Group 0: well below threshold
-  survival_times_0 = np.random.exponential(1.0 / lambda_0, size=n_patients_per_group)
-  observables_0 = np.random.uniform(0.0, threshold - 50.0, size=n_patients_per_group)
-
-  # Group 1: well above threshold
-  survival_times_1 = np.random.exponential(1.0 / lambda_1, size=n_patients_per_group)
-  observables_1 = np.random.uniform(threshold + 50.0, threshold + 200.0, size=n_patients_per_group)
-
-  # Randomly censor ~30% of patients
-  censored_0 = np.random.random(n_patients_per_group) < 0.3
-  censored_1 = np.random.random(n_patients_per_group) < 0.3
-
-  # Combine all data
-  all_survival_times = np.concatenate([survival_times_0, survival_times_1])
-  all_censored = np.concatenate([censored_0, censored_1])
-  all_observables = np.concatenate([observables_0, observables_1])
-
-  # Format data
-  survival_times_str = '\t'.join(f'{t:.4f}' for t in all_survival_times)
-  censored_str = '\t'.join('1' if c else '0' for c in all_censored)
-  observables_str = '\t'.join(f'{o:.4f}' for o in all_observables)
-
-  datacard_content = f"""observable_type fixed
-------------
-# Synthetic datacard with perfect classification
-# Group 0 (well below {threshold}): lambda_0 = {lambda_0}
-# Group 1 (well above {threshold}): lambda_1 = {lambda_1}
-# Expected HR = {target_hr}
-------------
-survival_time\t{survival_times_str}
-censored\t{censored_str}
-observable\t{observables_str}
-"""
+  # Generate synthetic two-group datacard from target hazard ratio
+  datacard_content = generate_two_group_datacard_from_hr(
+    n_patients_per_group=n_patients_per_group,
+    target_hr=target_hr,
+    threshold=threshold,
+    observable_range_0=(0.0, threshold - 50.0),
+    observable_range_1=(threshold + 50.0, threshold + 200.0),
+    censor_rate=0.3,
+    seed=42,
+  )
 
   # Write to temporary file and parse
   with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
