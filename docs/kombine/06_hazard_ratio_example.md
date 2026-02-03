@@ -241,11 +241,11 @@ Let's compare the results. With large counts, the Poisson density results should
 
 ```python
 print("Comparison: Fixed vs. Poisson (Large Counts)")
-print("=" * 60)
-print("                          Fixed      Poisson-Large")
-print(f"Best-fit HR:             {best_fit_hr_fixed:6.3f}      {best_fit_hr_large:6.3f}")
-print(f"68% CI:          [{lower_ci_68_fixed:5.3f}, {upper_ci_68_fixed:5.3f}]  [{lower_ci_68_large:5.3f}, {upper_ci_68_large:5.3f}]")
-print(f"95% CI:          [{lower_ci_95_fixed:5.3f}, {upper_ci_95_fixed:5.3f}]  [{lower_ci_95_large:5.3f}, {upper_ci_95_large:5.3f}]")
+print("=" * 70)
+print(f"{'':30} {'Fixed':>15} {'Poisson-Large':>15}")
+print(f"{'Best-fit HR':30} {best_fit_hr_fixed:>15.3f} {best_fit_hr_large:>15.3f}")
+print(f"{'68% CI':30} [{lower_ci_68_fixed:5.3f}, {upper_ci_68_fixed:5.3f}] [{lower_ci_68_large:5.3f}, {upper_ci_68_large:5.3f}]")
+print(f"{'95% CI':30} [{lower_ci_95_fixed:5.3f}, {upper_ci_95_fixed:5.3f}] [{lower_ci_95_large:5.3f}, {upper_ci_95_large:5.3f}]")
 print(f"\nDifference in log(HR): {abs(np.log(best_fit_hr_fixed) - np.log(best_fit_hr_large)):.4f}")
 print("\nAs expected, with large Poisson counts, results are very similar!")
 print("The Cox error dominates, and measurement uncertainty is negligible.")
@@ -304,29 +304,43 @@ hr_calc_poisson_moderate_counts = datacard_poisson_moderate_counts.km_hazard_rat
     parameter_max=0.99,
 )
 
-# Calculate confidence intervals
+# Calculate confidence intervals with extended bounds to find thresholds
 best_fit_hr_moderate, lower_ci_68_moderate, upper_ci_68_moderate, result_68_moderate = hr_calc_poisson_moderate_counts.hazard_ratio_confidence_interval(
     cox_only=False,
     confidence_level=0.68,
-    hazard_ratio_min=0.5,
-    hazard_ratio_max=10.0,
+    hazard_ratio_min=0.1,  # Extended from 0.5
+    hazard_ratio_max=15.0,  # Extended from 10.0
 )
 
 _, lower_ci_95_moderate, upper_ci_95_moderate, _ = hr_calc_poisson_moderate_counts.hazard_ratio_confidence_interval(
     cox_only=False,
     confidence_level=0.95,
+    hazard_ratio_min=0.1,  # Extended
+    hazard_ratio_max=15.0,  # Extended
 )
 
+# Format CI values for display: show "<value" or ">value" if boundary not found
+def format_ci_bound(value, bound_type, extended_bound):
+    """Format CI bound, showing < or > if at extended boundary"""
+    if bound_type == "lower":
+        if abs(value - extended_bound) < 0.01:  # At lower boundary
+            return f"<{extended_bound}"
+        return f"{value:.3f}"
+    else:  # upper
+        if abs(value - extended_bound) < 0.01:  # At upper boundary
+            return f">{extended_bound}"
+        return f"{value:.3f}"
+
 print(f"\nBest-fit hazard ratio: {best_fit_hr_moderate:.3f}")
-print(f"68% CI: [{lower_ci_68_moderate:.3f}, {upper_ci_68_moderate:.3f}]")
-print(f"95% CI: [{lower_ci_95_moderate:.3f}, {upper_ci_95_moderate:.3f}]")
+print(f"68% CI: [{format_ci_bound(lower_ci_68_moderate, 'lower', 0.1)}, {format_ci_bound(upper_ci_68_moderate, 'upper', 15.0)}]")
+print(f"95% CI: [{format_ci_bound(lower_ci_95_moderate, 'lower', 0.1)}, {format_ci_bound(upper_ci_95_moderate, 'upper', 15.0)}]")
 print(f"\n2NLL at best fit: {result_68_moderate.x:.2f}")
 
-# Perform likelihood scan
+# Perform likelihood scan with extended bounds
 hazard_ratios_moderate, twonll_values_moderate, best_fit_result_moderate = hr_calc_poisson_moderate_counts.likelihood_scan_hazard_ratio(
     n_points=50,
-    hazard_ratio_min=0.5,
-    hazard_ratio_max=6.0,
+    hazard_ratio_min=0.1,  # Extended from 0.5
+    hazard_ratio_max=15.0,  # Extended from 6.0
     cox_only=False
 )
 
@@ -371,6 +385,69 @@ print("3. Best-fit HRs remain similar (same underlying survival distributions)")
 Let's create a comprehensive visualization comparing all three cases.
 
 ```python
+# Helper function to draw error bars with arrows for unbounded CIs
+def plot_confidence_intervals(ax, x_pos, best_fits, ci_lower, ci_upper, color, label, extended_lower=None, extended_upper=None):
+    """
+    Plot error bars with arrows at ends where CI bounds hit extended search limits
+    """
+    # Determine which bounds are at extended limits
+    bounded_lower = [True] * len(x_pos)
+    bounded_upper = [True] * len(x_pos)
+    
+    if extended_lower is not None:
+        for i in range(len(x_pos)):
+            if isinstance(ci_lower[i], str) or abs(ci_lower[i] - extended_lower) < 0.01:
+                bounded_lower[i] = False
+                ci_lower[i] = extended_lower if isinstance(ci_lower[i], str) else ci_lower[i]
+    
+    if extended_upper is not None:
+        for i in range(len(x_pos)):
+            if isinstance(ci_upper[i], str) or abs(ci_upper[i] - extended_upper) < 0.01:
+                bounded_upper[i] = False
+                ci_upper[i] = extended_upper if isinstance(ci_upper[i], str) else ci_upper[i]
+    
+    # Convert to numpy arrays for arithmetic
+    ci_lower_vals = np.array([float(c) if isinstance(c, str) else c for c in ci_lower])
+    ci_upper_vals = np.array([float(c) if isinstance(c, str) else c for c in ci_upper])
+    
+    # Plot main error bars
+    for i in range(len(x_pos)):
+        lower_err = best_fits[i] - ci_lower_vals[i]
+        upper_err = ci_upper_vals[i] - best_fits[i]
+        
+        # Plot bar
+        ax.plot([x_pos[i], x_pos[i]], [ci_lower_vals[i], ci_upper_vals[i]], 
+                color=color, linewidth=2, zorder=1)
+        
+        # Plot point
+        ax.plot(x_pos[i], best_fits[i], 'o', markersize=10, color='darkblue', zorder=3)
+        
+        # Add arrows at ends where bounds are unbounded
+        arrow_size = 0.12  # relative to y-axis on log scale
+        
+        if not bounded_lower[i]:
+            # Draw downward arrow at lower end
+            ax.annotate('', xy=(x_pos[i], ci_lower_vals[i]), 
+                       xytext=(x_pos[i], ci_lower_vals[i] * 1.1),
+                       arrowprops=dict(arrowstyle='->', color=color, lw=2))
+        else:
+            # Draw cap at lower end
+            ax.plot([x_pos[i]-0.08, x_pos[i]+0.08], [ci_lower_vals[i], ci_lower_vals[i]], 
+                   color=color, linewidth=2, zorder=2)
+        
+        if not bounded_upper[i]:
+            # Draw upward arrow at upper end
+            ax.annotate('', xy=(x_pos[i], ci_upper_vals[i]), 
+                       xytext=(x_pos[i], ci_upper_vals[i] / 1.1),
+                       arrowprops=dict(arrowstyle='->', color=color, lw=2))
+        else:
+            # Draw cap at upper end
+            ax.plot([x_pos[i]-0.08, x_pos[i]+0.08], [ci_upper_vals[i], ci_upper_vals[i]], 
+                   color=color, linewidth=2, zorder=2)
+    
+    # Add dummy point for legend
+    ax.plot([], [], 'o-', color=color, linewidth=2, markersize=10, label=label)
+
 # Create comprehensive comparison plot
 fig, axes = plt.subplots(2, 2, figsize=(16, 12))
 
@@ -420,11 +497,8 @@ ci_68_lower = [lower_ci_68_fixed, lower_ci_68_large, lower_ci_68_moderate]
 ci_68_upper = [upper_ci_68_fixed, upper_ci_68_large, upper_ci_68_moderate]
 
 x_pos = np.arange(len(cases))
-ax.errorbar(x_pos, best_fits, 
-            yerr=[np.array(best_fits) - np.array(ci_68_lower), 
-                  np.array(ci_68_upper) - np.array(best_fits)],
-            fmt='o', markersize=10, capsize=10, capthick=2, linewidth=2,
-            color='darkblue', ecolor='orange', label='68% CI')
+plot_confidence_intervals(ax, x_pos, best_fits, ci_68_lower, ci_68_upper, 
+                         'orange', '68% CI', extended_lower=0.1, extended_upper=15.0)
 
 ax.set_xticks(x_pos)
 ax.set_xticklabels(cases)
@@ -439,11 +513,8 @@ ax = axes[1, 1]
 ci_95_lower = [lower_ci_95_fixed, lower_ci_95_large, lower_ci_95_moderate]
 ci_95_upper = [upper_ci_95_fixed, upper_ci_95_large, upper_ci_95_moderate]
 
-ax.errorbar(x_pos, best_fits, 
-            yerr=[np.array(best_fits) - np.array(ci_95_lower), 
-                  np.array(ci_95_upper) - np.array(best_fits)],
-            fmt='o', markersize=10, capsize=10, capthick=2, linewidth=2,
-            color='darkblue', ecolor='purple', label='95% CI')
+plot_confidence_intervals(ax, x_pos, best_fits, ci_95_lower, ci_95_upper, 
+                         'purple', '95% CI', extended_lower=0.1, extended_upper=15.0)
 
 ax.set_xticks(x_pos)
 ax.set_xticklabels(cases)
@@ -529,24 +600,11 @@ for datacard_name, datacard in [
     print(f"                    Observed Low    Observed High")
     print(f"True Low:           {result_yi['misclassification_matrix'][0,0]:12.4f}    {result_yi['misclassification_matrix'][0,1]:13.4f}")
     print(f"True High:          {result_yi['misclassification_matrix'][1,0]:12.4f}    {result_yi['misclassification_matrix'][1,1]:13.4f}")
-    print()
-    print("Interpretation:")
-    print(f"  P(observed high | true high) = {result_yi['misclassification_matrix'][1,1]:.4f}")
-    print(f"  P(observed low | true low)   = {result_yi['misclassification_matrix'][0,0]:.4f}")
-    print(f"  P(observed high | true low)  = {result_yi['misclassification_matrix'][0,1]:.4f}")
-    print(f"  P(observed low | true high)  = {result_yi['misclassification_matrix'][1,0]:.4f}")
-    
-    if datacard_name == "FIXED":
-        print("  → Identity matrix: perfect classification (no measurement error)")
-    elif datacard_name == "LARGE COUNTS":
-        print("  → Near-identity: minimal misclassification (small Poisson errors)")
-    else:
-        print("  → Non-trivial off-diagonal: significant misclassification probability")
 ```
 
 ### Likelihood Scan Comparison: KoMbine MINLP vs. Yi's Method
 
-The following plots show the profile likelihood (-2ΔlnL) and absolute NLL for both methods across all three scenarios. In the fixed case, the agreement is perfect (to numerical precision) in both -2ΔlnL and absolute NLL. For large counts, the agreement is good. For moderate counts, differences emerge as expected when measurement error is large enough that patient-level vs. aggregate treatment becomes important.
+The following plots show the profile likelihood (-2ΔlnL) and absolute NLL for both methods across all three scenarios. In the fixed case, the agreement is perfect (to numerical precision) in both -2ΔlnL and absolute NLL. For large counts, the agreement is good. For moderate counts, differences emerge when measurement error is large, as we will discuss below.
 
 ```python
 # Compare likelihood scans for all three datasets
@@ -799,46 +857,47 @@ print(f"    P(true density < 0.5) = {p_below:.6f} (error: {best_high_mod_error:.
 
 ```python
 # Now create the datacard files
-# We'll use the same event times as in the other datacards for consistency
-# Load one of the existing datacards to get the structure
+# Format: tab-separated columns, each column is a patient
+# Row headers for poisson_density: survival_time, censored, num, area
+
+# Event times for low and high groups (same for both to focus on density differences)
+event_times_low = [10.5, 12.3, 15.8, 18.2, 21.7, 24.1, 27.5, 30.9, 34.2, 38.6]
+event_times_high = [8.1, 9.7, 11.2, 13.8, 16.4, 19.1, 22.3, 25.8, 29.4, 33.7]
+censoring_low = [0, 0, 1, 0, 1, 0, 1, 0, 1, 1]
+censoring_high = [0, 0, 0, 1, 0, 0, 1, 0, 1, 1]
 
 # Create homogeneous datacard matching LARGE counts misclassification
-datacard_content_large = """# Homogeneous groups datacard matching LARGE counts misclassification matrix
-# All low-group patients have identical density, all high-group patients have identical density
-# Area = 1000 for all patients to allow fine control over density
+# Format: tabs separate columns, rows are: survival_time, censored, num, area
+def create_poisson_density_datacard(event_times_low, event_times_high, censoring_low, censoring_high, num_low, num_high, area):
+    lines = []
+    lines.append("observable_type poisson_density")
+    lines.append("# Homogeneous groups datacard")
+    lines.append("")
+    
+    # Combine data for low and high groups
+    all_times = event_times_low + event_times_high
+    all_censoring = censoring_low + censoring_high
+    all_nums = [num_low] * len(event_times_low) + [num_high] * len(event_times_high)
+    all_areas = [area] * len(all_times)
+    
+    # Survival time row
+    lines.append("survival_time\t" + "\t".join(str(t) for t in all_times))
+    
+    # Censored row
+    lines.append("censored\t" + "\t".join(str(c) for c in all_censoring))
+    
+    # Numerator row
+    lines.append("num\t" + "\t".join(str(n) for n in all_nums))
+    
+    # Area row (NOT denom for poisson_density!)
+    lines.append("area\t" + "\t".join(str(a) for a in all_areas))
+    
+    return "\n".join(lines)
 
-OBSERVABLE_TYPE poisson_density
-
-# 10 patients in low group (density {low_density:.3f})
-# 10 patients in high group (density {high_density:.3f})
-
-# Format: event_time censored numerator denominator
-
-# Low group patients (below threshold)
-10.5 0 {num_low} {area}
-12.3 0 {num_low} {area}
-15.8 1 {num_low} {area}
-18.2 0 {num_low} {area}
-21.7 1 {num_low} {area}
-24.1 0 {num_low} {area}
-27.5 1 {num_low} {area}
-30.9 0 {num_low} {area}
-34.2 1 {num_low} {area}
-38.6 1 {num_low} {area}
-
-# High group patients (above threshold)
-8.1 0 {num_high} {area}
-9.7 0 {num_high} {area}
-11.2 0 {num_high} {area}
-13.8 1 {num_high} {area}
-16.4 0 {num_high} {area}
-19.1 0 {num_high} {area}
-22.3 1 {num_high} {area}
-25.8 0 {num_high} {area}
-29.4 1 {num_high} {area}
-33.7 1 {num_high} {area}
-""".format(num_low=best_low_large, num_high=best_high_large, area=area, 
-           low_density=best_low_large/area, high_density=best_high_large/area)
+datacard_content_large = create_poisson_density_datacard(
+    event_times_low, event_times_high, censoring_low, censoring_high,
+    best_low_large, best_high_large, area
+)
 
 datacard_path_large = datacards_dir / "poisson_density_hr_example_homogeneous_large.txt"
 with open(datacard_path_large, 'w') as f:
@@ -847,42 +906,10 @@ with open(datacard_path_large, 'w') as f:
 print(f"\nCreated datacard: {datacard_path_large}")
 
 # Create homogeneous datacard matching MODERATE counts misclassification
-datacard_content_moderate = """# Homogeneous groups datacard matching MODERATE counts misclassification matrix
-# All low-group patients have identical density, all high-group patients have identical density
-# Area = 1000 for all patients to allow fine control over density
-
-OBSERVABLE_TYPE poisson_density
-
-# 10 patients in low group (density {low_density:.3f})
-# 10 patients in high group (density {high_density:.3f})
-
-# Format: event_time censored numerator denominator
-
-# Low group patients (below threshold)
-10.5 0 {num_low} {area}
-12.3 0 {num_low} {area}
-15.8 1 {num_low} {area}
-18.2 0 {num_low} {area}
-21.7 1 {num_low} {area}
-24.1 0 {num_low} {area}
-27.5 1 {num_low} {area}
-30.9 0 {num_low} {area}
-34.2 1 {num_low} {area}
-38.6 1 {num_low} {area}
-
-# High group patients (above threshold)
-8.1 0 {num_high} {area}
-9.7 0 {num_high} {area}
-11.2 0 {num_high} {area}
-13.8 1 {num_high} {area}
-16.4 0 {num_high} {area}
-19.1 0 {num_high} {area}
-22.3 1 {num_high} {area}
-25.8 0 {num_high} {area}
-29.4 1 {num_high} {area}
-33.7 1 {num_high} {area}
-""".format(num_low=best_low_mod, num_high=best_high_mod, area=area,
-           low_density=best_low_mod/area, high_density=best_high_mod/area)
+datacard_content_moderate = create_poisson_density_datacard(
+    event_times_low, event_times_high, censoring_low, censoring_high,
+    best_low_mod, best_high_mod, area
+)
 
 datacard_path_moderate = datacards_dir / "poisson_density_hr_example_homogeneous_moderate.txt"
 with open(datacard_path_moderate, 'w') as f:
@@ -890,6 +917,13 @@ with open(datacard_path_moderate, 'w') as f:
 
 print(f"Created datacard: {datacard_path_moderate}")
 print("\nBoth homogeneous datacards have been created!")
+
+# Show first few lines of the large datacard for verification
+print("\n" + "="*70)
+print("PREVIEW: homogeneous_large datacard:")
+print("="*70)
+for line in datacard_content_large.split('\n'):
+    print(line)
 ```
 
 ### Loading and Analyzing the Homogeneous Datacards
