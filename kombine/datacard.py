@@ -1087,7 +1087,7 @@ class Datacard:
       cox_only=cox_only,
     )
 
-  def km_p_value_logrank_yi(
+  def km_p_value_logrank_yi(  #pylint: disable=too-many-arguments
     self,
     *,
     parameter_threshold: float,

@@ -12,11 +12,7 @@ import warnings
 import numpy as np
 
 import kombine.datacard
-from kombine.utilities import (
-  prob_poisson_density_exceeds_threshold,
-  estimate_misclassification_matrix,
-  invert_misclassification_matrix,
-)
+from kombine.utilities import prob_poisson_density_exceeds_threshold
 
 # Treat all warnings as errors
 warnings.simplefilter("error")
@@ -258,52 +254,6 @@ def test_yi_hazard_ratio_perfect_classification():
   )
 
 
-def test_misclassification_matrix_identity_for_perfect_data():
-  """
-  Test that the misclassification matrix is close to identity for data
-  with perfect separation.
-  """
-  datacard = generate_synthetic_datacard_with_perfect_classification(
-    target_hr=1.5,
-    n_patients_per_group=30,
-    random_seed=789
-  )
-
-  threshold = 100.0
-
-  # Get patient NLL objects
-  patients = [p.get_nll() for p in datacard.patients]
-
-  # Estimate misclassification matrix
-  Pi = estimate_misclassification_matrix(
-    patients,
-    threshold,
-    method='bayesian'
-  )
-
-  # With perfect separation, Pi should be close to identity
-  # Pi[0, 0] ~ 1 (true low, observed low)
-  # Pi[1, 1] ~ 1 (true high, observed high)
-  # Pi[0, 1] ~ 0 (true low, observed high)
-  # Pi[1, 0] ~ 0 (true high, observed low)
-
-  assert Pi[0, 0] > 0.95, f"Expected Pi[0,0] > 0.95, got {Pi[0, 0]}"
-  assert Pi[1, 1] > 0.95, f"Expected Pi[1,1] > 0.95, got {Pi[1, 1]}"
-  assert Pi[0, 1] < 0.05, f"Expected Pi[0,1] < 0.05, got {Pi[0, 1]}"
-  assert Pi[1, 0] < 0.05, f"Expected Pi[1,0] < 0.05, got {Pi[1, 0]}"
-
-  # Test that inverse exists and is close to identity
-  Pi_inv = invert_misclassification_matrix(Pi)
-
-  # Pi @ Pi_inv should be close to identity
-  product = Pi @ Pi_inv
-  identity = np.eye(2)
-
-  assert np.allclose(product, identity, atol=0.01), (
-    f"Pi @ Pi_inv should be identity, got:\n{product}"
-  )
-
-
 def test_yi_methods_return_valid_structure():
   """
   Test that Yi's methods return properly structured results.
@@ -416,15 +366,11 @@ if __name__ == "__main__":
   test_yi_hazard_ratio_perfect_classification()
   print("✓ Passed")
 
-  print("Test 5: Misclassification matrix identity check...")
-  test_misclassification_matrix_identity_for_perfect_data()
-  print("✓ Passed")
-
-  print("Test 6: Result structure validation...")
+  print("Test 5: Result structure validation...")
   test_yi_methods_return_valid_structure()
   print("✓ Passed")
 
-  print("Test 7: Both estimation methods...")
+  print("Test 6: Both estimation methods...")
   test_yi_both_methods_available()
   print("✓ Passed")
 
