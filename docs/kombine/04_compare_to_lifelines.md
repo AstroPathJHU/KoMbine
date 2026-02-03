@@ -34,12 +34,13 @@ import lifelines  #noqa: E402
 import matplotlib.pyplot as plt  #noqa: E402
 import numpy as np  #noqa: E402
 
-from roc_picker.datacard import Datacard  #noqa: E402
+from kombine.datacard import Datacard, FixedObservable  #noqa: E402
+
 
 # Try to import Pandas4Warning for pandas v3 compatibility
 # On older pandas versions, this doesn't exist
 try:
-    from pandas.errors import Pandas4Warning
+    from pandas.errors import Pandas4Warning  # pyright: ignore[reportAttributeAccessIssue]
 except ImportError:
     Pandas4Warning = None
 ```
@@ -89,11 +90,15 @@ For fixed observables (no measurement error), all three methods should agree.
 # Group 1: patients with high observable values
 
 # Parse the datacard with two groups
+
 datacard_two_groups = Datacard.parse_datacard(datacardfile)
 
 # Define a threshold to split patients (use median)
-observables = [p.observable.value for p in datacard_two_groups.patients]
-threshold = np.median(observables)
+observables = []
+for p in datacard_two_groups.patients:
+    assert isinstance(p.observable, FixedObservable)
+    observables.append(p.observable.value)
+threshold = float(np.median(observables))
 
 print(f"Splitting patients at threshold: {threshold}")
 print(f"Total patients: {len(datacard_two_groups.patients)}")
@@ -104,6 +109,7 @@ times = []
 events = []
 
 for p in datacard_two_groups.patients:
+    assert isinstance(p.observable, FixedObservable)
     if p.observable.value < threshold:
         group_labels.append(0)
     else:

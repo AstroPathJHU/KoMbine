@@ -516,7 +516,7 @@ class Patient: # pylint: disable=too-many-instance-attributes
     self.__censored = value
 
   @property
-  def observable(self):
+  def observable(self) -> Observable | None:
     """
     Get the observable for the patient.
     """

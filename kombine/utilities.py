@@ -1,6 +1,7 @@
 """
 Miscellaneous utilities for ROC Picker
 """
+import os
 import typing
 
 import numpy as np
@@ -200,8 +201,8 @@ class GurobiOptimizerMixin:  # pylint: disable=too-few-public-methods
     self,
     *,
     verbose: bool = False,
-    MIPGap: float,
-    MIPGapAbs: float,
+    MIPGap: float | None = None,
+    MIPGapAbs: float | None = None,
     TimeLimit: float | None = None,
     Threads: int | None = None,
     MIPFocus: int | None = None,
@@ -222,8 +223,6 @@ class GurobiOptimizerMixin:  # pylint: disable=too-few-public-methods
     Returns:
         Dictionary of Gurobi parameters.
     """
-    import os  # pylint: disable=import-outside-toplevel
-
     params = {
       'OutputFlag': 1 if verbose else 0,
       'MIPGap': MIPGap,
@@ -254,8 +253,8 @@ class GurobiOptimizerMixin:  # pylint: disable=too-few-public-methods
     model,
     *,
     verbose: bool = False,
-    MIPGap: float,
-    MIPGapAbs: float,
+    MIPGap: float | None = None,
+    MIPGapAbs: float | None = None,
     TimeLimit: float | None = None,
     Threads: int | None = None,
     MIPFocus: int | None = None,
