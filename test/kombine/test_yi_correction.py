@@ -10,7 +10,6 @@ import tempfile
 import warnings
 
 import numpy as np
-import scipy.stats
 
 import kombine.datacard
 from kombine.utilities import (

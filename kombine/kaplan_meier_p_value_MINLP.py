@@ -18,11 +18,7 @@ import scipy.optimize
 import scipy.stats
 
 from .kaplan_meier_MINLP import KaplanMeierPatientNLL, n_choose_d_term_table
-from .utilities import (
-  LOG_ZERO_EPSILON_DEFAULT,
-  estimate_misclassification_matrix,
-  invert_misclassification_matrix,
-)
+from .utilities import LOG_ZERO_EPSILON_DEFAULT
 
 class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-instance-attributes
   """
@@ -1404,7 +1400,8 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
         # Compute this patient's probability of being in high group
         # based on their individual measurement
         prob_high = None
-        if hasattr(patient, 'observable') and patient.observable is not None:
+        obs = getattr(patient, 'observable', None)
+        if obs is not None:
           obs = patient.observable  # type: ignore
           if hasattr(obs, 'numerator') and hasattr(obs, 'denominator'):
             # Poisson density measurement
