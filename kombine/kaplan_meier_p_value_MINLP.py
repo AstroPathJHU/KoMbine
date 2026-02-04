@@ -176,7 +176,27 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
 
     # Fallback: use observed parameter for deterministic assignment
     if prob_high is None:
-      prob_high = 1.0 if patient.observed_parameter > self.parameter_threshold else 0.0
+      # Need to compute observed parameter from the observable
+      if hasattr(patient, 'observed_parameter'):
+        # It's a KaplanMeierPatientNLL
+        observed_param = patient.observed_parameter
+      elif obs is not None:
+        # It's a datacard Patient - compute from observable
+        if hasattr(obs, 'value'):
+          # FixedObservable
+          observed_param = obs.value
+        elif hasattr(obs, 'numerator') and hasattr(obs, 'denominator'):
+          # PoissonDensityObservable or PoissonRatioObservable
+          observed_param = obs.numerator / obs.denominator if obs.denominator > 0 else float('inf')
+        elif hasattr(obs, 'count'):
+          # PoissonObservable
+          observed_param = obs.count
+        else:
+          raise ValueError(f"Cannot compute observed parameter from observable of type {type(obs)}")
+      else:
+        raise ValueError("Cannot compute observed parameter: patient has no observable attribute")
+      
+      prob_high = 1.0 if observed_param > self.parameter_threshold else 0.0
 
     return prob_high
   @functools.cached_property
