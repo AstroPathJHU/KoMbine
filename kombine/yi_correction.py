@@ -9,11 +9,18 @@ Yi's methods use inverse probability weighting to account for measurement uncert
 providing an alternative to integer optimization (MINLP) approaches.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
 import scipy.optimize
 import scipy.stats
 
 from .utilities import prob_poisson_density_exceeds_threshold
+
+if TYPE_CHECKING:
+  from .datacard import Patient
 
 
 class YiCorrectionBase:  # pylint: disable=too-few-public-methods
@@ -26,7 +33,7 @@ class YiCorrectionBase:  # pylint: disable=too-few-public-methods
 
   def __init__(
     self,
-    patients: list,
+    patients: list[Patient],
     parameter_threshold: float,
   ):
     """
@@ -44,7 +51,7 @@ class YiCorrectionBase:  # pylint: disable=too-few-public-methods
 
   def compute_patient_prob_high(
     self,
-    patient,
+    patient: Patient,
     *,
     method: str = 'bayesian',
     prior_alpha: float = 1.0,
