@@ -22,6 +22,7 @@ from .utilities import (
   LOG_ZERO_EPSILON_DEFAULT,
   prob_poisson_density_exceeds_threshold,
   GurobiOptimizerMixin,
+  PatientLike,
 )
 
 
@@ -141,7 +142,7 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
 
   def compute_patient_prob_high(  # pylint: disable=too-many-arguments
     self,
-    patient,
+    patient: PatientLike,
     *,
     method: str = 'bayesian',
     prior_alpha: float = 1.0,
@@ -151,7 +152,7 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     Compute the probability that a patient belongs to the high group.
 
     Args:
-        patient: The patient to compute probability for.
+        patient: The patient to compute probability for (KaplanMeierPatientNLL or datacard.Patient).
         method: Method for probability calculation ('bayesian' or 'normal_approx').
         prior_alpha: Alpha parameter for Bayesian prior.
         prior_beta: Beta parameter for Bayesian prior.
@@ -159,46 +160,21 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     Returns:
         Probability that patient is in the high group (0.0 to 1.0).
     """
-    prob_high = None
+    # Try probabilistic classification first (for Poisson density measurements)
     obs = getattr(patient, 'observable', None)
-    if obs is not None:
-      obs = patient.observable  # type: ignore
-      if hasattr(obs, 'numerator') and hasattr(obs, 'denominator'):
-        # Poisson density measurement
-        prob_high = prob_poisson_density_exceeds_threshold(
-          obs.numerator,
-          obs.denominator,
-          self.parameter_threshold,
-          method=method,
-          prior_alpha=prior_alpha,
-          prior_beta=prior_beta,
-        )
+    if obs is not None and hasattr(obs, 'numerator') and hasattr(obs, 'denominator'):
+      # Poisson density measurement - use probabilistic weighting
+      return prob_poisson_density_exceeds_threshold(
+        obs.numerator,
+        obs.denominator,
+        self.parameter_threshold,
+        method=method,
+        prior_alpha=prior_alpha,
+        prior_beta=prior_beta,
+      )
 
-    # Fallback: use observed parameter for deterministic assignment
-    if prob_high is None:
-      # Need to compute observed parameter from the observable
-      if hasattr(patient, 'observed_parameter'):
-        # It's a KaplanMeierPatientNLL
-        observed_param = patient.observed_parameter
-      elif obs is not None:
-        # It's a datacard Patient - compute from observable
-        if hasattr(obs, 'value'):
-          # FixedObservable
-          observed_param = obs.value
-        elif hasattr(obs, 'numerator') and hasattr(obs, 'denominator'):
-          # PoissonDensityObservable or PoissonRatioObservable
-          observed_param = obs.numerator / obs.denominator if obs.denominator > 0 else float('inf')
-        elif hasattr(obs, 'count'):
-          # PoissonObservable
-          observed_param = obs.count
-        else:
-          raise ValueError(f"Cannot compute observed parameter from observable of type {type(obs)}")
-      else:
-        raise ValueError("Cannot compute observed parameter: patient has no observable attribute")
-      
-      prob_high = 1.0 if observed_param > self.parameter_threshold else 0.0
-
-    return prob_high
+    # Fall back to deterministic classification based on observed parameter
+    return 1.0 if patient.observed_parameter > self.parameter_threshold else 0.0
   @functools.cached_property
   def parameter_in_range(self) -> npt.NDArray[np.bool_]:
     """

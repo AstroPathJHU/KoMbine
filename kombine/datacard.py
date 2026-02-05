@@ -598,6 +598,53 @@ class Patient: # pylint: disable=too-many-instance-attributes
     )
     return result
 
+  @property
+  def time(self) -> float:
+    """
+    Alias for survival_time to conform to PatientLike protocol.
+    """
+    if self.survival_time is None:
+      raise ValueError("Survival time not set")
+    return self.survival_time
+
+  @property
+  def observed_parameter(self) -> float:
+    """
+    Compute the observed parameter value from the observable.
+    
+    This property enables the Patient class to conform to the PatientLike protocol,
+    allowing it to be used interchangeably with KaplanMeierPatientNLL in methods
+    like compute_patient_prob_high.
+    
+    Returns:
+        float: The observed parameter value computed from the observable data.
+    
+    Raises:
+        ValueError: If observable is not set or has an unrecognized type.
+    """
+    if self.observable is None:
+      raise ValueError("Observable not set")
+    
+    obs = self.observable
+    
+    # FixedObservable
+    if hasattr(obs, 'value'):
+      return obs.value
+    
+    # PoissonDensityObservable or PoissonRatioObservable
+    if hasattr(obs, 'numerator') and hasattr(obs, 'denominator'):
+      if obs.denominator is None or obs.denominator == 0:
+        return float('inf')
+      return obs.numerator / obs.denominator
+    
+    # PoissonObservable
+    if hasattr(obs, 'count'):
+      return obs.count
+    
+    raise ValueError(
+      f"Cannot compute observed parameter from observable of type {type(obs).__name__}"
+    )
+
 class Datacard:
   """
   A datacard class to specify the inputs to ROC Picker.
