@@ -66,6 +66,15 @@ class Observable(abc.ABC): # pylint: disable=too-few-public-methods
     Get the patient NLL for the likelihood method.
     """
 
+  @abc.abstractmethod
+  def observed_parameter(self) -> float:
+    """
+    Get the observed parameter value.
+    
+    This is the scalar value used for classification and threshold comparison.
+    Each observable type computes this differently based on its measurement type.
+    """
+
 class FixedObservable(Observable):
   """
   A class to represent a fixed observable.
@@ -107,6 +116,12 @@ class FixedObservable(Observable):
       systematics=systematics,
     )
 
+  def observed_parameter(self) -> float:
+    """
+    Get the observed parameter value (the fixed value itself).
+    """
+    return self.value
+
 class PoissonObservable(Observable):
   """
   A class to represent a Poisson observable.
@@ -147,6 +162,12 @@ class PoissonObservable(Observable):
       time=time,
       systematics=systematics,
     )
+
+  def observed_parameter(self) -> float:
+    """
+    Get the observed parameter value (the count itself).
+    """
+    return float(self.count)
 
 class PoissonDensityObservable(Observable):
   """
@@ -240,6 +261,16 @@ class PoissonDensityObservable(Observable):
       censored=censored,
       systematics=systematics,
     )
+
+  def observed_parameter(self) -> float:
+    """
+    Get the observed parameter value (density = count / area).
+    """
+    if self.numerator is None or self.denominator is None:
+      raise ValueError("Numerator and denominator must be set")
+    if self.denominator == 0:
+      return float('inf')
+    return self.numerator / self.denominator
 
 class PoissonRatioObservable(Observable):
   """
@@ -347,6 +378,16 @@ class PoissonRatioObservable(Observable):
       censored=censored,
       systematics=systematics,
     )
+
+  def observed_parameter(self) -> float:
+    """
+    Get the observed parameter value (ratio = numerator / denominator).
+    """
+    if self.numerator is None or self.denominator is None:
+      raise ValueError("Numerator and denominator must be set")
+    if self.denominator == 0:
+      return float('inf')
+    return self.numerator / self.denominator
 
 
 class Systematic:
@@ -610,40 +651,21 @@ class Patient: # pylint: disable=too-many-instance-attributes
   @property
   def observed_parameter(self) -> float:
     """
-    Compute the observed parameter value from the observable.
+    Get the observed parameter value from the observable.
     
     This property enables the Patient class to conform to the PatientLike protocol,
     allowing it to be used interchangeably with KaplanMeierPatientNLL in methods
     like compute_patient_prob_high.
     
     Returns:
-        float: The observed parameter value computed from the observable data.
+        float: The observed parameter value from the observable.
     
     Raises:
-        ValueError: If observable is not set or has an unrecognized type.
+        ValueError: If observable is not set.
     """
     if self.observable is None:
       raise ValueError("Observable not set")
-    
-    obs = self.observable
-    
-    # FixedObservable
-    if hasattr(obs, 'value'):
-      return obs.value
-    
-    # PoissonDensityObservable or PoissonRatioObservable
-    if hasattr(obs, 'numerator') and hasattr(obs, 'denominator'):
-      if obs.denominator is None or obs.denominator == 0:
-        return float('inf')
-      return obs.numerator / obs.denominator
-    
-    # PoissonObservable
-    if hasattr(obs, 'count'):
-      return obs.count
-    
-    raise ValueError(
-      f"Cannot compute observed parameter from observable of type {type(obs).__name__}"
-    )
+    return self.observable.observed_parameter()
 
 class Datacard:
   """
