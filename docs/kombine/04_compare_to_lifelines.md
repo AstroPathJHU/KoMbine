@@ -84,6 +84,8 @@ In addition to survival curve estimation, we can compare hypothesis testing appr
 
 For fixed observables (no measurement error), all three methods should agree.
 
+We use the `km_p_value_logrank_yi()` method from the datacard API, which implements Yi's correction approach.
+
 ```python
 # Create a two-group dataset for logrank testing
 # Group 0: patients with low observable values
@@ -161,8 +163,11 @@ print(f"  P-value: {p_value_kombine:.6f}")
 
 ### Method 3: Yi's Misclassification Correction
 
+Yi's method uses inverse probability weighting to account for measurement error. We use the `km_p_value_logrank_yi()` method from the datacard API.
+
 ```python
-# Yi's correction method (for fixed observables, should match standard)
+# Yi's correction method
+# For fixed observables, should match standard logrank
 result_yi = datacard_two_groups.km_p_value_logrank_yi(
     parameter_threshold=threshold,
     parameter_min=-np.inf,

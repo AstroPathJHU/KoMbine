@@ -531,9 +531,13 @@ plt.show()
 print("\nFigure saved as 'hazard_ratio_likelihood_scan_comparison.pdf'")
 ```
 
-## Comparing MINLP vs. Yi's Discrete Covariate Misclassification Method
+## Comparing MINLP vs. Yi's Misclassification Correction Method
 
-Now that we've visualized the three likelihood scans, let's quantitatively compare KoMbine's MINLP approach with the discrete covariate misclassification method presented in Yi's *Statistical Analysis with Measurement Error or Misclassification* (Springer 2017, §3.7.1). This method estimates a single misclassification matrix Π that applies uniformly to all patients, while MINLP optimizes each patient's group assignment individually.
+Now that we've visualized the three likelihood scans, let's quantitatively compare KoMbine's MINLP approach with Yi's misclassification correction method (Section 3.7.1). 
+
+Yi's method uses inverse probability weighting to account for measurement uncertainty. Our implementation computes individual probabilities for each patient rather than using an aggregate misclassification matrix, providing more accurate correction that accounts for individual measurement error.
+
+We use the `km_hazard_ratio_yi()` method from the datacard API, which directly implements Yi's correction approach.
 
 ```python
 # Compare all three datasets: fixed, large counts, and moderate counts
@@ -566,8 +570,8 @@ for datacard_name, datacard, hr_calc in [
             parameter_max=0.99,
             method='bayesian',
         )
-        diff = result_minlp.x - result_yi['x']
-        print(f"{hr_test:<8.1f} {result_minlp.x:<15.4f} {result_yi['x']:<15.4f} {diff:<12.4f}")
+        diff = result_minlp.x - result_yi.x
+        print(f"{hr_test:<8.1f} {result_minlp.x:<15.4f} {result_yi.x:<15.4f} {diff:<12.4f}")
 ```
 
 ## Analyzing Measurement Error Effects
@@ -617,7 +621,7 @@ for row_idx, (datacard_name, datacard, hr_calc) in enumerate([
             parameter_max=0.99,
             method='bayesian',
         )
-        nll_yi.append(result_yi['x'])
+        nll_yi.append(result_yi.x)
     # Convert to arrays and compute minima
     nll_minlp = np.array(nll_minlp)
     nll_yi = np.array(nll_yi)

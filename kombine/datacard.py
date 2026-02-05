@@ -26,6 +26,7 @@ from .kaplan_meier_likelihood import (
 )
 from .kaplan_meier_p_value_MINLP import MINLPforKMPValue
 from .kaplan_meier_hazard_ratio_MINLP import MINLPforKMHazardRatio
+from .yi_correction import YiCorrectionForLogrank, YiCorrectionForCoxPH
 from .utilities import LOG_ZERO_EPSILON_DEFAULT
 
 class Response:
@@ -1169,9 +1170,6 @@ class Datacard:
     """
     Calculate p-value using Yi's misclassification correction method (Section 3.7.1).
     
-    This is a convenience method that creates a MINLPforKMPValue object
-    and calls its survival_curves_pvalue_logrank_yi method.
-    
     Yi's method uses inverse probability weighting to account for measurement uncertainty,
     providing an alternative to KoMbine's MINLP optimization approach.
     
@@ -1200,8 +1198,6 @@ class Datacard:
         - 'logrank_statistic' : float - The corrected test statistic.
         - 'U' : float - Weighted observed minus expected.
         - 'V' : float - Weighted variance.
-        - 'misclassification_matrix' : ndarray - Estimated Π matrix.
-        - 'inverse_misclassification_matrix' : ndarray - Inverse Π^{-1} matrix.
         - 'n_low_observed' : int - Patients observed in low group.
         - 'n_high_observed' : int - Patients observed in high group.
     
@@ -1217,13 +1213,23 @@ class Datacard:
     >>> result = datacard.km_p_value_logrank_yi(parameter_threshold=0.5)
     >>> print(f"Yi's corrected p-value: {result['p_value']:.4f}")
     """
-    minlp_pvalue = self.km_p_value(
-      parameter_min=parameter_min,
+    # Filter patients by parameter range
+    filtered_patients = [
+      p for p in self.patients
+      if parameter_min <= p.observed_parameter <= parameter_max
+    ]
+    
+    if not filtered_patients:
+      raise ValueError(
+        f"No patients found in parameter range [{parameter_min}, {parameter_max}]"
+      )
+    
+    yi_correction = YiCorrectionForLogrank(
+      patients=filtered_patients,
       parameter_threshold=parameter_threshold,
-      parameter_max=parameter_max,
     )
-
-    return minlp_pvalue.survival_curves_pvalue_logrank_yi(
+    
+    return yi_correction.compute_pvalue(
       method=method,
       prior_alpha=prior_alpha,
       prior_beta=prior_beta,
@@ -1243,9 +1249,6 @@ class Datacard:
   ) -> scipy.optimize.OptimizeResult:
     """
     Compute 2NLL at a hazard ratio using Yi's misclassification correction.
-    
-    This is a convenience method that creates a MINLPforKMHazardRatio object
-    and calls its compute_2nll_at_hazard_ratio_yi method.
     
     Yi's method uses inverse probability weighting to account for measurement uncertainty,
     providing an alternative to KoMbine's MINLP optimization approach.
@@ -1268,7 +1271,7 @@ class Datacard:
     prior_alpha : float, optional
         Alpha parameter for Gamma prior (Bayesian method only). Default 0.5 (Jeffreys).
     prior_beta : float, optional
-        Beta parameter for Gamma prior (Bayesian method only). Default 0.5.
+        Beta parameter for Gamma prior (Bayesian method only). Default 0.0.
     log_hazard_ratio_bounds : tuple[float, float], optional
         Bounds on log(hazard ratio) for compatibility. Not used in Yi's method.
         Default is (-10.0, 10.0).
@@ -1282,8 +1285,7 @@ class Datacard:
         - hazard_ratio : float - The hazard ratio value.
         - log_hazard_ratio : float - Natural log of hazard ratio.
         - cox_2NLL : float - Twice the corrected Cox partial likelihood.
-        - misclassification_matrix : ndarray - Estimated Π matrix.
-        - inverse_misclassification_matrix : ndarray - Inverse Π^{-1} matrix.
+        - patient_2NLL : float - Always 0.0 for Yi's method.
     
     Notes
     -----
@@ -1300,16 +1302,24 @@ class Datacard:
     ... )
     >>> print(f"2NLL at HR=2.0: {result.x:.2f}")
     """
-    hr_calc = self.km_hazard_ratio(
-      parameter_min=parameter_min,
+    # Filter patients by parameter range
+    filtered_patients = [
+      p for p in self.patients
+      if parameter_min <= p.observed_parameter <= parameter_max
+    ]
+    
+    if not filtered_patients:
+      raise ValueError(
+        f"No patients found in parameter range [{parameter_min}, {parameter_max}]"
+      )
+    
+    yi_correction = YiCorrectionForCoxPH(
+      patients=filtered_patients,
       parameter_threshold=parameter_threshold,
-      parameter_max=parameter_max,
-      log_hazard_ratio_bounds=log_hazard_ratio_bounds,
     )
-
-    return hr_calc.compute_2nll_at_hazard_ratio_yi(
+    
+    return yi_correction.compute_2nll_at_hazard_ratio(
       hazard_ratio=hazard_ratio,
-      original_patients=self.patients,  # Pass original patients for misclassification estimation
       method=method,
       prior_alpha=prior_alpha,
       prior_beta=prior_beta,

@@ -158,6 +158,10 @@ jobs:
         run: |
           python -m test.kombine.test_documentation
 
+      - name: Yi correction unit tests
+        run: |
+          python -m test.kombine.test_yi_correction
+
       - name: convert KoMbine notebooks
         run: |
           jupytext --sync docs/kombine/*.md
