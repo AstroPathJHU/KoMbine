@@ -1,7 +1,7 @@
 """
 Yi's misclassification correction methods for survival analysis.
 
-This module implements Yi's correction method (Section 3.7.1 from 
+This module implements Yi's correction method (Section 3.7.1 from
 "Statistical Analysis with Measurement Error or Misclassification", 2017)
 for discrete covariate misclassification in survival analysis.
 
@@ -16,14 +16,14 @@ import scipy.stats
 from .utilities import prob_poisson_density_exceeds_threshold
 
 
-class YiCorrectionBase:
+class YiCorrectionBase:  # pylint: disable=too-few-public-methods
   """
   Base class for Yi's misclassification correction methods.
-  
+
   Provides common functionality for computing patient probabilities
   of belonging to the high group based on their observable measurements.
   """
-  
+
   def __init__(
     self,
     patients: list,
@@ -31,7 +31,7 @@ class YiCorrectionBase:
   ):
     """
     Initialize Yi's correction calculator.
-    
+
     Parameters
     ----------
     patients : list[Patient]
@@ -41,7 +41,7 @@ class YiCorrectionBase:
     """
     self._patients = patients
     self._parameter_threshold = parameter_threshold
-  
+
   def compute_patient_prob_high(
     self,
     patient,
@@ -52,7 +52,7 @@ class YiCorrectionBase:
   ) -> float:
     """
     Compute the probability that a patient belongs to the high group.
-    
+
     This method uses the patient's observable measurement data to calculate
     a probability rather than making a deterministic classification.
 
@@ -92,12 +92,12 @@ class YiCorrectionBase:
 class YiCorrectionForLogrank(YiCorrectionBase):
   """
   Yi's misclassification correction for the logrank test.
-  
+
   This class implements the corrected logrank test using inverse probability
   weighting to account for measurement error in group assignment.
   """
-  
-  def compute_pvalue(
+
+  def compute_pvalue(  # pylint: disable=too-many-locals
     self,
     *,
     method: str = 'bayesian',
@@ -108,7 +108,7 @@ class YiCorrectionForLogrank(YiCorrectionBase):
     Calculate p-value using Yi's misclassification correction method.
 
     This implements Yi's correction for discrete covariate misclassification applied
-    to the logrank test. Uses inverse probability weighting to account for 
+    to the logrank test. Uses inverse probability weighting to account for
     measurement uncertainty.
 
     Parameters
@@ -272,14 +272,14 @@ class YiCorrectionForLogrank(YiCorrectionBase):
 class YiCorrectionForCoxPH(YiCorrectionBase):
   """
   Yi's misclassification correction for Cox proportional hazards model.
-  
-  This class implements the corrected Cox partial likelihood using inverse 
+
+  This class implements the corrected Cox partial likelihood using inverse
   probability weighting to account for measurement error in covariate values.
   """
-  
+
   LOG_ZERO_EPSILON_DEFAULT = 1e-6
-  
-  def compute_2nll_at_hazard_ratio(
+
+  def compute_2nll_at_hazard_ratio(  # pylint: disable=too-many-locals
     self,
     hazard_ratio: float,
     *,

@@ -242,10 +242,9 @@ def test_yi_methods_return_valid_structure():
     parameter_threshold=threshold
   )
 
-  # Check required keys
+  # Check required keys (new implementation uses per-patient probabilities)
   required_keys = [
     'p_value', 'logrank_statistic', 'U', 'V',
-    'misclassification_matrix', 'inverse_misclassification_matrix',
     'n_low_observed', 'n_high_observed'
   ]
   for key in required_keys:
@@ -256,8 +255,6 @@ def test_yi_methods_return_valid_structure():
   assert 0 <= result_logrank['p_value'] <= 1
   assert isinstance(result_logrank['logrank_statistic'], (int, float))
   assert result_logrank['logrank_statistic'] >= 0
-  assert isinstance(result_logrank['misclassification_matrix'], np.ndarray)
-  assert result_logrank['misclassification_matrix'].shape == (2, 2)
 
   # Test hazard ratio result structure
   result_hr = datacard.km_hazard_ratio_yi(
@@ -271,7 +268,6 @@ def test_yi_methods_return_valid_structure():
   assert hasattr(result_hr, 'hazard_ratio')
   assert hasattr(result_hr, 'log_hazard_ratio')
   assert hasattr(result_hr, 'cox_2NLL')
-  assert hasattr(result_hr, 'misclassification_matrix')
 
   # Check types
   assert isinstance(result_hr.x, (int, float))

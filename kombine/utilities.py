@@ -9,7 +9,8 @@ import numpy as np
 import scipy.stats
 
 # Default log zero epsilon value used across Kaplan-Meier likelihood methods
-# Set to be larger than compile_plots.sh value (1e-7) so explicit specification not needed
+# Set to be larger than compile_plots.sh value (1e-7)
+# so explicit specification not needed
 LOG_ZERO_EPSILON_DEFAULT = 1e-6
 
 
@@ -36,23 +37,20 @@ class PatientLike(Protocol):
   Examples:
   ---------
   - KaplanMeierPatientNLL: Has time, censored, observed_parameter. No observable attribute.
-  - datacard.Patient: Has time (via survival_time), censored, observed_parameter (computed property),
-                     and observable (PoissonDensityObservable, PoissonRatioObservable, etc.)
+  - datacard.Patient: Has time (via survival_time), censored, observed_parameter
+                     (computed property), and observable (PoissonDensityObservable, etc.)
   """
   @property
   def time(self) -> float:
     """The survival/event time."""
-    ...
-  
+
   @property
   def censored(self) -> bool:
     """Whether the observation was censored."""
-    ...
-  
+
   @property
   def observed_parameter(self) -> float:
     """The observed parameter value used for classification."""
-    ...
 
 T = typing.TypeVar("T")
 R = typing.TypeVar("R")
@@ -169,24 +167,22 @@ def prob_poisson_density_exceeds_threshold(  # pylint: disable=too-many-argument
     # Let 'rate' be the true density (cells per unit area)
     # Observation: count ~ Poisson(rate * area)
     #
-    # Prior: rate ~ Gamma(alpha, scale)
-    # With Jeffreys prior: alpha=0.5, scale=1 (so beta=1/scale=1)
+    # Prior: rate ~ Gamma(alpha, beta) [rate parameterization]
+    # With Jeffreys prior: alpha=0.5, beta=0
     #
-    # Posterior: rate ~ Gamma(alpha + count, scale=1/(1/scale + area))
-    # With Jeffreys: rate ~ Gamma(0.5 + count, scale=1/(0 + area))
-    #              = Gamma(0.5 + count, scale=1/area)
+    # Posterior: rate ~ Gamma(alpha + count, beta + area) [rate parameterization]
+    # With Jeffreys: rate ~ Gamma(0.5 + count, 0 + area)
+    #              = Gamma(0.5 + count, area)
+    #
+    # In scipy scale parameterization: scale = 1/rate_param
+    # So posterior scale = 1/(beta + area)
     #
     # We want: P(rate > threshold)
 
-    # Convert prior from (alpha, beta) to (alpha, scale) parameterization
-    # Beta parameterization: Gamma(alpha, beta) where rate = 1/scale
-    # Scale parameterization: Gamma(alpha, scale)
-    # Relationship: beta = 1/scale
-    prior_scale = 1.0 / prior_beta if prior_beta > 0 else 1.0
-
     # Compute posterior parameters
     posterior_alpha = prior_alpha + observed_count
-    posterior_scale = prior_scale / (1.0 + prior_scale * observed_area)
+    # Correct Gamma-Poisson conjugate update: scale = 1/(beta + area)
+    posterior_scale = 1.0 / (prior_beta + observed_area)
 
     # P(rate > threshold) = 1 - CDF(threshold)
     # scipy.stats.gamma uses (a=shape, scale=scale)

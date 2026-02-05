@@ -71,7 +71,7 @@ class Observable(abc.ABC): # pylint: disable=too-few-public-methods
   def observed_parameter(self) -> float:
     """
     Get the observed parameter value.
-    
+
     This is the scalar value used for classification and threshold comparison.
     Each observable type computes this differently based on its measurement type.
     """
@@ -653,14 +653,14 @@ class Patient: # pylint: disable=too-many-instance-attributes
   def observed_parameter(self) -> float:
     """
     Get the observed parameter value from the observable.
-    
+
     This property enables the Patient class to conform to the PatientLike protocol,
     allowing it to be used interchangeably with KaplanMeierPatientNLL in methods
     like compute_patient_prob_high.
-    
+
     Returns:
         float: The observed parameter value from the observable.
-    
+
     Raises:
         ValueError: If observable is not set.
     """
@@ -1169,10 +1169,10 @@ class Datacard:
   ) -> dict:
     """
     Calculate p-value using Yi's misclassification correction method (Section 3.7.1).
-    
+
     Yi's method uses inverse probability weighting to account for measurement uncertainty,
     providing an alternative to KoMbine's MINLP optimization approach.
-    
+
     Parameters
     ----------
     parameter_threshold : float
@@ -1189,7 +1189,7 @@ class Datacard:
         Alpha parameter for Gamma prior (Bayesian method only). Default 0.5 (Jeffreys).
     prior_beta : float, optional
         Beta parameter for Gamma prior (Bayesian method only). Default 0.5.
-    
+
     Returns
     -------
     dict
@@ -1200,12 +1200,12 @@ class Datacard:
         - 'V' : float - Weighted variance.
         - 'n_low_observed' : int - Patients observed in low group.
         - 'n_high_observed' : int - Patients observed in high group.
-    
+
     Notes
     -----
     See Yi (2017) "Statistical Analysis with Measurement Error or Misclassification",
     Section 3.7.1 for theoretical foundation.
-    
+
     Examples
     --------
     >>> from kombine.datacard import Datacard
@@ -1218,24 +1218,24 @@ class Datacard:
       p for p in self.patients
       if parameter_min <= p.observed_parameter <= parameter_max
     ]
-    
+
     if not filtered_patients:
       raise ValueError(
         f"No patients found in parameter range [{parameter_min}, {parameter_max}]"
       )
-    
+
     yi_correction = YiCorrectionForLogrank(
       patients=filtered_patients,
       parameter_threshold=parameter_threshold,
     )
-    
+
     return yi_correction.compute_pvalue(
       method=method,
       prior_alpha=prior_alpha,
       prior_beta=prior_beta,
     )
 
-  def km_hazard_ratio_yi(  #pylint: disable=too-many-arguments
+  def km_hazard_ratio_yi(  # pylint: disable=too-many-arguments,unused-argument
     self,
     *,
     parameter_threshold: float,
@@ -1249,10 +1249,10 @@ class Datacard:
   ) -> scipy.optimize.OptimizeResult:
     """
     Compute 2NLL at a hazard ratio using Yi's misclassification correction.
-    
+
     Yi's method uses inverse probability weighting to account for measurement uncertainty,
     providing an alternative to KoMbine's MINLP optimization approach.
-    
+
     Parameters
     ----------
     parameter_threshold : float
@@ -1275,7 +1275,7 @@ class Datacard:
     log_hazard_ratio_bounds : tuple[float, float], optional
         Bounds on log(hazard ratio) for compatibility. Not used in Yi's method.
         Default is (-10.0, 10.0).
-    
+
     Returns
     -------
     scipy.optimize.OptimizeResult
@@ -1286,12 +1286,12 @@ class Datacard:
         - log_hazard_ratio : float - Natural log of hazard ratio.
         - cox_2NLL : float - Twice the corrected Cox partial likelihood.
         - patient_2NLL : float - Always 0.0 for Yi's method.
-    
+
     Notes
     -----
     See Yi (2017) "Statistical Analysis with Measurement Error or Misclassification",
     Section 3.7.1 for theoretical foundation.
-    
+
     Examples
     --------
     >>> from kombine.datacard import Datacard
@@ -1307,17 +1307,17 @@ class Datacard:
       p for p in self.patients
       if parameter_min <= p.observed_parameter <= parameter_max
     ]
-    
+
     if not filtered_patients:
       raise ValueError(
         f"No patients found in parameter range [{parameter_min}, {parameter_max}]"
       )
-    
+
     yi_correction = YiCorrectionForCoxPH(
       patients=filtered_patients,
       parameter_threshold=parameter_threshold,
     )
-    
+
     return yi_correction.compute_2nll_at_hazard_ratio(
       hazard_ratio=hazard_ratio,
       method=method,
