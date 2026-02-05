@@ -3,7 +3,6 @@ Miscellaneous utilities for ROC Picker
 """
 import os
 import typing
-from typing import Protocol, runtime_checkable
 
 import numpy as np
 import scipy.stats
@@ -12,45 +11,6 @@ import scipy.stats
 # Set to be larger than compile_plots.sh value (1e-7)
 # so explicit specification not needed
 LOG_ZERO_EPSILON_DEFAULT = 1e-6
-
-
-# ============================================================================
-# Patient Protocol for Type Safety
-# ============================================================================
-
-@runtime_checkable
-class PatientLike(Protocol):
-  """
-  Protocol defining the interface required for patient probability calculations.
-  
-  This protocol unifies the interface between KaplanMeierPatientNLL and datacard.Patient,
-  allowing compute_patient_prob_high to work with both types without runtime type checking.
-  
-  A patient-like object must have:
-  - time: float - survival/event time (as property or attribute)
-  - censored: bool - whether the observation was censored (as property or attribute)
-  - observed_parameter: float - the observed parameter value for classification (as property)
-  
-  Optionally, it may have:
-  - observable: an object with numerator/denominator attributes for probabilistic classification
-  
-  Examples:
-  ---------
-  - KaplanMeierPatientNLL: Has time, censored, observed_parameter. No observable attribute.
-  - datacard.Patient: Has time (via survival_time), censored, observed_parameter
-                     (computed property), and observable (PoissonDensityObservable, etc.)
-  """
-  @property
-  def time(self) -> float:
-    """The survival/event time."""
-
-  @property
-  def censored(self) -> bool:
-    """Whether the observation was censored."""
-
-  @property
-  def observed_parameter(self) -> float:
-    """The observed parameter value used for classification."""
 
 T = typing.TypeVar("T")
 R = typing.TypeVar("R")
