@@ -463,3 +463,192 @@ class YiCorrectionForCoxPH(YiCorrectionBase):
     )
 
     return result
+
+
+class YiCorrectionForKaplanMeier(YiCorrectionBase):
+  """
+  Yi's misclassification correction applied to Kaplan-Meier curve estimation.
+
+  This class implements weighted Kaplan-Meier survival estimation using inverse
+  probability weighting to account for measurement error in group assignment.
+  Unlike MINLP approaches, this provides point estimates without confidence intervals.
+  """
+
+  def compute_weighted_survival_probabilities(
+    self,
+    times_for_plot: list[float] | None = None,
+    *,
+    method: str = 'bayesian',
+    prior_alpha: float = 0.5,
+    prior_beta: float = 0.0,
+  ) -> dict:
+    """
+    Calculate weighted Kaplan-Meier survival probabilities using Yi's correction.
+
+    This implements the weighted Kaplan-Meier estimator using inverse probability
+    weighting to account for measurement uncertainty in group assignment.
+    Each patient contributes to the survival curve with weight equal to their
+    probability of belonging to the observed (or alternative) group.
+
+    Parameters
+    ----------
+    times_for_plot : list[float], optional
+        Time points at which to calculate survival probabilities.
+        If None, uses unique death times from patient data.
+    method : str, optional
+        Method for estimating misclassification probabilities:
+        - 'bayesian': Full Bayesian posterior (default, more accurate)
+        - 'normal_approx': Normal approximation (faster, less accurate for small counts)
+    prior_alpha : float, optional
+        Alpha parameter for Gamma prior (Bayesian method only). Default 0.5 (Jeffreys).
+    prior_beta : float, optional
+        Beta parameter for Gamma prior (Bayesian method only). Default 0.0.
+
+    Returns
+    -------
+    dict
+        Dictionary containing:
+        - 'survival_probabilities' : np.ndarray
+            Weighted survival probabilities at each time point in times_for_plot.
+        - 'times_for_plot' : list[float]
+            The time points where probabilities were calculated.
+        - 'n_at_risk_weighted' : list[float]
+            Weighted number of patients at risk at each death time.
+        - 'n_deaths_weighted' : list[float]
+            Weighted number of deaths at each death time.
+        - 'n_at_risk' : list[int]
+            Unweighted number of patients at risk at each death time.
+        - 'n_deaths' : list[int]
+            Unweighted number of deaths at each death time.
+        - 'death_times' : list[float]
+            Unique death times where events occurred.
+        - 'method' : str
+            'yi_correction'
+
+    Notes
+    -----
+    Yi's method (Statistical Analysis with Measurement Error or Misclassification, 2017)
+    uses inverse probability weighting to correct for misclassification.
+
+    The weighted Kaplan-Meier estimator uses:
+    - Weighted at-risk counts: n*(t) = sum of patient weights for patients at risk at t
+    - Weighted death counts: d*(t) = sum of patient weights for patients who died at t
+    - Weighted KM: S(t) = product of (1 - d*(t_i)/n*(t_i)) for all t_i <= t
+
+    where each patient's weight depends on their probability of true group membership
+    based on their observable measurements.
+
+    This differs from KoMbine's MINLP approach:
+    - Yi: Probabilistic weighting (point estimates only, no confidence intervals)
+    - MINLP: Integer optimization with likelihood-based confidence intervals
+
+    The per-patient weighting approach is more accurate than aggregate misclassification
+    matrices, as it accounts for individual measurement uncertainty.
+
+    See Section 3.7.1 of Yi's book for theoretical foundation. The weighted KM
+    extension follows naturally from applying per-patient weights to the standard
+    Kaplan-Meier formula.
+
+    Examples
+    --------
+    >>> from kombine.yi_correction import YiCorrectionForKaplanMeier
+    >>> from kombine.datacard import Patient
+    >>> yi = YiCorrectionForKaplanMeier(patients=patient_list, parameter_threshold=0.5)
+    >>> result = yi.compute_weighted_survival_probabilities()
+    >>> print(result['survival_probabilities'])
+    """
+    # Get unique death times from all patients
+    death_times = sorted(set(
+      p.time for p in self._patients if not p.censored
+    ))
+
+    if not death_times:
+      raise ValueError("No death events found in patient data.")
+
+    # If times_for_plot not provided, use standard times based on death times
+    if times_for_plot is None:
+      times_for_plot = (
+        [0.0]
+        + death_times
+        + [1.1 * max((
+          max(death_times, default=0),
+          max((p.time for p in self._patients if p.censored), default=0)
+        ))]
+      )
+
+    # Track weighted and unweighted counts at each death time
+    n_at_risk_by_time = []
+    n_deaths_by_time = []
+    n_at_risk_weighted_by_time = []
+    n_deaths_weighted_by_time = []
+
+    # Compute weighted and unweighted counts at each death time
+    for t_death in death_times:
+      n_at_risk = 0
+      n_deaths = 0
+      n_at_risk_weighted = 0.0
+      n_deaths_weighted = 0.0
+
+      for patient in self._patients:
+        # Compute patient's probability of being in the high group
+        prob_high = self.compute_patient_prob_high(
+          patient,
+          method=method,
+          prior_alpha=prior_alpha,
+          prior_beta=prior_beta,
+        )
+
+        # Patient is at risk if their time >= death_time
+        if patient.time >= t_death:
+          n_at_risk += 1
+          n_at_risk_weighted += prob_high
+
+        # Patient dies at this time if time == death_time and not censored
+        if patient.time == t_death and not patient.censored:
+          n_deaths += 1
+          n_deaths_weighted += prob_high
+
+      n_at_risk_by_time.append(n_at_risk)
+      n_deaths_by_time.append(n_deaths)
+      n_at_risk_weighted_by_time.append(n_at_risk_weighted)
+      n_deaths_weighted_by_time.append(n_deaths_weighted)
+
+    # Compute weighted Kaplan-Meier survival probabilities at requested times
+    survival_probabilities = np.zeros(len(times_for_plot))
+    survival_probabilities[0] = 1.0  # Probability at t=0 is 1.0
+
+    for i, t in enumerate(times_for_plot):
+      if t == 0.0:
+        survival_probabilities[i] = 1.0
+        continue
+
+      # Find all death times <= t and accumulate survival probability
+      s_t = 1.0
+      for j, t_death in enumerate(death_times):
+        if t_death > t:
+          break
+
+        # Weighted KM formula: S(t) = product of (1 - d*(t_i)/n*(t_i))
+        n_at_risk_w = n_at_risk_weighted_by_time[j]
+        n_deaths_w = n_deaths_weighted_by_time[j]
+
+        if n_at_risk_w > 0 and n_deaths_w > 0:
+          s_t *= (1.0 - n_deaths_w / n_at_risk_w)
+        elif n_deaths_w > n_at_risk_w and n_at_risk_w > 0:
+          # Handle edge case: weighted deaths > weighted at-risk
+          # This can happen with probabilistic weights; clamp to 0
+          s_t = 0.0
+          break
+
+      survival_probabilities[i] = s_t
+
+    return {
+      'survival_probabilities': survival_probabilities,
+      'times_for_plot': times_for_plot,
+      'n_at_risk_weighted': n_at_risk_weighted_by_time,
+      'n_deaths_weighted': n_deaths_weighted_by_time,
+      'n_at_risk': n_at_risk_by_time,
+      'n_deaths': n_deaths_by_time,
+      'death_times': death_times,
+      'method': 'yi_correction',
+    }

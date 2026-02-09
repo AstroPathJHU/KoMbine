@@ -26,7 +26,7 @@ from .kaplan_meier_likelihood import (
 )
 from .kaplan_meier_p_value_MINLP import MINLPforKMPValue
 from .kaplan_meier_hazard_ratio_MINLP import MINLPforKMHazardRatio
-from .yi_correction import YiCorrectionForLogrank, YiCorrectionForCoxPH
+from .yi_correction import YiCorrectionForLogrank, YiCorrectionForCoxPH, YiCorrectionForKaplanMeier
 from .utilities import LOG_ZERO_EPSILON_DEFAULT
 
 class Response:
@@ -1320,6 +1320,101 @@ class Datacard:
 
     return yi_correction.compute_2nll_at_hazard_ratio(
       hazard_ratio=hazard_ratio,
+      method=method,
+      prior_alpha=prior_alpha,
+      prior_beta=prior_beta,
+    )
+
+  def km_survival_yi(  # pylint: disable=too-many-arguments
+    self,
+    *,
+    parameter_threshold: float,
+    parameter_min: float = -np.inf,
+    parameter_max: float = np.inf,
+    method: str = 'bayesian',
+    prior_alpha: float = 0.5,
+    prior_beta: float = 0.0,
+  ) -> dict:
+    """
+    Calculate weighted Kaplan-Meier survival probabilities using Yi's correction.
+
+    Yi's method uses inverse probability weighting to account for measurement uncertainty,
+    providing point estimates of the best-fit Kaplan-Meier curve without confidence intervals.
+    This implements the weighted KM estimator where each patient contributes based on their
+    probability of belonging to the observed group.
+
+    Parameters
+    ----------
+    parameter_threshold : float
+        The threshold value that separates the two groups.
+    parameter_min : float, optional
+        The minimum parameter value to include in the analysis. Default is -inf.
+    parameter_max : float, optional
+        The maximum parameter value to include in the analysis. Default is +inf.
+    method : str, optional
+        Method for estimating misclassification probabilities:
+        - 'bayesian': Full Bayesian posterior (default, more accurate)
+        - 'normal_approx': Normal approximation (faster, less accurate for small counts)
+    prior_alpha : float, optional
+        Alpha parameter for Gamma prior (Bayesian method only). Default 0.5 (Jeffreys).
+    prior_beta : float, optional
+        Beta parameter for Gamma prior (Bayesian method only). Default 0.0.
+
+    Returns
+    -------
+    dict
+        Dictionary containing:
+        - 'survival_probabilities' : np.ndarray
+            Weighted survival probabilities at each time point.
+        - 'times_for_plot' : list[float]
+            Time points where probabilities were calculated.
+        - 'n_at_risk_weighted' : list[float]
+            Weighted number of patients at risk at each death time.
+        - 'n_deaths_weighted' : list[float]
+            Weighted number of deaths at each death time.
+        - 'n_at_risk' : list[int]
+            Unweighted number of patients at risk at each death time.
+        - 'n_deaths' : list[int]
+            Unweighted number of deaths at each death time.
+        - 'death_times' : list[float]
+            Unique death times where events occurred.
+        - 'method' : str
+            'yi_correction'
+
+    Notes
+    -----
+    See Yi (2017) "Statistical Analysis with Measurement Error or Misclassification",
+    Section 3.7.1 for theoretical foundation. The weighted Kaplan-Meier extension
+    applies per-patient probability weights to the standard KM formula.
+
+    Unlike MINLP approaches, Yi's method provides point estimates only without
+    confidence intervals around the survival curve.
+
+    Examples
+    --------
+    >>> from kombine.datacard import Datacard
+    >>> datacard = Datacard.parse_datacard("datacard.txt")
+    >>> result = datacard.km_survival_yi(parameter_threshold=0.5)
+    >>> survival_probs = result['survival_probabilities']
+    >>> times = result['times_for_plot']
+    """
+    # Filter patients by parameter range
+    filtered_patients = [
+      p for p in self.patients
+      if parameter_min <= p.observed_parameter <= parameter_max
+    ]
+
+    if not filtered_patients:
+      raise ValueError(
+        f"No patients found in parameter range [{parameter_min}, {parameter_max}]"
+      )
+
+    yi_correction = YiCorrectionForKaplanMeier(
+      patients=filtered_patients,
+      parameter_threshold=parameter_threshold,
+    )
+
+    return yi_correction.compute_weighted_survival_probabilities(
       method=method,
       prior_alpha=prior_alpha,
       prior_beta=prior_beta,
