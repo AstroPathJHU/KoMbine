@@ -66,17 +66,14 @@ The logrank test compares survival curves between two groups defined by a biomar
 threshold = 0.5
 
 # Calculate p-value using logrank test
-result_pvalue = datacard.km_p_value_logrank(
+p_value = datacard.km_p_value_logrank(
     parameter_threshold=threshold,
     parameter_min=-np.inf,
     parameter_max=np.inf,
 )
 
 print(f"Logrank Test Results:")
-print(f"  P-value: {result_pvalue['p_value']:.4e}")
-print(f"  Test statistic: {result_pvalue['logrank_statistic']:.4f}")
-print(f"  Patients in low group: {result_pvalue['n_low_observed']}")
-print(f"  Patients in high group: {result_pvalue['n_high_observed']}")
+print(f"  P-value: {p_value:.4e}")
 ```
 
 ### Basic Hazard Ratio Estimation
