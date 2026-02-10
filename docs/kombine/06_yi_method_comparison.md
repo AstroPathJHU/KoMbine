@@ -173,78 +173,82 @@ for scenario_key, scenario_info in scenarios.items():
 ```
 
 ```python
-# Plot KM curves for all three scenarios side-by-side, comparing Yi and MINLP
-fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+# Define consistent color palette for all plots
+# High colors: variations of red-orange (darker to lighter)
+# Low colors: variations of blue-green (darker to lighter)
+# Fixed (baseline) - much darker; Large & Moderate - progressively lighter
+colors_palette = {
+    ('fixed', 'low'): '#0d47a1',      # Very dark blue
+    ('fixed', 'high'): '#6d1c1e',     # Very dark red
+    ('large', 'low'): '#42a5f5',      # Medium-bright blue
+    ('large', 'high'): '#ef5350',     # Medium-bright red
+    ('moderate', 'low'): '#26c6da',   # Light cyan/teal
+    ('moderate', 'high'): '#f39c12',  # Light orange
+}
+```
 
-for idx, (scenario_key, scenario_info) in enumerate(scenarios.items()):
-    ax = axes[idx]
+```python
+# Create unified plot with all 12 curves (no error bars)
+# Note: colors_palette is defined in the previous cell
+fig, ax = plt.subplots(figsize=(14, 7))
+
+for scenario_key, scenario_info in scenarios.items():
     result = km_results[scenario_key]
+    color_low = colors_palette[(scenario_key, 'low')]
+    color_high = colors_palette[(scenario_key, 'high')]
     
-    # Yi's method - Low group
+    # Yi's method - Low group (dashed lines)
     times_low_yi = result['yi']['low']['times_for_plot']
     surv_low_yi = result['yi']['low']['survival_probabilities']
     ax.step(times_low_yi, surv_low_yi, where='post', linewidth=2.5, 
-            color='red', alpha=0.6, linestyle='--', label="Yi: Low group")
+            color=color_low, alpha=0.7, linestyle='--', 
+            label=f"Yi: {scenario_info['label']} (Low)")
     
-    # Yi's method - High group
+    # Yi's method - High group (dashed lines)
     times_high_yi = result['yi']['high']['times_for_plot']
     surv_high_yi = result['yi']['high']['survival_probabilities']
     ax.step(times_high_yi, surv_high_yi, where='post', linewidth=2.5, 
-            color='blue', alpha=0.6, linestyle='--', label="Yi: High group")
+            color=color_high, alpha=0.7, linestyle='--', 
+            label=f"Yi: {scenario_info['label']} (High)")
     
-    # KoMbine MINLP - Low group with error bands
+    # KoMbine MINLP - Low group (solid lines)
     times_low_minlp = result['minlp']['low']['times']
     best_low_minlp = result['minlp']['low']['best']
-    ci_low_minlp = result['minlp']['low']['ci']
     
-    # Create step function coordinates for plotting
-    times_plot_low = [times_low_minlp[0]]
+    times_plot_low = [times_low_minlp[0]] if len(times_low_minlp) > 0 else [0.0]
     best_plot_low = [1.0]
-    ci_lower_plot_low = [1.0]
-    ci_upper_plot_low = [1.0]
     
     for i, t in enumerate(times_low_minlp):
         times_plot_low.append(t)
         best_plot_low.append(best_low_minlp[i])
-        ci_lower_plot_low.append(ci_low_minlp[i, 0, 0])
-        ci_upper_plot_low.append(ci_low_minlp[i, 0, 1])
     
     ax.step(times_plot_low, best_plot_low, where='post', linewidth=2.5, 
-            color='darkred', label='MINLP: Low group', zorder=3)
-    ax.fill_between(times_plot_low, ci_lower_plot_low, ci_upper_plot_low, 
-                     step='post', alpha=0.2, color='red', label='MINLP: Low 95% CI', zorder=2)
+            color=color_low, alpha=0.9, linestyle='-', 
+            label=f"MINLP: {scenario_info['label']} (Low)")
     
-    # KoMbine MINLP - High group with error bands
+    # KoMbine MINLP - High group (solid lines)
     times_high_minlp = result['minlp']['high']['times']
     best_high_minlp = result['minlp']['high']['best']
-    ci_high_minlp = result['minlp']['high']['ci']
     
-    times_plot_high = [times_high_minlp[0]]
+    times_plot_high = [times_high_minlp[0]] if len(times_high_minlp) > 0 else [0.0]
     best_plot_high = [1.0]
-    ci_lower_plot_high = [1.0]
-    ci_upper_plot_high = [1.0]
     
     for i, t in enumerate(times_high_minlp):
         times_plot_high.append(t)
         best_plot_high.append(best_high_minlp[i])
-        ci_lower_plot_high.append(ci_high_minlp[i, 0, 0])
-        ci_upper_plot_high.append(ci_high_minlp[i, 0, 1])
     
     ax.step(times_plot_high, best_plot_high, where='post', linewidth=2.5, 
-            color='darkblue', label='MINLP: High group', zorder=3)
-    ax.fill_between(times_plot_high, ci_lower_plot_high, ci_upper_plot_high, 
-                     step='post', alpha=0.2, color='blue', label='MINLP: High 95% CI', zorder=2)
-    
-    ax.set_xlabel('Time', fontsize=11)
-    ax.set_ylabel('Survival Probability', fontsize=11)
-    ax.set_title(f"{scenario_info['label']}\n({scenario_info['description']})", 
-                 fontsize=12, fontweight='bold')
-    ax.legend(fontsize=7, loc='lower left')
-    ax.grid(True, alpha=0.3)
-    ax.set_ylim([0, 1.05])
+            color=color_high, alpha=0.9, linestyle='-', 
+            label=f"MINLP: {scenario_info['label']} (High)")
 
-plt.suptitle("Kaplan-Meier Curves: Yi vs KoMbine MINLP Across Measurement Scenarios", 
-             fontsize=14, fontweight='bold', y=1.02)
+ax.set_xlabel('Time', fontsize=12)
+ax.set_ylabel('Survival Probability', fontsize=12)
+ax.set_title('All Kaplan-Meier Curves: Yi vs KoMbine MINLP (Solid = MINLP, Dashed = Yi)', 
+             fontsize=13, fontweight='bold')
+ax.legend(fontsize=9, loc='lower left', ncol=2)
+ax.grid(True, alpha=0.3)
+ax.set_ylim([0, 1.05])
+
 plt.tight_layout()
 plt.show()
 ```
