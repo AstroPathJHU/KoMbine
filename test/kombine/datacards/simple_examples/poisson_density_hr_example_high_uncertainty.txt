@@ -1,0 +1,20 @@
+observable_type poisson_density
+------------
+# HIGH UNCERTAINTY example where measurement error MATTERS
+# 
+# Four patients are clustered right at threshold 0.5 with HIGH uncertainty:
+# - Patients 8-9 (obs ~0.49-0.50): Could be low or high
+# - Patients 10-11 (obs ~0.50-0.51): Could be low or high
+# 
+# With 50% relative error, these patients can easily cross the threshold!
+# The MINLP should find different optimal assignments vs deterministic grouping.
+# 
+# Group separation in outcomes:
+# - Low group (far from threshold): Late deaths, more censoring (good prognosis)
+# - High group (far from threshold): Early deaths, less censoring (bad prognosis)
+# - Ambiguous patients: Mixed outcomes
+------------
+survival_time	10	12	15	18	20	24	28	30	6	8	2	3	4	5	6	7	8	10	12	14
+censored	0	0	0	1	1	1	1	1	0	0	0	0	0	0	0	1	1	1	1	1
+num	10	20	30	40	50	60	70	80	49	50	50	51	60	70	80	90	100	110	120	130
+area	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100

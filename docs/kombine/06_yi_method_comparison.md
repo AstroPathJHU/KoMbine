@@ -15,10 +15,11 @@ jupyter:
 
 # Yi's Method vs KoMbine MINLP: Comprehensive Comparison
 
-This notebook provides a comprehensive side-by-side comparison between Yi's method for Kaplan-Meier likelihood estimation and KoMbine's MINLP approach across three measurement scenarios:
+This notebook provides a comprehensive side-by-side comparison between Yi's method for Kaplan-Meier likelihood estimation and KoMbine's MINLP approach across four measurement scenarios:
 - Fixed Hazard Ratio (deterministic, no measurement error)
 - Poisson density with large effect size (small relative error ~2-3%)
 - Poisson density with moderate effect size (larger relative error ~5-7%)
+- Poisson density with small counts (high relative error ~25-70%)
 
 Each analysis directly compares both methods to understand how they handle measurement uncertainty differently.
 
@@ -49,12 +50,12 @@ from kombine.datacard import Datacard
 ```
 
 ```python
-# Setup - Load the three comparison datacards
+# Setup - Load the four comparison datacards
 here = pathlib.Path(".").resolve()
 test_dir = here.parent.parent / "test" / "kombine"
 datacards_dir = test_dir / "datacards" / "simple_examples"
 
-# Define the three scenarios
+# Define the four scenarios
 scenarios = {
     'fixed': {
         'file': 'fixed_hr_example.txt',
@@ -70,6 +71,11 @@ scenarios = {
         'file': 'poisson_density_hr_example_moderate.txt',
         'label': 'Moderate Count Poisson',
         'description': 'Larger relative error (~5-7%)'
+    },
+    'small': {
+        'file': 'poisson_density_hr_example_small.txt',
+        'label': 'Small Count Poisson',
+        'description': 'High relative error (~25-70%)'
     }
 }
 
@@ -88,7 +94,7 @@ threshold = 0.5
 
 ## Analysis 1: Kaplan-Meier Curves
 
-Compare the Kaplan-Meier survival curves between Yi's method (dashed lines) and KoMbine's MINLP approach (solid lines with shaded 95% confidence intervals) across all three scenarios. This visualization directly shows how measurement error affects the survival curve estimates and their uncertainties.
+Compare the Kaplan-Meier survival curves between Yi's method (dashed lines) and KoMbine's MINLP approach (solid lines with shaded 95% confidence intervals) across all four scenarios. This visualization directly shows how measurement error affects the survival curve estimates and their uncertainties.
 
 ```python
 # Calculate both Yi's weighted KM and KoMbine's MINLP KM for each scenario
@@ -176,18 +182,21 @@ for scenario_key, scenario_info in scenarios.items():
 # Define consistent color palette for all plots
 # High colors: variations of red-orange (darker to lighter)
 # Low colors: variations of blue-green (darker to lighter)
-# Fixed (baseline) - much darker; Large & Moderate - progressively lighter
+# Fixed (baseline) - darkest; Large and Moderate - mid tones; Small - lightest
 colors_palette = {
-    ('fixed', 'low'): '#0d47a1',      # Very dark blue
-    ('fixed', 'high'): '#6d1c1e',     # Very dark red
-    ('large', 'low'): '#42a5f5',      # Medium-bright blue
-    ('large', 'high'): '#ef5350',     # Medium-bright red
-    ('moderate', 'low'): '#26c6da',   # Light cyan/teal
-    ('moderate', 'high'): '#f39c12',  # Light orange
+    ('fixed', 'low'): '#0d47a1',      # Deep blue
+    ('fixed', 'high'): '#6d1c1e',     # Deep red
+    ('large', 'low'): '#1976d2',      # Strong blue
+    ('large', 'high'): '#e53935',     # Strong red
+    ('moderate', 'low'): '#26a69a',   # Teal
+    ('moderate', 'high'): '#fb8c00',  # Orange
+    ('small', 'low'): '#80cbc4',      # Light teal
+    ('small', 'high'): '#ffd54f',     # Light amber
 }
 
-# Plot KM curves for all three scenarios side-by-side, comparing Yi and MINLP
-fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+# Plot KM curves for all four scenarios in a 2x2 grid
+fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+axes = axes.flatten()
 
 for idx, (scenario_key, scenario_info) in enumerate(scenarios.items()):
     ax = axes[idx]
@@ -254,7 +263,7 @@ for idx, (scenario_key, scenario_info) in enumerate(scenarios.items()):
     ax.set_ylabel('Survival Probability', fontsize=11)
     ax.set_title(f"{scenario_info['label']}\n({scenario_info['description']})", 
                  fontsize=12, fontweight='bold')
-    ax.legend(fontsize=7, loc='lower left')
+    ax.legend(fontsize=10, loc='lower left')
     ax.grid(True, alpha=0.3)
     ax.set_ylim([0, 1.05])
 
@@ -265,7 +274,7 @@ plt.show()
 ```
 
 ```python
-# Create unified plot with all 12 curves (no error bars)
+# Create unified plot with all 16 curves (no error bars)
 # Note: colors_palette is defined in the previous cell
 fig, ax = plt.subplots(figsize=(14, 7))
 
@@ -335,7 +344,7 @@ plt.show()
 Compare p-values computed using Yi's method and KoMbine's MINLP approach for each scenario.
 
 ```python
-# Calculate p-values (Yi vs KoMbine) for all three scenarios
+# Calculate p-values (Yi vs KoMbine) for all four scenarios
 pvalue_results = {}
 
 for scenario_key, scenario_info in scenarios.items():
@@ -374,9 +383,9 @@ for scenario_key, scenario_info in scenarios.items():
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
 # Prepare data
-scenario_labels = [scenarios[k]['label'] for k in ['fixed', 'large', 'moderate']]
-yi_pvals = [pvalue_results[k]['yi'] for k in ['fixed', 'large', 'moderate']]
-minlp_pvals = [pvalue_results[k]['minlp'] for k in ['fixed', 'large', 'moderate']]
+scenario_labels = [scenarios[k]['label'] for k in ['fixed', 'large', 'moderate', 'small']]
+yi_pvals = [pvalue_results[k]['yi'] for k in ['fixed', 'large', 'moderate', 'small']]
+minlp_pvals = [pvalue_results[k]['minlp'] for k in ['fixed', 'large', 'moderate', 'small']]
 
 # Bar plot
 x = np.arange(len(scenario_labels))
@@ -422,7 +431,7 @@ plt.show()
 Compare hazard ratios estimated using Yi's method and KoMbine's MINLP approach.
 
 ```python
-# Calculate hazard ratios (Yi vs KoMbine) for all three scenarios
+# Calculate hazard ratios (Yi vs KoMbine) for all four scenarios
 hr_results = {}
 hazard_ratios_scan = np.linspace(0.2, 5.0, 25)
 
@@ -478,8 +487,9 @@ for scenario_key, scenario_info in scenarios.items():
 ```
 
 ```python
-# Plot hazard ratio profiles for all three scenarios
-fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+# Plot hazard ratio profiles for all four scenarios in a 2x2 grid
+fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+axes = axes.flatten()
 
 for idx, (scenario_key, scenario_info) in enumerate(scenarios.items()):
     ax = axes[idx]
@@ -498,7 +508,7 @@ for idx, (scenario_key, scenario_info) in enumerate(scenarios.items()):
     ax.axvline(result['minlp_best'], color='r', linestyle='--', alpha=0.7, linewidth=2,
                label=f"MINLP: {result['minlp_best']:.3f}")
     ax.axvspan(result['minlp_lower'], result['minlp_upper'], alpha=0.2, color='red',
-               label=f"MINLP 95% CI")
+               label="MINLP 95% CI")
     
     # Confidence threshold
     ax.axhline(2.706, color='gray', linestyle=':', alpha=0.5, linewidth=1.5, label='95% threshold')
@@ -526,48 +536,56 @@ Direct visual comparison between Yi's method (dashed lines) and KoMbine's MINLP 
 
 **Fixed Observable (No Error)**:
 - Both methods show nearly identical point estimates for the high-risk group
-- Yi: High group 50% final survival
-- MINLP: High group 50% final survival  
-- MINLP confidence bands reflect only Cox/binomial uncertainty (baseline, narrowest)
+- Yi: High group 50.00% final survival
+- MINLP: High group 50.00% final survival
+- MINLP confidence bands reflect only Cox/binomial uncertainty (baseline, narrowest; width 0.565)
 - Perfect agreement as expected with no measurement error
 
-**Large Count Poisson (~3-10% relative error)**:
+**Large Count Poisson (~2-3% relative error)**:
 - Very subtle differences begin to emerge
-- Yi: High group 50.07% final survival (minimal shift from probabilistic weighting)
-- MINLP: High group 50% best-fit survival (stable)
+- Yi: High group 51.04% final survival (minimal shift from probabilistic weighting)
+- MINLP: High group 50.00% best-fit survival (stable)
 - MINLP confidence bands remain nearly identical to fixed case (0.565 width)
 - Measurement error is too small to meaningfully affect either method
 
-**Moderate Count Poisson (~10-30% relative error)**:
+**Moderate Count Poisson (~5-7% relative error)**:
 - **Major visible differences in both methods**
-- Yi: High group 51.77% final survival (3.5% elevation due to probabilistic weighting)
-- MINLP: High group **62.5%** best-fit survival (25% elevation!)
-- MINLP confidence bands **substantially wider** (0.653 width, 16% increase)
+- Yi: High group 55.70% final survival (11.4% elevation due to probabilistic weighting)
+- MINLP: High group **62.50%** best-fit survival (25% elevation)
+- MINLP confidence bands **substantially wider** (0.653 width, 15.6% increase)
 - Both methods show that moderate measurement uncertainty fundamentally changes the analysis
 
-**Key Observation**: 
+**Small Count Poisson (~25-70% relative error)**:
+- **Largest divergence between methods**
+- Yi: High group 62.19% final survival
+- MINLP: High group **83.33%** best-fit survival
+- MINLP confidence bands remain wide (0.643 width)
+- Small-count uncertainty leads to strong re-assignment effects in the MINLP solution
+
+**Key Observation**:
 - MINLP's full likelihood optimization (including patient-wise measurement error) produces **larger shifts** in point estimates compared to Yi's probabilistic weighting method
-- MINLP explicitly quantifies uncertainty via widening confidence bands (Fixed: 0.565 → Moderate: 0.653)
+- MINLP explicitly quantifies uncertainty via widening confidence bands (Fixed: 0.565 → Moderate: 0.653 → Small: 0.643)
 - Yi's method shows more modest curve adjustments through weighted KM estimation
-- In the moderate error scenario, the two methods give **substantially different survival estimates** (Yi: 51.8% vs MINLP: 62.5%), highlighting the importance of method choice when measurement uncertainty is high
+- In the moderate and small-count scenarios, the two methods give **substantially different survival estimates**, highlighting the importance of method choice when measurement uncertainty is high
 
 ### Logrank Test P-Values
 The p-value comparisons reveal how measurement error affects statistical significance testing:
 
 | Scenario | Yi's Method | MINLP | Relative Difference |
 |----------|------------|--------|-------------------|
-| Fixed Observable | 0.2433 | 0.2509 | 3.1% |
-| Large Count Poisson | 0.2783 | 0.2509 | 10.9% |
-| Moderate Count Poisson | 0.5316 | 0.2509 | 111.9% |
+| Fixed Observable | 0.2433 | 0.2508 | 3.1% |
+| Large Count Poisson | 0.2783 | 0.2508 | 10.9% |
+| Moderate Count Poisson | 0.5316 | 0.2508 | 111.9% |
+| Small Count Poisson | 0.9702 | 0.4250 | 128.3% |
 
 **Key Observations**:
 - In the fixed (no-error) case, both methods agree closely (3.1% relative difference)
-- MINLP p-values remain remarkably stable (~0.251) across all measurement error scenarios
+- MINLP p-values remain stable through large/moderate scenarios, then increase for small counts
 - Yi's method shows **monotonically increasing p-values** with measurement error
 - In the moderate error case, Yi's p-value (0.532) suggests no significant difference, while MINLP (0.251) maintains moderate significance
-- This 112% divergence represents a fundamental disagreement about statistical significance
+- In the small-count case, Yi's p-value (0.970) indicates no separation, while MINLP still detects separation (0.425)
 - Yi's probabilistic weighting treats measurement uncertainty as group-assignment ambiguity, which inflates the p-value
-- MINLP's optimization approach maintains stable hypothesis testing by finding optimal patient assignments despite measurement uncertainty
+- MINLP's optimization approach can maintain separation by re-assigning ambiguous patients
 
 ### Hazard Ratio Estimates
 The hazard ratio comparison shows how measurement uncertainty affects Cox regression:
@@ -577,14 +595,14 @@ The hazard ratio comparison shows how measurement uncertainty affects Cox regres
 | Fixed Observable | 2.200 | 2.280 | [0.557, 10.000] | 9.443 | 3.5% |
 | Large Count Poisson | 2.200 | 2.280 | [0.557, 10.000] | 9.443 | 3.5% |
 | Moderate Count Poisson | 1.600 | 2.280 | [0.557, 10.000] | 9.443 | 29.8% |
+| Small Count Poisson | 1.000 | 1.775 | [0.434, 8.676] | 8.242 | 43.7% |
 
 **Key Observations**:
-- MINLP's point estimate (2.280) remains **perfectly stable** across all measurement scenarios
-- Yi's method shows **high sensitivity** to measurement error (HR drops 27% from 2.2 to 1.6)
-- MINLP's CI bounds are wide ([0.557, 10.000]) but consistent, reflecting the discrete optimization constraints
-- The relative HR difference grows dramatically with measurement error (3.5% → 29.8%)
+- MINLP's point estimate (2.280) remains **stable** for fixed/large/moderate scenarios
+- Yi's method shows **high sensitivity** to measurement error (HR drops from 2.2 to 1.6 to 1.0)
+- Small counts reduce MINLP's best-fit hazard ratio and widen the lower CI bound
+- The relative HR difference grows dramatically with measurement error (3.5% → 29.8% → 43.7%)
 - Yi's method does not directly provide confidence intervals in the current implementation
-- In the moderate error case, the two methods disagree by 30% on the hazard ratio point estimate
 
 ### Overall Comparison
 
@@ -592,12 +610,16 @@ The hazard ratio comparison shows how measurement uncertainty affects Cox regres
 1. **No measurement error (fixed)**: Both methods show strong agreement (3-4% difference across metrics)
 2. **Small measurement error (large Poisson)**: Methods remain similar for most metrics, p-values begin diverging (11%)
 3. **Moderate measurement error (moderate Poisson)**: Major systematic divergence:
-   - KM curves differ by 10-12 percentage points
+   - KM curves differ by 5-12 percentage points
    - P-values differ by 112%
    - Hazard ratios differ by 30%
+4. **High measurement error (small Poisson)**: Largest divergence:
+   - KM curves differ by >20 percentage points
+   - P-values differ by 128%
+   - Hazard ratios differ by 44%
 
 **Method Characteristics**:
-- **Yi's Method**: 
+- **Yi's Method**:
   - Fast computation (~100-500ms per analysis)
   - Probabilistic weighting adapts point estimates to measurement uncertainty
   - More conservative with increasing uncertainty (elevated survival curves, inflated p-values, reduced HRs)
@@ -617,10 +639,10 @@ The hazard ratio comparison shows how measurement uncertainty affects Cox regres
 **Critical Finding**:
 When measurement uncertainty is moderate-to-high (>10% relative error), **method choice matters critically**:
 - The two methods can disagree by >100% on statistical significance (p-values)
-- Survival estimates can differ by >10 percentage points (51.8% vs 62.5%)  
-- Hazard ratios can differ by 30% (1.6 vs 2.28)
+- Survival estimates can differ by >10 percentage points (moderate) and >20 percentage points (small counts)
+- Hazard ratios can differ by 30-45%
 
-**Recommendation**: 
+**Recommendation**:
 For datasets with suspected measurement error:
 1. **Always run both methods** to assess sensitivity to methodology
 2. If discrepancies are small (<10%), either method is defensible
