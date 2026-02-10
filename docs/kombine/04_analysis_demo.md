@@ -2,12 +2,15 @@
 jupyter:
   jupytext:
     formats: ipynb,md,py:percent
-    main_language: python
     text_representation:
       extension: .md
       format_name: markdown
       format_version: '1.3'
       jupytext_version: 1.18.1
+  kernelspec:
+    display_name: rocpicker
+    language: python
+    name: python3
 ---
 
 # Comprehensive P-value and Hazard Ratio Analysis with KoMbine

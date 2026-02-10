@@ -256,6 +256,57 @@ def test_yi_methods_return_valid_structure():
   assert isinstance(result_logrank['logrank_statistic'], (int, float))
   assert result_logrank['logrank_statistic'] >= 0
 
+  def test_yi_km_matches_nominal_fixed_observable():
+    """
+    Yi KM curves should match nominal KM for fixed observables.
+
+    With deterministic group assignment, Yi's weighting reduces to a
+    standard KM curve for each group when using all patients.
+    """
+    datacard = kombine.datacard.Datacard.parse_datacard(
+      datacards / "fixed_hr_example.txt"
+    )
+
+    threshold = 0.5
+
+    yi_low = datacard.km_survival_yi(
+      parameter_threshold=threshold,
+      group='low',
+    )
+    yi_high = datacard.km_survival_yi(
+      parameter_threshold=threshold,
+      group='high',
+    )
+
+    km_low = datacard.km_likelihood(
+      parameter_min=-np.inf,
+      parameter_max=threshold,
+    )
+    km_high = datacard.km_likelihood(
+      parameter_min=threshold,
+      parameter_max=np.inf,
+    )
+
+    low_nominal = km_low.nominalkm.survival_probabilities(
+      times_for_plot=yi_low['times_for_plot']
+    )
+    high_nominal = km_high.nominalkm.survival_probabilities(
+      times_for_plot=yi_high['times_for_plot']
+    )
+
+    np.testing.assert_allclose(
+      yi_low['survival_probabilities'],
+      low_nominal,
+      atol=1e-10,
+      rtol=1e-10,
+    )
+    np.testing.assert_allclose(
+      yi_high['survival_probabilities'],
+      high_nominal,
+      atol=1e-10,
+      rtol=1e-10,
+    )
+
   # Test hazard ratio result structure
   result_hr = datacard.km_hazard_ratio_yi(
     parameter_threshold=threshold,

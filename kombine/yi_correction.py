@@ -478,6 +478,7 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
     self,
     times_for_plot: list[float] | None = None,
     *,
+    group: str = 'high',
     method: str = 'bayesian',
     prior_alpha: float = 0.5,
     prior_beta: float = 0.0,
@@ -495,6 +496,8 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
     times_for_plot : list[float], optional
         Time points at which to calculate survival probabilities.
         If None, uses unique death times from patient data.
+    group : str, optional
+        Which curve to compute: 'high' or 'low'. Default is 'high'.
     method : str, optional
         Method for estimating misclassification probabilities:
         - 'bayesian': Full Bayesian posterior (default, more accurate)
@@ -576,6 +579,9 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
         ))]
       )
 
+    if group not in {'high', 'low'}:
+      raise ValueError("group must be 'high' or 'low'")
+
     # Track weighted and unweighted counts at each death time
     n_at_risk_by_time = []
     n_deaths_by_time = []
@@ -598,15 +604,18 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
           prior_beta=prior_beta,
         )
 
+        prob_low = 1.0 - prob_high
+        weight = prob_high if group == 'high' else prob_low
+
         # Patient is at risk if their time >= death_time
         if patient.time >= t_death:
           n_at_risk += 1
-          n_at_risk_weighted += prob_high
+          n_at_risk_weighted += weight
 
         # Patient dies at this time if time == death_time and not censored
         if patient.time == t_death and not patient.censored:
           n_deaths += 1
-          n_deaths_weighted += prob_high
+          n_deaths_weighted += weight
 
       n_at_risk_by_time.append(n_at_risk)
       n_deaths_by_time.append(n_deaths)
@@ -651,4 +660,5 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
       'n_deaths': n_deaths_by_time,
       'death_times': death_times,
       'method': 'yi_correction',
+      'group': group,
     }

@@ -1331,6 +1331,8 @@ class Datacard:
     parameter_threshold: float,
     parameter_min: float = -np.inf,
     parameter_max: float = np.inf,
+    group: str = 'high',
+    times_for_plot: list[float] | None = None,
     method: str = 'bayesian',
     prior_alpha: float = 0.5,
     prior_beta: float = 0.0,
@@ -1351,6 +1353,10 @@ class Datacard:
         The minimum parameter value to include in the analysis. Default is -inf.
     parameter_max : float, optional
         The maximum parameter value to include in the analysis. Default is +inf.
+    group : str, optional
+      Which curve to compute: 'high' or 'low'. Default is 'high'.
+    times_for_plot : list[float], optional
+      Time points to use when evaluating the survival probabilities.
     method : str, optional
         Method for estimating misclassification probabilities:
         - 'bayesian': Full Bayesian posterior (default, more accurate)
@@ -1415,6 +1421,8 @@ class Datacard:
     )
 
     return yi_correction.compute_weighted_survival_probabilities(
+      group=group,
+      times_for_plot=times_for_plot,
       method=method,
       prior_alpha=prior_alpha,
       prior_beta=prior_beta,
