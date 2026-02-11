@@ -240,57 +240,6 @@ def test_yi_methods_return_valid_structure():
   assert isinstance(result_logrank['logrank_statistic'], (int, float))
   assert result_logrank['logrank_statistic'] >= 0
 
-  def test_yi_km_matches_nominal_fixed_observable():
-    """
-    Yi KM curves should match nominal KM for fixed observables.
-
-    With deterministic group assignment, Yi's weighting reduces to a
-    standard KM curve for each group when using all patients.
-    """
-    datacard = kombine.datacard.Datacard.parse_datacard(
-      datacards / "fixed_hr_example.txt"
-    )
-
-    threshold = 0.5
-
-    yi_low = datacard.km_survival_yi(
-      parameter_min=-np.inf,
-      parameter_max=threshold,
-    )
-    yi_high = datacard.km_survival_yi(
-      parameter_min=threshold,
-      parameter_max=np.inf,
-    )
-
-    km_low = datacard.km_likelihood(
-      parameter_min=-np.inf,
-      parameter_max=threshold,
-    )
-    km_high = datacard.km_likelihood(
-      parameter_min=threshold,
-      parameter_max=np.inf,
-    )
-
-    low_nominal = km_low.nominalkm.survival_probabilities(
-      times_for_plot=yi_low['times_for_plot']
-    )
-    high_nominal = km_high.nominalkm.survival_probabilities(
-      times_for_plot=yi_high['times_for_plot']
-    )
-
-    np.testing.assert_allclose(
-      yi_low['survival_probabilities'],
-      low_nominal,
-      atol=1e-10,
-      rtol=1e-10,
-    )
-    np.testing.assert_allclose(
-      yi_high['survival_probabilities'],
-      high_nominal,
-      atol=1e-10,
-      rtol=1e-10,
-    )
-
   # Test hazard ratio result structure
   result_hr = datacard.km_hazard_ratio_yi(
     parameter_threshold=threshold,
@@ -310,6 +259,58 @@ def test_yi_methods_return_valid_structure():
   assert result_hr.success is True
   assert np.isclose(result_hr.hazard_ratio, 2.0)
   assert np.isclose(result_hr.log_hazard_ratio, np.log(2.0))
+
+
+def test_yi_km_matches_nominal_fixed_observable():
+  """
+  Yi KM curves should match nominal KM for fixed observables.
+
+  With deterministic group assignment, Yi's weighting reduces to a
+  standard KM curve for each group when using all patients.
+  """
+  datacard = kombine.datacard.Datacard.parse_datacard(
+    datacards / "fixed_hr_example.txt"
+  )
+
+  threshold = 0.5
+
+  yi_low = datacard.km_survival_yi(
+    parameter_min=-np.inf,
+    parameter_max=threshold,
+  )
+  yi_high = datacard.km_survival_yi(
+    parameter_min=threshold,
+    parameter_max=np.inf,
+  )
+
+  km_low = datacard.km_likelihood(
+    parameter_min=-np.inf,
+    parameter_max=threshold,
+  )
+  km_high = datacard.km_likelihood(
+    parameter_min=threshold,
+    parameter_max=np.inf,
+  )
+
+  low_nominal = km_low.nominalkm.survival_probabilities(
+    times_for_plot=yi_low['times_for_plot']
+  )
+  high_nominal = km_high.nominalkm.survival_probabilities(
+    times_for_plot=yi_high['times_for_plot']
+  )
+
+  np.testing.assert_allclose(
+    yi_low['survival_probabilities'],
+    low_nominal,
+    atol=1e-10,
+    rtol=1e-10,
+  )
+  np.testing.assert_allclose(
+    yi_high['survival_probabilities'],
+    high_nominal,
+    atol=1e-10,
+    rtol=1e-10,
+  )
 
 
 def test_yi_bayesian_method_only():
@@ -335,22 +336,22 @@ def test_yi_bayesian_method_only():
 def test_yi_kaplan_meier_survival():
   """
   Test Yi's weighted Kaplan-Meier survival probability estimation.
-  
+
   This tests the new km_survival_yi() method which applies Yi's inverse
   probability weighting to Kaplan-Meier curve estimation.
   """
   # Use a dataset with fixed observables for perfect classification test
   datacardfile = datacards / "fixed_km_censoring.txt"
   datacard = kombine.datacard.Datacard.parse_datacard(datacardfile)
-  
+
   threshold = 0.5
-  
+
   # Calculate Yi's weighted KM survival for the low group
   result_yi_low = datacard.km_survival_yi(
     parameter_min=-np.inf,
     parameter_max=threshold,  # Only low group
   )
-  
+
   # Validate return structure
   assert 'survival_probabilities' in result_yi_low
   assert 'times_for_plot' in result_yi_low
@@ -361,13 +362,13 @@ def test_yi_kaplan_meier_survival():
   assert 'death_times' in result_yi_low
   assert 'method' in result_yi_low
   assert result_yi_low['method'] == 'yi_correction'
-  
+
   # Validate survival probabilities are valid (between 0 and 1, monotonically decreasing)
   surv_probs = result_yi_low['survival_probabilities']
   assert len(surv_probs) == len(result_yi_low['times_for_plot'])
   assert all(0 <= p <= 1 for p in surv_probs), "Survival probabilities must be in [0, 1]"
   assert surv_probs[0] == 1.0, "Initial survival probability should be 1.0"
-  
+
   # Check monotonically non-increasing
   for i in range(len(surv_probs) - 1):
     assert surv_probs[i] >= surv_probs[i + 1], (
@@ -375,22 +376,22 @@ def test_yi_kaplan_meier_survival():
       f"S(t={result_yi_low['times_for_plot'][i]})={surv_probs[i]:.4f} > "
       f"S(t={result_yi_low['times_for_plot'][i+1]})={surv_probs[i+1]:.4f}"
     )
-  
+
   # Test high group as well
   result_yi_high = datacard.km_survival_yi(
     parameter_min=threshold,
     parameter_max=np.inf,  # Only high group
   )
-  
+
   assert 'survival_probabilities' in result_yi_high
   assert result_yi_high['survival_probabilities'][0] == 1.0
-  
+
   # For fixed observables with perfect classification, weighted counts should
   # approximately match unweighted counts (within rounding)
   # Note: Some patients may have weight 0 if they don't belong to the filtered group,
   # so weighted counts can be 0 even if unweighted is >0. We check that the weighted
   # curve is monotonically decreasing and starts at 1.0 instead.
-  
+
   # Verify that weighted death counts are non-negative
   assert all(n >= 0 for n in result_yi_low['n_deaths_weighted']), (
     f"Weighted death counts must be non-negative: {result_yi_low['n_deaths_weighted']}"
@@ -398,7 +399,7 @@ def test_yi_kaplan_meier_survival():
   assert all(n >= 0 for n in result_yi_low['n_at_risk_weighted']), (
     f"Weighted at-risk counts must be non-negative: {result_yi_low['n_at_risk_weighted']}"
   )
-  
+
   print(f"  Yi's KM low group: {len(result_yi_low['death_times'])} death times")
   print(f"  Yi's KM high group: {len(result_yi_high['death_times'])} death times")
   print(f"  Final survival (low): {result_yi_low['survival_probabilities'][-1]:.4f}")
@@ -426,11 +427,15 @@ if __name__ == "__main__":
   test_yi_methods_return_valid_structure()
   print("[PASS] Result structure validation")
 
-  print("Test 5: Bayesian method works...")
+  print("Test 5: Yi KM matches nominal with fixed observable...")
+  test_yi_km_matches_nominal_fixed_observable()
+  print("[PASS] Yi KM matches nominal with fixed observable")
+
+  print("Test 6: Bayesian method works...")
   test_yi_bayesian_method_only()
   print("[PASS] Bayesian method works")
 
-  print("Test 6: Yi's Kaplan-Meier survival probabilities...")
+  print("Test 7: Yi's Kaplan-Meier survival probabilities...")
   test_yi_kaplan_meier_survival()
   print("[PASS] Yi's Kaplan-Meier survival probabilities")
 

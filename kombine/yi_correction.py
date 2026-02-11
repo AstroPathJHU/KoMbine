@@ -83,13 +83,13 @@ class YiCorrectionBase:  # pylint: disable=too-few-public-methods
         f"{self._parameter_min} >= {self._parameter_max}"
       )
     if self._parameter_threshold is not None:
-      if not (self._parameter_min <= self._parameter_threshold <= self._parameter_max):
+      if not self._parameter_min <= self._parameter_threshold <= self._parameter_max:
         raise ValueError(
           "parameter_threshold must be within [parameter_min, parameter_max], got "
           f"{self._parameter_threshold}"
         )
 
-  def compute_patient_prob_in_range(
+  def compute_patient_prob_in_range(  # pylint: disable=too-many-arguments
     self,
     patient: Patient,
     range_min: float,
@@ -457,7 +457,7 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
   Unlike KoMbine's approach, this provides point estimates without confidence intervals.
   """
 
-  def compute_weighted_survival_probabilities(
+  def compute_weighted_survival_probabilities(  #pylint: disable=too-many-locals
     self,
     times_for_plot: list[float] | None = None,
     *,
@@ -566,7 +566,7 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
 
         if n_at_risk_w > 0 and n_deaths_w > 0:
           s_t *= (1.0 - n_deaths_w / n_at_risk_w)
-        elif n_deaths_w > n_at_risk_w and n_at_risk_w > 0:
+        elif n_deaths_w > n_at_risk_w > 0:
           # Handle edge case: weighted deaths > weighted at-risk
           # This can happen with probabilistic weights; clamp to 0
           s_t = 0.0
