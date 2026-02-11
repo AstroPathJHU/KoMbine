@@ -156,7 +156,7 @@ def prob_poisson_density_in_range(  # pylint: disable=too-many-arguments
     scale=posterior_scale,
   ) if not np.isposinf(range_max) else 1.0
 
-  prob_in_range = max(0.0, min(1.0, cdf_max - cdf_min))
+  prob_in_range = max(0.0, min(1.0, float(cdf_max - cdf_min)))
   return float(prob_in_range)
 
 
