@@ -51,11 +51,11 @@ def extract_documented_arguments(doc_file: pathlib.Path) -> set[str]:
 
 def test_cli_documentation_completeness():
   """
-  Test that all CLI arguments are documented in 05_command_line_interface.md
+  Test that all CLI arguments are documented in 07_command_line_interface.md
   and that all documented arguments actually exist in the CLI.
   """
   here = pathlib.Path(__file__).parent.parent.parent
-  doc_file = here / "docs" / "kombine" / "05_command_line_interface.md"
+  doc_file = here / "docs" / "kombine" / "07_command_line_interface.md"
 
   # Check that the documentation file exists
   assert doc_file.exists(), f"CLI documentation file not found: {doc_file}"
