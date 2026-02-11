@@ -45,7 +45,7 @@ class InspectableCache(typing.Generic[T, R]):
 # Yi's Misclassification Correction Utilities (Section 3.7.1)
 # ============================================================================
 
-def prob_poisson_density_in_range(
+def prob_poisson_density_in_range(  # pylint: disable=too-many-arguments
   observed_count: int,
   observed_area: float,
   range_min: float,
