@@ -181,7 +181,6 @@ print(f"95% CI: [{lower_ci_95_fixed:.3f}, {upper_ci_95_fixed:.3f}]")
     hazard_ratio_min=0.01,
     hazard_ratio_max=100.0,
     cox_only=False,
-    return_assignments=True,
 )
 
 low_counts_fixed = assignments_low_fixed.sum(axis=1)
@@ -301,7 +300,6 @@ print(f"95% CI: [{lower_ci_95_large:.3f}, {upper_ci_95_large:.3f}]")
     hazard_ratio_min=0.01,
     hazard_ratio_max=100.0,
     cox_only=False,
-    return_assignments=True,
 )
 
 twonll_min_large = np.min(twonll_values_large)
@@ -345,6 +343,9 @@ ax_high.set_xlim(0.01, 100.0)
 plt.tight_layout()
 plt.show()
 ```
+
+At hazard ratios around 4, the likelihood surface is fairly flat with respect to a few borderline patients, so the optimizer can switch their group assignments without a meaningful change in the objective. This shows up as small, brief changes in the high-group count even though the overall profile likelihood remains smooth.
+
 
 ### Scenario 3: Poisson Density with Moderate Counts
 
@@ -437,7 +438,6 @@ if np.isclose(lower_ci_95_moderate, hr_min) or np.isclose(upper_ci_95_moderate, 
     hazard_ratio_min=hr_min,
     hazard_ratio_max=hr_max,
     cox_only=False,
-    return_assignments=True,
 )
 
 twonll_min_moderate = np.min(twonll_values_moderate)
