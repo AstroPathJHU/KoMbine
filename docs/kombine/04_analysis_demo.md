@@ -28,7 +28,7 @@ import warnings
 import pathlib
 import numpy as np
 import matplotlib.pyplot as plt
-from kombine.datacard import Datacard, FixedObservable
+from kombine.datacard import Datacard, FixedObservable, PoissonDensityObservable
 
 # For reproducibility
 np.random.seed(42)
@@ -207,7 +207,11 @@ print("=" * 60)
 print(f"Loaded {len(datacard_poisson_large_counts.patients)} patients")
 
 # Check the counts
-nums = [p.observable.numerator for p in datacard_poisson_large_counts.patients]
+nums = []
+for p in datacard_poisson_large_counts.patients:
+    o = p.observable
+    assert isinstance(o, PoissonDensityObservable)
+    nums.append(o.numerator)
 print(f"  Mean count: {np.mean(nums):.1f}")
 print(f"  Relative uncertainty (√N/N): {np.mean([np.sqrt(n)/n for n in nums]):.1%}")
 print("\nWith large counts, Poisson error is small -> Cox error dominates")
@@ -253,7 +257,11 @@ print("=" * 60)
 print(f"Loaded {len(datacard_poisson_moderate_counts.patients)} patients")
 
 # Check the counts
-nums = [p.observable.numerator for p in datacard_poisson_moderate_counts.patients]
+nums = []
+for p in datacard_poisson_moderate_counts.patients:
+    o = p.observable
+    assert isinstance(o, PoissonDensityObservable)
+    nums.append(o.numerator)
 print(f"  Mean count: {np.mean(nums):.1f}")
 print(f"  Relative uncertainty (√N/N): {np.mean([np.sqrt(n)/n for n in nums]):.1%}")
 print("\nWith moderate counts, measurement uncertainty is significant!")
