@@ -1,12 +1,31 @@
 """
 Yi's misclassification correction methods for survival analysis.
 
-This module implements Yi's correction method (Section 3.7.1 from
+This module implements Yi's correction (Section 3.7.1 from
 "Statistical Analysis with Measurement Error or Misclassification", 2017)
-for discrete covariate misclassification in survival analysis.
+for discrete covariate misclassification by deriving per-patient probability weights
+from observable measurements. Yi's original presentation assumes a single
+misclassification probability matrix shared by all patients; here we extend the
+method by computing individualized uncertainties so each patient's contribution
+reflects their own measurement evidence.
 
-Yi's methods use inverse probability weighting to account for measurement uncertainty,
-providing an alternative to the KoMbine approach which uses optimization.
+General approach
+----------------
+1. Estimate P(true group = high | observed data) for each patient via
+  prob_poisson_density_exceeds_threshold when Poisson density measurements exist,
+  falling back to deterministic thresholds otherwise.
+2. Weight each patient's contribution to risk sets, death counts, and likelihood
+  terms by that probability.
+
+Weighted statistics
+-------------------
+- Logrank uses weighted U* and V* aggregates with statistic (U*)^2 / V*.
+- Cox PH applies weights inside the Breslow partial likelihood at hazard ratio H.
+- Kaplan-Meier multiplies (1 - d*(t_i)/n*(t_i)) across weighted death times.
+
+These methods produce computationally efficient point estimates that capture
+patient-specific measurement uncertainty, offering an alternative to KoMbine's
+optimization-driven approach.
 """
 
 from __future__ import annotations
@@ -108,65 +127,25 @@ class YiCorrectionForLogrank(YiCorrectionBase):
     prior_beta: float = 0.0,
   ) -> dict:
     """
-    Calculate p-value using Yi's misclassification correction method.
-
-    This implements Yi's correction for discrete covariate misclassification applied
-    to the logrank test. Uses inverse probability weighting with Bayesian estimation
-    to account for measurement uncertainty.
+    Compute Yi-corrected logrank statistic and p-value using weighted risk sets.
 
     Parameters
     ----------
     prior_alpha : float, optional
-        Alpha parameter for Gamma prior. Default 0.5 (Jeffreys).
+      Alpha parameter for the Gamma prior; default 0.5 (Jeffreys).
     prior_beta : float, optional
-        Beta parameter for Gamma prior. Default 0.0.
+      Beta parameter for the Gamma prior; default 0.0.
 
     Returns
     -------
     dict
-        Dictionary containing:
-        - 'p_value' : float
-            The p-value from the corrected logrank test.
-        - 'logrank_statistic' : float
-            The corrected logrank test statistic (chi-square distributed, df=1).
-        - 'U' : float
-            Sum of (observed - expected) weighted deaths for low group.
-        - 'V' : float
-            Sum of weighted variances.
-        - 'n_low_observed' : int
-            Number of patients observed in low group.
-        - 'n_high_observed' : int
-            Number of patients observed in high group.
+      Dictionary with keys 'p_value', 'logrank_statistic', 'U', 'V',
+      'n_low_observed', and 'n_high_observed'.
 
-    Notes
-    -----
-    Yi's method (Statistical Analysis with Measurement Error or Misclassification, 2017)
-    uses inverse probability weighting to correct for misclassification. The textbook approach
-    assumes a single misclassification probability matrix; here we extend it by computing
-    per-patient probabilities based on each patient's observable measurements, allowing
-    uncertainty to vary by individual.
-
-    The implemented approach:
-    1. For each patient, compute P(true group = high | observed data) based on their measurement
-    2. Weight each patient's contributions by their individual assignment probability
-    3. Compute corrected logrank test using weighted risk sets and event counts
-
-    The weighted logrank test formula:
-    - At each death time t, compute weighted risk sets r_k^*(t) and deaths d_k^*(t)
-    - U^* = sum_t [d_1^*(t) - r_1^*(t) * (d_0^* + d_1^*) / (r_0^* + r_1^*)]
-    - V^* = sum_t [r_0^* * r_1^* * (d_0^* + d_1^*) * (r_0^* + r_1^* - d_0^* - d_1^*) /
-                    ((r_0^* + r_1^*)^2 * (r_0^* + r_1^* - 1))]
-    - Logrank statistic = (U^*)^2 / V^* ~ chi^2(1)
-
-    This differs from KoMbine's approach:
-    - Yi: Probabilistic weighting with continuous fractional assignments
-    - KoMbine: Integer optimization over discrete assignments with likelihood penalties
-
-    Probability-based weighting is more computationally efficient than solving an optimization
-    problem, but does not provide confidence intervals; it yields point estimates only.
-
-    See Section 3.7.1 of Yi's book for theoretical foundation. The logrank
-    extension follows naturally from the weighted risk set principle (Equation 3.57).
+    Raises
+    ------
+    ValueError
+      If no uncensored death events are present in the data.
     """
 
     # Count patients by observed group
@@ -288,68 +267,22 @@ class YiCorrectionForCoxPH(YiCorrectionBase):
     prior_beta: float = 0.0,
   ) -> scipy.optimize.OptimizeResult:
     """
-    Compute 2NLL at a specific hazard ratio using Yi's misclassification correction.
-
-    This implements Yi's misclassification correction method (Section 3.7.1) for
-    the Cox proportional hazards model with discrete misclassified covariates.
-    This uses inverse probability weighting to account for measurement uncertainty,
-    in contrast to KoMbine's approach which solves an optimization problem.
+    Evaluate the Yi-weighted Cox partial likelihood at a specific hazard ratio.
 
     Parameters
     ----------
     hazard_ratio : float
-        The hazard ratio value at which to evaluate the 2NLL.
-        H = 1 corresponds to equal hazards (null hypothesis).
-        H > 1 means the high group has higher hazard (worse outcomes).
-        H < 1 means the low group has higher hazard.
+      Hazard ratio H at which to evaluate the twice-negative log-likelihood.
     prior_alpha : float, optional
-        Alpha parameter for Gamma prior. Default 0.5 (Jeffreys).
+      Alpha parameter for the Gamma prior; default 0.5 (Jeffreys).
     prior_beta : float, optional
-        Beta parameter for Gamma prior. Default 0.0.
+      Beta parameter for the Gamma prior; default 0.0.
 
     Returns
     -------
     scipy.optimize.OptimizeResult
-        Optimization result with attributes:
-        - x : float
-            The 2NLL value at the specified hazard ratio using Yi's correction.
-        - success : bool
-            Always True for Yi's method (no optimization).
-        - patients_low : list
-            Indices of patients nominally assigned to low group.
-        - patients_high : list
-            Indices of patients nominally assigned to high group.
-        - hazard_ratio : float
-            The hazard ratio value (should equal the input).
-        - log_hazard_ratio : float
-            Natural logarithm of the hazard ratio.
-        - cox_2NLL : float
-            Twice the corrected Cox partial likelihood contribution.
-        - patient_2NLL : float
-            Always 0.0 for Yi's method (no patient-wise penalties).
-        - method : str
-            'yi_correction'
-
-    Notes
-    -----
-    Yi's method (Statistical Analysis with Measurement Error or Misclassification, 2017)
-    uses inverse probability weighting to correct for misclassification. The textbook approach
-    assumes a single misclassification probability matrix; here we extend it by computing
-    per-patient probabilities based on each patient's observable measurements.
-
-    The implemented approach:
-    1. For each patient, compute P(true group = high | observed data) from their measurement
-    2. Weight each patient's Cox partial likelihood contributions by their assignment probability
-    3. Compute corrected likelihood using weighted risk sets
-
-    This differs from KoMbine's approach:
-    - Yi: Probabilistic weighting with continuous fractional assignments
-    - KoMbine: Integer optimization over discrete assignments with likelihood penalties
-
-    Probability-based weighting directly reflects patient-specific measurement uncertainty and
-    requires no optimization, but yields only point estimates without confidence intervals.
-
-    See Section 3.7.1 of Yi's book for theoretical foundation.
+      Contains the 2NLL value in `x` together with hazard ratio metadata,
+      observed group indices, and the method label 'yi_correction'.
     """
     log_hazard_ratio = np.log(hazard_ratio)
 
@@ -472,79 +405,29 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
     prior_beta: float = 0.0,
   ) -> dict:
     """
-    Calculate weighted Kaplan-Meier survival probabilities using Yi's correction.
-
-    This implements the weighted Kaplan-Meier estimator using inverse probability
-    weighting to account for measurement uncertainty in group assignment.
-    Each patient contributes to the survival curve with weight equal to their
-    probability of belonging to the observed (or alternative) group.
+    Compute Yi-weighted Kaplan-Meier survival probabilities for the requested group.
 
     Parameters
     ----------
     times_for_plot : list[float], optional
-        Time points at which to calculate survival probabilities.
-        If None, uses unique death times from patient data.
+      Time points at which to evaluate the survival curve; defaults to death times.
     group : str, optional
-        Which curve to compute: 'high' or 'low'. Default is 'high'.
+      Either 'high' or 'low', indicating which curve to return.
     prior_alpha : float, optional
-        Alpha parameter for Gamma prior. Default 0.5 (Jeffreys).
+      Alpha parameter for the Gamma prior; default 0.5 (Jeffreys).
     prior_beta : float, optional
-        Beta parameter for Gamma prior. Default 0.0.
+      Beta parameter for the Gamma prior; default 0.0.
 
     Returns
     -------
     dict
-        Dictionary containing:
-        - 'survival_probabilities' : np.ndarray
-            Weighted survival probabilities at each time point in times_for_plot.
-        - 'times_for_plot' : list[float]
-            The time points where probabilities were calculated.
-        - 'n_at_risk_weighted' : list[float]
-            Weighted number of patients at risk at each death time.
-        - 'n_deaths_weighted' : list[float]
-            Weighted number of deaths at each death time.
-        - 'n_at_risk' : list[int]
-            Unweighted number of patients at risk at each death time.
-        - 'n_deaths' : list[int]
-            Unweighted number of deaths at each death time.
-        - 'death_times' : list[float]
-            Unique death times where events occurred.
-        - 'method' : str
-            'yi_correction'
+      Contains survival probabilities, plotting times, weighted/unweighted counts,
+      death times, and the method label 'yi_correction'.
 
-    Notes
-    -----
-    Yi's method (Statistical Analysis with Measurement Error or Misclassification, 2017)
-    uses inverse probability weighting to correct for misclassification. The textbook approach
-    assumes a single misclassification probability matrix; here we extend it by computing
-    per-patient probabilities based on each patient's observable measurements.
-
-    The weighted Kaplan-Meier estimator uses:
-    - Weighted at-risk counts: n*(t) = sum of patient weights for patients at risk at t
-    - Weighted death counts: d*(t) = sum of patient weights for patients who died at t
-    - Weighted KM: S(t) = product of (1 - d*(t_i)/n*(t_i)) for all t_i <= t
-
-    where each patient's weight is their probability of true group membership based on
-    their observable measurements.
-
-    This differs from KoMbine's approach:
-    - Yi: Probabilistic weighting yielding point estimates only (no confidence intervals)
-    - KoMbine: Integer optimization with likelihood-based confidence intervals
-
-    Probability-based weighting is computationally efficient and directly reflects
-    patient-specific measurement uncertainty.
-
-    See Section 3.7.1 of Yi's book for theoretical foundation. The weighted KM
-    extension follows naturally from applying per-patient weights to the standard
-    Kaplan-Meier formula.
-
-    Examples
-    --------
-    >>> from kombine.yi_correction import YiCorrectionForKaplanMeier
-    >>> from kombine.datacard import Patient
-    >>> yi = YiCorrectionForKaplanMeier(patients=patient_list, parameter_threshold=0.5)
-    >>> result = yi.compute_weighted_survival_probabilities()
-    >>> print(result['survival_probabilities'])
+    Raises
+    ------
+    ValueError
+      If no death events exist or if `group` is not 'high' or 'low'.
     """
     # Get unique death times from all patients
     death_times = sorted(set(
