@@ -45,21 +45,22 @@ class InspectableCache(typing.Generic[T, R]):
 # Yi's Misclassification Correction Utilities (Section 3.7.1)
 # ============================================================================
 
-def prob_poisson_density_exceeds_threshold(
+def prob_poisson_density_in_range(
   observed_count: int,
   observed_area: float,
-  threshold: float,
+  range_min: float,
+  range_max: float,
   *,
   prior_alpha: float = 0.5,
   prior_beta: float = 0.0,
 ) -> float:
   """
-  Estimate P(true_density > threshold | observed_count, observed_area).
+  Estimate P(range_min <= true_density < range_max | observed_count, observed_area).
 
   Given a Poisson observation (count from area), estimate the probability that
-  the true underlying density exceeds a classification threshold. This is used
-  to convert continuous Poisson measurement error into discrete misclassification
-  probabilities for Yi's correction method.
+  the true underlying density lies within a specified range. This is used
+  to convert continuous Poisson measurement error into misclassification
+  probabilities for Yi's correction method, including "neither group" weights.
 
   Parameters
   ----------
@@ -67,8 +68,10 @@ def prob_poisson_density_exceeds_threshold(
       The observed count (numerator of density).
   observed_area : float
       The observed area (denominator of density). Must be > 0.
-  threshold : float
-      The classification threshold for group assignment. Must be > 0.
+  range_min : float
+      Lower bound for the density range. May be -np.inf.
+  range_max : float
+      Upper bound for the density range. May be np.inf.
   prior_alpha : float, optional
       Alpha parameter for Gamma(alpha, beta) prior on Poisson rate parameter.
       Default 0.5 (Jeffreys prior with beta=0).
@@ -79,7 +82,7 @@ def prob_poisson_density_exceeds_threshold(
   Returns
   -------
   float
-      P(true_density > threshold | data), in range [0, 1].
+      P(range_min <= true_density < range_max | data), in range [0, 1].
 
   Notes
   -----
@@ -87,35 +90,42 @@ def prob_poisson_density_exceeds_threshold(
   - Prior: lambda ~ Gamma(alpha, beta)
   - Likelihood: count ~ Poisson(lambda * area)
   - Posterior: lambda ~ Gamma(alpha + count, beta + area)
-  - Return: P(lambda > threshold | data)
+  - Return: P(range_min <= lambda < range_max | data)
 
-  For the normal approximation method:
-  - Approximate Poisson(lambda*area) by Normal with mean=variance=lambda*area
-  - Use CLT to get Normal distribution for density estimate
-  - Compute P(density > threshold) using Normal CDF
-
-  The normal approximation is faster but less accurate for small counts.
+  The rate parameter lambda is non-negative, so any portion of the range
+  below 0 contributes zero probability.
 
   Examples
   --------
-  >>> # High count, clearly above threshold
-  >>> prob_poisson_density_exceeds_threshold(100, 1.0, 50.0)
+  >>> # High count, clearly within high range
+  >>> prob_poisson_density_in_range(100, 1.0, 50.0, np.inf)
   ~0.999
 
-  >>> # Low count, clearly below threshold
-  >>> prob_poisson_density_exceeds_threshold(10, 1.0, 50.0)
+  >>> # Low count, clearly below range
+  >>> prob_poisson_density_in_range(10, 1.0, 50.0, np.inf)
   ~0.001
 
   >>> # Count near threshold (ambiguous classification)
-  >>> prob_poisson_density_exceeds_threshold(50, 1.0, 50.0)
+  >>> prob_poisson_density_in_range(50, 1.0, 48.0, 52.0)
   ~0.5
   """
   if observed_area <= 0:
     raise ValueError(f"observed_area must be > 0, got {observed_area}")
-  if threshold <= 0:
-    raise ValueError(f"threshold must be > 0, got {threshold}")
   if observed_count < 0:
     raise ValueError(f"observed_count must be >= 0, got {observed_count}")
+  if range_min >= range_max:
+    raise ValueError(
+      f"range_min must be < range_max, got {range_min} >= {range_max}"
+    )
+
+  # The Poisson rate is non-negative; clamp any negative range portion.
+  if range_max <= 0:
+    return 0.0
+  if range_min < 0:
+    range_min = 0.0
+
+  if np.isneginf(range_min) and np.isposinf(range_max):
+    return 1.0
 
   # Bayesian posterior for Poisson density parameter
   # Let 'rate' be the true density (cells per unit area)
@@ -125,27 +135,31 @@ def prob_poisson_density_exceeds_threshold(
   # With Jeffreys prior: alpha=0.5, beta=0
   #
   # Posterior: rate ~ Gamma(alpha + count, beta + area) [rate parameterization]
-  # With Jeffreys: rate ~ Gamma(0.5 + count, 0 + area)
-  #              = Gamma(0.5 + count, area)
+  # In scipy scale parameterization: scale = 1/(beta + area)
   #
-  # In scipy scale parameterization: scale = 1/rate_param
-  # So posterior scale = 1/(beta + area)
-  #
-  # We want: P(rate > threshold)
+  # We want: P(range_min <= rate < range_max)
 
   # Compute posterior parameters
   posterior_alpha = prior_alpha + observed_count
   # Correct Gamma-Poisson conjugate update: scale = 1/(beta + area)
   posterior_scale = 1.0 / (prior_beta + observed_area)
 
-  # P(rate > threshold) = 1 - CDF(threshold)
   # scipy.stats.gamma uses (a=shape, scale=scale)
-  prob_exceeds = 1.0 - scipy.stats.gamma.cdf(
-    threshold,
+  cdf_min = scipy.stats.gamma.cdf(
+    range_min,
     a=posterior_alpha,
-    scale=posterior_scale
-  )
-  return float(prob_exceeds)
+    scale=posterior_scale,
+  ) if not np.isneginf(range_min) else 0.0
+  cdf_max = scipy.stats.gamma.cdf(
+    range_max,
+    a=posterior_alpha,
+    scale=posterior_scale,
+  ) if not np.isposinf(range_max) else 1.0
+
+  prob_in_range = max(0.0, min(1.0, cdf_max - cdf_min))
+  return float(prob_in_range)
+
+
 
 
 # ============================================================================

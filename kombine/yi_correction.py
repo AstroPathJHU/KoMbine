@@ -11,8 +11,8 @@ reflects their own measurement evidence.
 
 General approach
 ----------------
-1. Estimate P(true group = high | observed data) for each patient via
-  prob_poisson_density_exceeds_threshold when Poisson density measurements exist,
+1. Estimate P(true parameter in range | observed data) for each patient via
+  prob_poisson_density_in_range when Poisson density measurements exist,
   falling back to deterministic thresholds otherwise.
 2. Weight each patient's contribution to risk sets, death counts, and likelihood
   terms by that probability.
@@ -36,7 +36,7 @@ import numpy as np
 import scipy.optimize
 import scipy.stats
 
-from .utilities import prob_poisson_density_exceeds_threshold
+from .utilities import prob_poisson_density_in_range
 
 if TYPE_CHECKING:
   from .datacard import Patient
@@ -47,13 +47,15 @@ class YiCorrectionBase:  # pylint: disable=too-few-public-methods
   Base class for Yi's misclassification correction methods.
 
   Provides common functionality for computing patient probabilities
-  of belonging to the high group based on their observable measurements.
+  of belonging to parameter ranges based on their observable measurements.
   """
 
   def __init__(
     self,
     patients: list[Patient],
-    parameter_threshold: float,
+    parameter_min: float = -np.inf,
+    parameter_max: float = np.inf,
+    parameter_threshold: float | None = None,
   ):
     """
     Initialize Yi's correction calculator.
@@ -62,21 +64,42 @@ class YiCorrectionBase:  # pylint: disable=too-few-public-methods
     ----------
     patients : list[Patient]
         List of Patient objects with observable measurements.
-    parameter_threshold : float
-        Threshold separating "low" and "high" groups.
+    parameter_min : float, optional
+        Minimum parameter value included in analysis. Default is -inf.
+    parameter_max : float, optional
+        Maximum parameter value included in analysis. Default is +inf.
+    parameter_threshold : float, optional
+        Threshold separating "low" and "high" groups. Required for
+        two-curve comparisons.
     """
     self._patients = patients
+    self._parameter_min = parameter_min
+    self._parameter_max = parameter_max
     self._parameter_threshold = parameter_threshold
 
-  def compute_patient_prob_high(
+    if self._parameter_min >= self._parameter_max:
+      raise ValueError(
+        "parameter_min must be < parameter_max, got "
+        f"{self._parameter_min} >= {self._parameter_max}"
+      )
+    if self._parameter_threshold is not None:
+      if not (self._parameter_min <= self._parameter_threshold <= self._parameter_max):
+        raise ValueError(
+          "parameter_threshold must be within [parameter_min, parameter_max], got "
+          f"{self._parameter_threshold}"
+        )
+
+  def compute_patient_prob_in_range(
     self,
     patient: Patient,
+    range_min: float,
+    range_max: float,
     *,
     prior_alpha: float = 1.0,
     prior_beta: float = 1.0,
   ) -> float:
     """
-    Compute the probability that a patient belongs to the high group.
+    Compute the probability that a patient belongs to a parameter range.
 
     This method uses the patient's observable measurement data to calculate
     a probability rather than making a deterministic classification.
@@ -85,7 +108,11 @@ class YiCorrectionBase:  # pylint: disable=too-few-public-methods
     Parameters
     ----------
     patient : Patient
-        The patient to compute probability for.
+      The patient to compute probability for.
+    range_min : float
+      Lower bound for the range. May be -np.inf.
+    range_max : float
+      Upper bound for the range (exclusive). May be np.inf.
     prior_alpha : float, optional
         Alpha parameter for Bayesian Gamma prior.
     prior_beta : float, optional
@@ -94,22 +121,57 @@ class YiCorrectionBase:  # pylint: disable=too-few-public-methods
     Returns
     -------
     float
-        Probability that patient is in the high group (0.0 to 1.0).
+        Probability that patient is in the range (0.0 to 1.0).
     """
     # Try probabilistic classification first (for Poisson density measurements)
     obs = getattr(patient, 'observable', None)
     if obs is not None and hasattr(obs, 'numerator') and hasattr(obs, 'denominator'):
       # Poisson density measurement - use probabilistic weighting
-      return prob_poisson_density_exceeds_threshold(
+      return prob_poisson_density_in_range(
         obs.numerator,
         obs.denominator,
-        self._parameter_threshold,
+        range_min,
+        range_max,
         prior_alpha=prior_alpha,
         prior_beta=prior_beta,
       )
 
     # Fall back to deterministic classification based on observed parameter
-    return 1.0 if patient.observed_parameter > self._parameter_threshold else 0.0
+    return 1.0 if range_min <= patient.observed_parameter < range_max else 0.0
+
+  def compute_patient_prob_low_high(
+    self,
+    patient: Patient,
+    *,
+    prior_alpha: float = 1.0,
+    prior_beta: float = 1.0,
+  ) -> tuple[float, float]:
+    """
+    Compute the low/high group membership probabilities for a patient.
+
+    Returns (prob_low, prob_high) for the ranges
+    [parameter_min, parameter_threshold) and
+    [parameter_threshold, parameter_max), respectively.
+    """
+    if self._parameter_threshold is None:
+      raise ValueError("parameter_threshold is required for low/high grouping")
+
+    prob_low = self.compute_patient_prob_in_range(
+      patient,
+      self._parameter_min,
+      self._parameter_threshold,
+      prior_alpha=prior_alpha,
+      prior_beta=prior_beta,
+    )
+    prob_high = self.compute_patient_prob_in_range(
+      patient,
+      self._parameter_threshold,
+      self._parameter_max,
+      prior_alpha=prior_alpha,
+      prior_beta=prior_beta,
+    )
+
+    return prob_low, prob_high
 
 
 class YiCorrectionForLogrank(YiCorrectionBase):
@@ -151,9 +213,12 @@ class YiCorrectionForLogrank(YiCorrectionBase):
     # Count patients by observed group
     n_low_observed = sum(
       1 for p in self._patients
-      if p.observed_parameter <= self._parameter_threshold
+      if self._parameter_min <= p.observed_parameter < self._parameter_threshold
     )
-    n_high_observed = len(self._patients) - n_low_observed
+    n_high_observed = sum(
+      1 for p in self._patients
+      if self._parameter_threshold <= p.observed_parameter < self._parameter_max
+    )
 
     # Get all unique death times
     all_death_times = sorted(set(
@@ -179,14 +244,12 @@ class YiCorrectionForLogrank(YiCorrectionBase):
           # Patient not at risk
           continue
 
-        # Compute this patient's probability of being in high group
-        prob_high = self.compute_patient_prob_high(
+        # Compute this patient's probability of being in each group
+        prob_low, prob_high = self.compute_patient_prob_low_high(
           patient,
           prior_alpha=prior_alpha,
           prior_beta=prior_beta,
         )
-
-        prob_low = 1.0 - prob_high
 
         # Add to risk sets weighted by individual probabilities
         r_low_weighted += prob_low
@@ -291,9 +354,9 @@ class YiCorrectionForCoxPH(YiCorrectionBase):
     patients_observed_high = []
 
     for i, p in enumerate(self._patients):
-      if p.observed_parameter > self._parameter_threshold:
+      if self._parameter_threshold <= p.observed_parameter < self._parameter_max:
         patients_observed_high.append(i)
-      else:
+      elif self._parameter_min <= p.observed_parameter < self._parameter_threshold:
         patients_observed_low.append(i)
 
     # Collect unique death times
@@ -323,14 +386,12 @@ class YiCorrectionForCoxPH(YiCorrectionBase):
           # Patient not at risk
           continue
 
-        # Compute this patient's probability of being in high group
-        prob_high = self.compute_patient_prob_high(
+        # Compute this patient's probability of being in each group
+        prob_low, prob_high = self.compute_patient_prob_low_high(
           patient,
           prior_alpha=prior_alpha,
           prior_beta=prior_beta,
         )
-
-        prob_low = 1.0 - prob_high
 
         # Add to risk sets weighted by individual probabilities
         r_low_weighted += prob_low
@@ -400,19 +461,16 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
     self,
     times_for_plot: list[float] | None = None,
     *,
-    group: str = 'high',
     prior_alpha: float = 0.5,
     prior_beta: float = 0.0,
   ) -> dict:
     """
-    Compute Yi-weighted Kaplan-Meier survival probabilities for the requested group.
+    Compute Yi-weighted Kaplan-Meier survival probabilities for a parameter range.
 
     Parameters
     ----------
     times_for_plot : list[float], optional
       Time points at which to evaluate the survival curve; defaults to death times.
-    group : str, optional
-      Either 'high' or 'low', indicating which curve to return.
     prior_alpha : float, optional
       Alpha parameter for the Gamma prior; default 0.5 (Jeffreys).
     prior_beta : float, optional
@@ -422,12 +480,12 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
     -------
     dict
       Contains survival probabilities, plotting times, weighted/unweighted counts,
-      death times, and the method label 'yi_correction'.
+      death times, parameter range, and the method label 'yi_correction'.
 
     Raises
     ------
     ValueError
-      If no death events exist or if `group` is not 'high' or 'low'.
+      If no death events exist.
     """
     # Get unique death times from all patients
     death_times = sorted(set(
@@ -448,9 +506,6 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
         ))]
       )
 
-    if group not in {'high', 'low'}:
-      raise ValueError("group must be 'high' or 'low'")
-
     # Track weighted and unweighted counts at each death time
     n_at_risk_by_time = []
     n_deaths_by_time = []
@@ -465,15 +520,15 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
       n_deaths_weighted = 0.0
 
       for patient in self._patients:
-        # Compute patient's probability of being in the high group
-        prob_high = self.compute_patient_prob_high(
+        # Compute patient's probability of being in the requested range
+        prob_in_range = self.compute_patient_prob_in_range(
           patient,
+          self._parameter_min,
+          self._parameter_max,
           prior_alpha=prior_alpha,
           prior_beta=prior_beta,
         )
-
-        prob_low = 1.0 - prob_high
-        weight = prob_high if group == 'high' else prob_low
+        weight = prob_in_range
 
         # Patient is at risk if their time >= death_time
         if patient.time >= t_death:
@@ -528,5 +583,6 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
       'n_deaths': n_deaths_by_time,
       'death_times': death_times,
       'method': 'yi_correction',
-      'group': group,
+      'parameter_min': self._parameter_min,
+      'parameter_max': self._parameter_max,
     }

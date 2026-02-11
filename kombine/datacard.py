@@ -1201,6 +1201,9 @@ class Datacard:
     See Yi (2017) "Statistical Analysis with Measurement Error or Misclassification",
     Section 3.7.1 for theoretical foundation.
 
+    Patients can contribute to the low group, high group, or neither depending on
+    their probability of lying within the requested parameter ranges.
+
     Examples
     --------
     >>> from kombine.datacard import Datacard
@@ -1208,19 +1211,10 @@ class Datacard:
     >>> result = datacard.km_p_value_logrank_yi(parameter_threshold=0.5)
     >>> print(f"Yi's corrected p-value: {result['p_value']:.4f}")
     """
-    # Filter patients by parameter range
-    filtered_patients = [
-      p for p in self.patients
-      if parameter_min <= p.observed_parameter <= parameter_max
-    ]
-
-    if not filtered_patients:
-      raise ValueError(
-        f"No patients found in parameter range [{parameter_min}, {parameter_max}]"
-      )
-
     yi_correction = YiCorrectionForLogrank(
-      patients=filtered_patients,
+      patients=self.patients,
+      parameter_min=parameter_min,
+      parameter_max=parameter_max,
       parameter_threshold=parameter_threshold,
     )
 
@@ -1281,6 +1275,9 @@ class Datacard:
     See Yi (2017) "Statistical Analysis with Measurement Error or Misclassification",
     Section 3.7.1 for theoretical foundation.
 
+    Patients can contribute to the low group, high group, or neither depending on
+    their probability of lying within the requested parameter ranges.
+
     Examples
     --------
     >>> from kombine.datacard import Datacard
@@ -1291,19 +1288,10 @@ class Datacard:
     ... )
     >>> print(f"2NLL at HR=2.0: {result.x:.2f}")
     """
-    # Filter patients by parameter range
-    filtered_patients = [
-      p for p in self.patients
-      if parameter_min <= p.observed_parameter <= parameter_max
-    ]
-
-    if not filtered_patients:
-      raise ValueError(
-        f"No patients found in parameter range [{parameter_min}, {parameter_max}]"
-      )
-
     yi_correction = YiCorrectionForCoxPH(
-      patients=filtered_patients,
+      patients=self.patients,
+      parameter_min=parameter_min,
+      parameter_max=parameter_max,
       parameter_threshold=parameter_threshold,
     )
 
@@ -1316,10 +1304,8 @@ class Datacard:
   def km_survival_yi(  # pylint: disable=too-many-arguments
     self,
     *,
-    parameter_threshold: float,
     parameter_min: float = -np.inf,
     parameter_max: float = np.inf,
-    group: str = 'high',
     times_for_plot: list[float] | None = None,
     prior_alpha: float = 0.5,
     prior_beta: float = 0.0,
@@ -1330,24 +1316,16 @@ class Datacard:
     Yi's method uses inverse probability weighting to account for measurement uncertainty,
     providing point estimates of the best-fit Kaplan-Meier curve without confidence intervals.
     This implements the weighted KM estimator where each patient contributes based on their
-    probability of belonging to the observed group.
+    probability of belonging to the parameter range.
 
     Parameters
     ----------
-    parameter_threshold : float
-        The threshold value that separates the two groups.
     parameter_min : float, optional
         The minimum parameter value to include in the analysis. Default is -inf.
     parameter_max : float, optional
         The maximum parameter value to include in the analysis. Default is +inf.
-    group : str, optional
-      Which curve to compute: 'high' or 'low'. Default is 'high'.
     times_for_plot : list[float], optional
       Time points to use when evaluating the survival probabilities.
-    method : str, optional
-        Method for estimating misclassification probabilities:
-        - 'bayesian': Full Bayesian posterior (default, more accurate)
-        - 'normal_approx': Normal approximation (faster, less accurate for small counts)
     prior_alpha : float, optional
         Alpha parameter for Gamma prior (Bayesian method only). Default 0.5 (Jeffreys).
     prior_beta : float, optional
@@ -1387,28 +1365,17 @@ class Datacard:
     --------
     >>> from kombine.datacard import Datacard
     >>> datacard = Datacard.parse_datacard("datacard.txt")
-    >>> result = datacard.km_survival_yi(parameter_threshold=0.5)
+    >>> result = datacard.km_survival_yi(parameter_min=0.0, parameter_max=1.0)
     >>> survival_probs = result['survival_probabilities']
     >>> times = result['times_for_plot']
     """
-    # Filter patients by parameter range
-    filtered_patients = [
-      p for p in self.patients
-      if parameter_min <= p.observed_parameter <= parameter_max
-    ]
-
-    if not filtered_patients:
-      raise ValueError(
-        f"No patients found in parameter range [{parameter_min}, {parameter_max}]"
-      )
-
     yi_correction = YiCorrectionForKaplanMeier(
-      patients=filtered_patients,
-      parameter_threshold=parameter_threshold,
+      patients=self.patients,
+      parameter_min=parameter_min,
+      parameter_max=parameter_max,
     )
 
     return yi_correction.compute_weighted_survival_probabilities(
-      group=group,
       times_for_plot=times_for_plot,
       prior_alpha=prior_alpha,
       prior_beta=prior_beta,

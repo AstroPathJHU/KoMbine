@@ -141,19 +141,17 @@ for scenario_key, scenario_info in scenarios.items():
     times_low_plot = [0.0] + times_low
     times_high_plot = [0.0] + times_high
 
-    # Yi's method (both curves use all patients, weighted by group probability)
+    # Yi's method (each curve is a parameter range, weighted by membership probability)
     result_low_yi = dc.km_survival_yi(
-        parameter_threshold=threshold,
-        group='low',
+        parameter_min=-np.inf,
+        parameter_max=threshold,
         times_for_plot=times_low_plot,
-        method='bayesian',
     )
     
     result_high_yi = dc.km_survival_yi(
-        parameter_threshold=threshold,
-        group='high',
+        parameter_min=threshold,
+        parameter_max=np.inf,
         times_for_plot=times_high_plot,
-        method='bayesian',
     )
     
     # Calculate best-fit and 95% CI for MINLP
@@ -206,8 +204,8 @@ for scenario_key, scenario_info in scenarios.items():
         print(f"  MINLP - High group final survival: {best_high[-1]:.4f} [{ci_high_lower:.4f}, {ci_high_upper:.4f}]")
     else:
         print(f"  MINLP - High group final survival: {best_high[-1]:.4f}")
-
 ```
+
 
 ```python
 # Define consistent color palette for all plots
@@ -491,8 +489,8 @@ for scenario_key, scenario_info in scenarios.items():
     print(f"  MINLP best-fit HR:    {best_hr_minlp:.3f} [{lower_ci:.3f}, {upper_ci:.3f}]")
     rel_hr_diff = abs(best_hr_yi - best_hr_minlp) / best_hr_minlp * 100
     print(f"  Relative HR diff:     {rel_hr_diff:.1f}%")
-
 ```
+
 
 ```python
 # Plot hazard ratio profiles for all four scenarios in a 2x2 grid
@@ -539,8 +537,8 @@ plt.suptitle('Profile Likelihood for Hazard Ratio: Yi vs MINLP',
              fontsize=14, fontweight='bold', y=1.02)
 plt.tight_layout()
 plt.show()
-
 ```
+
 
 ## Summary of Findings
 

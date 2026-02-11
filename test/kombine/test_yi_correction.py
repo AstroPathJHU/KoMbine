@@ -12,7 +12,7 @@ import warnings
 import numpy as np
 
 import kombine.datacard
-from kombine.utilities import prob_poisson_density_exceeds_threshold
+from kombine.utilities import prob_poisson_density_in_range
 from ..utility_testing_functions import generate_two_group_datacard_from_hr
 
 # Treat all warnings as errors
@@ -22,35 +22,38 @@ here = pathlib.Path(__file__).parent
 datacards = here / "datacards" / "simple_examples"
 
 
-def test_prob_poisson_density_exceeds_threshold_bayesian():
+def test_prob_poisson_density_in_range_bayesian():
   """
-  Test the Bayesian probability estimation for Poisson density threshold crossing.
+  Test the Bayesian probability estimation for Poisson density range membership.
   """
   # Test 1: High count, clearly above threshold
   # count=100, area=1.0, threshold=50.0 => density ~ 100, should be > 0.99
-  prob = prob_poisson_density_exceeds_threshold(
+  prob = prob_poisson_density_in_range(
     observed_count=100,
     observed_area=1.0,
-    threshold=50.0,
+    range_min=50.0,
+    range_max=np.inf,
   )
   assert prob > 0.99, f"Expected prob > 0.99 for high count, got {prob}"
 
   # Test 2: Low count, clearly below threshold
   # count=10, area=1.0, threshold=50.0 => density ~ 10, should be ~0.0
-  prob = prob_poisson_density_exceeds_threshold(
+  prob = prob_poisson_density_in_range(
     observed_count=10,
     observed_area=1.0,
-    threshold=50.0,
+    range_min=50.0,
+    range_max=np.inf,
   )
   assert prob < 0.001, f"Expected prob < 0.001 for low count, got {prob}"
 
   # Test 3: Count near threshold (ambiguous)
   # count=50, area=1.0, threshold=48.0 => density ~ 50, threshold slightly below
   # Probability should be moderately high
-  prob = prob_poisson_density_exceeds_threshold(
+  prob = prob_poisson_density_in_range(
     observed_count=50,
     observed_area=1.0,
-    threshold=48.0,
+    range_min=48.0,
+    range_max=np.inf,
   )
   if not 0.5 < prob < 0.9:
     raise AssertionError(
@@ -58,12 +61,24 @@ def test_prob_poisson_density_exceeds_threshold_bayesian():
     )
 
   # Test 4: Zero count (edge case)
-  prob = prob_poisson_density_exceeds_threshold(
+  prob = prob_poisson_density_in_range(
     observed_count=0,
     observed_area=1.0,
-    threshold=10.0,
+    range_min=10.0,
+    range_max=np.inf,
   )
   assert prob < 0.01, f"Expected prob < 0.01 for zero count, got {prob}"
+
+  # Test 5: Finite range captures middle probability mass
+  prob = prob_poisson_density_in_range(
+    observed_count=50,
+    observed_area=1.0,
+    range_min=40.0,
+    range_max=60.0,
+  )
+  assert 0.6 < prob < 0.95, (
+    f"Expected prob in (0.6, 0.95) for middle range, got {prob}"
+  )
 
 
 def generate_synthetic_datacard_with_perfect_classification( # pylint: disable=too-many-locals, too-many-arguments
@@ -181,7 +196,6 @@ def test_yi_hazard_ratio_perfect_classification():
     hazard_ratio=hr_test,
     parameter_min=-np.inf,
     parameter_max=np.inf,
-    method='bayesian'
   )
   twonll_yi = result_yi.x
 
@@ -240,12 +254,12 @@ def test_yi_methods_return_valid_structure():
     threshold = 0.5
 
     yi_low = datacard.km_survival_yi(
-      parameter_threshold=threshold,
-      group='low',
+      parameter_min=-np.inf,
+      parameter_max=threshold,
     )
     yi_high = datacard.km_survival_yi(
-      parameter_threshold=threshold,
-      group='high',
+      parameter_min=threshold,
+      parameter_max=np.inf,
     )
 
     km_low = datacard.km_likelihood(
@@ -333,10 +347,8 @@ def test_yi_kaplan_meier_survival():
   
   # Calculate Yi's weighted KM survival for the low group
   result_yi_low = datacard.km_survival_yi(
-    parameter_threshold=threshold,
     parameter_min=-np.inf,
     parameter_max=threshold,  # Only low group
-    method='bayesian',
   )
   
   # Validate return structure
@@ -366,10 +378,8 @@ def test_yi_kaplan_meier_survival():
   
   # Test high group as well
   result_yi_high = datacard.km_survival_yi(
-    parameter_threshold=threshold,
     parameter_min=threshold,
     parameter_max=np.inf,  # Only high group
-    method='bayesian',
   )
   
   assert 'survival_probabilities' in result_yi_high
@@ -401,7 +411,7 @@ if __name__ == "__main__":
   print("Running Yi correction tests...")
 
   print("Test 1: Bayesian probability estimation...")
-  test_prob_poisson_density_exceeds_threshold_bayesian()
+  test_prob_poisson_density_in_range_bayesian()
   print("[PASS] Bayesian probability estimation")
 
   print("Test 2: Yi logrank with perfect classification...")
