@@ -47,9 +47,8 @@ datacardfile = here.parent.parent / "test" / "kombine" / "datacards" / "simple_e
 # Display the datacard format
 with open(datacardfile) as f:
     content = f.read()
-    print("Datacard file contents (first 500 chars):")
-    print(content[:500])
-    print("...")
+    print("Datacard file contents:")
+    print(content)
 ```
 
 ```python
@@ -60,23 +59,28 @@ print(f"Deaths: {sum(1 for p in datacard.patients if not p.censored)}")
 print(f"Censored: {sum(1 for p in datacard.patients if p.censored)}")
 ```
 
-### Logrank P-value Calculation
+### Logrank and KoMbine P-value Calculation
 
-The logrank test compares survival curves between two groups defined by a biomarker threshold. KoMbine uses exact binomial likelihood methods.
+The logrank test compares survival curves between two groups defined by a biomarker threshold. KoMbine also provides a likelihood-based p-value that accounts for measurement uncertainty.
 
 ```python
 # Define biomarker threshold to split patients into two groups
 threshold = 0.5
 
-# Calculate p-value using logrank test
-p_value = datacard.km_p_value_logrank(
+# KoMbine likelihood p-value
+km_p_value_minlp = datacard.km_p_value(
     parameter_threshold=threshold,
     parameter_min=-np.inf,
     parameter_max=np.inf,
 )
+kombine_p_value, _, _ = km_p_value_minlp.solve_and_pvalue(cox_only=False)
 
-print(f"Logrank Test Results:")
-print(f"  P-value: {p_value:.4e}")
+# Conventional logrank p-value
+logrank_p_value = km_p_value_minlp.survival_curves_pvalue_logrank()
+
+print("P-value comparison:")
+print(f"  KoMbine likelihood p-value: {kombine_p_value:.4e}")
+print(f"  Logrank p-value:           {logrank_p_value:.4e}")
 ```
 
 ### Basic Hazard Ratio Estimation
@@ -98,11 +102,11 @@ hr_calc = datacard.km_hazard_ratio(
 best_fit_hr, lower_ci_95, upper_ci_95, result_95 = hr_calc.hazard_ratio_confidence_interval(
     cox_only=False,
     confidence_level=0.95,
-    hazard_ratio_min=0.5,
-    hazard_ratio_max=10.0,
+    hazard_ratio_min=0.01,
+    hazard_ratio_max=100.0,
 )
 
-print(f"Hazard Ratio Analysis:")
+print("Hazard Ratio Analysis:")
 print(f"  Best-fit HR: {best_fit_hr:.4f}")
 print(f"  95% CI: [{lower_ci_95:.4f}, {upper_ci_95:.4f}]")
 ```
@@ -141,17 +145,22 @@ hr_calc_fixed = datacard_fixed.km_hazard_ratio(
     parameter_max=1.0,
 )
 
+hr_min = 0.01
+hr_max = 100.0
+
 # Calculate 68% and 95% confidence intervals
 best_fit_hr_fixed, lower_ci_68_fixed, upper_ci_68_fixed, result_68_fixed = hr_calc_fixed.hazard_ratio_confidence_interval(
     cox_only=False,
     confidence_level=0.68,
-    hazard_ratio_min=0.5,
-    hazard_ratio_max=10.0,
+    hazard_ratio_min=hr_min,
+    hazard_ratio_max=hr_max,
 )
 
 _, lower_ci_95_fixed, upper_ci_95_fixed, _ = hr_calc_fixed.hazard_ratio_confidence_interval(
     cox_only=False,
     confidence_level=0.95,
+    hazard_ratio_min=hr_min,
+    hazard_ratio_max=hr_max,
 )
 
 print(f"\nBest-fit hazard ratio: {best_fit_hr_fixed:.3f}")
@@ -162,10 +171,10 @@ print(f"95% CI: [{lower_ci_95_fixed:.3f}, {upper_ci_95_fixed:.3f}]")
 ```python
 # Perform likelihood scan for fixed observable
 hazard_ratios_fixed, twonll_values_fixed, best_fit_result_fixed = hr_calc_fixed.likelihood_scan_hazard_ratio(
-    n_points=50,
-    hazard_ratio_min=0.5,
-    hazard_ratio_max=6.0,
-    cox_only=False
+    n_points=80,
+    hazard_ratio_min=0.01,
+    hazard_ratio_max=100.0,
+    cox_only=False,
 )
 
 # Plot the likelihood scan
@@ -181,11 +190,11 @@ ax.axhline(chi2_95, color='purple', linestyle='--', linewidth=1.5, alpha=0.7, la
 ax.axvline(best_fit_hr_fixed, color='red', linestyle=':', linewidth=1.5, alpha=0.5, label=f'Best fit: {best_fit_hr_fixed:.2f}')
 
 ax.set_xlabel('Hazard Ratio', fontsize=12)
-ax.set_ylabel(r'$-2 \Delta \ln L$', fontsize=12)
+ax.set_ylabel("$-2 \\Delta \\ln L$", fontsize=12)
 ax.set_title('Profile Likelihood: Fixed Observable', fontsize=14, fontweight='bold')
 ax.legend(fontsize=10)
 ax.grid(True, alpha=0.3)
-ax.set_xlim(0.5, 6.0)
+ax.set_xlim(0.01, 100.0)
 ax.set_ylim(0, 15)
 
 plt.tight_layout()
@@ -225,21 +234,57 @@ hr_calc_poisson_large = datacard_poisson_large_counts.km_hazard_ratio(
     parameter_max=0.99,
 )
 
+hr_min = 0.01
+hr_max = 100.0
+
 best_fit_hr_large, lower_ci_68_large, upper_ci_68_large, _ = hr_calc_poisson_large.hazard_ratio_confidence_interval(
     cox_only=False,
     confidence_level=0.68,
-    hazard_ratio_min=0.5,
-    hazard_ratio_max=10.0,
+    hazard_ratio_min=hr_min,
+    hazard_ratio_max=hr_max,
 )
 
 _, lower_ci_95_large, upper_ci_95_large, _ = hr_calc_poisson_large.hazard_ratio_confidence_interval(
     cox_only=False,
     confidence_level=0.95,
+    hazard_ratio_min=hr_min,
+    hazard_ratio_max=hr_max,
 )
 
 print(f"Best-fit hazard ratio: {best_fit_hr_large:.3f}")
 print(f"68% CI: [{lower_ci_68_large:.3f}, {upper_ci_68_large:.3f}]")
 print(f"95% CI: [{lower_ci_95_large:.3f}, {upper_ci_95_large:.3f}]")
+```
+
+```python
+# Likelihood scan for Poisson (large counts)
+hazard_ratios_large, twonll_values_large, _ = hr_calc_poisson_large.likelihood_scan_hazard_ratio(
+    n_points=80,
+    hazard_ratio_min=0.01,
+    hazard_ratio_max=100.0,
+    cox_only=False,
+)
+
+twonll_min_large = np.min(twonll_values_large)
+delta_twonll_large = twonll_values_large - twonll_min_large
+
+fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+ax.plot(hazard_ratios_large, delta_twonll_large, 'b-', linewidth=2.5, label='Poisson Large Counts')
+ax.axhline(chi2_68, color='orange', linestyle='--', linewidth=1.5, alpha=0.7, label='68% CI')
+ax.axhline(chi2_95, color='purple', linestyle='--', linewidth=1.5, alpha=0.7, label='95% CI')
+ax.axvline(best_fit_hr_large, color='red', linestyle=':', linewidth=1.5, alpha=0.5, label=f'Best fit: {best_fit_hr_large:.2f}')
+
+ax.set_xscale('log')
+ax.set_xlabel('Hazard Ratio', fontsize=12)
+ax.set_ylabel("$-2 \\Delta \\ln L$", fontsize=12)
+ax.set_title('Profile Likelihood: Poisson Large Counts', fontsize=14, fontweight='bold')
+ax.legend(fontsize=10)
+ax.grid(True, alpha=0.3, which='both')
+ax.set_xlim(0.01, 100.0)
+ax.set_ylim(0, 15)
+
+plt.tight_layout()
+plt.show()
 ```
 
 ### Scenario 3: Poisson Density with Moderate Counts
@@ -265,6 +310,15 @@ for p in datacard_poisson_moderate_counts.patients:
 print(f"  Mean count: {np.mean(nums):.1f}")
 print(f"  Relative uncertainty (√N/N): {np.mean([np.sqrt(n)/n for n in nums]):.1%}")
 print("\nWith moderate counts, measurement uncertainty is significant!")
+
+# KoMbine p-value for a nontrivial datacard (Poisson errors)
+km_p_value_poisson = datacard_poisson_moderate_counts.km_p_value(
+    parameter_threshold=0.5,
+    parameter_min=0.01,
+    parameter_max=0.99,
+)
+kombine_p_value_poisson, _, _ = km_p_value_poisson.solve_and_pvalue(cox_only=False)
+print(f"KoMbine p-value (Poisson errors): {kombine_p_value_poisson:.4e}")
 ```
 
 ```python
@@ -273,25 +327,73 @@ hr_calc_poisson_moderate = datacard_poisson_moderate_counts.km_hazard_ratio(
     parameter_threshold=0.5,
     parameter_min=0.01,
     parameter_max=0.99,
+    log_hazard_ratio_bounds=(-35.0, 35.0),
 )
+
+hr_min = 1e-12
+hr_max = 1e12
 
 best_fit_hr_moderate, lower_ci_68_moderate, upper_ci_68_moderate, _ = hr_calc_poisson_moderate.hazard_ratio_confidence_interval(
     cox_only=False,
     confidence_level=0.68,
-    hazard_ratio_min=0.1,
-    hazard_ratio_max=15.0,
+    hazard_ratio_min=hr_min,
+    hazard_ratio_max=hr_max,
 )
 
 _, lower_ci_95_moderate, upper_ci_95_moderate, _ = hr_calc_poisson_moderate.hazard_ratio_confidence_interval(
     cox_only=False,
     confidence_level=0.95,
-    hazard_ratio_min=0.1,
-    hazard_ratio_max=15.0,
+    hazard_ratio_min=hr_min,
+    hazard_ratio_max=hr_max,
 )
 
+def format_ci_value(value: float, *, bound: float, is_lower: bool) -> str:
+    if np.isclose(value, bound):
+        return f"< {bound:g}" if is_lower else f"> {bound:g}"
+    return f"{value:.3f}"
+
+lower_68_str = format_ci_value(lower_ci_68_moderate, bound=hr_min, is_lower=True)
+upper_68_str = format_ci_value(upper_ci_68_moderate, bound=hr_max, is_lower=False)
+lower_95_str = format_ci_value(lower_ci_95_moderate, bound=hr_min, is_lower=True)
+upper_95_str = format_ci_value(upper_ci_95_moderate, bound=hr_max, is_lower=False)
+
 print(f"Best-fit hazard ratio: {best_fit_hr_moderate:.3f}")
-print(f"68% CI: [{lower_ci_68_moderate:.3f}, {upper_ci_68_moderate:.3f}]")
-print(f"95% CI: [{lower_ci_95_moderate:.3f}, {upper_ci_95_moderate:.3f}]")
+print(f"68% CI: [{lower_68_str}, {upper_68_str}]")
+print(f"95% CI: [{lower_95_str}, {upper_95_str}]")
+
+if np.isclose(lower_ci_95_moderate, hr_min) or np.isclose(upper_ci_95_moderate, hr_max):
+    print("Note: 95% CI is open-ended at the scan bounds.")
+```
+
+```python
+# Likelihood scan for Poisson (moderate counts)
+hazard_ratios_moderate, twonll_values_moderate, _ = hr_calc_poisson_moderate.likelihood_scan_hazard_ratio(
+    n_points=80,
+    hazard_ratio_min=hr_min,
+    hazard_ratio_max=hr_max,
+    cox_only=False,
+)
+
+twonll_min_moderate = np.min(twonll_values_moderate)
+delta_twonll_moderate = twonll_values_moderate - twonll_min_moderate
+
+fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+ax.plot(hazard_ratios_moderate, delta_twonll_moderate, 'b-', linewidth=2.5, label='Poisson Moderate Counts')
+ax.axhline(chi2_68, color='orange', linestyle='--', linewidth=1.5, alpha=0.7, label='68% CI')
+ax.axhline(chi2_95, color='purple', linestyle='--', linewidth=1.5, alpha=0.7, label='95% CI')
+ax.axvline(best_fit_hr_moderate, color='red', linestyle=':', linewidth=1.5, alpha=0.5, label=f'Best fit: {best_fit_hr_moderate:.2f}')
+
+ax.set_xscale('log')
+ax.set_xlabel('Hazard Ratio', fontsize=12)
+ax.set_ylabel("$-2 \\Delta \\ln L$", fontsize=12)
+ax.set_title('Profile Likelihood: Poisson Moderate Counts', fontsize=14, fontweight='bold')
+ax.legend(fontsize=10)
+ax.grid(True, alpha=0.3, which='both')
+ax.set_xlim(hr_min, hr_max)
+ax.set_ylim(0, 15)
+
+plt.tight_layout()
+plt.show()
 ```
 
 ### Summary Comparison
@@ -299,12 +401,28 @@ print(f"95% CI: [{lower_ci_95_moderate:.3f}, {upper_ci_95_moderate:.3f}]")
 Let's compare all three scenarios to see how measurement uncertainty affects the results.
 
 ```python
+def format_ci_width(lower: float, upper: float, *, min_bound: float | None = None, max_bound: float | None = None) -> str:
+    if min_bound is not None and np.isclose(lower, min_bound):
+        return "open"
+    if max_bound is not None and np.isclose(upper, max_bound):
+        return "open"
+    return f"{upper - lower:6.3f}"
+
 print("Summary Comparison")
 print("=" * 80)
 print("                          Fixed      Poisson-Large  Poisson-Moderate")
+
+width_68_fixed = format_ci_width(lower_ci_68_fixed, upper_ci_68_fixed)
+width_68_large = format_ci_width(lower_ci_68_large, upper_ci_68_large)
+width_68_moderate = format_ci_width(lower_ci_68_moderate, upper_ci_68_moderate, min_bound=hr_min, max_bound=hr_max)
+
+width_95_fixed = format_ci_width(lower_ci_95_fixed, upper_ci_95_fixed)
+width_95_large = format_ci_width(lower_ci_95_large, upper_ci_95_large)
+width_95_moderate = format_ci_width(lower_ci_95_moderate, upper_ci_95_moderate, min_bound=hr_min, max_bound=hr_max)
+
 print(f"Best-fit HR:             {best_fit_hr_fixed:6.3f}      {best_fit_hr_large:6.3f}          {best_fit_hr_moderate:6.3f}")
-print(f"68% CI width:            {upper_ci_68_fixed - lower_ci_68_fixed:6.3f}      {upper_ci_68_large - lower_ci_68_large:6.3f}          {upper_ci_68_moderate - lower_ci_68_moderate:6.3f}")
-print(f"95% CI width:            {upper_ci_95_fixed - lower_ci_95_fixed:6.3f}      {upper_ci_95_large - lower_ci_95_large:6.3f}          {upper_ci_95_moderate - lower_ci_95_moderate:6.3f}")
+print(f"68% CI width:            {width_68_fixed:>6}      {width_68_large:>6}          {width_68_moderate:>6}")
+print(f"95% CI width:            {width_95_fixed:>6}      {width_95_large:>6}          {width_95_moderate:>6}")
 print("=" * 80)
 
 print("\nConfidence interval width ratios (relative to fixed):")
@@ -313,10 +431,19 @@ print(f"  Poisson-Large   (95%): {(upper_ci_95_large - lower_ci_95_large) / (upp
 print(f"  Poisson-Moderate(68%): {(upper_ci_68_moderate - lower_ci_68_moderate) / (upper_ci_68_fixed - lower_ci_68_fixed):.2f}x")
 print(f"  Poisson-Moderate(95%): {(upper_ci_95_moderate - lower_ci_95_moderate) / (upper_ci_95_fixed - lower_ci_95_fixed):.2f}x")
 
+hr_bounds = (hr_min, hr_max)
+moderate_hits_bounds = (
+    np.isclose(lower_ci_95_moderate, hr_bounds[0]) or
+    np.isclose(upper_ci_95_moderate, hr_bounds[1])
+)
+
 print("\nKey observations:")
 print("1. Large counts → CIs similar to fixed (measurement error negligible)")
-print("2. Moderate counts → CIs noticeably wider (measurement error significant)")
-print("3. Best-fit HRs remain similar (same underlying survival distributions)")
+print("2. Moderate counts → CIs widen substantially (measurement error significant)")
+if moderate_hits_bounds:
+    print("3. Moderate-count HR estimate is weakly constrained (95% CI reaches scan bounds)")
+else:
+    print("3. Moderate-count HR estimate remains less constrained than fixed/large-count cases")
 ```
 
 ## Summary
