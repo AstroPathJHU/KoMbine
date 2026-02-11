@@ -36,7 +36,8 @@ Each analysis directly compares both methods to understand how they handle measu
 
 ### How Yi's Method Works (Intuition)
 - Convert each patient's observed biomarker value into a probability of being below or above the threshold using the measurement error model.
-- Use those probabilities as weights in the Kaplan-Meier estimator and logrank test.
+- Instead of a global misclassification matrix as Yi describes, we extend her method to compute these probabilities on a per-patient basis (allowing uncertainty to vary by individual measurement).
+- Use those per-patient probabilities as weights in the Kaplan-Meier estimator and logrank test.
 - Every patient contributes to both groups, in proportion to their probability of belonging there.
 - This yields fast, smooth estimates that tend to shrink group differences as measurement uncertainty grows.
 - It is an approximation because it does not enforce a single, discrete group assignment for each patient.

@@ -141,10 +141,10 @@ class YiCorrectionForLogrank(YiCorrectionBase):
     Notes
     -----
     Yi's method (Statistical Analysis with Measurement Error or Misclassification, 2017)
-    uses inverse probability weighting to correct for misclassification. When misclassification
-    probabilities differ across patients (as determined by their observable measurements), we
-    compute per-patient probabilities directly—a straightforward application of Yi's framework
-    rather than a modification to her method.
+    uses inverse probability weighting to correct for misclassification. The textbook approach
+    assumes a single misclassification probability matrix; here we extend it by computing
+    per-patient probabilities based on each patient's observable measurements, allowing
+    uncertainty to vary by individual.
 
     The implemented approach:
     1. For each patient, compute P(true group = high | observed data) based on their measurement
@@ -333,9 +333,9 @@ class YiCorrectionForCoxPH(YiCorrectionBase):
     Notes
     -----
     Yi's method (Statistical Analysis with Measurement Error or Misclassification, 2017)
-    uses inverse probability weighting to correct for misclassification. When misclassification
-    probabilities vary by patient (based on their observable measurements), we compute
-    per-patient probabilities directly—a straightforward application of Yi's framework.
+    uses inverse probability weighting to correct for misclassification. The textbook approach
+    assumes a single misclassification probability matrix; here we extend it by computing
+    per-patient probabilities based on each patient's observable measurements.
 
     The implemented approach:
     1. For each patient, compute P(true group = high | observed data) from their measurement
@@ -515,9 +515,9 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
     Notes
     -----
     Yi's method (Statistical Analysis with Measurement Error or Misclassification, 2017)
-    uses inverse probability weighting to correct for misclassification. When probabilities
-    differ across patients (based on their observable measurements), we compute per-patient
-    probabilities directly—a straightforward application of Yi's framework.
+    uses inverse probability weighting to correct for misclassification. The textbook approach
+    assumes a single misclassification probability matrix; here we extend it by computing
+    per-patient probabilities based on each patient's observable measurements.
 
     The weighted Kaplan-Meier estimator uses:
     - Weighted at-risk counts: n*(t) = sum of patient weights for patients at risk at t
