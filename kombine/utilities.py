@@ -45,12 +45,11 @@ class InspectableCache(typing.Generic[T, R]):
 # Yi's Misclassification Correction Utilities (Section 3.7.1)
 # ============================================================================
 
-def prob_poisson_density_exceeds_threshold(  # pylint: disable=too-many-arguments
+def prob_poisson_density_exceeds_threshold(
   observed_count: int,
   observed_area: float,
   threshold: float,
   *,
-  method: str = 'bayesian',
   prior_alpha: float = 0.5,
   prior_beta: float = 0.0,
 ) -> float:
@@ -70,16 +69,12 @@ def prob_poisson_density_exceeds_threshold(  # pylint: disable=too-many-argument
       The observed area (denominator of density). Must be > 0.
   threshold : float
       The classification threshold for group assignment. Must be > 0.
-  method : str, optional
-      Method for computing the probability:
-      - 'bayesian': Full Bayesian posterior using Gamma prior (default)
-      - 'normal_approx': Normal approximation to Poisson (faster but less accurate)
   prior_alpha : float, optional
       Alpha parameter for Gamma(alpha, beta) prior on Poisson rate parameter.
-      Used only for 'bayesian' method. Default 0.5 (Jeffreys prior with beta=0).
+      Default 0.5 (Jeffreys prior with beta=0).
   prior_beta : float, optional
       Beta parameter for Gamma(alpha, beta) prior on Poisson rate parameter.
-      Used only for 'bayesian' method. Default 0.0 (Jeffreys prior).
+      Default 0.0.
 
   Returns
   -------
@@ -122,61 +117,35 @@ def prob_poisson_density_exceeds_threshold(  # pylint: disable=too-many-argument
   if observed_count < 0:
     raise ValueError(f"observed_count must be >= 0, got {observed_count}")
 
-  if method == 'bayesian':
-    # Bayesian posterior for Poisson density parameter
-    # Let 'rate' be the true density (cells per unit area)
-    # Observation: count ~ Poisson(rate * area)
-    #
-    # Prior: rate ~ Gamma(alpha, beta) [rate parameterization]
-    # With Jeffreys prior: alpha=0.5, beta=0
-    #
-    # Posterior: rate ~ Gamma(alpha + count, beta + area) [rate parameterization]
-    # With Jeffreys: rate ~ Gamma(0.5 + count, 0 + area)
-    #              = Gamma(0.5 + count, area)
-    #
-    # In scipy scale parameterization: scale = 1/rate_param
-    # So posterior scale = 1/(beta + area)
-    #
-    # We want: P(rate > threshold)
+  # Bayesian posterior for Poisson density parameter
+  # Let 'rate' be the true density (cells per unit area)
+  # Observation: count ~ Poisson(rate * area)
+  #
+  # Prior: rate ~ Gamma(alpha, beta) [rate parameterization]
+  # With Jeffreys prior: alpha=0.5, beta=0
+  #
+  # Posterior: rate ~ Gamma(alpha + count, beta + area) [rate parameterization]
+  # With Jeffreys: rate ~ Gamma(0.5 + count, 0 + area)
+  #              = Gamma(0.5 + count, area)
+  #
+  # In scipy scale parameterization: scale = 1/rate_param
+  # So posterior scale = 1/(beta + area)
+  #
+  # We want: P(rate > threshold)
 
-    # Compute posterior parameters
-    posterior_alpha = prior_alpha + observed_count
-    # Correct Gamma-Poisson conjugate update: scale = 1/(beta + area)
-    posterior_scale = 1.0 / (prior_beta + observed_area)
+  # Compute posterior parameters
+  posterior_alpha = prior_alpha + observed_count
+  # Correct Gamma-Poisson conjugate update: scale = 1/(beta + area)
+  posterior_scale = 1.0 / (prior_beta + observed_area)
 
-    # P(rate > threshold) = 1 - CDF(threshold)
-    # scipy.stats.gamma uses (a=shape, scale=scale)
-    prob_exceeds = 1.0 - scipy.stats.gamma.cdf(
-      threshold,
-      a=posterior_alpha,
-      scale=posterior_scale
-    )
-    return float(prob_exceeds)
-
-  if method == 'normal_approx':
-    # Normal approximation: density ~ N(observed_density, variance)
-    observed_density = observed_count / observed_area
-
-    # Variance of Poisson count = lambda * area
-    # Variance of density = (lambda * area) / area^2 = lambda / area
-    # Estimate lambda by observed_density
-    variance = observed_density / observed_area
-
-    # Handle zero count case (degenerate)
-    if observed_count == 0:
-      # density ~ 0, so P(density > threshold) ~ 0
-      # Use half-count correction: treat as 0.5 count
-      variance = 0.5 / (observed_area * observed_area)
-      observed_density = 0.5 / observed_area
-
-    std = np.sqrt(variance)
-
-    # P(density > threshold) = 1 - Phi((threshold - observed_density) / std)
-    z_score = (threshold - observed_density) / std
-    prob_exceeds = 1.0 - scipy.stats.norm.cdf(z_score)
-    return float(prob_exceeds)
-
-  raise ValueError(f"Unknown method '{method}'. Must be 'bayesian' or 'normal_approx'.")
+  # P(rate > threshold) = 1 - CDF(threshold)
+  # scipy.stats.gamma uses (a=shape, scale=scale)
+  prob_exceeds = 1.0 - scipy.stats.gamma.cdf(
+    threshold,
+    a=posterior_alpha,
+    scale=posterior_scale
+  )
+  return float(prob_exceeds)
 
 
 # ============================================================================

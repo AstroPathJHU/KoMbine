@@ -1163,7 +1163,6 @@ class Datacard:
     parameter_threshold: float,
     parameter_min: float = -np.inf,
     parameter_max: float = np.inf,
-    method: str = 'bayesian',
     prior_alpha: float = 0.5,
     prior_beta: float = 0.5,
   ) -> dict:
@@ -1181,14 +1180,10 @@ class Datacard:
         The minimum parameter value to include in the analysis. Default is -inf.
     parameter_max : float, optional
         The maximum parameter value to include in the analysis. Default is +inf.
-    method : str, optional
-        Method for estimating misclassification probabilities:
-        - 'bayesian': Full Bayesian posterior (default, more accurate)
-        - 'normal_approx': Normal approximation (faster, less accurate for small counts)
     prior_alpha : float, optional
-        Alpha parameter for Gamma prior (Bayesian method only). Default 0.5 (Jeffreys).
+        Alpha parameter for Gamma prior. Default 0.5 (Jeffreys).
     prior_beta : float, optional
-        Beta parameter for Gamma prior (Bayesian method only). Default 0.5.
+        Beta parameter for Gamma prior. Default 0.5.
 
     Returns
     -------
@@ -1230,7 +1225,6 @@ class Datacard:
     )
 
     return yi_correction.compute_pvalue(
-      method=method,
       prior_alpha=prior_alpha,
       prior_beta=prior_beta,
     )
@@ -1242,7 +1236,6 @@ class Datacard:
     hazard_ratio: float,
     parameter_min: float = -np.inf,
     parameter_max: float = np.inf,
-    method: str = 'bayesian',
     prior_alpha: float = 0.5,
     prior_beta: float = 0.0,
     log_hazard_ratio_bounds: tuple[float, float] = (-10.0, 10.0),
@@ -1264,14 +1257,10 @@ class Datacard:
         The minimum parameter value to include in the analysis. Default is -inf.
     parameter_max : float, optional
         The maximum parameter value to include in the analysis. Default is +inf.
-    method : str, optional
-        Method for estimating misclassification probabilities:
-        - 'bayesian': Full Bayesian posterior (default, more accurate)
-        - 'normal_approx': Normal approximation (faster, less accurate for small counts)
     prior_alpha : float, optional
-        Alpha parameter for Gamma prior (Bayesian method only). Default 0.5 (Jeffreys).
+        Alpha parameter for Gamma prior. Default 0.5 (Jeffreys).
     prior_beta : float, optional
-        Beta parameter for Gamma prior (Bayesian method only). Default 0.0.
+        Beta parameter for Gamma prior. Default 0.0.
     log_hazard_ratio_bounds : tuple[float, float], optional
         Bounds on log(hazard ratio) for compatibility. Not used in Yi's method.
         Default is (-10.0, 10.0).
@@ -1320,7 +1309,6 @@ class Datacard:
 
     return yi_correction.compute_2nll_at_hazard_ratio(
       hazard_ratio=hazard_ratio,
-      method=method,
       prior_alpha=prior_alpha,
       prior_beta=prior_beta,
     )
@@ -1333,7 +1321,6 @@ class Datacard:
     parameter_max: float = np.inf,
     group: str = 'high',
     times_for_plot: list[float] | None = None,
-    method: str = 'bayesian',
     prior_alpha: float = 0.5,
     prior_beta: float = 0.0,
   ) -> dict:
@@ -1423,7 +1410,6 @@ class Datacard:
     return yi_correction.compute_weighted_survival_probabilities(
       group=group,
       times_for_plot=times_for_plot,
-      method=method,
       prior_alpha=prior_alpha,
       prior_beta=prior_beta,
     )

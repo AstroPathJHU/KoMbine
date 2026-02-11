@@ -32,7 +32,6 @@ def test_prob_poisson_density_exceeds_threshold_bayesian():
     observed_count=100,
     observed_area=1.0,
     threshold=50.0,
-    method='bayesian',
   )
   assert prob > 0.99, f"Expected prob > 0.99 for high count, got {prob}"
 
@@ -42,7 +41,6 @@ def test_prob_poisson_density_exceeds_threshold_bayesian():
     observed_count=10,
     observed_area=1.0,
     threshold=50.0,
-    method='bayesian',
   )
   assert prob < 0.001, f"Expected prob < 0.001 for low count, got {prob}"
 
@@ -53,7 +51,6 @@ def test_prob_poisson_density_exceeds_threshold_bayesian():
     observed_count=50,
     observed_area=1.0,
     threshold=48.0,
-    method='bayesian',
   )
   if not 0.5 < prob < 0.9:
     raise AssertionError(
@@ -65,34 +62,8 @@ def test_prob_poisson_density_exceeds_threshold_bayesian():
     observed_count=0,
     observed_area=1.0,
     threshold=10.0,
-    method='bayesian',
   )
   assert prob < 0.01, f"Expected prob < 0.01 for zero count, got {prob}"
-
-
-def test_prob_poisson_density_exceeds_threshold_normal_approx():
-  """
-  Test the normal approximation for Poisson density threshold crossing.
-  """
-  # Test with moderately large counts where normal approximation should work
-  # count=100, area=1.0, threshold=50.0
-  prob_bayes = prob_poisson_density_exceeds_threshold(
-    observed_count=100,
-    observed_area=1.0,
-    threshold=50.0,
-    method='bayesian',
-  )
-  prob_normal = prob_poisson_density_exceeds_threshold(
-    observed_count=100,
-    observed_area=1.0,
-    threshold=50.0,
-    method='normal_approx',
-  )
-
-  # Normal approximation should be close to Bayesian for large counts
-  assert abs(prob_bayes - prob_normal) < 0.05, (
-    f"Bayesian and normal approx differ: {prob_bayes} vs {prob_normal}"
-  )
 
 
 def generate_synthetic_datacard_with_perfect_classification( # pylint: disable=too-many-locals, too-many-arguments
@@ -160,7 +131,6 @@ def test_yi_logrank_perfect_classification():
     parameter_threshold=threshold,
     parameter_min=-np.inf,
     parameter_max=np.inf,
-    method='bayesian'
   )
   p_value_yi = result_yi['p_value']
 
@@ -328,9 +298,9 @@ def test_yi_methods_return_valid_structure():
   assert np.isclose(result_hr.log_hazard_ratio, np.log(2.0))
 
 
-def test_yi_both_methods_available():
+def test_yi_bayesian_method_only():
   """
-  Test that both Bayesian and normal approximation methods work.
+  Test that the Bayesian method works correctly.
   """
   datacard = generate_synthetic_datacard_with_perfect_classification(
     target_hr=1.5,
@@ -340,28 +310,12 @@ def test_yi_both_methods_available():
 
   threshold = 100.0
 
-  # Test Bayesian method
+  # Test Bayesian method (now the only method)
   result_bayes = datacard.km_p_value_logrank_yi(
     parameter_threshold=threshold,
-    method='bayesian'
   )
   assert 'p_value' in result_bayes
   assert 0 <= result_bayes['p_value'] <= 1
-
-  # Test normal approximation method
-  result_normal = datacard.km_p_value_logrank_yi(
-    parameter_threshold=threshold,
-    method='normal_approx'
-  )
-  assert 'p_value' in result_normal
-  assert 0 <= result_normal['p_value'] <= 1
-
-  # For perfect classification with large sample, methods should agree reasonably well
-  p_diff = abs(result_bayes['p_value'] - result_normal['p_value'])
-  assert p_diff < 0.15, (
-    f"Bayesian and normal approx differ too much: "
-    f"bayes={result_bayes['p_value']:.4f}, normal={result_normal['p_value']:.4f}"
-  )
 
 
 def test_yi_kaplan_meier_survival():
@@ -450,27 +404,23 @@ if __name__ == "__main__":
   test_prob_poisson_density_exceeds_threshold_bayesian()
   print("[PASS] Bayesian probability estimation")
 
-  print("Test 2: Normal approximation...")
-  test_prob_poisson_density_exceeds_threshold_normal_approx()
-  print("[PASS] Normal approximation")
-
-  print("Test 3: Yi logrank with perfect classification...")
+  print("Test 2: Yi logrank with perfect classification...")
   test_yi_logrank_perfect_classification()
   print("[PASS] Yi logrank with perfect classification")
 
-  print("Test 4: Yi hazard ratio with perfect classification...")
+  print("Test 3: Yi hazard ratio with perfect classification...")
   test_yi_hazard_ratio_perfect_classification()
   print("[PASS] Yi hazard ratio with perfect classification")
 
-  print("Test 5: Result structure validation...")
+  print("Test 4: Result structure validation...")
   test_yi_methods_return_valid_structure()
   print("[PASS] Result structure validation")
 
-  print("Test 6: Both estimation methods...")
-  test_yi_both_methods_available()
-  print("[PASS] Both estimation methods")
+  print("Test 5: Bayesian method works...")
+  test_yi_bayesian_method_only()
+  print("[PASS] Bayesian method works")
 
-  print("Test 7: Yi's Kaplan-Meier survival probabilities...")
+  print("Test 6: Yi's Kaplan-Meier survival probabilities...")
   test_yi_kaplan_meier_survival()
   print("[PASS] Yi's Kaplan-Meier survival probabilities")
 

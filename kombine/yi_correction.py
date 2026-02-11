@@ -53,7 +53,6 @@ class YiCorrectionBase:  # pylint: disable=too-few-public-methods
     self,
     patient: Patient,
     *,
-    method: str = 'bayesian',
     prior_alpha: float = 1.0,
     prior_beta: float = 1.0,
   ) -> float:
@@ -62,17 +61,16 @@ class YiCorrectionBase:  # pylint: disable=too-few-public-methods
 
     This method uses the patient's observable measurement data to calculate
     a probability rather than making a deterministic classification.
+    Uses Bayesian posterior for Poisson measurement uncertainty.
 
     Parameters
     ----------
     patient : Patient
         The patient to compute probability for.
-    method : str, optional
-        Method for probability calculation ('bayesian' or 'normal_approx').
     prior_alpha : float, optional
-        Alpha parameter for Bayesian prior.
+        Alpha parameter for Bayesian Gamma prior.
     prior_beta : float, optional
-        Beta parameter for Bayesian prior.
+        Beta parameter for Bayesian Gamma prior.
 
     Returns
     -------
@@ -87,7 +85,6 @@ class YiCorrectionBase:  # pylint: disable=too-few-public-methods
         obs.numerator,
         obs.denominator,
         self._parameter_threshold,
-        method=method,
         prior_alpha=prior_alpha,
         prior_beta=prior_beta,
       )
@@ -107,7 +104,6 @@ class YiCorrectionForLogrank(YiCorrectionBase):
   def compute_pvalue(  # pylint: disable=too-many-locals
     self,
     *,
-    method: str = 'bayesian',
     prior_alpha: float = 0.5,
     prior_beta: float = 0.0,
   ) -> dict:
@@ -115,19 +111,15 @@ class YiCorrectionForLogrank(YiCorrectionBase):
     Calculate p-value using Yi's misclassification correction method.
 
     This implements Yi's correction for discrete covariate misclassification applied
-    to the logrank test. Uses inverse probability weighting to account for
-    measurement uncertainty.
+    to the logrank test. Uses inverse probability weighting with Bayesian estimation
+    to account for measurement uncertainty.
 
     Parameters
     ----------
-    method : str, optional
-        Method for estimating misclassification probabilities:
-        - 'bayesian': Full Bayesian posterior (default, more accurate)
-        - 'normal_approx': Normal approximation (faster, less accurate for small counts)
     prior_alpha : float, optional
-        Alpha parameter for Gamma prior (Bayesian method only). Default 0.5 (Jeffreys).
+        Alpha parameter for Gamma prior. Default 0.5 (Jeffreys).
     prior_beta : float, optional
-        Beta parameter for Gamma prior (Bayesian method only). Default 0.0.
+        Beta parameter for Gamma prior. Default 0.0.
 
     Returns
     -------
@@ -208,7 +200,6 @@ class YiCorrectionForLogrank(YiCorrectionBase):
         # Compute this patient's probability of being in high group
         prob_high = self.compute_patient_prob_high(
           patient,
-          method=method,
           prior_alpha=prior_alpha,
           prior_beta=prior_beta,
         )
@@ -290,7 +281,6 @@ class YiCorrectionForCoxPH(YiCorrectionBase):
     self,
     hazard_ratio: float,
     *,
-    method: str = 'bayesian',
     prior_alpha: float = 0.5,
     prior_beta: float = 0.0,
   ) -> scipy.optimize.OptimizeResult:
@@ -309,14 +299,10 @@ class YiCorrectionForCoxPH(YiCorrectionBase):
         H = 1 corresponds to equal hazards (null hypothesis).
         H > 1 means the high group has higher hazard (worse outcomes).
         H < 1 means the low group has higher hazard.
-    method : str, optional
-        Method for estimating misclassification probabilities:
-        - 'bayesian': Full Bayesian posterior (default, more accurate)
-        - 'normal_approx': Normal approximation (faster, less accurate for small counts)
     prior_alpha : float, optional
-        Alpha parameter for Gamma prior (Bayesian method only). Default 0.5 (Jeffreys).
+        Alpha parameter for Gamma prior. Default 0.5 (Jeffreys).
     prior_beta : float, optional
-        Beta parameter for Gamma prior (Bayesian method only). Default 0.0.
+        Beta parameter for Gamma prior. Default 0.0.
 
     Returns
     -------
@@ -403,7 +389,6 @@ class YiCorrectionForCoxPH(YiCorrectionBase):
         # Compute this patient's probability of being in high group
         prob_high = self.compute_patient_prob_high(
           patient,
-          method=method,
           prior_alpha=prior_alpha,
           prior_beta=prior_beta,
         )
@@ -479,7 +464,6 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
     times_for_plot: list[float] | None = None,
     *,
     group: str = 'high',
-    method: str = 'bayesian',
     prior_alpha: float = 0.5,
     prior_beta: float = 0.0,
   ) -> dict:
@@ -498,14 +482,10 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
         If None, uses unique death times from patient data.
     group : str, optional
         Which curve to compute: 'high' or 'low'. Default is 'high'.
-    method : str, optional
-        Method for estimating misclassification probabilities:
-        - 'bayesian': Full Bayesian posterior (default, more accurate)
-        - 'normal_approx': Normal approximation (faster, less accurate for small counts)
     prior_alpha : float, optional
-        Alpha parameter for Gamma prior (Bayesian method only). Default 0.5 (Jeffreys).
+        Alpha parameter for Gamma prior. Default 0.5 (Jeffreys).
     prior_beta : float, optional
-        Beta parameter for Gamma prior (Bayesian method only). Default 0.0.
+        Beta parameter for Gamma prior. Default 0.0.
 
     Returns
     -------
@@ -599,7 +579,6 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
         # Compute patient's probability of being in the high group
         prob_high = self.compute_patient_prob_high(
           patient,
-          method=method,
           prior_alpha=prior_alpha,
           prior_beta=prior_beta,
         )
