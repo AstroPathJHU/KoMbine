@@ -55,7 +55,6 @@ class YiCorrectionBase:  # pylint: disable=too-few-public-methods
     patients: list[Patient],
     parameter_min: float = -np.inf,
     parameter_max: float = np.inf,
-    parameter_threshold: float | None = None,
   ):
     """
     Initialize Yi's correction calculator.
@@ -68,26 +67,16 @@ class YiCorrectionBase:  # pylint: disable=too-few-public-methods
         Minimum parameter value included in analysis. Default is -inf.
     parameter_max : float, optional
         Maximum parameter value included in analysis. Default is +inf.
-    parameter_threshold : float, optional
-        Threshold separating "low" and "high" groups. Required for
-        two-curve comparisons.
     """
     self._patients = patients
     self._parameter_min = parameter_min
     self._parameter_max = parameter_max
-    self._parameter_threshold = parameter_threshold
 
     if self._parameter_min >= self._parameter_max:
       raise ValueError(
         "parameter_min must be < parameter_max, got "
         f"{self._parameter_min} >= {self._parameter_max}"
       )
-    if self._parameter_threshold is not None:
-      if not self._parameter_min <= self._parameter_threshold <= self._parameter_max:
-        raise ValueError(
-          "parameter_threshold must be within [parameter_min, parameter_max], got "
-          f"{self._parameter_threshold}"
-        )
 
   def compute_patient_prob_in_range(  # pylint: disable=too-many-arguments
     self,
@@ -139,6 +128,50 @@ class YiCorrectionBase:  # pylint: disable=too-few-public-methods
     # Fall back to deterministic classification based on observed parameter
     return 1.0 if range_min <= patient.observed_parameter < range_max else 0.0
 
+
+class YiCorrectionWithThreshold(YiCorrectionBase):  # pylint: disable=too-few-public-methods
+  """
+  Base class for Yi correction methods that require a threshold parameter.
+
+  This intermediate base class enforces that parameter_threshold is a non-None float,
+  suitable for two-curve comparisons (logrank test, Cox PH).
+  """
+
+  def __init__(
+    self,
+    patients: list[Patient],
+    parameter_min: float = -np.inf,
+    parameter_max: float = np.inf,
+    parameter_threshold: float = 0.0,
+  ):
+    """
+    Initialize Yi's correction with required threshold.
+
+    Parameters
+    ----------
+    patients : list[Patient]
+        List of Patient objects with observable measurements.
+    parameter_min : float, optional
+        Minimum parameter value included in analysis. Default is -inf.
+    parameter_max : float, optional
+        Maximum parameter value included in analysis. Default is +inf.
+    parameter_threshold : float
+        Threshold separating "low" and "high" groups. Required for
+        two-curve comparisons.
+    """
+    super().__init__(
+      patients,
+      parameter_min=parameter_min,
+      parameter_max=parameter_max,
+    )
+    self._parameter_threshold: float = parameter_threshold
+
+    if not self._parameter_min <= self._parameter_threshold <= self._parameter_max:
+      raise ValueError(
+        "parameter_threshold must be within [parameter_min, parameter_max], got "
+        f"{self._parameter_threshold}"
+      )
+
   def compute_patient_prob_low_high(
     self,
     patient: Patient,
@@ -153,9 +186,6 @@ class YiCorrectionBase:  # pylint: disable=too-few-public-methods
     [parameter_min, parameter_threshold) and
     [parameter_threshold, parameter_max), respectively.
     """
-    if self._parameter_threshold is None:
-      raise ValueError("parameter_threshold is required for low/high grouping")
-
     prob_low = self.compute_patient_prob_in_range(
       patient,
       self._parameter_min,
@@ -174,7 +204,7 @@ class YiCorrectionBase:  # pylint: disable=too-few-public-methods
     return prob_low, prob_high
 
 
-class YiCorrectionForLogrank(YiCorrectionBase):
+class YiCorrectionForLogrank(YiCorrectionWithThreshold):
   """
   Yi's misclassification correction for the logrank test.
 
@@ -312,7 +342,7 @@ class YiCorrectionForLogrank(YiCorrectionBase):
     }
 
 
-class YiCorrectionForCoxPH(YiCorrectionBase):
+class YiCorrectionForCoxPH(YiCorrectionWithThreshold):
   """
   Yi's misclassification correction for Cox proportional hazards model.
 
