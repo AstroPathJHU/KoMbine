@@ -26,10 +26,10 @@ Each analysis directly compares both methods to understand how they handle measu
 
 ## Method Overview and Comparison
 
-| Aspect | Yi's Method | KoMbine MINLP |
+| Aspect | Yi's Method | KoMbine |
 |--------|---|---|
 | **Core idea** | Weighted KM/logrank using probabilistic group membership | Full likelihood with explicit group assignment variables |
-| **Optimization** | Direct parameter search | Mixed Integer Nonlinear Programming (Gurobi) |
+| **Optimization** | Direct probability calculation (no optimization) | Mixed Integer Nonlinear Programming (Gurobi) |
 | **Computational cost** | Low | Medium-high |
 | **Accuracy (within model)** | Approximate to the full likelihood | Exact maximizer within solver tolerance |
 | **Core assumptions** | Known measurement error distribution; independent errors; fractional group membership is an adequate proxy for uncertain assignment | Known measurement error distribution; independent errors; patients belong to one group; event times treated as observed and discrete; likelihood model is correctly specified |
@@ -41,7 +41,7 @@ Each analysis directly compares both methods to understand how they handle measu
 - This yields fast, smooth estimates that tend to shrink group differences as measurement uncertainty grows.
 - It is an approximation because it does not enforce a single, discrete group assignment for each patient.
 
-### How KoMbine MINLP Works (Intuition)
+### How KoMbine Works (Intuition)
 - Introduce a binary assignment variable for each patient (low vs high group).
 - Combine the survival likelihood with a measurement error penalty that scores how plausible each assignment is.
 - Solve a constrained optimization problem that finds the most likely set of assignments and survival parameters together.
@@ -305,7 +305,7 @@ plt.show()
 
 ### Understanding the Small Counts Anomaly: Why the High Group Can Look Better
 
-In the small-counts scenario, KoMbine’s best-fit curve can show the high group outperforming the low group. This is not a bug; it reflects how a discrete-assignment likelihood behaves when measurement error is large and many patients sit near the threshold. KoMbine may effectively flip the group separation in such cases, but it also reports confidence bands that naturally widen as per-patient uncertainty increases.
+In the small-counts scenario, KoMbine's best-fit curve can show the high group outperforming the low group. This is not a bug; it reflects how a discrete-assignment likelihood behaves when measurement error is large and many patients sit near the threshold. KoMbine may effectively flip the group separation in such cases, but it also reports confidence bands that naturally widen as per-patient uncertainty increases.
 
 **What is happening conceptually**
 - With high uncertainty, several patients have substantial probability mass on both sides of the threshold.
@@ -313,9 +313,9 @@ In the small-counts scenario, KoMbine’s best-fit curve can show the high group
 - If several early events are borderline, the likelihood can increase by assigning them to the low group, which makes the high group appear to survive longer.
 
 **Why Yi looks different**
-- Yi’s method does not pick a single group; it spreads each borderline patient across both groups using weights.
+- Yi's method does not pick a single group; it spreads each borderline patient across both groups using probabilistic weights.
 - That softens the group contrast and tends to avoid reversals of this kind.
-- As uncertainty grows, Yi’s estimates drift toward each other rather than flipping.
+- As uncertainty grows, Yi's estimates drift toward each other rather than flipping.
 
 **How to interpret this scenario**
 - The reversal indicates that group membership is weakly identified under the assumed error model.
@@ -323,7 +323,7 @@ In the small-counts scenario, KoMbine’s best-fit curve can show the high group
 - Treat this as a sensitivity flag: the inference is driven more by the measurement error model than by the survival data alone.
 
 **Takeaway**
-When measurement error is large, discrete assignment (KoMbine) and fractional assignment (Yi) can lead to qualitatively different stories. The right interpretation is not “which is correct,” but “how sensitive are the conclusions to how uncertain group membership is modeled.”
+When measurement error is large, probabilistic assignment (Yi) and discrete assignment (KoMbine) can lead to qualitatively different stories. The right interpretation is not "which is correct," but "how sensitive are the conclusions to how uncertain group membership is modeled."
 
 
 ## Analysis 2: P-Values (Logrank Test)
@@ -544,30 +544,30 @@ plt.show()
 ## Summary of Findings
 
 ### Kaplan-Meier Curves (Qualitative)
-Across the four scenarios, both methods track each other closely when measurement error is tiny, then diverge as uncertainty grows. The divergence is expected given the modeling differences: Yi uses fractional membership (weighted KM), while KoMbine enforces a single group per patient and optimizes assignments.
+Across the four scenarios, both methods track each other closely when measurement error is tiny, then diverge as uncertainty grows. The divergence is expected given the modeling differences: Yi uses probabilistic weights with fractional group membership, while KoMbine enforces a single group per patient and optimizes assignments.
 
 - **Fixed / Large-count**: Curves are nearly identical because group membership is effectively known.
 - **Moderate-count**: Yi softens group separation (curves move closer), while KoMbine can shift assignments to the most likely configuration, which can preserve or amplify separation.
 - **Small-count**: The largest differences appear because group assignment becomes ambiguous; KoMbine may reassign multiple borderline patients, while Yi spreads their influence across both groups.
 
 ### Logrank Test P-Values (Interpretation)
-- **Yi** tends to increase p-values as uncertainty grows because fractional membership blurs group differences.
+- **Yi** tends to increase p-values as uncertainty grows because probabilistic weighting blurs group differences.
 - **KoMbine** can keep p-values more stable by choosing a most-likely discrete assignment, but the result depends on the assumed error model and the likelihood specification.
 - When the two p-values disagree strongly, it is a signal that measurement uncertainty is driving the inference, not just sampling noise.
 
 ### Hazard Ratios (Interpretation)
 - **Yi** generally yields smaller hazard ratios as uncertainty increases, reflecting the softened group contrast from weighting.
 - **KoMbine** can retain larger hazard ratios if the likelihood favors a strong separation after assignment optimization.
-- The profile likelihood curves show not only the best-fit HR, but also how uncertain that HR is under each method’s model assumptions.
+- The profile likelihood curves show not only the best-fit HR, but also how uncertain that HR is under each method's model assumptions.
 
 ### What These Differences Mean
-- **Neither method is universally “correct.”** Each is correct for its own modeling assumptions.
-- **Yi’s approach** is an approximation that treats uncertain group membership as fractional, which is fast and often conservative.
-- **KoMbine’s approach** enforces discrete membership and optimizes it with the survival model, which can produce sharper separation but relies on the chosen error model and constraints.
+- **Neither method is universally "correct."** Each is correct for its own modeling assumptions.
+- **Yi's approach** uses probabilistic weighting that treats uncertain group membership as fractional, which is fast and often conservative.
+- **KoMbine's approach** enforces discrete membership and optimizes it with the survival model, which can produce sharper separation but relies on the chosen error model and constraints.
 - **Big discrepancies** between methods indicate that measurement uncertainty is a dominant driver of the result; the conclusion is sensitive to how group assignment is modeled.
 
 ### Practical Takeaways
 1. If measurement error is small, both methods should agree and the choice is less critical.
 2. If measurement error is moderate or large, treat results as model-dependent; report sensitivity to the modeling choice.
 3. If you can justify a specific error model and discrete group assignments, KoMbine provides a principled likelihood-based fit.
-4. If you want a fast, conservative screen or do not want to commit to discrete assignments, Yi’s weighting is a reasonable approximation.
+4. If you want a fast, conservative screen or do not want to commit to discrete assignments, Yi's weighting is a reasonable approximation.

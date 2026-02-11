@@ -6,7 +6,7 @@ This module implements Yi's correction method (Section 3.7.1 from
 for discrete covariate misclassification in survival analysis.
 
 Yi's methods use inverse probability weighting to account for measurement uncertainty,
-providing an alternative to integer optimization (MINLP) approaches.
+providing an alternative to the KoMbine approach which uses optimization.
 """
 
 from __future__ import annotations
@@ -141,11 +141,14 @@ class YiCorrectionForLogrank(YiCorrectionBase):
     Notes
     -----
     Yi's method (Statistical Analysis with Measurement Error or Misclassification, 2017)
-    uses inverse probability weighting to correct for misclassification.
+    uses inverse probability weighting to correct for misclassification. When misclassification
+    probabilities differ across patients (as determined by their observable measurements), we
+    compute per-patient probabilities directly—a straightforward application of Yi's framework
+    rather than a modification to her method.
 
-    This improved implementation uses per-patient probability weighting:
-    1. For each patient, compute P(true group = high | observed data)
-    2. Weight patient's contributions by their individual probabilities
+    The implemented approach:
+    1. For each patient, compute P(true group = high | observed data) based on their measurement
+    2. Weight each patient's contributions by their individual assignment probability
     3. Compute corrected logrank test using weighted risk sets and event counts
 
     The weighted logrank test formula:
@@ -155,12 +158,12 @@ class YiCorrectionForLogrank(YiCorrectionBase):
                     ((r_0^* + r_1^*)^2 * (r_0^* + r_1^* - 1))]
     - Logrank statistic = (U^*)^2 / V^* ~ chi^2(1)
 
-    This differs from KoMbine's MINLP approach:
-    - Yi: Probabilistic weighting (no optimization, fractional assignments)
-    - MINLP: Integer optimization over discrete assignments with NLL penalties
+    This differs from KoMbine's approach:
+    - Yi: Probabilistic weighting with continuous fractional assignments
+    - KoMbine: Integer optimization over discrete assignments with likelihood penalties
 
-    The per-patient approach is more accurate than aggregate misclassification
-    matrices, as it accounts for individual measurement uncertainty.
+    Probability-based weighting is more computationally efficient than solving an optimization
+    problem, but does not provide confidence intervals; it yields point estimates only.
 
     See Section 3.7.1 of Yi's book for theoretical foundation. The logrank
     extension follows naturally from the weighted risk set principle (Equation 3.57).
@@ -289,8 +292,8 @@ class YiCorrectionForCoxPH(YiCorrectionBase):
 
     This implements Yi's misclassification correction method (Section 3.7.1) for
     the Cox proportional hazards model with discrete misclassified covariates.
-    Instead of using integer optimization (MINLP), this method uses inverse probability
-    weighting to account for measurement uncertainty.
+    This uses inverse probability weighting to account for measurement uncertainty,
+    in contrast to KoMbine's approach which solves an optimization problem.
 
     Parameters
     ----------
@@ -330,20 +333,21 @@ class YiCorrectionForCoxPH(YiCorrectionBase):
     Notes
     -----
     Yi's method (Statistical Analysis with Measurement Error or Misclassification, 2017)
-    uses inverse probability weighting to correct for misclassification.
+    uses inverse probability weighting to correct for misclassification. When misclassification
+    probabilities vary by patient (based on their observable measurements), we compute
+    per-patient probabilities directly—a straightforward application of Yi's framework.
 
-    This improved implementation uses per-patient probability weighting:
-    1. For each patient, compute P(true group = high | observed data)
-    2. Weight patient's contributions by their individual probabilities
-    3. Compute corrected Cox partial likelihood using weighted risk sets
+    The implemented approach:
+    1. For each patient, compute P(true group = high | observed data) from their measurement
+    2. Weight each patient's Cox partial likelihood contributions by their assignment probability
+    3. Compute corrected likelihood using weighted risk sets
 
-    This differs from KoMbine's MINLP approach:
-    - Yi: Probabilistic weighting (no optimization, fractional assignments)
-    - MINLP: Integer optimization over discrete assignments with NLL penalties
+    This differs from KoMbine's approach:
+    - Yi: Probabilistic weighting with continuous fractional assignments
+    - KoMbine: Integer optimization over discrete assignments with likelihood penalties
 
-    The per-patient approach is more accurate than aggregate misclassification
-    matrices, as it accounts for individual measurement uncertainty rather than
-    assuming uniform misclassification probabilities within groups.
+    Probability-based weighting directly reflects patient-specific measurement uncertainty and
+    requires no optimization, but yields only point estimates without confidence intervals.
 
     See Section 3.7.1 of Yi's book for theoretical foundation.
     """
@@ -456,7 +460,7 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
 
   This class implements weighted Kaplan-Meier survival estimation using inverse
   probability weighting to account for measurement error in group assignment.
-  Unlike MINLP approaches, this provides point estimates without confidence intervals.
+  Unlike KoMbine's approach, this provides point estimates without confidence intervals.
   """
 
   def compute_weighted_survival_probabilities(
@@ -511,22 +515,24 @@ class YiCorrectionForKaplanMeier(YiCorrectionBase):
     Notes
     -----
     Yi's method (Statistical Analysis with Measurement Error or Misclassification, 2017)
-    uses inverse probability weighting to correct for misclassification.
+    uses inverse probability weighting to correct for misclassification. When probabilities
+    differ across patients (based on their observable measurements), we compute per-patient
+    probabilities directly—a straightforward application of Yi's framework.
 
     The weighted Kaplan-Meier estimator uses:
     - Weighted at-risk counts: n*(t) = sum of patient weights for patients at risk at t
     - Weighted death counts: d*(t) = sum of patient weights for patients who died at t
     - Weighted KM: S(t) = product of (1 - d*(t_i)/n*(t_i)) for all t_i <= t
 
-    where each patient's weight depends on their probability of true group membership
-    based on their observable measurements.
+    where each patient's weight is their probability of true group membership based on
+    their observable measurements.
 
-    This differs from KoMbine's MINLP approach:
-    - Yi: Probabilistic weighting (point estimates only, no confidence intervals)
-    - MINLP: Integer optimization with likelihood-based confidence intervals
+    This differs from KoMbine's approach:
+    - Yi: Probabilistic weighting yielding point estimates only (no confidence intervals)
+    - KoMbine: Integer optimization with likelihood-based confidence intervals
 
-    The per-patient weighting approach is more accurate than aggregate misclassification
-    matrices, as it accounts for individual measurement uncertainty.
+    Probability-based weighting is computationally efficient and directly reflects
+    patient-specific measurement uncertainty.
 
     See Section 3.7.1 of Yi's book for theoretical foundation. The weighted KM
     extension follows naturally from applying per-patient weights to the standard
