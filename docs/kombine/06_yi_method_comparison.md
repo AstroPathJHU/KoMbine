@@ -341,7 +341,6 @@ for scenario_key, scenario_info in scenarios.items():
         parameter_threshold=threshold,
         parameter_min=-np.inf,
         parameter_max=np.inf,
-        method='bayesian',
     )
     
     # KoMbine's MINLP
@@ -434,7 +433,6 @@ for scenario_key, scenario_info in scenarios.items():
             hazard_ratio=hr,
             parameter_min=-np.inf,
             parameter_max=np.inf,
-            method='bayesian',
         )
         yi_2nlls.append(result.x)
     
