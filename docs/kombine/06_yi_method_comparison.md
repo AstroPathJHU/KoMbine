@@ -28,12 +28,32 @@ Each analysis directly compares both methods to understand how they handle measu
 
 | Aspect | Yi's Method | KoMbine MINLP |
 |--------|---|---|
-| **Approach** | Parametric KM likelihood with Yi's correction | Mixed Integer Nonlinear Programming |
-| **Optimization** | Direct parameter search | Gurobi optimization |
-| **Computational Cost** | Low | Medium-High |
-| **Accuracy** | Approximate | Exact (within solver tolerance) |
-| **Assumptions** | Smooth hazard & frailty | Discrete event times |
-| **Use Cases** | Quick screening, exploratory analysis | Rigorous statistical inference |
+| **Core idea** | Weighted KM/logrank using probabilistic group membership | Full likelihood with explicit group assignment variables |
+| **Optimization** | Direct parameter search | Mixed Integer Nonlinear Programming (Gurobi) |
+| **Computational cost** | Low | Medium-high |
+| **Accuracy (within model)** | Approximate to the full likelihood | Exact maximizer within solver tolerance |
+| **Core assumptions** | Known measurement error distribution; independent errors; fractional group membership is an adequate proxy for uncertain assignment | Known measurement error distribution; independent errors; patients belong to one group; event times treated as observed and discrete; likelihood model is correctly specified |
+
+### How Yi's Method Works (Intuition)
+- Convert each patient's observed biomarker value into a probability of being below or above the threshold using the measurement error model.
+- Use those probabilities as weights in the Kaplan-Meier estimator and logrank test.
+- Every patient contributes to both groups, in proportion to their probability of belonging there.
+- This yields fast, smooth estimates that tend to shrink group differences as measurement uncertainty grows.
+- It is an approximation because it does not enforce a single, discrete group assignment for each patient.
+
+### How KoMbine MINLP Works (Intuition)
+- Introduce a binary assignment variable for each patient (low vs high group).
+- Combine the survival likelihood with a measurement error penalty that scores how plausible each assignment is.
+- Solve a constrained optimization problem that finds the most likely set of assignments and survival parameters together.
+- Compute confidence intervals via profile likelihood, which naturally widens as uncertainty increases.
+- This is exact for the specified likelihood model but requires heavier computation.
+
+### What the Assumptions Mean (Plain Language)
+- **Known measurement error distribution**: You have a reasonable model for how observed biomarker values deviate from the true value (e.g., Poisson noise).
+- **Independent errors**: One patient's measurement error does not influence another patient's measurement error.
+- **Fractional membership (Yi)**: It is acceptable to treat a patient as partly in each group, rather than forcing a single group.
+- **Discrete membership (KoMbine)**: Each patient ultimately belongs to one group, but the model allows uncertainty in that assignment.
+- **Correct likelihood model**: The survival model used (KM/logrank or Cox) is an appropriate description of the data-generating process.
 
 ### Key Comparisons
 1. **Kaplan-Meier Curves**: Visual comparison of survival estimates
@@ -283,6 +303,29 @@ plt.tight_layout()
 plt.show()
 ```
 
+### Understanding the Small Counts Anomaly: Why the High Group Can Look Better
+
+In the small-counts scenario, KoMbine’s best-fit curve can show the high group outperforming the low group. This is not a bug; it reflects how a discrete-assignment likelihood behaves when measurement error is large and many patients sit near the threshold. KoMbine may effectively flip the group separation in such cases, but it also reports confidence bands that naturally widen as per-patient uncertainty increases.
+
+**What is happening conceptually**
+- With high uncertainty, several patients have substantial probability mass on both sides of the threshold.
+- KoMbine must choose a single group per patient and will pick the assignment that maximizes the joint likelihood.
+- If several early events are borderline, the likelihood can increase by assigning them to the low group, which makes the high group appear to survive longer.
+
+**Why Yi looks different**
+- Yi’s method does not pick a single group; it spreads each borderline patient across both groups using weights.
+- That softens the group contrast and tends to avoid reversals of this kind.
+- As uncertainty grows, Yi’s estimates drift toward each other rather than flipping.
+
+**How to interpret this scenario**
+- The reversal indicates that group membership is weakly identified under the assumed error model.
+- The result is model-dependent: a different error model or a different prior on assignment could shift the outcome.
+- Treat this as a sensitivity flag: the inference is driven more by the measurement error model than by the survival data alone.
+
+**Takeaway**
+When measurement error is large, discrete assignment (KoMbine) and fractional assignment (Yi) can lead to qualitatively different stories. The right interpretation is not “which is correct,” but “how sensitive are the conclusions to how uncertain group membership is modeled.”
+
+
 ## Analysis 2: P-Values (Logrank Test)
 
 Compare p-values computed using Yi's method and KoMbine's MINLP approach for each scenario.
@@ -378,6 +421,7 @@ Compare hazard ratios estimated using Yi's method and KoMbine's MINLP approach.
 # Calculate hazard ratios (Yi vs KoMbine) for all four scenarios
 hr_results = {}
 hazard_ratios_scan = np.linspace(0.1, 12.0, 50)  # Extended range with more points
+chi2_95 = 3.84  # chi2.ppf(0.95, df=1) for a 95% two-sided CI
 
 for scenario_key, scenario_info in scenarios.items():
     dc = datacards[scenario_key]
@@ -401,15 +445,14 @@ for scenario_key, scenario_info in scenarios.items():
     # Calculate Yi's 95% CI from profile likelihood
     min_yi_2nll = min(yi_2nlls)
     delta_yi_2nll = np.array(yi_2nlls) - min_yi_2nll
-    # Find HR values where delta crosses 2.706 (95% CL threshold)
-    below_threshold = delta_yi_2nll < 2.706
+    # Find HR values where delta crosses the 95% threshold
+    below_threshold = delta_yi_2nll < chi2_95
     if np.any(below_threshold):
         yi_ci_indices = np.where(below_threshold)[0]
         yi_lower_ci = hazard_ratios_scan[yi_ci_indices[0]]
         yi_upper_ci = hazard_ratios_scan[yi_ci_indices[-1]]
-        yi_ci_width = yi_upper_ci - yi_lower_ci
     else:
-        yi_lower_ci = yi_upper_ci = yi_ci_width = np.nan
+        yi_lower_ci = yi_upper_ci = np.nan
     
     # KoMbine's MINLP
     hr_calc = dc.km_hazard_ratio(
@@ -443,13 +486,8 @@ for scenario_key, scenario_info in scenarios.items():
     }
     
     print(f"\n{scenario_info['label']}:")
-    print(f"  Yi best-fit HR:       {best_hr_yi:.3f}")
-    print(f"  Yi 95% CI:            [{yi_lower_ci:.3f}, {yi_upper_ci:.3f}]")
-    print(f"  Yi CI width:          {yi_ci_width:.3f}")
-    print(f"  MINLP best-fit HR:    {best_hr_minlp:.3f}")
-    print(f"  MINLP 95% CI:         [{lower_ci:.3f}, {upper_ci:.3f}]")
-    minlp_ci_width = upper_ci - lower_ci
-    print(f"  MINLP CI width:       {minlp_ci_width:.3f}")
+    print(f"  Yi best-fit HR:       {best_hr_yi:.3f} [{yi_lower_ci:.3f}, {yi_upper_ci:.3f}]")
+    print(f"  MINLP best-fit HR:    {best_hr_minlp:.3f} [{lower_ci:.3f}, {upper_ci:.3f}]")
     rel_hr_diff = abs(best_hr_yi - best_hr_minlp) / best_hr_minlp * 100
     print(f"  Relative HR diff:     {rel_hr_diff:.1f}%")
 
@@ -484,14 +522,12 @@ for idx, (scenario_key, scenario_info) in enumerate(scenarios.items()):
     ax.axvline(result['yi_best'], color='#1976d2', linestyle='--', alpha=0.6, linewidth=1.5, zorder=2)
     ax.axvline(result['minlp_best'], color='#d32f2f', linestyle='--', alpha=0.6, linewidth=1.5, zorder=2)
     
-    # Confidence threshold lines
-    ax.axhline(1.0, color='gray', linestyle=':', alpha=0.6, linewidth=1.5, label='68% CL', zorder=1)
-    ax.axhline(2.706, color='gray', linestyle=':', alpha=0.6, linewidth=2.0, label='95% CL (χ²=2.706)', zorder=1)
+    # Confidence threshold line (95% CI, chi2=3.84)
+    ax.axhline(3.84, color='gray', linestyle=':', alpha=0.6, linewidth=2.0, label='95% CL (χ²=3.84)', zorder=1)
     
     ax.set_xlabel('Hazard Ratio', fontsize=11)
     ax.set_ylabel(r'$-2 \Delta \ln L$', fontsize=11)
-    ci_width = result['minlp_upper'] - result['minlp_lower']
-    ax.set_title(f"{scenario_info['label']}\n(MINLP CI width: {ci_width:.3f})",
+    ax.set_title(f"{scenario_info['label']}",
                 fontsize=12, fontweight='bold')
     ax.legend(fontsize=9, loc='upper left')
     ax.grid(True, alpha=0.3)
@@ -507,138 +543,31 @@ plt.show()
 
 ## Summary of Findings
 
-### Kaplan-Meier Curves
-Direct visual comparison between Yi's method (dashed lines) and KoMbine's MINLP (solid lines with 95% CI bands) reveals key differences in how each method handles measurement uncertainty:
+### Kaplan-Meier Curves (Qualitative)
+Across the four scenarios, both methods track each other closely when measurement error is tiny, then diverge as uncertainty grows. The divergence is expected given the modeling differences: Yi uses fractional membership (weighted KM), while KoMbine enforces a single group per patient and optimizes assignments.
 
-**Fixed Observable (No Error)**:
-- Both methods show nearly identical point estimates for the high-risk group
-- Yi: High group 50.00% final survival
-- MINLP: High group 50.00% final survival
-- MINLP confidence bands reflect only Cox/binomial uncertainty (baseline, narrowest; width 0.565)
-- Perfect agreement as expected with no measurement error
+- **Fixed / Large-count**: Curves are nearly identical because group membership is effectively known.
+- **Moderate-count**: Yi softens group separation (curves move closer), while KoMbine can shift assignments to the most likely configuration, which can preserve or amplify separation.
+- **Small-count**: The largest differences appear because group assignment becomes ambiguous; KoMbine may reassign multiple borderline patients, while Yi spreads their influence across both groups.
 
-**Large Count Poisson (~2-3% relative error)**:
-- Very subtle differences begin to emerge
-- Yi: High group 51.04% final survival (minimal shift from probabilistic weighting)
-- MINLP: High group 50.00% best-fit survival (stable)
-- MINLP confidence bands remain nearly identical to fixed case (0.565 width)
-- Measurement error is too small to meaningfully affect either method
+### Logrank Test P-Values (Interpretation)
+- **Yi** tends to increase p-values as uncertainty grows because fractional membership blurs group differences.
+- **KoMbine** can keep p-values more stable by choosing a most-likely discrete assignment, but the result depends on the assumed error model and the likelihood specification.
+- When the two p-values disagree strongly, it is a signal that measurement uncertainty is driving the inference, not just sampling noise.
 
-**Moderate Count Poisson (~5-7% relative error)**:
-- **Major visible differences in both methods**
-- Yi: High group 55.70% final survival (11.4% elevation due to probabilistic weighting)
-- MINLP: High group **62.50%** best-fit survival (25% elevation)
-- MINLP confidence bands **substantially wider** (0.653 width, 15.6% increase)
-- Both methods show that moderate measurement uncertainty fundamentally changes the analysis
+### Hazard Ratios (Interpretation)
+- **Yi** generally yields smaller hazard ratios as uncertainty increases, reflecting the softened group contrast from weighting.
+- **KoMbine** can retain larger hazard ratios if the likelihood favors a strong separation after assignment optimization.
+- The profile likelihood curves show not only the best-fit HR, but also how uncertain that HR is under each method’s model assumptions.
 
-**Small Count Poisson (~25-70% relative error)**:
-- **Largest divergence between methods**
-- Yi: High group 62.19% final survival
-- MINLP: High group **83.33%** best-fit survival
-- MINLP confidence bands remain wide (0.643 width)
-- Small-count uncertainty leads to strong re-assignment effects in the MINLP solution
+### What These Differences Mean
+- **Neither method is universally “correct.”** Each is correct for its own modeling assumptions.
+- **Yi’s approach** is an approximation that treats uncertain group membership as fractional, which is fast and often conservative.
+- **KoMbine’s approach** enforces discrete membership and optimizes it with the survival model, which can produce sharper separation but relies on the chosen error model and constraints.
+- **Big discrepancies** between methods indicate that measurement uncertainty is a dominant driver of the result; the conclusion is sensitive to how group assignment is modeled.
 
-**Key Observation**:
-- MINLP's full likelihood optimization (including patient-wise measurement error) produces **larger shifts** in point estimates compared to Yi's probabilistic weighting method
-- MINLP explicitly quantifies uncertainty via widening confidence bands (Fixed: 0.565 → Moderate: 0.653 → Small: 0.643)
-- Yi's method shows more modest curve adjustments through weighted KM estimation
-- In the moderate and small-count scenarios, the two methods give **substantially different survival estimates**, highlighting the importance of method choice when measurement uncertainty is high
-
-### Logrank Test P-Values
-The p-value comparisons reveal how measurement error affects statistical significance testing:
-
-| Scenario | Yi's Method | MINLP | Relative Difference |
-|----------|------------|--------|-------------------|
-| Fixed Observable | 0.2433 | 0.2508 | 3.1% |
-| Large Count Poisson | 0.2783 | 0.2508 | 10.9% |
-| Moderate Count Poisson | 0.5316 | 0.2508 | 111.9% |
-| Small Count Poisson | 0.9702 | 0.4250 | 128.3% |
-
-**Key Observations**:
-- In the fixed (no-error) case, both methods agree closely (3.1% relative difference)
-- MINLP p-values remain stable through large/moderate scenarios, then increase for small counts
-- Yi's method shows **monotonically increasing p-values** with measurement error
-- In the moderate error case, Yi's p-value (0.532) suggests no significant difference, while MINLP (0.251) maintains moderate significance
-- In the small-count case, Yi's p-value (0.970) indicates no separation, while MINLP still detects separation (0.425)
-- Yi's probabilistic weighting treats measurement uncertainty as group-assignment ambiguity, which inflates the p-value
-- MINLP's optimization approach can maintain separation by re-assigning ambiguous patients
-
-### Hazard Ratio Estimates
-The hazard ratio comparison shows how measurement uncertainty affects Cox regression:
-
-| Scenario | Yi HR | MINLP HR | CI Bounds | CI Width | HR Difference |
-|----------|-------|----------|-----------|----------|---------------|
-| Fixed Observable | 2.200 | 2.280 | [0.557, 10.000] | 9.443 | 3.5% |
-| Large Count Poisson | 2.200 | 2.280 | [0.557, 10.000] | 9.443 | 3.5% |
-| Moderate Count Poisson | 1.600 | 2.280 | [0.557, 10.000] | 9.443 | 29.8% |
-| Small Count Poisson | 1.000 | 1.775 | [0.434, 8.676] | 8.242 | 43.7% |
-
-**Key Observations from Point Estimates**:
-- MINLP's point estimate (2.280) remains **stable** for fixed/large/moderate scenarios
-- Yi's method shows **high sensitivity** to measurement error (HR drops from 2.2 to 1.6 to 1.0)
-- Small counts reduce MINLP's best-fit hazard ratio and widen the lower CI bound
-- The relative HR difference grows dramatically with measurement error (3.5% → 29.8% → 43.7%)
-
-**Profile Likelihood Analysis**:
-The profile likelihood plots (showing $-2 \Delta \ln L$ vs hazard ratio) reveal deeper differences:
-- **Fixed & Large scenarios**: Yi and MINLP profile likelihoods are nearly identical, with both curves crossing 68% and 95% confidence thresholds at similar HR values
-- **Moderate scenario**: Yi's profile shifts left (lower best-fit HR) and becomes slightly broader, indicating the probabilistic weighting reduces the inferred effect size
-- **Small scenario**: Yi's profile is dramatically different:
-  - Best-fit HR near 1.0 (no effect), vs MINLP's HR ≈ 1.8
-  - Much flatter profile, indicating extreme uncertainty from Yi's perspective
-  - 95% CL interval much wider for Yi than MINLP
-- The profile likelihood visualization clearly demonstrates that **Yi's method becomes progressively more conservative** (lower HR, wider uncertainty) as measurement error increases, while **MINLP maintains sharper inference** by optimizing patient assignments
-
-### Overall Comparison
-
-**Agreement Pattern**:
-1. **No measurement error (fixed)**: Both methods show strong agreement (3-4% difference across metrics)
-2. **Small measurement error (large Poisson)**: Methods remain similar for most metrics, p-values begin diverging (11%)
-3. **Moderate measurement error (moderate Poisson)**: Major systematic divergence:
-   - KM curves differ by 5-12 percentage points
-   - P-values differ by 112%
-   - Hazard ratios differ by 30%
-4. **High measurement error (small Poisson)**: Largest divergence:
-   - KM curves differ by >20 percentage points
-   - P-values differ by 128%
-   - Hazard ratios differ by 44%
-
-**Method Characteristics**:
-- **Yi's Method**:
-  - Fast computation (~100-500ms per analysis)
-  - Probabilistic weighting adapts point estimates to measurement uncertainty
-  - More conservative with increasing uncertainty (elevated survival curves, inflated p-values, reduced HRs)
-  - Does not provide rigorous confidence intervals for survival curves
-  - Better for quick exploratory analysis and hypothesis screening
-  - May be **over-conservative** in moderate+ measurement uncertainty scenarios
-  
-- **KoMbine MINLP**:
-  - Computationally intensive (~10-30 seconds per analysis with full likelihood)
-  - Maintains stable point estimates by optimizing patient assignments
-  - Properly quantifies uncertainty via expanding confidence intervals
-  - Uses penalty functions to systematically handle measurement error
-  - Provides rigorous statistical inference with formal CI requirements
-  - Better for confirmatory analysis and publication-quality results
-  - **More robust** to measurement uncertainty in point estimates
-
-**Critical Finding**:
-When measurement uncertainty is moderate-to-high (>10% relative error), **method choice matters critically**:
-- The two methods can disagree by >100% on statistical significance (p-values)
-- Survival estimates can differ by >10 percentage points (moderate) and >20 percentage points (small counts)
-- Hazard ratios can differ by 30-45%
-
-**Recommendation**:
-For datasets with suspected measurement error:
-1. **Always run both methods** to assess sensitivity to methodology
-2. If discrepancies are small (<10%), either method is defensible
-3. If discrepancies are large (>20%), investigate the source:
-   - Check the magnitude of measurement errors in your data
-   - Consider whether probabilistic weighting (Yi) or optimization (MINLP) better matches your scientific question
-   - For formal statistical inference and publication, prefer MINLP with full confidence intervals
-4. When measurement uncertainty is high (>10%), strongly prefer MINLP:
-   - Yi's method may be overly conservative
-   - MINLP provides proper uncertainty quantification
-   - Confidence intervals correctly expand with measurement error
-5. For exploratory screening with many comparisons, Yi's method offers a fast first-pass
-6. For final analysis and publication, validate with MINLP's full likelihood approach
-
+### Practical Takeaways
+1. If measurement error is small, both methods should agree and the choice is less critical.
+2. If measurement error is moderate or large, treat results as model-dependent; report sensitivity to the modeling choice.
+3. If you can justify a specific error model and discrete group assignments, KoMbine provides a principled likelihood-based fit.
+4. If you want a fast, conservative screen or do not want to commit to discrete assignments, Yi’s weighting is a reasonable approximation.
