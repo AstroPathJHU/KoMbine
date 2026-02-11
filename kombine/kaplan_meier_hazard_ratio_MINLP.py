@@ -245,7 +245,13 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
     n_points: int = 50,
     hazard_ratio_min: float = 0.1,
     hazard_ratio_max: float = 10.0,
-  ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], scipy.optimize.OptimizeResult]:
+  ) -> tuple[
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+    scipy.optimize.OptimizeResult,
+    npt.NDArray[np.bool_],
+    npt.NDArray[np.bool_],
+  ]:
     """
     Perform a likelihood scan over a range of hazard ratio values.
 
@@ -272,11 +278,15 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
     Returns
     -------
     hazard_ratios : ndarray
-        Array of hazard ratio values.
+      Array of hazard ratio values.
     twonll_values : ndarray
-        Array of 2NLL values corresponding to each hazard ratio.
+      Array of 2NLL values corresponding to each hazard ratio.
     best_fit_result : scipy.optimize.OptimizeResult
-        The optimization result at the best-fit hazard ratio (minimum 2NLL).
+      The optimization result at the best-fit hazard ratio (minimum 2NLL).
+    assignments_low : ndarray
+      Boolean array of shape (n_points, n_patients) indicating low-group assignments.
+    assignments_high : ndarray
+      Boolean array of shape (n_points, n_patients) indicating high-group assignments.
     """
     if hazard_ratio_values is None:
       # Create a logarithmically-spaced grid
@@ -318,7 +328,12 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
         stacklevel=2
       )
 
-    return hazard_ratios, twonll_values, best_fit_result
+    assignments_low = np.zeros((len(hazard_ratios), self.n_patients), dtype=bool)
+    assignments_high = np.zeros((len(hazard_ratios), self.n_patients), dtype=bool)
+    for idx, result in enumerate(results):
+      assignments_low[idx, result.patients_low] = True
+      assignments_high[idx, result.patients_high] = True
+    return hazard_ratios, twonll_values, best_fit_result, assignments_low, assignments_high
 
   def hazard_ratio_confidence_interval(  # pylint: disable=too-many-arguments,too-many-locals
     self,

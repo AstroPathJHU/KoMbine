@@ -59,9 +59,9 @@ print(f"Deaths: {sum(1 for p in datacard.patients if not p.censored)}")
 print(f"Censored: {sum(1 for p in datacard.patients if p.censored)}")
 ```
 
-### Logrank and KoMbine P-value Calculation
+### KoMbine P-value Calculation
 
-The logrank test compares survival curves between two groups defined by a biomarker threshold. KoMbine also provides a likelihood-based p-value that accounts for measurement uncertainty.
+KoMbine provides a likelihood-based p-value that accounts for measurement uncertainty when comparing survival curves between two groups defined by a biomarker threshold. For comparison, we also calculate the conventional logrank test p-value.
 
 ```python
 # Define biomarker threshold to split patients into two groups
@@ -170,32 +170,61 @@ print(f"95% CI: [{lower_ci_95_fixed:.3f}, {upper_ci_95_fixed:.3f}]")
 
 ```python
 # Perform likelihood scan for fixed observable
-hazard_ratios_fixed, twonll_values_fixed, best_fit_result_fixed = hr_calc_fixed.likelihood_scan_hazard_ratio(
+(
+    hazard_ratios_fixed,
+    twonll_values_fixed,
+    best_fit_result_fixed,
+    assignments_low_fixed,
+    assignments_high_fixed,
+) = hr_calc_fixed.likelihood_scan_hazard_ratio(
     n_points=80,
     hazard_ratio_min=0.01,
     hazard_ratio_max=100.0,
     cox_only=False,
+    return_assignments=True,
 )
 
-# Plot the likelihood scan
-fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+low_counts_fixed = assignments_low_fixed.sum(axis=1)
+high_counts_fixed = assignments_high_fixed.sum(axis=1)
+
+# Plot the likelihood scan with group sizes
+fig, axes = plt.subplots(
+    3,
+    1,
+    figsize=(10, 8),
+    sharex=True,
+    gridspec_kw={"height_ratios": [3, 1, 1], "hspace": 0.05},
+)
+ax_main, ax_low, ax_high = axes
+
 chi2_68 = 1.0
 chi2_95 = 3.84
 twonll_min_fixed = np.min(twonll_values_fixed)
 delta_twonll = twonll_values_fixed - twonll_min_fixed
 
-ax.plot(hazard_ratios_fixed, delta_twonll, 'b-', linewidth=2.5, label='Fixed Observable')
-ax.axhline(chi2_68, color='orange', linestyle='--', linewidth=1.5, alpha=0.7, label='68% CI')
-ax.axhline(chi2_95, color='purple', linestyle='--', linewidth=1.5, alpha=0.7, label='95% CI')
-ax.axvline(best_fit_hr_fixed, color='red', linestyle=':', linewidth=1.5, alpha=0.5, label=f'Best fit: {best_fit_hr_fixed:.2f}')
+ax_main.plot(hazard_ratios_fixed, delta_twonll, 'b-', linewidth=2.5, label='Fixed Observable')
+ax_main.axhline(chi2_68, color='orange', linestyle='--', linewidth=1.5, alpha=0.7, label='68% CI')
+ax_main.axhline(chi2_95, color='purple', linestyle='--', linewidth=1.5, alpha=0.7, label='95% CI')
+ax_main.axvline(best_fit_hr_fixed, color='red', linestyle=':', linewidth=1.5, alpha=0.5, label=f'Best fit: {best_fit_hr_fixed:.2f}')
 
-ax.set_xlabel('Hazard Ratio', fontsize=12)
-ax.set_ylabel("$-2 \\Delta \\ln L$", fontsize=12)
-ax.set_title('Profile Likelihood: Fixed Observable', fontsize=14, fontweight='bold')
-ax.legend(fontsize=10)
-ax.grid(True, alpha=0.3)
-ax.set_xlim(0.01, 100.0)
-ax.set_ylim(0, 15)
+ax_main.set_xscale('log')
+ax_main.set_ylabel("$-2 \\Delta \\ln L$", fontsize=12)
+ax_main.set_title('Profile Likelihood: Fixed Observable', fontsize=14, fontweight='bold')
+ax_main.legend(fontsize=10)
+ax_main.grid(True, alpha=0.3, which='both')
+ax_main.set_ylim(0, 15)
+
+ax_low.step(hazard_ratios_fixed, low_counts_fixed, where='mid', color='tab:blue')
+ax_low.set_ylabel('Low N', fontsize=10)
+ax_low.grid(True, alpha=0.3, which='both')
+ax_low.set_xscale('log')
+
+ax_high.step(hazard_ratios_fixed, high_counts_fixed, where='mid', color='tab:green')
+ax_high.set_ylabel('High N', fontsize=10)
+ax_high.set_xlabel('Hazard Ratio', fontsize=12)
+ax_high.grid(True, alpha=0.3, which='both')
+ax_high.set_xscale('log')
+ax_high.set_xlim(0.01, 100.0)
 
 plt.tight_layout()
 plt.show()
@@ -204,6 +233,9 @@ plt.show()
 ### Scenario 2: Poisson Density with Large Counts
 
 Now let's consider measurements with large counts (hundreds of cells), where Poisson error is small (√N/N ~ 2-3%). The **Cox error dominates** over measurement error.
+
+
+The likelihood scans below include a main profile-likelihood panel and two narrow subplots showing how many patients are assigned to the low and high groups at each hazard ratio. These assignment counts can change with hazard ratio when measurement uncertainty allows reassignment.
 
 ```python
 # Load Poisson density datacard with large counts
@@ -258,30 +290,57 @@ print(f"95% CI: [{lower_ci_95_large:.3f}, {upper_ci_95_large:.3f}]")
 
 ```python
 # Likelihood scan for Poisson (large counts)
-hazard_ratios_large, twonll_values_large, _ = hr_calc_poisson_large.likelihood_scan_hazard_ratio(
+(
+    hazard_ratios_large,
+    twonll_values_large,
+    _,
+    assignments_low_large,
+    assignments_high_large,
+) = hr_calc_poisson_large.likelihood_scan_hazard_ratio(
     n_points=80,
     hazard_ratio_min=0.01,
     hazard_ratio_max=100.0,
     cox_only=False,
+    return_assignments=True,
 )
 
 twonll_min_large = np.min(twonll_values_large)
 delta_twonll_large = twonll_values_large - twonll_min_large
+low_counts_large = assignments_low_large.sum(axis=1)
+high_counts_large = assignments_high_large.sum(axis=1)
 
-fig, ax = plt.subplots(1, 1, figsize=(10, 6))
-ax.plot(hazard_ratios_large, delta_twonll_large, 'b-', linewidth=2.5, label='Poisson Large Counts')
-ax.axhline(chi2_68, color='orange', linestyle='--', linewidth=1.5, alpha=0.7, label='68% CI')
-ax.axhline(chi2_95, color='purple', linestyle='--', linewidth=1.5, alpha=0.7, label='95% CI')
-ax.axvline(best_fit_hr_large, color='red', linestyle=':', linewidth=1.5, alpha=0.5, label=f'Best fit: {best_fit_hr_large:.2f}')
+fig, axes = plt.subplots(
+    3,
+    1,
+    figsize=(10, 8),
+    sharex=True,
+    gridspec_kw={"height_ratios": [3, 1, 1], "hspace": 0.05},
+)
+ax_main, ax_low, ax_high = axes
 
-ax.set_xscale('log')
-ax.set_xlabel('Hazard Ratio', fontsize=12)
-ax.set_ylabel("$-2 \\Delta \\ln L$", fontsize=12)
-ax.set_title('Profile Likelihood: Poisson Large Counts', fontsize=14, fontweight='bold')
-ax.legend(fontsize=10)
-ax.grid(True, alpha=0.3, which='both')
-ax.set_xlim(0.01, 100.0)
-ax.set_ylim(0, 15)
+ax_main.plot(hazard_ratios_large, delta_twonll_large, 'b-', linewidth=2.5, label='Poisson Large Counts')
+ax_main.axhline(chi2_68, color='orange', linestyle='--', linewidth=1.5, alpha=0.7, label='68% CI')
+ax_main.axhline(chi2_95, color='purple', linestyle='--', linewidth=1.5, alpha=0.7, label='95% CI')
+ax_main.axvline(best_fit_hr_large, color='red', linestyle=':', linewidth=1.5, alpha=0.5, label=f'Best fit: {best_fit_hr_large:.2f}')
+
+ax_main.set_xscale('log')
+ax_main.set_ylabel("$-2 \\Delta \\ln L$", fontsize=12)
+ax_main.set_title('Profile Likelihood: Poisson Large Counts', fontsize=14, fontweight='bold')
+ax_main.legend(fontsize=10)
+ax_main.grid(True, alpha=0.3, which='both')
+ax_main.set_ylim(0, 15)
+
+ax_low.step(hazard_ratios_large, low_counts_large, where='mid', color='tab:blue')
+ax_low.set_ylabel('Low N', fontsize=10)
+ax_low.grid(True, alpha=0.3, which='both')
+ax_low.set_xscale('log')
+
+ax_high.step(hazard_ratios_large, high_counts_large, where='mid', color='tab:green')
+ax_high.set_ylabel('High N', fontsize=10)
+ax_high.set_xlabel('Hazard Ratio', fontsize=12)
+ax_high.grid(True, alpha=0.3, which='both')
+ax_high.set_xscale('log')
+ax_high.set_xlim(0.01, 100.0)
 
 plt.tight_layout()
 plt.show()
@@ -367,34 +426,71 @@ if np.isclose(lower_ci_95_moderate, hr_min) or np.isclose(upper_ci_95_moderate, 
 
 ```python
 # Likelihood scan for Poisson (moderate counts)
-hazard_ratios_moderate, twonll_values_moderate, _ = hr_calc_poisson_moderate.likelihood_scan_hazard_ratio(
+(
+    hazard_ratios_moderate,
+    twonll_values_moderate,
+    _,
+    assignments_low_moderate,
+    assignments_high_moderate,
+) = hr_calc_poisson_moderate.likelihood_scan_hazard_ratio(
     n_points=80,
     hazard_ratio_min=hr_min,
     hazard_ratio_max=hr_max,
     cox_only=False,
+    return_assignments=True,
 )
 
 twonll_min_moderate = np.min(twonll_values_moderate)
 delta_twonll_moderate = twonll_values_moderate - twonll_min_moderate
+low_counts_moderate = assignments_low_moderate.sum(axis=1)
+high_counts_moderate = assignments_high_moderate.sum(axis=1)
 
-fig, ax = plt.subplots(1, 1, figsize=(10, 6))
-ax.plot(hazard_ratios_moderate, delta_twonll_moderate, 'b-', linewidth=2.5, label='Poisson Moderate Counts')
-ax.axhline(chi2_68, color='orange', linestyle='--', linewidth=1.5, alpha=0.7, label='68% CI')
-ax.axhline(chi2_95, color='purple', linestyle='--', linewidth=1.5, alpha=0.7, label='95% CI')
-ax.axvline(best_fit_hr_moderate, color='red', linestyle=':', linewidth=1.5, alpha=0.5, label=f'Best fit: {best_fit_hr_moderate:.2f}')
+fig, axes = plt.subplots(
+    3,
+    1,
+    figsize=(10, 8),
+    sharex=True,
+    gridspec_kw={"height_ratios": [3, 1, 1], "hspace": 0.05},
+)
+ax_main, ax_low, ax_high = axes
 
-ax.set_xscale('log')
-ax.set_xlabel('Hazard Ratio', fontsize=12)
-ax.set_ylabel("$-2 \\Delta \\ln L$", fontsize=12)
-ax.set_title('Profile Likelihood: Poisson Moderate Counts', fontsize=14, fontweight='bold')
-ax.legend(fontsize=10)
-ax.grid(True, alpha=0.3, which='both')
-ax.set_xlim(hr_min, hr_max)
-ax.set_ylim(0, 15)
+ax_main.plot(hazard_ratios_moderate, delta_twonll_moderate, 'b-', linewidth=2.5, label='Poisson Moderate Counts')
+ax_main.axhline(chi2_68, color='orange', linestyle='--', linewidth=1.5, alpha=0.7, label='68% CI')
+ax_main.axhline(chi2_95, color='purple', linestyle='--', linewidth=1.5, alpha=0.7, label='95% CI')
+ax_main.axvline(best_fit_hr_moderate, color='red', linestyle=':', linewidth=1.5, alpha=0.5, label=f'Best fit: {best_fit_hr_moderate:.2f}')
+
+ax_main.set_xscale('log')
+ax_main.set_ylabel("$-2 \\Delta \\ln L$", fontsize=12)
+ax_main.set_title('Profile Likelihood: Poisson Moderate Counts', fontsize=14, fontweight='bold')
+ax_main.legend(fontsize=10)
+ax_main.grid(True, alpha=0.3, which='both')
+ax_main.set_ylim(0, 15)
+
+ax_low.step(hazard_ratios_moderate, low_counts_moderate, where='mid', color='tab:blue')
+ax_low.set_ylabel('Low N', fontsize=10)
+ax_low.grid(True, alpha=0.3, which='both')
+ax_low.set_xscale('log')
+
+ax_high.step(hazard_ratios_moderate, high_counts_moderate, where='mid', color='tab:green')
+ax_high.set_ylabel('High N', fontsize=10)
+ax_high.set_xlabel('Hazard Ratio', fontsize=12)
+ax_high.grid(True, alpha=0.3, which='both')
+ax_high.set_xscale('log')
+ax_high.set_xlim(hr_min, hr_max)
 
 plt.tight_layout()
 plt.show()
 ```
+
+### Note on the Moderate-Count Likelihood Scan Shape
+
+The discontinuities come from **assignment changes** as the hazard ratio is forced to extreme values:
+- The low group remains fixed (patients with the smallest observed parameters).
+- The high group shrinks from two patients to one, and then becomes empty at very large hazard ratios.
+- Many patients are excluded from either curve because the MINLP is allowed to drop assignments when that reduces the total penalty.
+
+That discontinuous re-assignment creates visible kinks and plateaus in the profile likelihood at extreme hazard ratios.
+
 
 ### Summary Comparison
 
