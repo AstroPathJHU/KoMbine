@@ -374,8 +374,8 @@ print("\nWith moderate counts, measurement uncertainty is significant!")
 # KoMbine p-value for a nontrivial datacard (Poisson errors)
 km_p_value_poisson = datacard_poisson_moderate_counts.km_p_value(
     parameter_threshold=threshold,
-    parameter_min=0.01,
-    parameter_max=0.99,
+    parameter_min=-np.inf,
+    parameter_max=np.inf,
 )
 kombine_p_value_poisson, _, _ = km_p_value_poisson.solve_and_pvalue(cox_only=False)
 print(f"KoMbine p-value (Poisson errors): {kombine_p_value_poisson:.4e}")
@@ -385,13 +385,12 @@ print(f"KoMbine p-value (Poisson errors): {kombine_p_value_poisson:.4e}")
 # Create hazard ratio calculator for Poisson (moderate counts)
 hr_calc_poisson_moderate = datacard_poisson_moderate_counts.km_hazard_ratio(
     parameter_threshold=threshold,
-    parameter_min=0.01,
-    parameter_max=0.99,
-    log_hazard_ratio_bounds=(-35.0, 35.0),
+    parameter_min=-np.inf,
+    parameter_max=np.inf,
 )
 
-hr_min = 1e-12
-hr_max = 1e12
+hr_min = 0.01
+hr_max = 100.0
 
 best_fit_hr_moderate, lower_ci_68_moderate, upper_ci_68_moderate, _ = hr_calc_poisson_moderate.hazard_ratio_confidence_interval(
     cox_only=False,
@@ -482,41 +481,6 @@ plt.tight_layout()
 plt.show()
 ```
 
-### Note on the Moderate-Count Likelihood Scan Shape
-
-The discontinuities come from **assignment changes** as the hazard ratio is forced to extreme values:
-- The low group remains fixed (patients with the smallest observed parameters).
-- The high group shrinks from two patients to one, and then becomes empty at very large hazard ratios.
-- Many patients are excluded from either curve because the MINLP is allowed to drop assignments when that reduces the total penalty.
-
-That discontinuous re-assignment creates visible kinks and plateaus in the profile likelihood at extreme hazard ratios.
-
-#### Why can a group become empty?
-
-In this scan, the optimizer is allowed to place each patient in **low**, **high**, or **neither** (dropped). Dropping a patient costs a *patient-wise penalty*, but it can still be beneficial if keeping that patient would make the Cox/Breslow (survival-curve) part of the objective much worse at a forced hazard ratio.
-
-There is also **no constraint that forces both groups to stay non-empty**, so at extreme forced hazard ratios the optimizer can decide that the best option is to shrink (or even empty) one group.
-
-#### What does an empty group mean for the hazard ratio?
-
-A hazard ratio only has content when you are comparing *two* groups. If the optimizer empties one group, then the survival-data part of the objective no longer has leverage to prefer one hazard ratio over another.
-
-Concretely, the Cox/Breslow likelihood used here depends on the risk sets through terms like:
-
-$$\log\big(r_{\mathrm{low}}(t) + \mathrm{HR}\,r_{\mathrm{high}}(t) + \epsilon\big).$$
-
-- If the **high** group is empty, then $r_{\mathrm{high}}(t)=0$ (and there are no high-group deaths), so HR drops out of these terms.
-- If the **low** group is empty, the dependence on HR cancels in the same way in the ideal Cox expression; in the implementation a small $\epsilon$ is included to keep the log well-defined, so any remaining HR dependence is purely a numerical safeguard and does not provide a meaningful constraint.
-
-#### Why does that create a plateau (“ceiling”) in the scan?
-
-As HR is forced to more extreme values, the best *two-group* assignment can become very expensive in NLL. But the optimizer has an escape hatch: it can drop borderline patients (and in the limit, empty one group), pay the patient-wise penalties, and move to a configuration where the objective no longer depends on HR.
-
-So the patient-wise penalty effectively sets the *height of the plateau*: beyond some HR, the optimizer prefers a roughly fixed penalty + an HR-insensitive Cox/Breslow term, rather than letting $-2\Delta\ln L$ continue to grow.
-
-**Interpretation:** in the plateau region, the hazard ratio is **not constrained by the data at a higher confidence level than the plateau height**. Intuitively, the data do not force the model to keep any patients in the depleted group, so they also cannot force a particular hazard ratio between the two groups.
-
-
 ### Summary Comparison
 
 Let's compare all three scenarios to see how measurement uncertainty affects the results.
@@ -582,3 +546,149 @@ This notebook demonstrated:
 - Moderate count measurements show substantial widening of confidence intervals due to measurement uncertainty
 - KoMbine properly accounts for this measurement uncertainty in survival analysis
 
+
+
+## Appendix: Moderate Counts with Restricted Range (0.01–0.99)
+
+This section performs a separate moderate-count likelihood scan using a restricted parameter range.
+
+```python
+# Moderate counts scan with restricted range (0.01–0.99)
+hr_calc_poisson_moderate_restricted = datacard_poisson_moderate_counts.km_hazard_ratio(
+    parameter_threshold=threshold,
+    parameter_min=0.01,
+    parameter_max=0.99,
+    log_hazard_ratio_bounds=(-35.0, 35.0),
+)
+
+hr_min_restricted = 1e-12
+hr_max_restricted = 1e12
+
+best_fit_hr_moderate_restricted, lower_ci_68_restricted, upper_ci_68_restricted, _ = (
+    hr_calc_poisson_moderate_restricted.hazard_ratio_confidence_interval(
+        cox_only=False,
+        confidence_level=0.68,
+        hazard_ratio_min=hr_min_restricted,
+        hazard_ratio_max=hr_max_restricted,
+    )
+)
+
+_, lower_ci_95_restricted, upper_ci_95_restricted, _ = (
+    hr_calc_poisson_moderate_restricted.hazard_ratio_confidence_interval(
+        cox_only=False,
+        confidence_level=0.95,
+        hazard_ratio_min=hr_min_restricted,
+        hazard_ratio_max=hr_max_restricted,
+    )
+)
+
+def format_ci_value_restricted(value: float, *, bound: float, is_lower: bool) -> str:
+    if np.isclose(value, bound):
+        return f"< {bound:g}" if is_lower else f"> {bound:g}"
+    return f"{value:.3f}"
+
+lower_68_restricted = format_ci_value_restricted(lower_ci_68_restricted, bound=hr_min_restricted, is_lower=True)
+upper_68_restricted = format_ci_value_restricted(upper_ci_68_restricted, bound=hr_max_restricted, is_lower=False)
+lower_95_restricted = format_ci_value_restricted(lower_ci_95_restricted, bound=hr_min_restricted, is_lower=True)
+upper_95_restricted = format_ci_value_restricted(upper_ci_95_restricted, bound=hr_max_restricted, is_lower=False)
+
+print("\nRestricted-range moderate counts")
+print(f"Best-fit hazard ratio: {best_fit_hr_moderate_restricted:.3f}")
+print(f"68% CI: [{lower_68_restricted}, {upper_68_restricted}]")
+print(f"95% CI: [{lower_95_restricted}, {upper_95_restricted}]")
+
+(
+    hazard_ratios_moderate_restricted,
+    twonll_values_moderate_restricted,
+    _,
+    assignments_low_moderate_restricted,
+    assignments_high_moderate_restricted,
+) = hr_calc_poisson_moderate_restricted.likelihood_scan_hazard_ratio(
+    n_points=80,
+    hazard_ratio_min=hr_min_restricted,
+    hazard_ratio_max=hr_max_restricted,
+    cox_only=False,
+ )
+
+twonll_min_moderate_restricted = np.min(twonll_values_moderate_restricted)
+delta_twonll_moderate_restricted = twonll_values_moderate_restricted - twonll_min_moderate_restricted
+low_counts_moderate_restricted = assignments_low_moderate_restricted.sum(axis=1)
+high_counts_moderate_restricted = assignments_high_moderate_restricted.sum(axis=1)
+
+fig, axes = plt.subplots(
+    3,
+    1,
+    figsize=(10, 8),
+    sharex=True,
+    gridspec_kw={"height_ratios": [3, 1, 1], "hspace": 0.05},
+)
+ax_main, ax_low, ax_high = axes
+
+ax_main.plot(hazard_ratios_moderate_restricted, delta_twonll_moderate_restricted, 'b-', linewidth=2.5, label='Poisson Moderate Counts (Restricted)')
+ax_main.axhline(chi2_68, color='orange', linestyle='--', linewidth=1.5, alpha=0.7, label='68% CI')
+ax_main.axhline(chi2_95, color='purple', linestyle='--', linewidth=1.5, alpha=0.7, label='95% CI')
+ax_main.axvline(best_fit_hr_moderate_restricted, color='red', linestyle=':', linewidth=1.5, alpha=0.5, label=f'Best fit: {best_fit_hr_moderate_restricted:.2f}')
+
+ax_main.set_xscale('log')
+ax_main.set_ylabel("$-2 \\Delta \\ln L$", fontsize=12)
+ax_main.set_title('Profile Likelihood: Moderate Counts (Restricted Range)', fontsize=14, fontweight='bold')
+ax_main.legend(fontsize=10)
+ax_main.grid(True, alpha=0.3, which='both')
+ax_main.set_ylim(0, 15)
+
+ax_low.step(hazard_ratios_moderate_restricted, low_counts_moderate_restricted, where='mid', color='tab:blue')
+ax_low.set_ylabel('Low N', fontsize=10)
+ax_low.grid(True, alpha=0.3, which='both')
+ax_low.set_xscale('log')
+
+ax_high.step(hazard_ratios_moderate_restricted, high_counts_moderate_restricted, where='mid', color='tab:green')
+ax_high.set_ylabel('High N', fontsize=10)
+ax_high.set_xlabel('Hazard Ratio', fontsize=12)
+ax_high.grid(True, alpha=0.3, which='both')
+ax_high.set_xscale('log')
+ax_high.set_xlim(hr_min_restricted, hr_max_restricted)
+
+plt.tight_layout()
+plt.show()
+```
+
+### Moderate-Count Likelihood Scan Behavior
+
+**What the restricted range means in practice**
+- The restricted range (0.01–0.99) defines a **hard inclusion window** for the biomarker used to form the two groups.
+- Patients whose **fitted parameter** (the value chosen by the optimizer within the likelihood model) falls **outside** this window are allowed to be **dropped** from both curves when that improves the likelihood.
+- Intuitively, this says: “we are comparing two **target groups**, and we are willing to set aside patients who fall outside those group definitions under the fitted model.”
+- A common use case is when you split patients into **more than two groups** (for example low / medium / high) and then compare **two** of those groups. The restricted range acts like a selector that keeps only the two groups you are comparing.
+- As the hazard ratio is pushed to extremes, dropping borderline patients can become cheaper than forcing them into a poorly fitting group, so group sizes can shrink or even become empty.
+
+The discontinuities come from **assignment changes** as the hazard ratio is forced to extreme values:
+- The low group remains fixed (patients with the smallest observed parameters).
+- The high group shrinks from two patients to one, and then becomes empty at very large hazard ratios.
+- Many patients are excluded from either curve because the MINLP is allowed to drop assignments when that reduces the total penalty.
+
+That discontinuous re-assignment creates visible kinks and plateaus in the profile likelihood at extreme hazard ratios.
+
+#### Why can a group become empty?
+
+In this scan, the optimizer is allowed to place each patient in **low**, **high**, or **neither** (dropped). Dropping a patient costs a *patient-wise penalty*, but it can still be beneficial if keeping that patient would make the Cox/Breslow (survival-curve) part of the objective much worse at a forced hazard ratio.
+
+There is also **no constraint that forces both groups to stay non-empty**, so at extreme forced hazard ratios the optimizer can decide that the best option is to shrink (or even empty) one group.
+
+#### What does an empty group mean for the hazard ratio?
+
+A hazard ratio only has content when you are comparing *two* groups. If the optimizer empties one group, then the survival-data part of the objective no longer has leverage to prefer one hazard ratio over another.
+
+Concretely, the Cox/Breslow likelihood used here depends on the risk sets through terms like:
+
+$$\log\big(r_{\mathrm{low}}(t) + \mathrm{HR}\,r_{\mathrm{high}}(t) + \epsilon\big).$$
+
+- If the **high** group is empty, then $r_{\mathrm{high}}(t)=0$ (and there are no high-group deaths), so HR drops out of these terms.
+- If the **low** group is empty, the dependence on HR cancels in the same way in the ideal Cox expression; in the implementation a small $\epsilon$ is included to keep the log well-defined, so any remaining HR dependence is purely a numerical safeguard and does not provide a meaningful constraint.
+
+#### Why does that create a plateau (“ceiling”) in the scan?
+
+As HR is forced to more extreme values, the best *two-group* assignment can become very expensive in NLL. But the optimizer has an escape hatch: it can drop borderline patients (and in the limit, empty one group), pay the patient-wise penalties, and move to a configuration where the objective no longer depends on HR.
+
+So the patient-wise penalty effectively sets the *height of the plateau*: beyond some HR, the optimizer prefers a roughly fixed penalty + an HR-insensitive Cox/Breslow term, rather than letting $-2\Delta\ln L$ continue to grow.
+
+**Interpretation:** in the plateau region, the hazard ratio is **not constrained by the data at a higher confidence level than the plateau height**. Intuitively, the data do not force the model to keep any patients in the depleted group, so they also cannot force a particular hazard ratio between the two groups.
