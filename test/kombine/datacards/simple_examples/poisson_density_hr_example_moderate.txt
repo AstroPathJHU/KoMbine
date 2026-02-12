@@ -1,7 +1,7 @@
 observable_type poisson_density
 ------------
 # Poisson density example with MODERATE counts (observable Poisson error)
-# Expected HR ~ 2.3 (similar to fixed_hr_example.txt)
+# Expected HR ~ 2.3 (matches fixed_hr_example.txt grid)
 # 
 # With moderate counts near threshold, ~10% probability of patients crossing
 # -> Both Cox error and Poisson error contribute to confidence intervals
@@ -10,10 +10,10 @@ observable_type poisson_density
 # Group 0 (low density, < 0.5): Better survival (later death times)
 # Group 1 (high density, >= 0.5): Worse survival (earlier death times)
 # 
-# Using moderate num values (20-95) so sqrt(N)/N ~ 10-20% uncertainty
+# Using moderate num values so sqrt(N)/N ~ 10-20% uncertainty
 # -> Patients near threshold (0.4-0.6) have ~10% chance of crossing
 ------------
 survival_time	10	12	15	18	20	24	28	30	35	40	3	5	7	9	12	15	18	20	25	30
 censored	0	0	0	1	1	1	1	1	1	1	0	0	0	0	0	1	1	1	1	1
-num	10	15	20	25	30	35	40	42	45	48	55	60	65	70	75	80	85	88	92	95
+num	10	15	20	25	30	35	40	40	45	50	55	60	65	70	75	80	85	90	95	95
 area	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100	100

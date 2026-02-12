@@ -110,7 +110,7 @@ for key, info in scenarios.items():
     n_deaths = sum(1 for p in datacard.patients if not p.censored)
     print(f"{info['label']}: {n_patients} patients, {n_deaths} deaths")
 
-threshold = 0.5
+threshold = 0.5001
 ```
 
 ## Analysis 1: Kaplan-Meier Curves
@@ -304,30 +304,37 @@ plt.show()
 
 ### Understanding the Small Counts Anomaly: Why the High Group Can Look Better
 
-In the small-counts scenario, KoMbine's best-fit curve can show the high group outperforming the low group. This is not a bug; it reflects how a discrete-assignment likelihood behaves when measurement error is large and many patients sit near the threshold. KoMbine may effectively flip the group separation in such cases, but it also reports confidence bands that naturally widen as per-patient uncertainty increases.
+In the small-counts scenario, KoMbine’s best-fit *KM curves* can show the “high” group outperforming the “low” group. This is not necessarily a bug: it reflects how a **discrete-assignment likelihood** behaves when measurement error is large and many patients are effectively borderline relative to the threshold.
 
 **What is happening conceptually**
 - With high uncertainty, several patients have substantial probability mass on both sides of the threshold.
-- KoMbine must choose a single group per patient and will pick the assignment that maximizes the joint likelihood.
-- If several early events are borderline, the likelihood can increase by assigning them to the low group, which makes the high group appear to survive longer.
+- KoMbine must choose a single group per patient (within each optimization problem) and will pick the assignment(s) that maximize the likelihood.
+- If early events are borderline, the likelihood can increase by assigning them to the group that best explains the observed survival times, which can make the *apparent* group ordering flip.
+
+**A subtle but important detail**
+- In this notebook, the two KoMbine KM curves are fit **separately** (one MINLP for the low range and one MINLP for the high range). With large uncertainty, the best-fit assignments for those two separate optimizations need not form a perfectly complementary partition of patients.
+- The KoMbine **hazard ratio / p-value** calculations, in contrast, are *joint* two-group fits. Those joint fits are the self-consistent way to summarize “which group is worse” under the KoMbine model.
 
 **Why Yi looks different**
-- Yi's method does not pick a single group; it spreads each borderline patient across both groups using probabilistic weights.
-- That softens the group contrast and tends to avoid reversals of this kind.
-- As uncertainty grows, Yi's estimates drift toward each other rather than flipping.
-
-**How to interpret this scenario**
-- The reversal indicates that group membership is weakly identified under the assumed error model.
-- The result is model-dependent: a different error model or a different prior on assignment could shift the outcome.
-- Treat this as a sensitivity flag: the inference is driven more by the measurement error model than by the survival data alone.
+- Yi’s method does not pick a single group; it spreads each borderline patient across both groups using probabilistic weights.
+- That softens the group contrast and tends to avoid hard reversals; as uncertainty grows, Yi’s estimates drift toward each other.
 
 **Takeaway**
-When measurement error is large, probabilistic assignment (Yi) and discrete assignment (KoMbine) can lead to qualitatively different stories. The right interpretation is not "which is correct," but "how sensitive are the conclusions to how uncertain group membership is modeled."
+When measurement error is large, probabilistic assignment (Yi) and discrete assignment (KoMbine) can tell qualitatively different stories. The right question is not “which is correct?”, but “how sensitive are the conclusions to how uncertain group membership is modeled?”
 
 
-## Analysis 2: P-Values (Logrank Test)
+## Analysis 2: P-Values (Logrank / Likelihood-Ratio Test)
 
-Compare p-values computed using Yi's method and KoMbine's MINLP approach for each scenario.
+We compare p-values from:
+
+- **Yi**: a *weighted* logrank-style calculation using per-patient probabilistic group membership (fractional membership).
+- **KoMbine**: a *likelihood-based* p-value using the full MINLP model (**`cox_only=False`**), which allows discrete group assignments to change in the fit when measurements are uncertain.
+
+**What to expect**
+
+- As measurement error grows, **Yi's p-values typically increase** because fractional membership blurs the difference between groups.
+- **KoMbine's p-values need not increase**: because it enforces discrete membership, it can keep (or even increase) apparent separation by choosing the most likely global assignment consistent with the assumed measurement-error model.
+- Large disagreements between the two p-values indicate that inference is being driven by how group-membership uncertainty is modeled, not just by sampling noise.
 
 ```python
 # Calculate p-values (Yi vs KoMbine) for all four scenarios
@@ -343,13 +350,13 @@ for scenario_key, scenario_info in scenarios.items():
         parameter_max=np.inf,
     )
     
-    # KoMbine's MINLP
+    # KoMbine's MINLP (full likelihood; includes patient-wise uncertainty)
     minlp_calc = dc.km_p_value(
         parameter_threshold=threshold,
         parameter_min=-np.inf,
         parameter_max=np.inf,
     )
-    pval_minlp, _, _ = minlp_calc.solve_and_pvalue(cox_only=True)
+    pval_minlp, _, _ = minlp_calc.solve_and_pvalue(cox_only=False)
     
     pvalue_results[scenario_key] = {
         'yi': yi_result['p_value'],
@@ -413,7 +420,16 @@ plt.show()
 
 ## Analysis 3: Hazard Ratios
 
-Compare hazard ratios estimated using Yi's method and KoMbine's MINLP approach.
+We compare hazard ratios estimated using:
+
+- **Yi**: a weighted likelihood / weighted logrank-style construction based on fractional group membership.
+- **KoMbine**: the full MINLP profile likelihood (**`cox_only=False`**), which jointly optimizes discrete assignments and survival parameters.
+
+### Why the confidence intervals behave differently
+
+As noted in the paper text, Yi’s approach can reduce bias in the *point estimate* of the hazard ratio compared to ignoring measurement error, but the **confidence interval does not necessarily reflect loss of identifiability** when measurement error becomes very large. In the extreme-uncertainty limit we would expect the data to place almost no constraint on the hazard ratio, but Yi-style weighting does not automatically produce that behavior.
+
+KoMbine’s likelihood framework, by contrast, can naturally widen the profile-likelihood confidence interval as patient-wise uncertainty increases, because the model explicitly accounts for the possibility that the discrete group assignment itself is uncertain.
 
 ```python
 # Calculate hazard ratios (Yi vs KoMbine) for all four scenarios
@@ -423,7 +439,7 @@ chi2_95 = 3.84  # chi2.ppf(0.95, df=1) for a 95% two-sided CI
 
 for scenario_key, scenario_info in scenarios.items():
     dc = datacards[scenario_key]
-    hr_threshold = 0.5
+    hr_threshold = threshold
     
     # Yi's method - profile likelihood scan
     yi_2nlls = []
@@ -451,7 +467,7 @@ for scenario_key, scenario_info in scenarios.items():
     else:
         yi_lower_ci = yi_upper_ci = np.nan
     
-    # KoMbine's MINLP
+    # KoMbine's MINLP (full likelihood; allows assignments to change with HR)
     hr_calc = dc.km_hazard_ratio(
         parameter_threshold=hr_threshold,
         parameter_min=-np.inf,
@@ -459,7 +475,7 @@ for scenario_key, scenario_info in scenarios.items():
     )
     
     best_hr_minlp, lower_ci, upper_ci, _ = hr_calc.hazard_ratio_confidence_interval(
-        cox_only=True,
+        cox_only=False,
         confidence_level=0.95,
         hazard_ratio_min=0.1,
         hazard_ratio_max=15.0  # Extended to match scan range
@@ -538,33 +554,39 @@ plt.show()
 ```
 
 
-## Summary of Findings
+## Summary of Findings (with `cox_only=False` for KoMbine HR/p-values)
 
-### Kaplan-Meier Curves (Qualitative)
-Across the four scenarios, both methods track each other closely when measurement error is tiny, then diverge as uncertainty grows. The divergence is expected given the modeling differences: Yi uses probabilistic weights with fractional group membership, while KoMbine enforces a single group per patient and optimizes assignments.
+The key modeling difference is **fractional vs discrete assignment** under measurement uncertainty: Yi’s method assigns each patient to both groups with weights, while KoMbine enforces one group per patient and scores assignments using an explicit measurement-error model.
 
-- **Fixed / Large-count**: Curves are nearly identical because group membership is effectively known.
-- **Moderate-count**: Yi softens group separation (curves move closer), while KoMbine can shift assignments to the most likely configuration, which can preserve or amplify separation.
-- **Small-count**: The largest differences appear because group assignment becomes ambiguous; KoMbine may reassign multiple borderline patients, while Yi spreads their influence across both groups.
+### Kaplan–Meier Curves (Qualitative)
+- **Fixed / Large-count**: Yi and KoMbine curves are very similar because group membership is effectively known (measurement error is negligible).
+- **Moderate-count**: Yi begins to shrink the gap between groups. KoMbine’s best-fit curves can still preserve separation, but the confidence bands widen because assignments are less certain.
+- **Small-count**: Differences can become qualitative (including apparent reversals) because group membership is weakly identified under the error model.
 
-### Logrank Test P-Values (Interpretation)
-- **Yi** tends to increase p-values as uncertainty grows because probabilistic weighting blurs group differences.
-- **KoMbine** can keep p-values more stable by choosing a most-likely discrete assignment, but the result depends on the assumed error model and the likelihood specification.
-- When the two p-values disagree strongly, it is a signal that measurement uncertainty is driving the inference, not just sampling noise.
+### P-Values (Observed in this notebook run)
+- Yi’s p-values generally increase as uncertainty grows, reaching near 1.0 in the small-count case.
+- KoMbine’s full-likelihood p-values stay relatively stable for fixed/large/moderate and diverge from Yi when assignments become ambiguous.
 
-### Hazard Ratios (Interpretation)
-- **Yi** generally yields smaller hazard ratios as uncertainty increases, reflecting the softened group contrast from weighting.
-- **KoMbine** can retain larger hazard ratios if the likelihood favors a strong separation after assignment optimization.
-- The profile likelihood curves show not only the best-fit HR, but also how uncertain that HR is under each method's model assumptions.
+| Scenario | Yi p-value | KoMbine p-value (MINLP) |
+|---|---:|---:|
+| Fixed | 4.226e-01 | 2.509e-01 |
+| Large Poisson | 3.330e-01 | 2.508e-01 |
+| Moderate Poisson | 5.460e-01 | 2.508e-01 |
+| Small Poisson | 9.702e-01 | 1.718e-01 |
 
-### What These Differences Mean
-- **Neither method is universally "correct."** Each is correct for its own modeling assumptions.
-- **Yi's approach** uses probabilistic weighting that treats uncertain group membership as fractional, which is fast and often conservative.
-- **KoMbine's approach** enforces discrete membership and optimizes it with the survival model, which can produce sharper separation but relies on the chosen error model and constraints.
-- **Big discrepancies** between methods indicate that measurement uncertainty is a dominant driver of the result; the conclusion is sensitive to how group assignment is modeled.
+### Hazard Ratios (Observed in this notebook run)
+- Yi’s best-fit HR drifts toward 1 as uncertainty increases, and its profile-based CI in this simple scan does not automatically explode in the large-uncertainty limit.
+- KoMbine’s best-fit HR stays near the baseline optimum in these examples, but the **confidence interval widens** as uncertainty grows; in the small-count case the lower bound hits the scan boundary, consistent with the idea that the HR becomes weakly constrained.
+
+| Scenario | Yi best HR [95% CI] | KoMbine best HR [95% CI] |
+|---|---|---|
+| Fixed | 1.800 [0.586, 8.600] | 2.280 [0.496, 11.156] |
+| Large Poisson | 2.043 [0.586, 9.571] | 2.280 [0.496, 11.156] |
+| Moderate Poisson | 1.557 [0.586, 6.900] | 2.280 [0.442, 11.156] |
+| Small Poisson | 1.071 [0.343, 3.986] | 2.280 [0.100, 11.156] |
 
 ### Practical Takeaways
-1. If measurement error is small, both methods should agree and the choice is less critical.
-2. If measurement error is moderate or large, treat results as model-dependent; report sensitivity to the modeling choice.
-3. If you can justify a specific error model and discrete group assignments, KoMbine provides a principled likelihood-based fit.
-4. If you want a fast, conservative screen or do not want to commit to discrete assignments, Yi's weighting is a reasonable approximation.
+1. When measurement error is tiny, both methods agree and the choice is less critical.
+2. When measurement error is moderate/large, treat the conclusion as model-dependent and report sensitivity to the modeling choice.
+3. Yi’s method is fast and often conservative (it blurs separation as uncertainty grows).
+4. KoMbine is likelihood-principled for the specified error model and can reveal when parameters become weakly identified via widening profile-likelihood intervals.
