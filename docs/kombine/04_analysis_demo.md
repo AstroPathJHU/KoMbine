@@ -15,13 +15,18 @@ jupyter:
 
 # Comprehensive P-value and Hazard Ratio Analysis with KoMbine
 
-This notebook provides a comprehensive guide to calculating p-values and hazard ratios using the KoMbine package.
+This notebook demonstrates likelihood-based p-values and hazard ratio estimation with KoMbine, then explores how the likelihood behaves across different data-count scenarios and parameter restrictions.
 
 ## Contents
-1. Basic p-value calculations using logrank tests
-2. Hazard ratio estimation with confidence intervals
-3. Scenario likelihood scans (fixed, large, moderate, small)
-4. Restricted range analysis (0.01 to 0.99)
+- [Part 1: Basic analysis - p-values and hazard ratios](#part-1-basic-analysis---p-values-and-hazard-ratios)
+  - [Loading data](#loading-data)
+  - [KoMbine p-value calculation](#kombine-p-value-calculation)
+  - [Basic hazard ratio estimation](#basic-hazard-ratio-estimation)
+- [Scenario likelihood scans (fixed, large, moderate, small)](#scenario-likelihood-scans-fixed-large-moderate-small)
+- [Restricted range analysis (0.01 to 0.99)](#restricted-range-analysis-001-to-099)
+  - [Why can a group become empty?](#why-can-a-group-become-empty)
+  - [What does an empty group mean for the hazard ratio?](#what-does-an-empty-group-mean-for-the-hazard-ratio)
+  - [Why does that create a plateau in the scan?](#why-does-that-create-a-plateau-in-the-scan)
 
 ```python
 import warnings
@@ -34,11 +39,11 @@ from kombine.datacard import Datacard, FixedObservable, PoissonDensityObservable
 np.random.seed(42)
 ```
 
-## Part 1: Basic Analysis - P-values and Hazard Ratios
+## Part 1: Basic analysis - p-values and hazard ratios
 
-### Loading Data
+### Loading data
 
-First, we load patient data from a datacard file. Datacard files specify patient survival times, censoring status, and biomarker measurements.
+We load a small example datacard with fixed observables. The file encodes survival times, censoring, and biomarker measurements for a 12-patient cohort.
 
 ```python
 here = pathlib.Path(".").resolve()
@@ -59,9 +64,11 @@ print(f"Deaths: {sum(1 for p in datacard.patients if not p.censored)}")
 print(f"Censored: {sum(1 for p in datacard.patients if p.censored)}")
 ```
 
-### KoMbine P-value Calculation
+### KoMbine p-value calculation
 
-KoMbine provides a likelihood-based p-value that accounts for measurement uncertainty when comparing survival curves between two groups defined by a biomarker threshold. For comparison, we also calculate the conventional logrank test p-value.
+KoMbine provides a likelihood-based p-value that accounts for measurement uncertainty when comparing survival curves across a biomarker threshold. For context, we also compute the standard logrank p-value.
+
+For this dataset and threshold, the likelihood p-value is $2.67\times 10^{-2}$ and the logrank p-value is $1.61\times 10^{-2}$.
 
 ```python
 # Define biomarker threshold to split patients into two groups
@@ -83,12 +90,14 @@ print(f"  KoMbine likelihood p-value: {kombine_p_value:.4e}")
 print(f"  Logrank p-value:           {logrank_p_value:.4e}")
 ```
 
-### Basic Hazard Ratio Estimation
+### Basic hazard ratio estimation
 
-The hazard ratio quantifies the relative instantaneous risk of an event between two groups:
-- HR = 1: No difference
-- HR > 1: High group has higher hazard (worse outcomes)
-- HR < 1: Low group has higher hazard (better outcomes)
+The hazard ratio (HR) summarizes the relative instantaneous event risk between the high- and low-risk groups:
+- HR = 1: no difference
+- HR > 1: high group has higher hazard (worse outcomes)
+- HR < 1: high group has lower hazard (better outcomes)
+
+For this example, the best-fit HR is 0.1959 with a 95% CI of [0.0284, 0.8386], indicating lower hazard in the high group at this threshold.
 
 ```python
 # Create hazard ratio calculator
@@ -111,8 +120,8 @@ print(f"  Best-fit HR: {best_fit_hr:.4f}")
 print(f"  95% CI: [{lower_ci_95:.4f}, {upper_ci_95:.4f}]")
 ```
 
-## Scenario Likelihood Scans (Fixed, Large, Moderate, Small)
-These scans use the full likelihood (`cox_only=False`) with wide parameter bounds and a shared hazard-ratio grid.
+## Scenario likelihood scans (fixed, large, moderate, small)
+These scans use the full likelihood (`cox_only=False`) with wide parameter bounds and a shared hazard-ratio grid from 0.01 to 100. In some scenarios the best-fit HR lands at the lower scan bound, so extending the grid can be useful for a tighter minimum.
 
 ```python
 from pathlib import Path
@@ -221,13 +230,14 @@ for pair_index, (left, right) in enumerate(scenario_pairs):
 plt.tight_layout()
 ```
 
-The NLL profiles align in shape across scenarios, while the patient-count panels show how assignments shift as the hazard ratio changes.
-As counts decrease, the NLL curves become flatter and the patient-count curves show more step-like changes, reflecting the discrete nature of the assignments.
-Fixed-count data stay comparatively stable across hazard ratios, whereas smaller counts show earlier shifts in who is assigned to the high-risk group.
+The fixed and large-count cases show smooth, convex $-2\Delta\ln L$ profiles with a clear minimum, while the moderate case remains smooth but with more pronounced curvature changes.
+The small-count scenario is noticeably rougher, with shallow local structure before rising at large HR.
+
+Patient assignments behave accordingly: fixed counts remain constant across the scan, large counts shift once, and moderate/small counts show multiple step-like changes as the optimizer reassigns borderline patients.
 
 
-## Restricted Range Analysis (0.01 to 0.99)
-This section shows how restricting the fitted parameter range affects the moderate-count scan.
+## Restricted range analysis (0.01 to 0.99)
+This section repeats the moderate-count scan while restricting the fitted parameter to [0.01, 0.99], showing how parameter bounds can change the likelihood surface and the optimal patient assignments.
 
 ```python
 moderate_path = datacard_root / "poisson_density_hr_example_moderate.txt"
@@ -299,9 +309,7 @@ _tight_patient_ylim(axes[2], high_restricted[valid_mask])
 plt.tight_layout()
 ```
 
-When the fitted parameter is restricted to 0.01 to 0.99, the optimizer can exclude some assignments that would otherwise be available, which introduces broader plateaus in the NLL curve.
-The patient-count plots show where the fit is forced to hold a group size fixed because the best-fit parameter would lie outside the allowed range.
-This effect becomes more pronounced when many groups are fit together, since a single restricted parameter can force the shared hazard ratio to favor different subsets of patients across groups.
+With the 0.01 to 0.99 restriction, the scan shows a long plateau at low HR, a sharp dip to the minimum at intermediate HR, and a rapid rise at extreme HR. The low-risk count stays nearly fixed, while the high-risk group steadily shrinks and can hit zero near the extreme end.
 
 ### Why can a group become empty?
 
@@ -326,9 +334,6 @@ $$
 
 As HR is forced to more extreme values, the best two-group assignment can become very expensive in NLL. But the optimizer has an escape hatch: it can drop borderline patients (and in the limit, empty one group), pay the patient-wise penalties, and move to a configuration where the objective no longer depends on HR.
 
-So the patient-wise penalty effectively sets the height of the plateau: beyond some HR, the optimizer prefers a roughly fixed penalty plus an HR-insensitive Cox/Breslow term, rather than letting $-2\Delta\ln L$ continue to grow.
+So the patient-wise penalty effectively sets the height of the plateau: beyond some HR, the optimizer prefers a fixed penalty plus an HR-insensitive Cox/Breslow term, rather than letting $-2\Delta\ln L$ continue to grow.
 
 **Interpretation:** in the plateau region, the hazard ratio is not constrained by the data at a higher confidence level than the plateau height.
-
-
-
