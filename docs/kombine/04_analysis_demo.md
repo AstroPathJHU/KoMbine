@@ -491,6 +491,31 @@ The discontinuities come from **assignment changes** as the hazard ratio is forc
 
 That discontinuous re-assignment creates visible kinks and plateaus in the profile likelihood at extreme hazard ratios.
 
+#### Why can a group become empty?
+
+In this scan, the optimizer is allowed to place each patient in **low**, **high**, or **neither** (dropped). Dropping a patient costs a *patient-wise penalty*, but it can still be beneficial if keeping that patient would make the Cox/Breslow (survival-curve) part of the objective much worse at a forced hazard ratio.
+
+There is also **no constraint that forces both groups to stay non-empty**, so at extreme forced hazard ratios the optimizer can decide that the best option is to shrink (or even empty) one group.
+
+#### What does an empty group mean for the hazard ratio?
+
+A hazard ratio only has content when you are comparing *two* groups. If the optimizer empties one group, then the survival-data part of the objective no longer has leverage to prefer one hazard ratio over another.
+
+Concretely, the Cox/Breslow likelihood used here depends on the risk sets through terms like:
+
+$$\log\big(r_{\mathrm{low}}(t) + \mathrm{HR}\,r_{\mathrm{high}}(t) + \epsilon\big).$$
+
+- If the **high** group is empty, then $r_{\mathrm{high}}(t)=0$ (and there are no high-group deaths), so HR drops out of these terms.
+- If the **low** group is empty, the dependence on HR cancels in the same way in the ideal Cox expression; in the implementation a small $\epsilon$ is included to keep the log well-defined, so any remaining HR dependence is purely a numerical safeguard and does not provide a meaningful constraint.
+
+#### Why does that create a plateau (“ceiling”) in the scan?
+
+As HR is forced to more extreme values, the best *two-group* assignment can become very expensive in NLL. But the optimizer has an escape hatch: it can drop borderline patients (and in the limit, empty one group), pay the patient-wise penalties, and move to a configuration where the objective no longer depends on HR.
+
+So the patient-wise penalty effectively sets the *height of the plateau*: beyond some HR, the optimizer prefers a roughly fixed penalty + an HR-insensitive Cox/Breslow term, rather than letting $-2\Delta\ln L$ continue to grow.
+
+**Interpretation:** in the plateau region, the hazard ratio is **not constrained by the data at a higher confidence level than the plateau height**. Intuitively, the data do not force the model to keep any patients in the depleted group, so they also cannot force a particular hazard ratio between the two groups.
+
 
 ### Summary Comparison
 
@@ -557,8 +582,3 @@ This notebook demonstrated:
 - Moderate count measurements show substantial widening of confidence intervals due to measurement uncertainty
 - KoMbine properly accounts for this measurement uncertainty in survival analysis
 
-See other notebooks for:
-- Yi's misclassification correction methods (notebook 06)
-- Comparison to external packages (lifelines, notebook 05)
-- Kaplan-Meier examples (notebook 03)
-- Command-line interface (notebook 07)
