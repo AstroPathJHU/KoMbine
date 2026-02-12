@@ -15,12 +15,12 @@ jupyter:
 
 # Comprehensive P-value and Hazard Ratio Analysis with KoMbine
 
-This notebook provides a comprehensive guide to calculating p-values, hazard ratios, and performing likelihood scans using the KoMbine package.
+This notebook provides a comprehensive guide to calculating p-values and hazard ratios using the KoMbine package.
 
 ## Contents
 1. Basic p-value calculations using logrank tests
 2. Hazard ratio estimation with confidence intervals
-3. Profile likelihood scans
+3. Profile hazard ratio likelihood scans
 4. Detailed comparisons across fixed, large count, and moderate count measurement scenarios
 
 ```python
