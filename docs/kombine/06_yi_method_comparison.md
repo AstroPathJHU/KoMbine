@@ -13,9 +13,9 @@ jupyter:
     name: python3
 ---
 
-# Yi's Method vs KoMbine MINLP: Comprehensive Comparison
+# Yi's Method vs KoMbine: Comprehensive Comparison
 
-This notebook provides a comprehensive side-by-side comparison between Yi's method for Kaplan-Meier likelihood estimation and KoMbine's MINLP approach across four measurement scenarios:
+This notebook provides a comprehensive side-by-side comparison between Yi's method for Kaplan-Meier likelihood estimation and KoMbine's approach (MINLP) across four measurement scenarios:
 - Fixed Hazard Ratio (deterministic, no measurement error)
 - Poisson density with large effect size (small relative error ~2-3%)
 - Poisson density with moderate effect size (larger relative error ~5-7%)
@@ -115,16 +115,17 @@ threshold = 0.5001
 
 ## Analysis 1: Kaplan-Meier Curves
 
-Compare the Kaplan-Meier survival curves between Yi's method (dashed lines) and KoMbine's MINLP approach (solid lines with shaded 95% confidence intervals) across all four scenarios. This visualization directly shows how measurement error affects the survival curve estimates and their uncertainties.
+Compare the Kaplan-Meier survival curves between Yi's method (dashed lines) and KoMbine's approach (solid lines with shaded 95% confidence intervals) across all four scenarios. This visualization directly shows how measurement error affects the survival curve estimates and their uncertainties.
 
 ```python
-# Calculate both Yi's weighted KM and KoMbine's MINLP KM for each scenario
+# Calculate both Yi's weighted KM and KoMbine KM for each scenario
 km_results = {}
+label_width = 7
 
 for scenario_key, scenario_info in scenarios.items():
     dc = datacards[scenario_key]
     
-    # KoMbine's MINLP method with confidence bands
+    # KoMbine method with confidence bands
     km_low = dc.km_likelihood(
         parameter_min=-np.inf,
         parameter_max=threshold,
@@ -135,7 +136,7 @@ for scenario_key, scenario_info in scenarios.items():
         parameter_max=np.inf,
     )
     
-    # Use the same time grids for Yi and MINLP so curves align
+    # Use the same time grids for Yi and KoMbine so curves align
     times_low = sorted(km_low.patient_death_times)
     times_high = sorted(km_high.patient_death_times)
     times_low_plot = [0.0] + times_low
@@ -154,7 +155,7 @@ for scenario_key, scenario_info in scenarios.items():
         times_for_plot=times_high_plot,
     )
     
-    # Calculate best-fit and 95% CI for MINLP
+    # Calculate best-fit and 95% CI for KoMbine
     # Use full likelihood (not binomial_only) to include measurement uncertainty!
     best_low, ci_low = km_low.survival_probabilities_likelihood(
         CLs=[0.95],
@@ -173,7 +174,7 @@ for scenario_key, scenario_info in scenarios.items():
             'low': result_low_yi,
             'high': result_high_yi,
         },
-        'minlp': {
+        'kombine': {
             'low': {
                 'times': times_low,
                 'best': best_low,
@@ -188,22 +189,22 @@ for scenario_key, scenario_info in scenarios.items():
     }
     
     print(f"\n{scenario_info['label']}:")
-    print(f"  Yi    - Low group final survival:  {result_low_yi['survival_probabilities'][-1]:.4f}")
-    print(f"  Yi    - High group final survival: {result_high_yi['survival_probabilities'][-1]:.4f}")
+    print(f"  {'Yi':<{label_width}} - Low group final survival:  {result_low_yi['survival_probabilities'][-1]:.4f}")
+    print(f"  {'Yi':<{label_width}} - High group final survival: {result_high_yi['survival_probabilities'][-1]:.4f}")
     
     if len(ci_low) > 0:
         ci_low_lower = ci_low[-1, 0, 0]
         ci_low_upper = ci_low[-1, 0, 1]
-        print(f"  MINLP - Low group final survival:  {best_low[-1]:.4f} [{ci_low_lower:.4f}, {ci_low_upper:.4f}]")
+        print(f"  {'KoMbine':<{label_width}} - Low group final survival:  {best_low[-1]:.4f} [{ci_low_lower:.4f}, {ci_low_upper:.4f}]")
     else:
-        print(f"  MINLP - Low group final survival:  {best_low[-1]:.4f}")
+        print(f"  {'KoMbine':<{label_width}} - Low group final survival:  {best_low[-1]:.4f}")
     
     if len(ci_high) > 0:
         ci_high_lower = ci_high[-1, 0, 0]
         ci_high_upper = ci_high[-1, 0, 1]
-        print(f"  MINLP - High group final survival: {best_high[-1]:.4f} [{ci_high_lower:.4f}, {ci_high_upper:.4f}]")
+        print(f"  {'KoMbine':<{label_width}} - High group final survival: {best_high[-1]:.4f} [{ci_high_lower:.4f}, {ci_high_upper:.4f}]")
     else:
-        print(f"  MINLP - High group final survival: {best_high[-1]:.4f}")
+        print(f"  {'KoMbine':<{label_width}} - High group final survival: {best_high[-1]:.4f}")
 ```
 
 
@@ -245,48 +246,48 @@ for idx, (scenario_key, scenario_info) in enumerate(scenarios.items()):
     ax.step(times_high_yi, surv_high_yi, where='post', linewidth=2.5, 
             color=color_high, alpha=0.7, linestyle='--', label="Yi: High group")
     
-    # KoMbine MINLP - Low group with error bands
-    times_low_minlp = result['minlp']['low']['times']
-    best_low_minlp = result['minlp']['low']['best']
-    ci_low_minlp = result['minlp']['low']['ci']
+    # KoMbine - Low group with error bands
+    times_low_kombine = result['kombine']['low']['times']
+    best_low_kombine = result['kombine']['low']['best']
+    ci_low_kombine = result['kombine']['low']['ci']
     
     # Create step function coordinates for plotting
-    times_plot_low = [times_low_minlp[0]]
+    times_plot_low = [times_low_kombine[0]]
     best_plot_low = [1.0]
     ci_lower_plot_low = [1.0]
     ci_upper_plot_low = [1.0]
     
-    for i, t in enumerate(times_low_minlp):
+    for i, t in enumerate(times_low_kombine):
         times_plot_low.append(t)
-        best_plot_low.append(best_low_minlp[i])
-        ci_lower_plot_low.append(ci_low_minlp[i, 0, 0])
-        ci_upper_plot_low.append(ci_low_minlp[i, 0, 1])
+        best_plot_low.append(best_low_kombine[i])
+        ci_lower_plot_low.append(ci_low_kombine[i, 0, 0])
+        ci_upper_plot_low.append(ci_low_kombine[i, 0, 1])
     
     ax.step(times_plot_low, best_plot_low, where='post', linewidth=2.5, 
-            color=color_low, alpha=0.9, label='MINLP: Low group', zorder=3)
+            color=color_low, alpha=0.9, label='KoMbine: Low group', zorder=3)
     ax.fill_between(times_plot_low, ci_lower_plot_low, ci_upper_plot_low, 
-                     step='post', alpha=0.15, color=color_low, label='MINLP: Low 95% CI', zorder=2)
+                     step='post', alpha=0.15, color=color_low, label='KoMbine: Low 95% CI', zorder=2)
     
-    # KoMbine MINLP - High group with error bands
-    times_high_minlp = result['minlp']['high']['times']
-    best_high_minlp = result['minlp']['high']['best']
-    ci_high_minlp = result['minlp']['high']['ci']
+    # KoMbine - High group with error bands
+    times_high_kombine = result['kombine']['high']['times']
+    best_high_kombine = result['kombine']['high']['best']
+    ci_high_kombine = result['kombine']['high']['ci']
     
-    times_plot_high = [times_high_minlp[0]]
+    times_plot_high = [times_high_kombine[0]]
     best_plot_high = [1.0]
     ci_lower_plot_high = [1.0]
     ci_upper_plot_high = [1.0]
     
-    for i, t in enumerate(times_high_minlp):
+    for i, t in enumerate(times_high_kombine):
         times_plot_high.append(t)
-        best_plot_high.append(best_high_minlp[i])
-        ci_lower_plot_high.append(ci_high_minlp[i, 0, 0])
-        ci_upper_plot_high.append(ci_high_minlp[i, 0, 1])
+        best_plot_high.append(best_high_kombine[i])
+        ci_lower_plot_high.append(ci_high_kombine[i, 0, 0])
+        ci_upper_plot_high.append(ci_high_kombine[i, 0, 1])
     
     ax.step(times_plot_high, best_plot_high, where='post', linewidth=2.5, 
-            color=color_high, alpha=0.9, label='MINLP: High group', zorder=3)
+            color=color_high, alpha=0.9, label='KoMbine: High group', zorder=3)
     ax.fill_between(times_plot_high, ci_lower_plot_high, ci_upper_plot_high, 
-                     step='post', alpha=0.15, color=color_high, label='MINLP: High 95% CI', zorder=2)
+                     step='post', alpha=0.15, color=color_high, label='KoMbine: High 95% CI', zorder=2)
     
     ax.set_xlabel('Time', fontsize=11)
     ax.set_ylabel('Survival Probability', fontsize=11)
@@ -296,7 +297,7 @@ for idx, (scenario_key, scenario_info) in enumerate(scenarios.items()):
     ax.grid(True, alpha=0.3)
     ax.set_ylim([0, 1.05])
 
-plt.suptitle("Kaplan-Meier Curves: Yi vs KoMbine MINLP Across Measurement Scenarios", 
+plt.suptitle("Kaplan-Meier Curves: Yi vs KoMbine Across Measurement Scenarios", 
              fontsize=14, fontweight='bold', y=1.02)
 plt.tight_layout()
 plt.show()
@@ -312,7 +313,7 @@ In the small-counts scenario, KoMbine’s best-fit *KM curves* can show the “h
 - If early events are borderline, the likelihood can increase by assigning them to the group that best explains the observed survival times, which can make the *apparent* group ordering flip.
 
 **A subtle but important detail**
-- In this notebook, the two KoMbine KM curves are fit **separately** (one MINLP for the low range and one MINLP for the high range). With large uncertainty, the best-fit assignments for those two separate optimizations need not form a perfectly complementary partition of patients.
+- In this notebook, the two KoMbine KM curves are fit **separately** (one KoMbine optimization for the low range and one for the high range). With large uncertainty, the best-fit assignments for those two separate optimizations need not form a perfectly complementary partition of patients.
 - The KoMbine **hazard ratio / p-value** calculations, in contrast, are *joint* two-group fits. Those joint fits are the self-consistent way to summarize “which group is worse” under the KoMbine model.
 
 **Why Yi looks different**
@@ -328,7 +329,7 @@ When measurement error is large, probabilistic assignment (Yi) and discrete assi
 We compare p-values from:
 
 - **Yi**: a *weighted* logrank-style calculation using per-patient probabilistic group membership (fractional membership).
-- **KoMbine**: a *likelihood-based* p-value using the full MINLP model (**`cox_only=False`**), which allows discrete group assignments to change in the fit when measurements are uncertain.
+- **KoMbine**: a *likelihood-based* p-value using the full model (**`cox_only=False`**), which allows discrete group assignments to change in the fit when measurements are uncertain.
 
 **What to expect**
 
@@ -339,6 +340,7 @@ We compare p-values from:
 ```python
 # Calculate p-values (Yi vs KoMbine) for all four scenarios
 pvalue_results = {}
+label_width = 7
 
 for scenario_key, scenario_info in scenarios.items():
     dc = datacards[scenario_key]
@@ -350,23 +352,23 @@ for scenario_key, scenario_info in scenarios.items():
         parameter_max=np.inf,
     )
     
-    # KoMbine's MINLP (full likelihood; includes patient-wise uncertainty)
-    minlp_calc = dc.km_p_value(
+    # KoMbine (full likelihood; includes patient-wise uncertainty)
+    kombine_calc = dc.km_p_value(
         parameter_threshold=threshold,
         parameter_min=-np.inf,
         parameter_max=np.inf,
     )
-    pval_minlp, _, _ = minlp_calc.solve_and_pvalue(cox_only=False)
+    pval_kombine, _, _ = kombine_calc.solve_and_pvalue(cox_only=False)
     
     pvalue_results[scenario_key] = {
         'yi': yi_result['p_value'],
-        'minlp': pval_minlp
+        'kombine': pval_kombine
     }
     
     print(f"\n{scenario_info['label']}:")
-    print(f"  Yi   p-value: {yi_result['p_value']:.4e}")
-    print(f"  MINLP p-value: {pval_minlp:.4e}")
-    rel_diff = abs(yi_result['p_value'] - pval_minlp) / min(yi_result['p_value'], pval_minlp) * 100
+    print(f"  {'Yi':<{label_width}} p-value: {yi_result['p_value']:.4e}")
+    print(f"  {'KoMbine':<{label_width}} p-value: {pval_kombine:.4e}")
+    rel_diff = abs(yi_result['p_value'] - pval_kombine) / min(yi_result['p_value'], pval_kombine) * 100
     print(f"  Relative diff: {rel_diff:.1f}%")
 ```
 
@@ -377,14 +379,14 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 # Prepare data
 scenario_labels = [scenarios[k]['label'] for k in ['fixed', 'large', 'moderate', 'small']]
 yi_pvals = [pvalue_results[k]['yi'] for k in ['fixed', 'large', 'moderate', 'small']]
-minlp_pvals = [pvalue_results[k]['minlp'] for k in ['fixed', 'large', 'moderate', 'small']]
+kombine_pvals = [pvalue_results[k]['kombine'] for k in ['fixed', 'large', 'moderate', 'small']]
 
 # Bar plot
 x = np.arange(len(scenario_labels))
 width = 0.35
 
 bars1 = ax1.bar(x - width/2, yi_pvals, width, label="Yi's Method", color='steelblue')
-bars2 = ax1.bar(x + width/2, minlp_pvals, width, label='KoMbine MINLP', color='coral')
+bars2 = ax1.bar(x + width/2, kombine_pvals, width, label='KoMbine', color='coral')
 
 ax1.set_ylabel('P-value', fontsize=12)
 ax1.set_title('Logrank Test P-Values Comparison', fontsize=13, fontweight='bold')
@@ -401,12 +403,12 @@ for bars in [bars1, bars2]:
                 f'{height:.3e}', ha='center', va='bottom', fontsize=9)
 
 # Relative difference plot
-differences = [abs(yi_pvals[i] - minlp_pvals[i]) for i in range(len(scenario_labels))]
-rel_diffs = [differences[i] / min(yi_pvals[i], minlp_pvals[i]) * 100 for i in range(len(scenario_labels))]
+differences = [abs(yi_pvals[i] - kombine_pvals[i]) for i in range(len(scenario_labels))]
+rel_diffs = [differences[i] / min(yi_pvals[i], kombine_pvals[i]) * 100 for i in range(len(scenario_labels))]
 
 ax2.bar(scenario_labels, rel_diffs, color='green', alpha=0.7)
 ax2.set_ylabel('Relative Difference (%)', fontsize=12)
-ax2.set_title('Relative Difference: |Yi - MINLP| / min(Yi, MINLP)', fontsize=13, fontweight='bold')
+ax2.set_title('Relative Difference: |Yi - KoMbine| / min(Yi, KoMbine)', fontsize=13, fontweight='bold')
 ax2.set_xticklabels(scenario_labels, rotation=15, ha='right')
 ax2.grid(True, alpha=0.3, axis='y')
 
@@ -423,7 +425,7 @@ plt.show()
 We compare hazard ratios estimated using:
 
 - **Yi**: a weighted likelihood / weighted logrank-style construction based on fractional group membership.
-- **KoMbine**: the full MINLP profile likelihood (**`cox_only=False`**), which jointly optimizes discrete assignments and survival parameters.
+- **KoMbine**: the full profile likelihood (**`cox_only=False`**), which jointly optimizes discrete assignments and survival parameters.
 
 ### Why the confidence intervals behave differently
 
@@ -434,6 +436,7 @@ KoMbine’s likelihood framework, by contrast, can naturally widen the profile-l
 ```python
 # Calculate hazard ratios (Yi vs KoMbine) for all four scenarios
 hr_results = {}
+label_width = 7
 hazard_ratios_scan = np.logspace(-2, 2, 80)  # Match 04: 0.01 to 100 with 80 points
 chi2_95 = 3.84  # chi2.ppf(0.95, df=1) for a 95% two-sided CI
 
@@ -467,41 +470,41 @@ for scenario_key, scenario_info in scenarios.items():
     else:
         yi_lower_ci = yi_upper_ci = np.nan
     
-    # KoMbine's MINLP (full likelihood; allows assignments to change with HR)
+    # KoMbine (full likelihood; allows assignments to change with HR)
     hr_calc = dc.km_hazard_ratio(
         parameter_threshold=hr_threshold,
         parameter_min=-np.inf,
         parameter_max=np.inf,
     )
     
-    best_hr_minlp, lower_ci, upper_ci, _ = hr_calc.hazard_ratio_confidence_interval(
+    best_hr_kombine, lower_ci, upper_ci, _ = hr_calc.hazard_ratio_confidence_interval(
         cox_only=False,
         confidence_level=0.95,
         hazard_ratio_min=0.01,
         hazard_ratio_max=100.0,
     )
     
-    # MINLP profile likelihood scan
-    minlp_2nlls = []
+    # KoMbine profile likelihood scan
+    kombine_2nlls = []
     for hr in hazard_ratios_scan:
         result = hr_calc.compute_2nll_at_hazard_ratio(hr, cox_only=False, verbose=False)
-        minlp_2nlls.append(result.x)
+        kombine_2nlls.append(result.x)
     
     hr_results[scenario_key] = {
         'yi_best': best_hr_yi,
         'yi_2nlls': yi_2nlls,
         'yi_lower': yi_lower_ci,
         'yi_upper': yi_upper_ci,
-        'minlp_best': best_hr_minlp,
-        'minlp_2nlls': minlp_2nlls,
-        'minlp_lower': lower_ci,
-        'minlp_upper': upper_ci,
+        'kombine_best': best_hr_kombine,
+        'kombine_2nlls': kombine_2nlls,
+        'kombine_lower': lower_ci,
+        'kombine_upper': upper_ci,
     }
     
     print(f"\n{scenario_info['label']}:")
-    print(f"  Yi best-fit HR:       {best_hr_yi:.3f} [{yi_lower_ci:.3f}, {yi_upper_ci:.3f}]")
-    print(f"  MINLP best-fit HR:    {best_hr_minlp:.3f} [{lower_ci:.3f}, {upper_ci:.3f}]")
-    rel_hr_diff = abs(best_hr_yi - best_hr_minlp) / best_hr_minlp * 100
+    print(f"  {'Yi':<{label_width}} best-fit HR: {best_hr_yi:.3f} [{yi_lower_ci:.3f}, {yi_upper_ci:.3f}]")
+    print(f"  {'KoMbine':<{label_width}} best-fit HR: {best_hr_kombine:.3f} [{lower_ci:.3f}, {upper_ci:.3f}]")
+    rel_hr_diff = abs(best_hr_yi - best_hr_kombine) / best_hr_kombine * 100
     print(f"  Relative HR diff:     {rel_hr_diff:.1f}%")
 ```
 
@@ -520,20 +523,20 @@ for idx, (scenario_key, scenario_info) in enumerate(scenarios.items()):
     min_yi = min(yi_2nlls)
     delta_yi = np.array(yi_2nlls) - min_yi
     
-    # MINLP profile likelihood
-    minlp_2nlls = result['minlp_2nlls']
-    min_minlp = min(minlp_2nlls)
-    delta_minlp = np.array(minlp_2nlls) - min_minlp
+    # KoMbine profile likelihood
+    kombine_2nlls = result['kombine_2nlls']
+    min_kombine = min(kombine_2nlls)
+    delta_kombine = np.array(kombine_2nlls) - min_kombine
     
     # Plot both profile likelihoods
     ax.plot(hazard_ratios_scan, delta_yi, color='#1976d2', linewidth=2.5, marker='o', markersize=3,
             label="Yi's Method", zorder=3)
-    ax.plot(hazard_ratios_scan, delta_minlp, color='#d32f2f', linewidth=2.5, marker='s', markersize=3,
-            label="KoMbine MINLP", zorder=3)
+    ax.plot(hazard_ratios_scan, delta_kombine, color='#d32f2f', linewidth=2.5, marker='s', markersize=3,
+            label="KoMbine", zorder=3)
     
     # Best-fit lines
     ax.axvline(result['yi_best'], color='#1976d2', linestyle='--', alpha=0.6, linewidth=1.5, zorder=2)
-    ax.axvline(result['minlp_best'], color='#d32f2f', linestyle='--', alpha=0.6, linewidth=1.5, zorder=2)
+    ax.axvline(result['kombine_best'], color='#d32f2f', linestyle='--', alpha=0.6, linewidth=1.5, zorder=2)
     
     # Confidence threshold line (95% CI, chi2=3.84)
     ax.axhline(3.84, color='gray', linestyle=':', alpha=0.6, linewidth=2.0, label='95% CL (χ²=3.84)', zorder=1)
@@ -548,14 +551,14 @@ for idx, (scenario_key, scenario_info) in enumerate(scenarios.items()):
     ax.set_xlim([0.01, 100.0])
     ax.set_ylim([0, 10])
 
-plt.suptitle('Profile Likelihood for Hazard Ratio: Yi vs MINLP', 
+plt.suptitle('Profile Likelihood for Hazard Ratio: Yi vs KoMbine', 
              fontsize=14, fontweight='bold', y=1.02)
 plt.tight_layout()
 plt.show()
 ```
 
 
-## Summary of Findings (with `cox_only=False` for KoMbine HR/p-values)
+## Summary of Findings
 
 The key modeling difference is **fractional vs discrete assignment** under measurement uncertainty: Yi’s method assigns each patient to both groups with weights, while KoMbine enforces one group per patient and scores assignments using an explicit measurement-error model.
 
@@ -568,7 +571,7 @@ The key modeling difference is **fractional vs discrete assignment** under measu
 - Yi’s p-values generally increase as uncertainty grows, reaching near 1.0 in the small-count case.
 - KoMbine’s full-likelihood p-values stay relatively stable for fixed/large/moderate and diverge from Yi when assignments become ambiguous.
 
-| Scenario | Yi p-value | KoMbine p-value (MINLP) |
+| Scenario | Yi p-value | KoMbine p-value |
 |---|---:|---:|
 | Fixed | 4.226e-01 | 2.509e-01 |
 | Large Poisson | 3.330e-01 | 2.508e-01 |
@@ -591,3 +594,6 @@ The key modeling difference is **fractional vs discrete assignment** under measu
 2. When measurement error is moderate/large, treat the conclusion as model-dependent and report sensitivity to the modeling choice.
 3. Yi’s method is fast and often conservative (it blurs separation as uncertainty grows).
 4. KoMbine is likelihood-principled for the specified error model and can reveal when parameters become weakly identified via widening profile-likelihood intervals.
+
+
+
