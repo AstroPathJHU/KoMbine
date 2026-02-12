@@ -158,7 +158,11 @@ While it would be desireable, with high data volumes, to estimate survival proba
 
 The biomarker measurements are subject to uncertainty, and it is desireable to incorporate this uncertainty into the \KM{} curve estimation. \KM{} curves are often shown without error bands, or with error bands that only take into account the statistical uncertainty resulting from the finite number of patients in the study.
 
-Previous literature~\citep{YiBook} 
+Previous literature~\citep{YiBook} contains a discussion of methods to handle measurement error in all kinds of regression analyses, with a chapter dedicated to survival analysis.  Most of that chapter focuses on modeling survival as a function of continuous covariates.  Section~3.7 discusses a method to handle misclassification error when using two discrete categories.
+
+Yi's general strategy is to partially assign each patient to both categories, weighted by the probability that the patient belongs to that category.  Yi's method can be used to construct a likelihood function for the hazard ratio.  Importantly, however, while the best-fit hazard ratio estimated using her method is less biased than one estimated without accounting for measurement errors, the confidence intervals are not necessarily more accurate.  In particular, in the limit of large measurement errors, we would expect no constraint on the hazard ratio.  The confidence intervals from Yi's method do not have this feature.
+
+Yi's method can be trivially used to construct weighted Kaplan--Meier curves, where each patient is weighted in the at-risk and death counts by the probability that they belong to the category being plotted.  While one could construct confidence intervals using a generalized binomial pseudo-likelihood with fractional counts, these confidence intervals would still not take the patient-wise uncertainties into account, and would not grow with the patient-wise uncertainties.
 
 In this paper, we present the first method to calculate both statistical and systematic uncertainties on \KM{} curves.
 
