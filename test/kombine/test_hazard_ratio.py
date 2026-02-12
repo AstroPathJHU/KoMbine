@@ -134,7 +134,7 @@ def test_likelihood_scan():
 
   # Perform likelihood scan with default parameters
   # Use a range wide enough that the minimum is not at the boundary
-  hazard_ratios, twonll_values, best_fit_result = hr_calc.likelihood_scan_hazard_ratio(
+  hazard_ratios, twonll_values, best_fit_result, _, _ = hr_calc.likelihood_scan_hazard_ratio(
     n_points=20,
     hazard_ratio_min=0.5,
     hazard_ratio_max=5.0,
@@ -181,7 +181,7 @@ def test_likelihood_scan_custom_values():
 
   # Specify custom hazard ratio values appropriate for this datacard (HR ~ 2.3)
   custom_hrs = np.array([0.5, 1.0, 1.5, 2.0, 3.0, 4.0])
-  hazard_ratios, twonll_values, best_fit_result = hr_calc.likelihood_scan_hazard_ratio(
+  hazard_ratios, twonll_values, best_fit_result, _, _ = hr_calc.likelihood_scan_hazard_ratio(
     hazard_ratio_values=custom_hrs,
     cox_only=False
   )

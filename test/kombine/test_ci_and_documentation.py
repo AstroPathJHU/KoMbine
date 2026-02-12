@@ -1,5 +1,5 @@
 """
-Test that all CLI options are documented in the CLI documentation file.
+Test that CLI documentation is complete and CI runs all test scripts.
 """
 
 import argparse
@@ -47,6 +47,28 @@ def extract_documented_arguments(doc_file: pathlib.Path) -> set[str]:
     documented.add(match)
 
   return documented
+
+
+def extract_ci_test_modules(ci_file: pathlib.Path) -> set[str]:
+  """
+  Extract python -m test.* module references from the CI workflow.
+  """
+  content = ci_file.read_text()
+  pattern = r'python -m (test\.[A-Za-z0-9_\.]+)'
+  return set(re.findall(pattern, content))
+
+
+def collect_test_modules(test_root: pathlib.Path) -> set[str]:
+  """
+  Collect all test_*.py modules under the test/ directory.
+  """
+  modules = set()
+  for path in test_root.rglob("test_*.py"):
+    if {"datacards", "reference", "test_output"}.intersection(path.parts):
+      continue
+    rel = path.relative_to(test_root).with_suffix("")
+    modules.add("test." + ".".join(rel.parts))
+  return modules
 
 
 def test_cli_documentation_completeness():
@@ -229,7 +251,32 @@ def test_table_of_contents_sync():
   print(f"✓ All {len(toc_references)} TOC references point to existing files")
 
 
+def test_ci_runs_all_test_scripts():
+  """
+  Test that all test scripts are executed in CI.
+  """
+  here = pathlib.Path(__file__).parent.parent.parent
+  ci_file = here / ".github" / "workflows" / "ci-cd.yml"
+  test_root = here / "test"
+
+  assert ci_file.exists(), f"CI workflow file not found: {ci_file}"
+  assert test_root.exists(), f"Test directory not found: {test_root}"
+
+  ci_modules = extract_ci_test_modules(ci_file)
+  test_modules = collect_test_modules(test_root)
+
+  missing_in_ci = test_modules - ci_modules
+  if missing_in_ci:
+    print(f"\nMissing test scripts in CI: {sorted(missing_in_ci)}")
+
+  assert not missing_in_ci, (
+    "The following test scripts are not executed in CI: "
+    f"{', '.join(sorted(missing_in_ci))}"
+  )
+
+
 if __name__ == "__main__":
   test_cli_documentation_completeness()
   test_table_of_contents_sync()
-  print("\n✅ All documentation tests passed!")
+  test_ci_runs_all_test_scripts()
+  print("\n✅ All documentation and CI tests passed!")

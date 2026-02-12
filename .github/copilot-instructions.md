@@ -63,7 +63,7 @@ This repository contains two distinct Python packages for biomedical analysis:
 - Files `03_*.md` and `04_*.md` are Jupytext notebooks with Python cells for interactive examples
 - Files `01_*.md` and `05_*.md` are pure Markdown with Jupytext headers but no Python cells
 - All documentation markdown files must have Jupytext headers to allow `jupytext --sync` to process them
-- All CLI options must be documented in `05_command_line_interface.md` and verified by `test/kombine/test_documentation.py`
+- All CLI options must be documented in `05_command_line_interface.md` and verified by `test/kombine/test_ci_and_documentation.py`
 - When adding new CLI arguments, update `05_command_line_interface.md` and run the documentation test
 - The table of contents (`01_table_of_contents.md`) must list all numbered documentation files
 
