@@ -434,7 +434,7 @@ KoMbine’s likelihood framework, by contrast, can naturally widen the profile-l
 ```python
 # Calculate hazard ratios (Yi vs KoMbine) for all four scenarios
 hr_results = {}
-hazard_ratios_scan = np.linspace(0.1, 12.0, 50)  # Extended range with more points
+hazard_ratios_scan = np.logspace(-2, 2, 80)  # Match 04: 0.01 to 100 with 80 points
 chi2_95 = 3.84  # chi2.ppf(0.95, df=1) for a 95% two-sided CI
 
 for scenario_key, scenario_info in scenarios.items():
@@ -477,14 +477,14 @@ for scenario_key, scenario_info in scenarios.items():
     best_hr_minlp, lower_ci, upper_ci, _ = hr_calc.hazard_ratio_confidence_interval(
         cox_only=False,
         confidence_level=0.95,
-        hazard_ratio_min=0.1,
-        hazard_ratio_max=15.0  # Extended to match scan range
+        hazard_ratio_min=0.01,
+        hazard_ratio_max=100.0,
     )
     
     # MINLP profile likelihood scan
     minlp_2nlls = []
     for hr in hazard_ratios_scan:
-        result = hr_calc.compute_2nll_at_hazard_ratio(hr, cox_only=True, verbose=False)
+        result = hr_calc.compute_2nll_at_hazard_ratio(hr, cox_only=False, verbose=False)
         minlp_2nlls.append(result.x)
     
     hr_results[scenario_key] = {
@@ -543,8 +543,9 @@ for idx, (scenario_key, scenario_info) in enumerate(scenarios.items()):
     ax.set_title(f"{scenario_info['label']}",
                 fontsize=12, fontweight='bold')
     ax.legend(fontsize=9, loc='upper left')
-    ax.grid(True, alpha=0.3)
-    ax.set_xlim([0.1, 12.0])
+    ax.grid(True, alpha=0.3, which='both')
+    ax.set_xscale('log')
+    ax.set_xlim([0.01, 100.0])
     ax.set_ylim([0, 10])
 
 plt.suptitle('Profile Likelihood for Hazard Ratio: Yi vs MINLP', 

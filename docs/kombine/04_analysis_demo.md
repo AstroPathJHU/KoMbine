@@ -65,7 +65,7 @@ KoMbine provides a likelihood-based p-value that accounts for measurement uncert
 
 ```python
 # Define biomarker threshold to split patients into two groups
-threshold = 0.5
+threshold = 0.5001
 
 # KoMbine likelihood p-value
 km_p_value_minlp = datacard.km_p_value(
@@ -140,7 +140,7 @@ print("-> Only Cox error (finite events) contributes to CIs")
 ```python
 # Create hazard ratio calculator for fixed observable datacard
 hr_calc_fixed = datacard_fixed.km_hazard_ratio(
-    parameter_threshold=0.5,
+    parameter_threshold=threshold,
     parameter_min=0.0,
     parameter_max=1.0,
 )
@@ -260,7 +260,7 @@ print("\nWith large counts, Poisson error is small -> Cox error dominates")
 ```python
 # Create hazard ratio calculator for Poisson (large counts)
 hr_calc_poisson_large = datacard_poisson_large_counts.km_hazard_ratio(
-    parameter_threshold=0.5,
+    parameter_threshold=threshold,
     parameter_min=0.01,
     parameter_max=0.99,
 )
@@ -373,7 +373,7 @@ print("\nWith moderate counts, measurement uncertainty is significant!")
 
 # KoMbine p-value for a nontrivial datacard (Poisson errors)
 km_p_value_poisson = datacard_poisson_moderate_counts.km_p_value(
-    parameter_threshold=0.5,
+    parameter_threshold=threshold,
     parameter_min=0.01,
     parameter_max=0.99,
 )
@@ -384,7 +384,7 @@ print(f"KoMbine p-value (Poisson errors): {kombine_p_value_poisson:.4e}")
 ```python
 # Create hazard ratio calculator for Poisson (moderate counts)
 hr_calc_poisson_moderate = datacard_poisson_moderate_counts.km_hazard_ratio(
-    parameter_threshold=0.5,
+    parameter_threshold=threshold,
     parameter_min=0.01,
     parameter_max=0.99,
     log_hazard_ratio_bounds=(-35.0, 35.0),
