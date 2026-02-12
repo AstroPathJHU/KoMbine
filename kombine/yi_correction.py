@@ -11,9 +11,8 @@ reflects their own measurement evidence.
 
 General approach
 ----------------
-1. Estimate P(true parameter in range | observed data) for each patient via
-  prob_poisson_density_in_range when Poisson density measurements exist,
-  falling back to deterministic thresholds otherwise.
+1. Estimate P(true parameter in range | observed data) for each patient by
+  delegating to their Observable implementation.
 2. Weight each patient's contribution to risk sets, death counts, and likelihood
   terms by that probability.
 
@@ -35,8 +34,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 import scipy.optimize
 import scipy.stats
-
-from .utilities import prob_poisson_density_in_range
 
 if TYPE_CHECKING:
   from .datacard import Patient
@@ -112,21 +109,16 @@ class YiCorrectionBase:  # pylint: disable=too-few-public-methods
     float
         Probability that patient is in the range (0.0 to 1.0).
     """
-    # Try probabilistic classification first (for Poisson density measurements)
-    obs = getattr(patient, 'observable', None)
-    if obs is not None and hasattr(obs, 'numerator') and hasattr(obs, 'denominator'):
-      # Poisson density measurement - use probabilistic weighting
-      return prob_poisson_density_in_range(
-        obs.numerator,
-        obs.denominator,
-        range_min,
-        range_max,
-        prior_alpha=prior_alpha,
-        prior_beta=prior_beta,
-      )
+    observable = getattr(patient, 'observable', None)
+    if observable is None:
+      raise ValueError("Patient has no observable set.")
 
-    # Fall back to deterministic classification based on observed parameter
-    return 1.0 if range_min <= patient.observed_parameter < range_max else 0.0
+    return observable.probability_in_range(
+      range_min,
+      range_max,
+      prior_alpha=prior_alpha,
+      prior_beta=prior_beta,
+    )
 
 
 class YiCorrectionWithThreshold(YiCorrectionBase):  # pylint: disable=too-few-public-methods

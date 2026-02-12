@@ -27,7 +27,7 @@ from .kaplan_meier_likelihood import (
 from .kaplan_meier_p_value_MINLP import MINLPforKMPValue
 from .kaplan_meier_hazard_ratio_MINLP import MINLPforKMHazardRatio
 from .yi_correction import YiCorrectionForLogrank, YiCorrectionForCoxPH, YiCorrectionForKaplanMeier
-from .utilities import LOG_ZERO_EPSILON_DEFAULT
+from .utilities import LOG_ZERO_EPSILON_DEFAULT, prob_poisson_density_in_range
 
 class Response:
   """
@@ -76,6 +76,24 @@ class Observable(abc.ABC): # pylint: disable=too-few-public-methods
     Each observable type computes this differently based on its measurement type.
     """
 
+  def probability_in_range(
+    self,
+    range_min: float,
+    range_max: float,
+    *,
+    prior_alpha: float = 1.0,
+    prior_beta: float = 1.0,
+  ) -> float:
+    """
+    Compute P(range_min <= true_parameter < range_max | observed data).
+
+    Concrete observables must implement this to reflect their measurement
+    uncertainty model. The default raises NotImplementedError.
+    """
+    raise NotImplementedError(
+      f"probability_in_range not implemented for {type(self).__name__}"
+    )
+
 class FixedObservable(Observable):
   """
   A class to represent a fixed observable.
@@ -123,6 +141,21 @@ class FixedObservable(Observable):
     """
     return self.value
 
+  def probability_in_range(
+    self,
+    range_min: float,
+    range_max: float,
+    *,
+    prior_alpha: float = 1.0,
+    prior_beta: float = 1.0,
+  ) -> float:
+    """
+    Fixed observables have no measurement uncertainty.
+    """
+    _ = prior_alpha
+    _ = prior_beta
+    return 1.0 if range_min <= self.value < range_max else 0.0
+
 class PoissonObservable(Observable):
   """
   A class to represent a Poisson observable.
@@ -169,6 +202,26 @@ class PoissonObservable(Observable):
     Get the observed parameter value (the count itself).
     """
     return float(self.count)
+
+  def probability_in_range(
+    self,
+    range_min: float,
+    range_max: float,
+    *,
+    prior_alpha: float = 1.0,
+    prior_beta: float = 1.0,
+  ) -> float:
+    """
+    Treat the Poisson rate as the parameter and integrate its posterior.
+    """
+    return prob_poisson_density_in_range(
+      observed_count=self.count,
+      observed_area=1.0,
+      range_min=range_min,
+      range_max=range_max,
+      prior_alpha=prior_alpha,
+      prior_beta=prior_beta,
+    )
 
 class PoissonDensityObservable(Observable):
   """
@@ -272,6 +325,28 @@ class PoissonDensityObservable(Observable):
     if self.denominator == 0:
       return float('inf')
     return self.numerator / self.denominator
+
+  def probability_in_range(
+    self,
+    range_min: float,
+    range_max: float,
+    *,
+    prior_alpha: float = 1.0,
+    prior_beta: float = 1.0,
+  ) -> float:
+    """
+    Compute probability using the Poisson density posterior.
+    """
+    if self.numerator is None or self.denominator is None:
+      raise ValueError("Numerator and denominator must be set")
+    return prob_poisson_density_in_range(
+      observed_count=self.numerator,
+      observed_area=self.denominator,
+      range_min=range_min,
+      range_max=range_max,
+      prior_alpha=prior_alpha,
+      prior_beta=prior_beta,
+    )
 
 class PoissonRatioObservable(Observable):
   """
@@ -389,6 +464,25 @@ class PoissonRatioObservable(Observable):
     if self.denominator == 0:
       return float('inf')
     return self.numerator / self.denominator
+
+  def probability_in_range(
+    self,
+    range_min: float,
+    range_max: float,
+    *,
+    prior_alpha: float = 1.0,
+    prior_beta: float = 1.0,
+  ) -> float:
+    """
+    Yi correction probability is not implemented for Poisson ratios.
+    """
+    _ = range_min
+    _ = range_max
+    _ = prior_alpha
+    _ = prior_beta
+    raise NotImplementedError(
+      "probability_in_range not implemented for PoissonRatioObservable"
+    )
 
 
 class Systematic:

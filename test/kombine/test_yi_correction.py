@@ -12,6 +12,14 @@ import warnings
 import numpy as np
 
 import kombine.datacard
+from kombine.datacard import (
+  FixedObservable,
+  PoissonDensityObservable,
+  PoissonObservable,
+  PoissonRatioObservable,
+  Patient,
+)
+from kombine.yi_correction import YiCorrectionBase
 from kombine.utilities import prob_poisson_density_in_range
 from ..utility_testing_functions import generate_two_group_datacard_from_hr
 
@@ -79,6 +87,71 @@ def test_prob_poisson_density_in_range_bayesian():
   assert 0.6 < prob < 0.95, (
     f"Expected prob in (0.6, 0.95) for middle range, got {prob}"
   )
+
+
+def test_observable_probability_in_range_fixed():
+  """
+  Fixed observables should use deterministic range membership.
+  """
+  obs = FixedObservable(5.0)
+  assert obs.probability_in_range(0.0, 10.0) == 1.0
+  assert obs.probability_in_range(5.0, 6.0) == 1.0
+  assert obs.probability_in_range(6.0, 10.0) == 0.0
+
+
+def test_observable_probability_in_range_poisson():
+  """
+  Poisson observables should return valid probabilities from posteriors.
+  """
+  obs = PoissonObservable(count=50, unique_id=1)
+  prob_narrow = obs.probability_in_range(40.0, 60.0)
+  prob_wide = obs.probability_in_range(0.0, 100.0)
+  assert 0.0 < prob_narrow < 1.0
+  assert 0.0 < prob_wide <= 1.0
+  assert prob_wide >= prob_narrow
+
+
+def test_observable_probability_in_range_poisson_density_matches_utility():
+  """
+  Poisson density observable should delegate to the utility function.
+  """
+  obs = PoissonDensityObservable(
+    numerator=50,
+    denominator=1.0,
+    unique_id_numerator=1,
+  )
+  prob_obs = obs.probability_in_range(48.0, np.inf)
+  prob_util = prob_poisson_density_in_range(
+    observed_count=50,
+    observed_area=1.0,
+    range_min=48.0,
+    range_max=np.inf,
+  )
+  assert np.isclose(prob_obs, prob_util)
+
+
+def test_yi_correction_poisson_ratio_not_implemented():
+  """
+  Yi correction should raise for Poisson ratio observables.
+  """
+  obs = PoissonRatioObservable(
+    numerator=10,
+    denominator=5,
+    unique_id_numerator=1,
+    unique_id_denominator=2,
+  )
+  patient = Patient(
+    survival_time=1.0,
+    censored=False,
+    observable=obs,
+  )
+  yi = YiCorrectionBase([patient])
+
+  try:
+    yi.compute_patient_prob_in_range(patient, 0.0, 1.0)
+  except NotImplementedError:
+    return
+  raise AssertionError("Expected NotImplementedError for PoissonRatioObservable")
 
 
 def generate_synthetic_datacard_with_perfect_classification( # pylint: disable=too-many-locals, too-many-arguments
