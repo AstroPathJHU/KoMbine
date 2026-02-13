@@ -415,6 +415,58 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       observed_ratio = numerator_count / denominator_count
     return cls(time, censored, wrapped, observed_ratio)
 
+  @classmethod
+  def from_discrete_class_probs(
+    cls,
+    time: float,
+    censored: bool,
+    class_probs: list[float],
+    *,
+    systematics: list[float] | None = None,
+  ):
+    """
+    Create a KaplanMeierPatientNLL from discrete class probabilities.
+
+    The parameter is the integer class index. The NLL is piecewise-constant
+    over intervals [k, k+1) with value -log(p_k).
+    """
+    systematics = systematics or []
+    if systematics:
+      raise NotImplementedError(
+        "Systematics are not supported for discrete class probabilities"
+      )
+    if not class_probs:
+      raise ValueError("class_probs must be non-empty")
+    for prob in class_probs:
+      if not isinstance(prob, (int, float)) or prob < 0:
+        raise ValueError(f"Invalid class probability: {prob}")
+    total = float(sum(class_probs))
+    if not np.isclose(total, 1.0, rtol=0.0, atol=1e-6):
+      raise ValueError(f"Class probabilities must sum to 1, got {total}")
+    log_probs = [
+      float(np.log(prob)) if prob > 0 else -float('inf')
+      for prob in class_probs
+    ]
+
+    def full_nll_0d(eff: float) -> float:
+      if not np.isfinite(eff):
+        return float('inf')
+      if eff < 0:
+        return float('inf')
+      idx = int(math.floor(eff))
+      if idx >= len(log_probs):
+        return float('inf')
+      if np.isclose(eff, len(log_probs)):
+        return float('inf')
+      log_prob = log_probs[idx]
+      if not np.isfinite(log_prob):
+        return float('inf')
+      return -log_prob
+
+    wrapped = cls._solve_0d(full_nll_0d)
+    observed_param = float(int(np.argmax(class_probs)))
+    return cls(time, censored, wrapped, observed_param)
+
   @property
   def nominal(self) -> KaplanMeierPatient:
     """

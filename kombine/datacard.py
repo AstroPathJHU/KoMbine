@@ -29,6 +29,17 @@ from .kaplan_meier_hazard_ratio_MINLP import MINLPforKMHazardRatio
 from .yi_correction import YiCorrectionForLogrank, YiCorrectionForCoxPH, YiCorrectionForKaplanMeier
 from .utilities import LOG_ZERO_EPSILON_DEFAULT, prob_poisson_density_in_range
 
+def _parse_prob_class_label(label: str) -> int | None:
+  """
+  Parse labels like "prob0" or "prob12" into an integer class index.
+  """
+  if not label.startswith("prob"):
+    return None
+  suffix = label[len("prob"):]
+  if not suffix.isdigit():
+    return None
+  return int(suffix)
+
 class Response:
   """
   A class to represent the response of a patient.
@@ -155,6 +166,166 @@ class FixedObservable(Observable):
     _ = prior_alpha
     _ = prior_beta
     return 1.0 if range_min <= self.value < range_max else 0.0
+
+class DiscreteClassObservable(Observable):
+  """
+  A class to represent discrete-class probabilities for a patient.
+
+  The parameter is the integer class index. Probabilities correspond to
+  P(true_class = k | observed data).
+  """
+  def __init__(
+    self,
+    class_probs: list[float] | None = None,
+    *,
+    class_index: int | None = None,
+    class_prob: float | None = None,
+  ):
+    self.__class_probs_by_index: dict[int, float] = {}
+    self.__class_probs: tuple[float, ...] | None = None
+
+    if class_probs is not None:
+      self._set_class_probs_from_list(class_probs)
+
+    if class_index is not None or class_prob is not None:
+      if class_index is None or class_prob is None:
+        raise ValueError("class_index and class_prob must be provided together")
+      self.set_class_prob(class_index, class_prob)
+
+  def __repr__(self):
+    if self.__class_probs is not None:
+      return f"{type(self).__name__}(class_probs={list(self.__class_probs)})"
+    return f"{type(self).__name__}(class_probs=unfinalized)"
+
+  def _set_class_probs_from_list(self, class_probs: list[float]):
+    if self.__class_probs is not None or self.__class_probs_by_index:
+      raise ValueError("Class probabilities already set")
+    if not class_probs:
+      raise ValueError("class_probs must be non-empty")
+    for prob in class_probs:
+      if not isinstance(prob, (int, float)) or prob < 0:
+        raise ValueError(f"Invalid class probability: {prob}")
+    total = float(sum(class_probs))
+    if not np.isclose(total, 1.0, rtol=0.0, atol=1e-6):
+      raise ValueError(f"Class probabilities must sum to 1, got {total}")
+    self.__class_probs = tuple(float(p) for p in class_probs)
+
+  def set_class_prob(self, class_index: int, class_prob: float) -> None:
+    """
+    Set the probability for a specific class index (used in datacard parsing).
+    """
+    if self.__class_probs is not None:
+      raise ValueError("Class probabilities already finalized")
+    if not isinstance(class_index, int) or class_index < 0:
+      raise ValueError(f"Invalid class_index: {class_index}")
+    if not isinstance(class_prob, (int, float)) or class_prob < 0:
+      raise ValueError(f"Invalid class probability: {class_prob}")
+    if class_index in self.__class_probs_by_index:
+      existing = self.__class_probs_by_index[class_index]
+      if existing != class_prob:
+        raise ValueError(
+          f"Class probability for index {class_index} already set to {existing}"
+        )
+      return
+    self.__class_probs_by_index[class_index] = float(class_prob)
+
+  def merge_from(self, other: "DiscreteClassObservable") -> None:
+    """
+    Merge class probabilities from another DiscreteClassObservable.
+    """
+    if not isinstance(other, DiscreteClassObservable):
+      raise ValueError("Can only merge from DiscreteClassObservable")
+    if other.__class_probs is not None:
+      raise ValueError("Cannot merge from finalized class probabilities")
+    for class_index, class_prob in other.__class_probs_by_index.items():
+      self.set_class_prob(class_index, class_prob)
+
+  def finalize_class_probs(self, n_classes: int) -> None:
+    """
+    Finalize class probabilities after all class lines have been parsed.
+    """
+    if self.__class_probs is not None:
+      return
+    if not isinstance(n_classes, int) or n_classes <= 0:
+      raise ValueError(f"Invalid n_classes: {n_classes}")
+    expected_indices = set(range(n_classes))
+    if set(self.__class_probs_by_index.keys()) != expected_indices:
+      missing = sorted(expected_indices - set(self.__class_probs_by_index.keys()))
+      extra = sorted(set(self.__class_probs_by_index.keys()) - expected_indices)
+      raise ValueError(
+        f"Class probabilities missing indices {missing} or extra indices {extra}"
+      )
+    probs = [self.__class_probs_by_index[i] for i in range(n_classes)]
+    total = float(sum(probs))
+    if not np.isclose(total, 1.0, rtol=0.0, atol=1e-6):
+      raise ValueError(f"Class probabilities must sum to 1, got {total}")
+    self.__class_probs = tuple(float(p) for p in probs)
+
+  def _require_finalized(self) -> tuple[float, ...]:
+    if self.__class_probs is None:
+      raise ValueError("Class probabilities not finalized")
+    return self.__class_probs
+
+  def _create_observable_distribution(self):
+    """
+    Discrete class observables do not currently support systematics MC.
+    """
+    raise NotImplementedError(
+      "observable_distribution not supported for DiscreteClassObservable"
+    )
+
+  def patient_nll(
+    self,
+    time: float,
+    censored: bool,
+    *,
+    systematics: list[float] | None
+  ) -> KaplanMeierPatientNLL:
+    """
+    Get the patient NLL for the likelihood method.
+    """
+    if systematics:
+      raise NotImplementedError(
+        "Systematics are not supported for DiscreteClassObservable"
+      )
+    class_probs = list(self._require_finalized())
+    return KaplanMeierPatientNLL.from_discrete_class_probs(
+      class_probs=class_probs,
+      time=time,
+      censored=censored,
+    )
+
+  def observed_parameter(self) -> float:
+    """
+    Get the observed parameter value (argmax class index).
+    """
+    class_probs = self._require_finalized()
+    return float(int(np.argmax(class_probs)))
+
+  def probability_in_range(
+    self,
+    range_min: float,
+    range_max: float,
+    *,
+    prior_alpha: float = 1.0,
+    prior_beta: float = 1.0,
+  ) -> float:
+    """
+    Sum class probabilities for indices within [range_min, range_max).
+    """
+    _ = prior_alpha
+    _ = prior_beta
+    class_probs = self._require_finalized()
+    n_classes = len(class_probs)
+    if not np.isfinite(range_min):
+      range_min = 0
+    if not np.isfinite(range_max):
+      range_max = n_classes
+    total = 0.0
+    for idx, prob in enumerate(class_probs):
+      if range_min <= idx < range_max:
+        total += prob
+    return float(total)
 
 class PoissonObservable(Observable):
   """
@@ -674,6 +845,11 @@ class Patient: # pylint: disable=too-many-instance-attributes
       ):
         self.__observable.numerator = value.numerator
         self.__observable.denominator = value.denominator
+      elif (
+        isinstance(value, DiscreteClassObservable)
+        and isinstance(self.__observable, DiscreteClassObservable)
+      ):
+        self.__observable.merge_from(value)
       else:
         raise ValueError("Observable already set")
     else:
@@ -819,6 +995,7 @@ class Datacard:
 
     observable_type = None
     patients = None
+    discrete_class_indices: set[int] = set()
 
     unique_id_generator = itertools.count(0)
 
@@ -830,7 +1007,13 @@ class Datacard:
       split = line.split()
       if split[0] == "observable_type":
         observable_type = split[1]
-        if observable_type not in ["fixed", "poisson", "poisson_density", "poisson_ratio"]:
+        if observable_type not in [
+          "fixed",
+          "poisson",
+          "poisson_density",
+          "poisson_ratio",
+          "discrete_classes",
+        ]:
           raise ValueError(f"Invalid observable_type: {observable_type}")
       elif split[0] == "bin":
         pass
@@ -853,15 +1036,26 @@ class Datacard:
             0: False,
             1: True,
           }[int(censored)]
-      elif split[0] in ["observable", "count", "num", "denom", "area"]:
+      elif split[0] in ["observable", "count", "num", "denom", "area"] or _parse_prob_class_label(split[0]) is not None:
         if observable_type is None:
           raise ValueError(f"No 'observable_type' line found before '{split[0]}' line")
         if patients is None:
           raise ValueError(f"No 'response' line found before '{split[0]}' line")
 
+        prob_index = _parse_prob_class_label(split[0])
+        if observable_type == "discrete_classes" and prob_index is None:
+          raise ValueError(f"Expected probability line 'probN', got '{split[0]}'")
+        if observable_type != "discrete_classes" and prob_index is not None:
+          raise ValueError(
+            f"Unexpected probability line '{split[0]}' for observable_type '{observable_type}'"
+          )
+        if prob_index is not None:
+          discrete_class_indices.add(prob_index)
+
         observables = cls.process_observable_line(
           split=split,
           observable_type=observable_type,
+          prob_index=prob_index,
           unique_id_generator=(
             unique_id_generator
             if patients[0].observable is None #pylint: disable=unsubscriptable-object
@@ -901,6 +1095,19 @@ class Datacard:
       raise ValueError("No 'observable_type' line found")
     if patients is None:
       raise ValueError("No 'response' line found")
+
+    if observable_type == "discrete_classes":
+      if not discrete_class_indices:
+        raise ValueError("No 'probN' lines found for discrete_classes observable")
+      n_classes = max(discrete_class_indices) + 1
+      if discrete_class_indices != set(range(n_classes)):
+        raise ValueError(
+          f"Discrete class indices must be contiguous from 0 to {n_classes - 1}"
+        )
+      for patient in patients:
+        if not isinstance(patient.observable, DiscreteClassObservable):
+          raise ValueError("Discrete classes require DiscreteClassObservable")
+        patient.observable.finalize_class_probs(n_classes)
     return Datacard(
       patients=patients,
     )
@@ -929,6 +1136,7 @@ class Datacard:
     *,
     split: list[str],
     observable_type: str,
+    prob_index: int | None,
     unique_id_generator: itertools.count
   ):
     """
@@ -942,19 +1150,25 @@ class Datacard:
       ("poisson_density", "area"),
       ("poisson_ratio", "num"),
       ("poisson_ratio", "denom"),
+      ("discrete_classes", split[0]),
     ):
       raise ValueError(
         f"Unexpected '{split[0]}' line for observable_type '{observable_type}'"
       )
-    value_type = {
-      ("fixed", "observable"): float,
-      ("poisson", "count"): int,
-      ("poisson_density", "num"): int,
-      ("poisson_density", "area"): float,
-      ("poisson_ratio", "num"): int,
-      ("poisson_ratio", "denom"): int,
-    }[observable_type, split[0]]
-    values = [value_type(_) for _ in split[1:]]
+    if observable_type == "discrete_classes":
+      if prob_index is None:
+        raise ValueError("Discrete class lines require prob_index")
+      values = [float(_) for _ in split[1:]]
+    else:
+      value_type = {
+        ("fixed", "observable"): float,
+        ("poisson", "count"): int,
+        ("poisson_density", "num"): int,
+        ("poisson_density", "area"): float,
+        ("poisson_ratio", "num"): int,
+        ("poisson_ratio", "denom"): int,
+      }[observable_type, split[0]]
+      values = [value_type(_) for _ in split[1:]]
 
     if observable_type == "fixed":
       observables = [FixedObservable(value) for value in values]
@@ -985,6 +1199,14 @@ class Datacard:
           },
           unique_id_numerator=next(unique_id_generator),
           unique_id_denominator=next(unique_id_generator),
+        )
+        for value in values
+      ]
+    elif observable_type == "discrete_classes":
+      observables = [
+        DiscreteClassObservable(
+          class_index=prob_index,
+          class_prob=value,
         )
         for value in values
       ]

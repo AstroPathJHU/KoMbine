@@ -20,6 +20,7 @@ This notebook provides a comprehensive side-by-side comparison between Yi's meth
 - Poisson density with large effect size (small relative error ~2-3%)
 - Poisson density with moderate effect size (larger relative error ~5-7%)
 - Poisson density with small counts (high relative error ~25-70%)
+- Discrete class probabilities (controllable uncertainty via class distributions)
 
 Each analysis directly compares both methods to understand how they handle measurement uncertainty differently.
 
