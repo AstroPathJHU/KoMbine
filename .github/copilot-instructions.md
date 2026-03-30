@@ -147,7 +147,7 @@ This activates the WLS academic license (requires network access to `token.gurob
 ```python
 import gurobipy
 env = gurobipy.Env()  # Uses WLS academic license from ~/gurobi.lic
-# Academic license 2671493 - for non-commercial use only - registered to hr___@jhu.edu
+# Academic license <LICENSE_ID> - for non-commercial use only - registered to <EMAIL>
 ```
 
 **License capabilities**:
