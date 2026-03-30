@@ -1171,7 +1171,7 @@ class Datacard:
     elif observable_type == "poisson":
       observables = [
         PoissonObservable(
-          value,
+          int(value),
           unique_id=next(unique_id_generator)
         ) for value in values
       ]
@@ -1191,7 +1191,7 @@ class Datacard:
       observables = [
         PoissonRatioObservable(
           **{
-            kw: value,
+            kw: int(value),
           },
           unique_id_numerator=next(unique_id_generator),
           unique_id_denominator=next(unique_id_generator),

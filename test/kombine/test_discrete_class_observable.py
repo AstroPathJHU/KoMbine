@@ -61,5 +61,7 @@ prob1 0.8 0.3 0.5
   patients = datacard.patients
   assert isinstance(patients[0].observable, DiscreteClassObservable)
   assert patients[0].observable.observed_parameter() == 1.0
+  assert isinstance(patients[1].observable, DiscreteClassObservable)
   assert np.isclose(patients[1].observable.probability_in_range(0.0, 1.0), 0.7)
+  assert isinstance(patients[2].observable, DiscreteClassObservable)
   assert np.isclose(patients[2].observable.probability_in_range(1.0, 2.0), 0.5)
