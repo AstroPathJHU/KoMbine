@@ -799,11 +799,11 @@ def main():
     formatter_class=argparse.RawDescriptionHelpFormatter,
     epilog="""
 Examples (run from parent directory):
-  python -m ROCPickerPaper.docs.kombine.compile_km_plots                    # Generate all plots
-  python -m ROCPickerPaper.docs.kombine.compile_km_plots --testing          # Generate all plots with test data
-  python -m ROCPickerPaper.docs.kombine.compile_km_plots --lung --testing   # Generate only lung plot with test data
-  python -m ROCPickerPaper.docs.kombine.compile_km_plots --lung --lung-production-panel A E  # Lung plot: panels A,E in production, others in testing
-  python -m ROCPickerPaper.docs.kombine.compile_km_plots --greenwood --p-value  # Generate Greenwood and p-value plots
+  python -m docs.kombine.compile_km_plots                    # Generate all plots
+  python -m docs.kombine.compile_km_plots --testing          # Generate all plots with test data
+  python -m docs.kombine.compile_km_plots --lung --testing   # Generate only lung plot with test data
+  python -m docs.kombine.compile_km_plots --lung --lung-production-panel A E  # Lung plot: panels A,E in production, others in testing
+  python -m docs.kombine.compile_km_plots --greenwood --p-value  # Generate Greenwood and p-value plots
     """
   )
 

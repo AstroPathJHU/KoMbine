@@ -69,7 +69,7 @@ This repository contains two distinct Python packages for biomedical analysis:
 
 **Compiling KoMbine LaTeX documentation (`02_kombine.tex`)**:
 - **CRITICAL**: Before compiling LaTeX, you must either:
-  1. Run `python -m ROCPickerPaper.docs.kombine.compile_km_plots --testing` (from parent directory) to generate test plots (works with restricted Gurobi license), OR
+  1. Run `python -m docs.kombine.compile_km_plots --testing` (from repo root) to generate test plots (works with restricted Gurobi license), OR
   2. Temporarily remove figure `\includegraphics` commands from the LaTeX file (do NOT commit this removal)
 - Without plots, LaTeX compilation will fail with missing file errors
 - The `--testing` flag generates smaller datasets: 10 patients for p-value plots, 3 patients for lung dataset
@@ -238,7 +238,7 @@ The repository now uses three separate workflows:
 1. **Installation**: Same as above
 2. **Linting**: Same as above  
 3. **Testing**: Run KoMbine tests from `test/kombine/` (may need Gurobi license)
-4. **Documentation**: Use `python -m ROCPickerPaper.docs.kombine.compile_km_plots` (from parent directory)
+4. **Documentation**: Use `python -m docs.kombine.compile_km_plots` (from repo root)
 
 ### For cross-package changes:
 - Test both packages since ROC Picker imports from KoMbine
