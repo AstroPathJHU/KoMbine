@@ -15,8 +15,9 @@ jupyter:
 
 # Yi's Method vs KoMbine: Comprehensive Comparison
 
-This notebook provides a comprehensive side-by-side comparison between Yi's method for Kaplan-Meier likelihood estimation and KoMbine's approach (MINLP) across four measurement scenarios:
+This notebook provides a comprehensive side-by-side comparison between Yi's method for Kaplan-Meier likelihood estimation and KoMbine's approach (MINLP) across multiple measurement scenarios:
 - Fixed Hazard Ratio (deterministic, no measurement error)
+- Discrete classes with class probabilities (small/medium/large uncertainty)
 - Poisson density with large effect size (small relative error ~2-3%)
 - Poisson density with moderate effect size (larger relative error ~5-7%)
 - Poisson density with small counts (high relative error ~25-70%)
@@ -62,6 +63,26 @@ Each analysis directly compares both methods to understand how they handle measu
 2. **P-Values**: Logrank test results and statistical significance
 3. **Hazard Ratios**: Point estimates and confidence intervals
 
+
+## Discrete Classes with Class Probabilities
+
+Yi's Section 3.7.1 treats misclassification of a discrete covariate using a
+misclassification matrix. We mimic that structure using two classes and a
+homogeneous binary matrix,
+$$
+\Pi = \begin{pmatrix} 1 - e & e \\ e & 1 - e \end{pmatrix}
+$$
+where $e$ is the misclassification rate shared by all patients.
+
+To match the binary examples and exercises, we use three error levels:
+- Small error: $e = 0.05$
+- Medium error: $e = 0.15$
+- Large error: $e = 0.30$
+
+Each patient keeps the same survival time and censoring as the fixed baseline.
+Only the class probabilities change: patients in the low group get probabilities
+$(1-e, e)$, and patients in the high group get $(e, 1-e)$.
+
 ```python
 import numpy as np
 import pandas as pd
@@ -72,33 +93,48 @@ from kombine.datacard import Datacard
 ```
 
 ```python
-# Setup - Load the four comparison datacards
+# Setup - Load the comparison datacards
 here = pathlib.Path(".").resolve()
 test_dir = here.parent.parent / "test" / "kombine"
 datacards_dir = test_dir / "datacards" / "simple_examples"
 
-# Define the four scenarios
+# Define the scenarios
 scenarios = {
     'fixed': {
         'file': 'fixed_hr_example.txt',
-        'label': 'Fixed Observable (No Error)',
-        'description': 'Deterministic group assignments (baseline)'
+        'label': 'Fixed Observable',
+        'description': 'no measurement error',
+    },
+    'misclass_small': {
+        'file': 'discrete_classes_hr_example_small.txt',
+        'label': 'Disc. Classes (e=0.05)',
+        'description': 'e = 0.05',
+    },
+    'misclass_moderate': {
+        'file': 'discrete_classes_hr_example_moderate.txt',
+        'label': 'Disc. Classes (e=0.15)',
+        'description': 'e = 0.15',
+    },
+    'misclass_large': {
+        'file': 'discrete_classes_hr_example_large.txt',
+        'label': 'Disc. Classes (e=0.30)',
+        'description': 'e = 0.30',
     },
     'large': {
         'file': 'poisson_density_hr_example_large.txt',
-        'label': 'Large Count Poisson',
-        'description': 'Small relative error (~2-3%)'
+        'label': 'Poisson (large counts)',
+        'description': '~2-3% relative error',
     },
     'moderate': {
         'file': 'poisson_density_hr_example_moderate.txt',
-        'label': 'Moderate Count Poisson',
-        'description': 'Larger relative error (~5-7%)'
+        'label': 'Poisson (moderate counts)',
+        'description': '~5-7% relative error',
     },
     'small': {
         'file': 'poisson_density_hr_example_small.txt',
-        'label': 'Small Count Poisson',
-        'description': 'High relative error (~25-70%)'
-    }
+        'label': 'Poisson (small counts)',
+        'description': '~25-70% relative error',
+    },
 }
 
 # Load all datacards
@@ -116,7 +152,7 @@ threshold = 0.5001
 
 ## Analysis 1: Kaplan-Meier Curves
 
-Compare the Kaplan-Meier survival curves between Yi's method (dashed lines) and KoMbine's approach (solid lines with shaded 95% confidence intervals) across all four scenarios. This visualization directly shows how measurement error affects the survival curve estimates and their uncertainties.
+Compare the Kaplan-Meier survival curves between Yi's method (dashed lines) and KoMbine's approach (solid lines with shaded 95% confidence intervals) across all scenarios. This visualization directly shows how measurement error affects the survival curve estimates and their uncertainties.
 
 ```python
 # Calculate both Yi's weighted KM and KoMbine KM for each scenario
@@ -211,95 +247,131 @@ for scenario_key, scenario_info in scenarios.items():
 
 ```python
 # Define consistent color palette for all plots
-# High colors: variations of red-orange (darker to lighter)
-# Low colors: variations of blue-green (darker to lighter)
-# Fixed (baseline) - darkest; Large and Moderate - mid tones; Small - lightest
 colors_palette = {
-    ('fixed', 'low'): '#0d47a1',      # Deep blue
-    ('fixed', 'high'): '#6d1c1e',     # Deep red
-    ('large', 'low'): '#1976d2',      # Strong blue
-    ('large', 'high'): '#e53935',     # Strong red
-    ('moderate', 'low'): '#26a69a',   # Teal
-    ('moderate', 'high'): '#fb8c00',  # Orange
-    ('small', 'low'): '#80cbc4',      # Light teal
-    ('small', 'high'): '#ffd54f',     # Light amber
+    ('fixed', 'low'): '#0d47a1',           # Deep blue
+    ('fixed', 'high'): '#6d1c1e',          # Deep red
+    ('misclass_small', 'low'): '#1b5e20',  # Deep green
+    ('misclass_small', 'high'): '#8e0000', # Dark brick
+    ('misclass_moderate', 'low'): '#2e7d32',   # Green
+    ('misclass_moderate', 'high'): '#b71c1c',  # Dark red
+    ('misclass_large', 'low'): '#66bb6a',      # Light green
+    ('misclass_large', 'high'): '#e57373',     # Light red
+    ('large', 'low'): '#1976d2',           # Strong blue
+    ('large', 'high'): '#e53935',          # Strong red
+    ('moderate', 'low'): '#26a69a',        # Teal
+    ('moderate', 'high'): '#fb8c00',       # Orange
+    ('small', 'low'): '#80cbc4',           # Light teal
+    ('small', 'high'): '#ffd54f',          # Light amber
 }
 
-# Plot KM curves for all four scenarios in a 2x2 grid
-fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-axes = axes.flatten()
 
-for idx, (scenario_key, scenario_info) in enumerate(scenarios.items()):
-    ax = axes[idx]
-    result = km_results[scenario_key]
+def _plot_km_in_ax(ax, scenario_key, scenario_info, result):
+    """Plot KM curves (Yi dashed, KoMbine solid + CI shading) in a single axes."""
     color_low = colors_palette[(scenario_key, 'low')]
     color_high = colors_palette[(scenario_key, 'high')]
-    
-    # Yi's method - Low group
+
     times_low_yi = result['yi']['low']['times_for_plot']
     surv_low_yi = result['yi']['low']['survival_probabilities']
-    ax.step(times_low_yi, surv_low_yi, where='post', linewidth=2.5, 
-            color=color_low, alpha=0.7, linestyle='--', label="Yi: Low group")
-    
-    # Yi's method - High group
+    ax.step(times_low_yi, surv_low_yi, where='post', linewidth=2.5,
+            color=color_low, alpha=0.7, linestyle='--', label='Yi: Low group')
+
     times_high_yi = result['yi']['high']['times_for_plot']
     surv_high_yi = result['yi']['high']['survival_probabilities']
-    ax.step(times_high_yi, surv_high_yi, where='post', linewidth=2.5, 
-            color=color_high, alpha=0.7, linestyle='--', label="Yi: High group")
-    
-    # KoMbine - Low group with error bands
+    ax.step(times_high_yi, surv_high_yi, where='post', linewidth=2.5,
+            color=color_high, alpha=0.7, linestyle='--', label='Yi: High group')
+
     times_low_kombine = result['kombine']['low']['times']
     best_low_kombine = result['kombine']['low']['best']
     ci_low_kombine = result['kombine']['low']['ci']
-    
-    # Create step function coordinates for plotting
     times_plot_low = [times_low_kombine[0]]
     best_plot_low = [1.0]
     ci_lower_plot_low = [1.0]
     ci_upper_plot_low = [1.0]
-    
     for i, t in enumerate(times_low_kombine):
         times_plot_low.append(t)
         best_plot_low.append(best_low_kombine[i])
         ci_lower_plot_low.append(ci_low_kombine[i, 0, 0])
         ci_upper_plot_low.append(ci_low_kombine[i, 0, 1])
-    
-    ax.step(times_plot_low, best_plot_low, where='post', linewidth=2.5, 
+    ax.step(times_plot_low, best_plot_low, where='post', linewidth=2.5,
             color=color_low, alpha=0.9, label='KoMbine: Low group', zorder=3)
-    ax.fill_between(times_plot_low, ci_lower_plot_low, ci_upper_plot_low, 
-                     step='post', alpha=0.15, color=color_low, label='KoMbine: Low 95% CI', zorder=2)
-    
-    # KoMbine - High group with error bands
+    ax.fill_between(times_plot_low, ci_lower_plot_low, ci_upper_plot_low,
+                    step='post', alpha=0.15, color=color_low, label='KoMbine: Low 95% CI', zorder=2)
+
     times_high_kombine = result['kombine']['high']['times']
     best_high_kombine = result['kombine']['high']['best']
     ci_high_kombine = result['kombine']['high']['ci']
-    
     times_plot_high = [times_high_kombine[0]]
     best_plot_high = [1.0]
     ci_lower_plot_high = [1.0]
     ci_upper_plot_high = [1.0]
-    
     for i, t in enumerate(times_high_kombine):
         times_plot_high.append(t)
         best_plot_high.append(best_high_kombine[i])
         ci_lower_plot_high.append(ci_high_kombine[i, 0, 0])
         ci_upper_plot_high.append(ci_high_kombine[i, 0, 1])
-    
-    ax.step(times_plot_high, best_plot_high, where='post', linewidth=2.5, 
+    ax.step(times_plot_high, best_plot_high, where='post', linewidth=2.5,
             color=color_high, alpha=0.9, label='KoMbine: High group', zorder=3)
-    ax.fill_between(times_plot_high, ci_lower_plot_high, ci_upper_plot_high, 
-                     step='post', alpha=0.15, color=color_high, label='KoMbine: High 95% CI', zorder=2)
-    
-    ax.set_xlabel('Time', fontsize=11)
-    ax.set_ylabel('Survival Probability', fontsize=11)
-    ax.set_title(f"{scenario_info['label']}\n({scenario_info['description']})", 
-                 fontsize=12, fontweight='bold')
-    ax.legend(fontsize=10, loc='lower left')
+    ax.fill_between(times_plot_high, ci_lower_plot_high, ci_upper_plot_high,
+                    step='post', alpha=0.15, color=color_high, label='KoMbine: High 95% CI', zorder=2)
+
+    ax.set_xlabel('Time', fontsize=10)
+    ax.set_ylabel('Survival Probability', fontsize=10)
+    ax.set_title(scenario_info['label'], fontsize=11, fontweight='bold')
+    ax.legend(fontsize=9, loc='lower left')
     ax.grid(True, alpha=0.3)
     ax.set_ylim([0, 1.05])
 
-plt.suptitle("Kaplan-Meier Curves: Yi vs KoMbine Across Measurement Scenarios", 
-             fontsize=14, fontweight='bold', y=1.02)
+
+# Layout: fixed centered in row 0; cols aligned by uncertainty level
+# Row 0: Fixed (baseline, centered)
+# Row 1: Discrete Classes — small / moderate / large error
+# Row 2: Poisson Counts  — large / moderate / small counts
+mosaic_layout = [
+    ['.', 'fixed', '.'],
+    ['dc_small', 'dc_moderate', 'dc_large'],
+    ['pois_large', 'pois_moderate', 'pois_small'],
+]
+mosaic_to_scenario = {
+    'fixed':       'fixed',
+    'dc_small':    'misclass_small',
+    'dc_moderate': 'misclass_moderate',
+    'dc_large':    'misclass_large',
+    'pois_large':  'large',
+    'pois_moderate': 'moderate',
+    'pois_small':  'small',
+}
+
+fig, axes_dict = plt.subplot_mosaic(
+    mosaic_layout, figsize=(14, 13),
+    gridspec_kw={'hspace': 0.52, 'wspace': 0.35},
+)
+
+for panel_key, scenario_key in mosaic_to_scenario.items():
+    _plot_km_in_ax(axes_dict[panel_key], scenario_key,
+                   scenarios[scenario_key], km_results[scenario_key])
+
+# Column headers: uncertainty level above row 1
+col_headers_list = ['Small Uncertainty', 'Medium Uncertainty', 'Large Uncertainty']
+for panel_key, header in zip(['dc_small', 'dc_moderate', 'dc_large'], col_headers_list):
+    axes_dict[panel_key].annotate(
+        header, xy=(0.5, 1.0), xytext=(0, 30),
+        xycoords='axes fraction', textcoords='offset points',
+        ha='center', va='bottom', fontsize=12, fontweight='bold',
+        color='#333333', annotation_clip=False,
+    )
+
+# Row labels: observable type on the left of the first column
+for panel_key, row_label in zip(['dc_small', 'pois_large'],
+                                 ['Discrete\nClasses', 'Poisson\nCounts']):
+    axes_dict[panel_key].annotate(
+        row_label, xy=(0, 0.5), xytext=(-52, 0),
+        xycoords='axes fraction', textcoords='offset points',
+        ha='center', va='center', fontsize=11, fontweight='bold',
+        color='#333333', rotation=90, annotation_clip=False,
+    )
+
+plt.suptitle('Kaplan-Meier Curves: Yi vs KoMbine Across Measurement Scenarios',
+             fontsize=14, fontweight='bold')
 plt.tight_layout()
 plt.show()
 ```
@@ -339,7 +411,7 @@ We compare p-values from:
 - Large disagreements between the two p-values indicate that inference is being driven by how group-membership uncertainty is modeled, not just by sampling noise.
 
 ```python
-# Calculate p-values (Yi vs KoMbine) for all four scenarios
+# Calculate p-values (Yi vs KoMbine) for all scenarios
 pvalue_results = {}
 label_width = 7
 
@@ -378,9 +450,10 @@ for scenario_key, scenario_info in scenarios.items():
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
 # Prepare data
-scenario_labels = [scenarios[k]['label'] for k in ['fixed', 'large', 'moderate', 'small']]
-yi_pvals = [pvalue_results[k]['yi'] for k in ['fixed', 'large', 'moderate', 'small']]
-kombine_pvals = [pvalue_results[k]['kombine'] for k in ['fixed', 'large', 'moderate', 'small']]
+scenario_keys = list(scenarios.keys())
+scenario_labels = [scenarios[k]['label'] for k in scenario_keys]
+yi_pvals = [pvalue_results[k]['yi'] for k in scenario_keys]
+kombine_pvals = [pvalue_results[k]['kombine'] for k in scenario_keys]
 
 # Bar plot
 x = np.arange(len(scenario_labels))
@@ -435,7 +508,7 @@ As noted in the paper text, Yi’s approach can reduce bias in the *point estima
 KoMbine’s likelihood framework, by contrast, can naturally widen the profile-likelihood confidence interval as patient-wise uncertainty increases, because the model explicitly accounts for the possibility that the discrete group assignment itself is uncertain.
 
 ```python
-# Calculate hazard ratios (Yi vs KoMbine) for all four scenarios
+# Calculate hazard ratios (Yi vs KoMbine) for all scenarios
 hr_results = {}
 label_width = 7
 hazard_ratios_scan = np.logspace(-2, 2, 80)  # Match 04: 0.01 to 100 with 80 points
@@ -511,49 +584,78 @@ for scenario_key, scenario_info in scenarios.items():
 
 
 ```python
-# Plot hazard ratio profiles for all four scenarios in a 2x2 grid
-fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-axes = axes.flatten()
+# Plot hazard ratio profiles for all scenarios in a grid
+mosaic_layout = [
+    ['.', 'fixed', '.'],
+    ['dc_small', 'dc_moderate', 'dc_large'],
+    ['pois_large', 'pois_moderate', 'pois_small'],
+]
+mosaic_to_scenario = {
+    'fixed':         'fixed',
+    'dc_small':      'misclass_small',
+    'dc_moderate':   'misclass_moderate',
+    'dc_large':      'misclass_large',
+    'pois_large':    'large',
+    'pois_moderate': 'moderate',
+    'pois_small':    'small',
+}
 
-for idx, (scenario_key, scenario_info) in enumerate(scenarios.items()):
-    ax = axes[idx]
+fig, axes_dict = plt.subplot_mosaic(
+    mosaic_layout, figsize=(14, 13),
+    gridspec_kw={'hspace': 0.52, 'wspace': 0.35},
+)
+
+for panel_key, scenario_key in mosaic_to_scenario.items():
+    ax = axes_dict[panel_key]
     result = hr_results[scenario_key]
-    
-    # Yi profile likelihood
+    info = scenarios[scenario_key]
+
     yi_2nlls = result['yi_2nlls']
-    min_yi = min(yi_2nlls)
-    delta_yi = np.array(yi_2nlls) - min_yi
-    
-    # KoMbine profile likelihood
+    delta_yi = np.array(yi_2nlls) - min(yi_2nlls)
+
     kombine_2nlls = result['kombine_2nlls']
-    min_kombine = min(kombine_2nlls)
-    delta_kombine = np.array(kombine_2nlls) - min_kombine
-    
-    # Plot both profile likelihoods
+    delta_kombine = np.array(kombine_2nlls) - min(kombine_2nlls)
+
     ax.plot(hazard_ratios_scan, delta_yi, color='#1976d2', linewidth=2.5, marker='o', markersize=3,
             label="Yi's Method", zorder=3)
     ax.plot(hazard_ratios_scan, delta_kombine, color='#d32f2f', linewidth=2.5, marker='s', markersize=3,
-            label="KoMbine", zorder=3)
-    
-    # Best-fit lines
+            label='KoMbine', zorder=3)
     ax.axvline(result['yi_best'], color='#1976d2', linestyle='--', alpha=0.6, linewidth=1.5, zorder=2)
     ax.axvline(result['kombine_best'], color='#d32f2f', linestyle='--', alpha=0.6, linewidth=1.5, zorder=2)
-    
-    # Confidence threshold line (95% CI, chi2=3.84)
-    ax.axhline(3.84, color='gray', linestyle=':', alpha=0.6, linewidth=2.0, label='95% CL (χ²=3.84)', zorder=1)
-    
-    ax.set_xlabel('Hazard Ratio', fontsize=11)
-    ax.set_ylabel(r'$-2 \Delta \ln L$', fontsize=11)
-    ax.set_title(f"{scenario_info['label']}",
-                fontsize=12, fontweight='bold')
+    ax.axhline(3.84, color='gray', linestyle=':', alpha=0.6, linewidth=2.0,
+               label='95% CL (χ²=3.84)', zorder=1)
+
+    ax.set_xlabel('Hazard Ratio', fontsize=10)
+    ax.set_ylabel(r'$-2 \Delta \ln L$', fontsize=10)
+    ax.set_title(info['label'], fontsize=11, fontweight='bold')
     ax.legend(fontsize=9, loc='upper left')
     ax.grid(True, alpha=0.3, which='both')
     ax.set_xscale('log')
     ax.set_xlim([0.01, 100.0])
     ax.set_ylim([0, 10])
 
-plt.suptitle('Profile Likelihood for Hazard Ratio: Yi vs KoMbine', 
-             fontsize=14, fontweight='bold', y=1.02)
+# Column headers: uncertainty level above row 1
+col_headers_list = ['Small Uncertainty', 'Medium Uncertainty', 'Large Uncertainty']
+for panel_key, header in zip(['dc_small', 'dc_moderate', 'dc_large'], col_headers_list):
+    axes_dict[panel_key].annotate(
+        header, xy=(0.5, 1.0), xytext=(0, 30),
+        xycoords='axes fraction', textcoords='offset points',
+        ha='center', va='bottom', fontsize=12, fontweight='bold',
+        color='#333333', annotation_clip=False,
+    )
+
+# Row labels: observable type on the left of the first column
+for panel_key, row_label in zip(['dc_small', 'pois_large'],
+                                 ['Discrete\nClasses', 'Poisson\nCounts']):
+    axes_dict[panel_key].annotate(
+        row_label, xy=(0, 0.5), xytext=(-52, 0),
+        xycoords='axes fraction', textcoords='offset points',
+        ha='center', va='center', fontsize=11, fontweight='bold',
+        color='#333333', rotation=90, annotation_clip=False,
+    )
+
+plt.suptitle('Profile Likelihood for Hazard Ratio: Yi vs KoMbine',
+             fontsize=14, fontweight='bold')
 plt.tight_layout()
 plt.show()
 ```
@@ -561,40 +663,48 @@ plt.show()
 
 ## Summary of Findings
 
-The key modeling difference is **fractional vs discrete assignment** under measurement uncertainty: Yi’s method assigns each patient to both groups with weights, while KoMbine enforces one group per patient and scores assignments using an explicit measurement-error model.
+The key modeling difference is **fractional vs discrete assignment** under measurement uncertainty:
+Yi’s method assigns each patient to both groups with weights, while KoMbine enforces one group per
+patient and scores assignments using an explicit measurement-error model.
 
 ### Kaplan–Meier Curves (Qualitative)
-- **Fixed / Large-count**: Yi and KoMbine curves are very similar because group membership is effectively known (measurement error is negligible).
-- **Moderate-count**: Yi begins to shrink the gap between groups. KoMbine’s best-fit curves can still preserve separation, but the confidence bands widen because assignments are less certain.
-- **Small-count**: Differences can become qualitative (including apparent reversals) because group membership is weakly identified under the error model.
+- **Fixed observable**: Yi and KoMbine produce identical curves because group membership is exact.
+- **Discrete classes (small e)**: Curves remain close to the fixed baseline. As e grows, Yi’s curves
+  drift toward each other while KoMbine can maintain separation using the most likely discrete assignment.
+- **Poisson (large/moderate counts)**: Similar behavior — Yi shrinks the group gap; KoMbine confidence
+  bands widen as assignment uncertainty increases.
+- **Poisson (small counts)**: Differences can become qualitative (including apparent reversals in the
+  individual KM curve fits) because group membership is weakly identified under the error model.
 
-### P-Values (Observed in this notebook run)
-- Yi’s p-values generally increase as uncertainty grows, reaching near 1.0 in the small-count case.
-- KoMbine’s full-likelihood p-values stay relatively stable for fixed/large/moderate and diverge from Yi when assignments become ambiguous.
-
-| Scenario | Yi p-value | KoMbine p-value |
-|---|---:|---:|
-| Fixed | 4.226e-01 | 2.509e-01 |
-| Large Poisson | 3.330e-01 | 2.508e-01 |
-| Moderate Poisson | 5.460e-01 | 2.508e-01 |
-| Small Poisson | 9.702e-01 | 1.718e-01 |
-
-### Hazard Ratios (Observed in this notebook run)
-- Yi’s best-fit HR drifts toward 1 as uncertainty increases, and its profile-based CI in this simple scan does not automatically explode in the large-uncertainty limit.
-- KoMbine’s best-fit HR stays near the baseline optimum in these examples, but the **confidence interval widens** as uncertainty grows; in the small-count case the lower bound hits the scan boundary, consistent with the idea that the HR becomes weakly constrained.
-
-| Scenario | Yi best HR [95% CI] | KoMbine best HR [95% CI] |
-|---|---|---|
-| Fixed | 1.800 [0.586, 8.600] | 2.280 [0.496, 11.156] |
-| Large Poisson | 2.043 [0.586, 9.571] | 2.280 [0.496, 11.156] |
-| Moderate Poisson | 1.557 [0.586, 6.900] | 2.280 [0.442, 11.156] |
-| Small Poisson | 1.071 [0.343, 3.986] | 2.280 [0.100, 11.156] |
+### P-Values and Hazard Ratios
+- Yi’s p-values generally increase as uncertainty grows; its best-fit HR drifts toward 1.
+- KoMbine’s p-values are more stable; its best-fit HR stays near the baseline, but the
+  **confidence interval widens** as uncertainty grows.
+- Large disagreements between the two indicate that inference is driven by how group-membership
+  uncertainty is modeled, not just by sampling noise.
 
 ### Practical Takeaways
 1. When measurement error is tiny, both methods agree and the choice is less critical.
-2. When measurement error is moderate/large, treat the conclusion as model-dependent and report sensitivity to the modeling choice.
+2. When measurement error is moderate/large, treat the conclusion as model-dependent and
+   report sensitivity to the modeling choice.
 3. Yi’s method is fast and often conservative (it blurs separation as uncertainty grows).
-4. KoMbine is likelihood-principled for the specified error model and can reveal when parameters become weakly identified via widening profile-likelihood intervals.
+4. KoMbine is likelihood-principled for the specified error model and can reveal when
+   parameters become weakly identified via widening profile-likelihood intervals.
 
-
-
+```python
+# Summary tables — computed live from pvalue_results and hr_results
+header = (f"{'Scenario':<36} {'Yi p-val':>10} {'KoMbine p-val':>14}"
+          f"  {'Yi HR [95% CI]':>22}  {'KoMbine HR [95% CI]':>25}")
+print(header)
+print('-' * len(header))
+for key, info in scenarios.items():
+    pv = pvalue_results[key]
+    hr = hr_results[key]
+    yi_ci = (f"[{hr['yi_lower']:.3f}, {hr['yi_upper']:.3f}]"
+             if not np.isnan(hr['yi_lower']) else '[n/a]')
+    ko_ci = f"[{hr['kombine_lower']:.3f}, {hr['kombine_upper']:.3f}]"
+    yi_hr_str = f"{hr['yi_best']:.3f} {yi_ci}"
+    ko_hr_str = f"{hr['kombine_best']:.3f} {ko_ci}"
+    print(f"{info['label']:<36} {pv['yi']:>10.3e} {pv['kombine']:>14.3e}"
+          f"  {yi_hr_str:>22}  {ko_hr_str:>25}")
+```
