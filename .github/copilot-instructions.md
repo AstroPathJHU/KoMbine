@@ -41,30 +41,35 @@ This repository contains two distinct Python packages for biomedical analysis:
   - `discrete_optimization.py`, `utilities.py` - Optimization utilities (used by KM methods)
   - `datacard.py` - Main Datacard class (core data parsing)
   - `command_line_interface.py` - KM-specific CLI functions
+  - `yi_correction.py` - Yi correction method
 
 ### Test Structure
 - **`test/roc_picker/`**: ROC Picker tests, datacards, and reference data
 - **`test/kombine/`**: KoMbine tests, datacards, and reference data
-- **Shared files**: `utility_testing_functions.py`, `test_continuous_distributions.py` (copied to both)
+- **Shared utilities**: `test/utility_testing_functions.py` (shared helpers used by both)
+- `test_continuous_distributions.py` lives in `test/roc_picker/`
 
 ### Documentation Structure
 - **`docs/roc_picker/`**: ROC Picker documentation, LaTeX files, and plotting scripts
 - **`docs/kombine/`**: KoMbine documentation, LaTeX files, and plotting scripts
-- Each has independent numbering starting from 01, with separate `compile_*_plots.sh` scripts
+- Each has independent numbering starting from 01
+- ROC Picker uses `docs/roc_picker/compile_roc_plots.sh`; KoMbine uses `python -m docs.kombine.compile_km_plots` (Python script, not shell)
 
 **KoMbine documentation files**:
-- `01_table_of_contents.md` - Index of all documentation files (synced with Jupytext)
+- `01_table_of_contents.md` - Index of all documentation files (pure Markdown, synced with Jupytext)
 - `02_kombine.tex` - LaTeX paper with mathematical details (JSS submission)
 - `03_kaplan_meier_example.md` - Jupyter notebook showing Python API usage examples
-- `04_compare_to_lifelines.md` - Jupyter notebook comparing to `lifelines` package
-- `05_command_line_interface.md` - **Pure Markdown** (no Python cells) documenting all CLI options for `kombine` and `kombine_twogroups` commands (synced with Jupytext)
+- `04_analysis_demo.md` - Jupyter notebook with analysis demonstration
+- `05_compare_lifelines_greenwood.md` - Jupyter notebook comparing to `lifelines` and Greenwood method
+- `06_yi_method_comparison.md` - Jupyter notebook comparing Yi correction method
+- `07_command_line_interface.md` - **Pure Markdown** (no Python cells) documenting all CLI options for `kombine` and `kombine_twogroups` commands (synced with Jupytext)
 
 **Documentation style guidelines**:
-- Files `03_*.md` and `04_*.md` are Jupytext notebooks with Python cells for interactive examples
-- Files `01_*.md` and `05_*.md` are pure Markdown with Jupytext headers but no Python cells
+- Files `03_*.md` through `06_*.md` are Jupytext notebooks with Python cells for interactive examples
+- Files `01_*.md` and `07_*.md` are pure Markdown with Jupytext headers but no Python cells
 - All documentation markdown files must have Jupytext headers to allow `jupytext --sync` to process them
-- All CLI options must be documented in `05_command_line_interface.md` and verified by `test/kombine/test_ci_and_documentation.py`
-- When adding new CLI arguments, update `05_command_line_interface.md` and run the documentation test
+- All CLI options must be documented in `07_command_line_interface.md` and verified by `test/kombine/test_ci_and_documentation.py`
+- When adding new CLI arguments, update `07_command_line_interface.md` and run the documentation test
 - The table of contents (`01_table_of_contents.md`) must list all numbered documentation files
 
 **Compiling KoMbine LaTeX documentation (`02_kombine.tex`)**:
@@ -206,6 +211,11 @@ python test/roc_picker/test_continuous_distributions.py  # ~5 seconds
 ```bash
 python -m test.kombine.test_discrete_optimization    # ~90 seconds
 python -m test.kombine.test_km_likelihood           # ~2 minutes, requires unrestricted license
+python -m test.kombine.test_hazard_ratio
+python -m test.kombine.test_km_plotting
+python -m test.kombine.test_yi_correction
+python -m test.kombine.test_discrete_class_observable
+python -m test.kombine.test_ci_and_documentation
 ```
 
 **Note**: Always set up the Gurobi license file (see above) before running KoMbine tests.
@@ -218,13 +228,11 @@ python -m pylint .          # Should score ~10/10
 
 ## GitHub Actions Workflows
 
-The repository now uses three separate workflows:
+The repository uses a single combined workflow:
 
-1. **`.github/workflows/linting.yml`**: Linting and type checking (pyflakes, pylint, pyright)
-2. **`.github/workflows/test_roc_picker.yml`**: ROC Picker testing and documentation
-3. **`.github/workflows/test_kombine.yml`**: KoMbine testing and documentation (requires Gurobi secrets)
+- **`.github/workflows/ci-cd.yml`**: Linting, type checking, ROC Picker and KoMbine testing, and documentation (requires Gurobi secrets)
 
-**Gurobi secrets** (for KoMbine workflow): `GUROBI_WLSACCESSID`, `GUROBI_WLSSECRET`, `GUROBI_LICENSEID`
+**Gurobi secrets**: `GUROBI_WLSACCESSID`, `GUROBI_WLSSECRET`, `GUROBI_LICENSEID`
 
 ## Development Workflow
 
@@ -246,8 +254,8 @@ The repository now uses three separate workflows:
 
 ## File Locations Quick Reference
 
-**ROC Picker code**: `roc_picker/` (6 Python modules)
-**KoMbine code**: `kombine/` (8 Python modules)
+**ROC Picker code**: `roc_picker/` (7 Python modules + `__init__.py`)
+**KoMbine code**: `kombine/` (10 Python modules + `__init__.py`)
 **ROC Picker tests**: `test/roc_picker/` with `datacards/`, `reference/`, `test_output/`
 **KoMbine tests**: `test/kombine/` with `datacards/`, `reference/`, `test_output/`
 **ROC Picker docs**: `docs/roc_picker/` (LaTeX + Jupyter notebooks)
