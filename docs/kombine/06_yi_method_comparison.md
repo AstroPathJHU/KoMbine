@@ -341,8 +341,7 @@ mosaic_to_scenario = {
     'pois_small':  'small',
 }
 
-fig, axes_dict = plt.subplot_mosaic(  # pyright: ignore[reportCallIssue, reportArgumentType]
-    mosaic_layout, figsize=(14, 13),
+fig, axes_dict = plt.subplot_mosaic(mosaic_layout, figsize=(14, 13),  # pyright: ignore[reportCallIssue, reportArgumentType]
     gridspec_kw={'hspace': 0.52, 'wspace': 0.35},
 )
 
@@ -600,8 +599,7 @@ mosaic_to_scenario = {
     'pois_small':    'small',
 }
 
-fig, axes_dict = plt.subplot_mosaic(  # pyright: ignore[reportCallIssue, reportArgumentType]
-    mosaic_layout, figsize=(14, 13),
+fig, axes_dict = plt.subplot_mosaic(mosaic_layout, figsize=(14, 13),  # pyright: ignore[reportCallIssue, reportArgumentType]
     gridspec_kw={'hspace': 0.52, 'wspace': 0.35},
 )
 
