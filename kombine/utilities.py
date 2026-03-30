@@ -160,6 +160,16 @@ def prob_poisson_density_in_range(  # pylint: disable=too-many-arguments
   return float(prob_in_range)
 
 
+def validate_class_probs(class_probs: list) -> None:
+  """Raise ValueError if class_probs is not a valid probability distribution."""
+  if not class_probs:
+    raise ValueError("class_probs must be non-empty")
+  for prob in class_probs:
+    if not isinstance(prob, (int, float)) or prob < 0:
+      raise ValueError(f"Invalid class probability: {prob}")
+  total = float(sum(class_probs))
+  if not np.isclose(total, 1.0, rtol=0.0, atol=1e-6):
+    raise ValueError(f"Class probabilities must sum to 1, got {total}")
 
 
 # ============================================================================

@@ -27,7 +27,7 @@ from .kaplan_meier_likelihood import (
 from .kaplan_meier_p_value_MINLP import MINLPforKMPValue
 from .kaplan_meier_hazard_ratio_MINLP import MINLPforKMHazardRatio
 from .yi_correction import YiCorrectionForLogrank, YiCorrectionForCoxPH, YiCorrectionForKaplanMeier
-from .utilities import LOG_ZERO_EPSILON_DEFAULT, prob_poisson_density_in_range
+from .utilities import LOG_ZERO_EPSILON_DEFAULT, prob_poisson_density_in_range, validate_class_probs
 
 def _parse_prob_class_label(label: str) -> int | None:
   """
@@ -200,14 +200,7 @@ class DiscreteClassObservable(Observable):
   def _set_class_probs_from_list(self, class_probs: list[float]):
     if self.__class_probs is not None or self.__class_probs_by_index:
       raise ValueError("Class probabilities already set")
-    if not class_probs:
-      raise ValueError("class_probs must be non-empty")
-    for prob in class_probs:
-      if not isinstance(prob, (int, float)) or prob < 0:
-        raise ValueError(f"Invalid class probability: {prob}")
-    total = float(sum(class_probs))
-    if not np.isclose(total, 1.0, rtol=0.0, atol=1e-6):
-      raise ValueError(f"Class probabilities must sum to 1, got {total}")
+    validate_class_probs(class_probs)
     self.__class_probs = tuple(float(p) for p in class_probs)
 
   def set_class_prob(self, class_index: int, class_prob: float) -> None:
@@ -235,9 +228,9 @@ class DiscreteClassObservable(Observable):
     """
     if not isinstance(other, DiscreteClassObservable):
       raise ValueError("Can only merge from DiscreteClassObservable")
-    if other.__class_probs is not None:
+    if other.__class_probs is not None:  # pylint: disable=protected-access
       raise ValueError("Cannot merge from finalized class probabilities")
-    for class_index, class_prob in other.__class_probs_by_index.items():
+    for class_index, class_prob in other.__class_probs_by_index.items():  # pylint: disable=protected-access
       self.set_class_prob(class_index, class_prob)
 
   def finalize_class_probs(self, n_classes: int) -> None:
@@ -1036,7 +1029,10 @@ class Datacard:
             0: False,
             1: True,
           }[int(censored)]
-      elif split[0] in ["observable", "count", "num", "denom", "area"] or _parse_prob_class_label(split[0]) is not None:
+      elif (
+        split[0] in ["observable", "count", "num", "denom", "area"]
+        or _parse_prob_class_label(split[0]) is not None
+      ):
         if observable_type is None:
           raise ValueError(f"No 'observable_type' line found before '{split[0]}' line")
         if patients is None:

@@ -21,7 +21,7 @@ from .kaplan_meier import (
   KaplanMeierPatientBase,
   KaplanMeierPatient,
 )
-from .utilities import LOG_ZERO_EPSILON_DEFAULT, GurobiOptimizerMixin
+from .utilities import LOG_ZERO_EPSILON_DEFAULT, GurobiOptimizerMixin, validate_class_probs
 
 def n_choose_d_term_table(n_patients) -> dict[tuple[int, int], float]:
   """
@@ -435,14 +435,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       raise NotImplementedError(
         "Systematics are not supported for discrete class probabilities"
       )
-    if not class_probs:
-      raise ValueError("class_probs must be non-empty")
-    for prob in class_probs:
-      if not isinstance(prob, (int, float)) or prob < 0:
-        raise ValueError(f"Invalid class probability: {prob}")
-    total = float(sum(class_probs))
-    if not np.isclose(total, 1.0, rtol=0.0, atol=1e-6):
-      raise ValueError(f"Class probabilities must sum to 1, got {total}")
+    validate_class_probs(class_probs)
     log_probs = [
       float(np.log(prob)) if prob > 0 else -float('inf')
       for prob in class_probs
