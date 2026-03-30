@@ -7,6 +7,8 @@ The p-value is computed via the likelihood ratio test.
 # pylint: disable=too-many-lines
 
 import functools
+import os
+import datetime
 
 import gurobipy as gp
 from gurobipy import GRB
@@ -16,9 +18,13 @@ import scipy.optimize
 import scipy.stats
 
 from .kaplan_meier_MINLP import KaplanMeierPatientNLL, n_choose_d_term_table
-from .utilities import LOG_ZERO_EPSILON_DEFAULT
+from .utilities import (
+  LOG_ZERO_EPSILON_DEFAULT,
+  GurobiOptimizerMixin,
+)
 
-class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-instance-attributes
+
+class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-methods, too-many-instance-attributes
   """
   MINLP solver for calculating p-values for two Kaplan-Meier curves.
   """
@@ -35,6 +41,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     parameter_max: float = np.inf,
     log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
     tie_handling: str = "breslow",
+    log_hazard_ratio_bounds: tuple[float, float] = (-10.0, 10.0),
   ):
     if tie_handling not in ["breslow"]:
       raise ValueError(f"tie_handling must be 'breslow', got '{tie_handling}'")
@@ -45,6 +52,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     self.__parameter_max = parameter_max
     self.__log_zero_epsilon = log_zero_epsilon
     self.__tie_handling = tie_handling
+    self.__log_hazard_ratio_bounds = log_hazard_ratio_bounds
     self.__null_hypothesis_constraint = None
     self.__patient_constraints_for_cox_only = None
     self.__patient_wise_only_constraint = None
@@ -81,6 +89,15 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     The maximum parameter value to be included in the "high" Kaplan-Meier curve.
     """
     return self.__parameter_max
+
+  @property
+  def log_hazard_ratio_bounds(self) -> tuple[float, float]:
+    """
+    The bounds on log(hazard ratio) for the Gurobi model.
+    These correspond to hazard ratio bounds of (exp(lb), exp(ub)).
+    Default is (-10.0, 10.0), allowing HR in [0.000045, 22026].
+    """
+    return self.__log_hazard_ratio_bounds
 
   @property
   def tie_handling(self) -> str:
@@ -120,6 +137,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     The observed parameters of all patients.
     """
     return np.array([p.observed_parameter for p in self.all_patients])
+
   @functools.cached_property
   def parameter_in_range(self) -> npt.NDArray[np.bool_]:
     """
@@ -517,8 +535,10 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
                       name=f"r_total_constraint_{j}")
 
     # log hazard ratio (beta) and its exp (omega)
+    # Use configurable bounds (default -10.0 to 10.0)
+    log_hr_lb, log_hr_ub = self.log_hazard_ratio_bounds
     beta = model.addVar(vtype=gp.GRB.CONTINUOUS,
-                        lb=-6.0, ub=6.0,
+                        lb=log_hr_lb, ub=log_hr_ub,
                         name="log_hazard_ratio")
     omega = model.addVar(vtype=gp.GRB.CONTINUOUS, lb=1e-6,
                         name="hazard_ratio")
@@ -749,7 +769,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     )
     model.update()
 
-    return (
+    return (  # pylint: disable=duplicate-code
       model,
       null_hypothesis_indicator,
       a,
@@ -924,9 +944,14 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     *,
     cox_only: bool = False,
     patient_wise_only: bool = False,
-    gurobi_verbose: bool = False,
+    verbose: bool = False,
+    print_progress: bool = False,
     MIPGap: float | None = None,
     MIPGapAbs: float | None = None,
+    TimeLimit: float | None = None,
+    Threads: int | None = None,
+    MIPFocus: int | None = None,
+    LogFile: os.PathLike | None = None,
   ):
     """
     Solve the MINLP and return the p value.
@@ -940,9 +965,11 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
         If True, only consider patient-wise errors and constrain the curves
         to be flipped relative to nominal at each death time point under the null hypothesis.
         Default is False.
-    gurobi_verbose : bool, optional
+    verbose : bool, optional
         If True, enable verbose output from Gurobi solver. Default is False.
     """
+    if print_progress or verbose:
+      print(f"Running p-value MINLP at {datetime.datetime.now()}")
     if cox_only and patient_wise_only:
       raise ValueError("cox_only and patient_wise_only cannot both be True")
 
@@ -956,7 +983,7 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
     if MIPGapAbs is None:
       MIPGapAbs = self.__default_MIPGapAbs
 
-    (
+    (  # pylint: disable=duplicate-code
       model,
       null_hypothesis_indicator,
       a,
@@ -978,15 +1005,24 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       use_cox_penalty_indicator=use_cox_penalty_indicator,
     )
 
-    # Set Gurobi verbose output parameter
-    model.setParam('OutputFlag', 1 if gurobi_verbose else 0)
-    model.setParam('MIPGap', MIPGap)
-    model.setParam('MIPGapAbs', MIPGapAbs)
-
+    # Setup and optimize with standard parameters and fallback strategies
+    if print_progress or verbose:
+      print("Solving for null hypothesis...")
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, True)
-    model.optimize()
+    # pylint: disable=duplicate-code
+    model = self._setup_and_optimize(
+      model,
+      verbose=verbose,
+      MIPGap=MIPGap,
+      MIPGapAbs=MIPGapAbs,
+      TimeLimit=TimeLimit,
+      Threads=Threads,
+      MIPFocus=MIPFocus,
+      LogFile=LogFile,
+    )
     if model.status != GRB.OPTIMAL:
       raise ValueError(f"Null model failed with status {model.status}")
+    # pylint: enable=duplicate-code
     twonll_null = model.ObjVal
 
     # Extract detailed information for null hypothesis result
@@ -1025,10 +1061,23 @@ class MINLPforKMPValue:  #pylint: disable=too-many-public-methods, too-many-inst
       model=model,
     )
 
+    if print_progress or verbose:
+      print("Solving for alternative hypothesis...")
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, False)
-    model.optimize()
+    # pylint: disable=duplicate-code
+    model = self._setup_and_optimize(
+      model,
+      verbose=verbose,
+      MIPGap=MIPGap,
+      MIPGapAbs=MIPGapAbs,
+      TimeLimit=TimeLimit,
+      Threads=Threads,
+      MIPFocus=MIPFocus,
+      LogFile=LogFile,
+    )
     if model.status != GRB.OPTIMAL:
       raise ValueError(f"Alternative model failed with status {model.status}")
+    # pylint: enable=duplicate-code
     twonll_alt = model.ObjVal
 
     # Extract detailed information for alternative hypothesis result

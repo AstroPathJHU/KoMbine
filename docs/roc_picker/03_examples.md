@@ -6,7 +6,7 @@ jupyter:
       extension: .md
       format_name: markdown
       format_version: '1.3'
-      jupytext_version: 1.16.4
+      jupytext_version: 1.18.1
   kernelspec:
     display_name: rocpicker
     language: python
@@ -49,6 +49,7 @@ Options are:
 * `poisson`: The observable for each patient is a count, which has an associated Poisson uncertainty.  It may have additional uncertainties defined in the systematics section.
 * `poisson_density`: The observable for each patient is a count, which has an associated Poisson uncertainty, divided by a fixed area, which is assumed to have no error.
 * `poisson_ratio`: The observable for each patient is a ratio of two counts.  Again, it may have additional uncertainties defined in the systematics section.
+* `discrete_classes`: The observable for each patient is a probability distribution over discrete class indices.
 
 Next is the list of patients.
 - `bin`: This might be used in the future to group patients (for example, into immunotherapy- and chemo-treated patients).  It currently doesn't do anything, and doesn't have to be included.
@@ -58,6 +59,7 @@ Next is the list of patients.
   - For `poisson`, it should be labeled `count`
   - For `poisson_ratio`, there should be two lines labeled `num` and `denom`
   - For `poisson_density`, there should be two lines labeled `num` and `area`
+  - For `discrete_classes`, there should be one line per class labeled `prob0`, `prob1`, ...
 
 Next is the systematics section, which will be described in more detail below.  This simple example datacard doesn't have any systematics.
 

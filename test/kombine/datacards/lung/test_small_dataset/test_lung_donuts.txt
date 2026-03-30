@@ -1,0 +1,8 @@
+observable_type poisson_density
+------------
+# List of patients (minimal test dataset for donuts - 3 patients)
+------------
+survival_time 10 20 30
+censored 0 1 0
+num 500 2500 2000
+area 2.69 2.36 1.5

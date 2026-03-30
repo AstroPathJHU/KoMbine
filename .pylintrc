@@ -2,6 +2,7 @@
 ignore = build
 extension-pkg-allow-list = scipy.special
 extension-pkg-whitelist = scipy.special
+ignored-modules = scipy.special
 
 [FORMAT]
 indent-string = '  '

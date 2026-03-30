@@ -828,7 +828,7 @@
     0.0
   ],
   "nominal_hazard_ratio_breslow": [
-    0.4162
+    0.4149
   ],
   "nominal_probabilities": [
     1.0,
@@ -901,7 +901,7 @@
     0.0
   ],
   "p_value_breslow": [
-    0.0202
+    0.02
   ],
   "p_value_cox_breslow": [
     0.175

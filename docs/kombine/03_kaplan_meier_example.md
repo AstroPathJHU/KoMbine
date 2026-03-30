@@ -1,12 +1,12 @@
 ---
 jupyter:
   jupytext:
-    formats: ipynb,md,py
+    formats: ipynb,md,py:percent
     text_representation:
       extension: .md
       format_name: markdown
       format_version: '1.3'
-      jupytext_version: 1.16.4
+      jupytext_version: 1.18.1
   kernelspec:
     display_name: rocpicker
     language: python
@@ -46,6 +46,7 @@ Options are:
 * `poisson`: The observable for each patient is a count, which has an associated Poisson uncertainty.  It may have additional uncertainties defined in the systematics section.
 * `poisson_density`: The observable for each patient is a count, which has an associated Poisson uncertainty, divided by a fixed area, which is assumed to have no error.
 * `poisson_ratio`: The observable for each patient is a ratio of two counts.  Again, it may have additional uncertainties defined in the systematics section.
+* `discrete_classes`: The observable for each patient is a probability distribution over discrete class indices.
 
 Next is the list of patients.
 - `survival_time`: the time when the patient was censored or died
@@ -55,6 +56,7 @@ Next is the list of patients.
   - For `poisson`, it should be labeled `count`
   - For `poisson_ratio`, there should be two lines labeled `num` and `denom`, as in the example here
   - For `poisson_density`, there should be two lines labeled `num` and `area`
+  - For `discrete_classes`, there should be one line per class labeled `prob0`, `prob1`, ...
 
 Below, you can put a list of systematic uncertainties.  These are documented in the example notebook in the ROC Picker documentation.  For KoMbine, uncertainties cannot yet be correlated between patients, so each uncertainty can only apply to a single patient.
 
@@ -81,14 +83,14 @@ plt.figure()
 _ = kml_low.plot(
     best_color="blue",
     CL_colors=["dodgerblue", "skyblue"],
-    best_label=f"observable < 0.45",
+    best_label="observable < 0.45",
     create_figure=False,
     include_nominal=False,
 )
 _ = kml_high.plot(
     best_color="red",
     CL_colors=["orangered", "lightcoral"],
-    best_label=f"observable >= 0.45",
+    best_label="observable >= 0.45",
     create_figure=False,
     include_nominal=False,
 )

@@ -1,0 +1,18 @@
+observable_type poisson_density
+------------
+# Poisson density example with LARGE counts (small Poisson error)
+# Expected HR ~ 2.3 (matches fixed_hr_example.txt grid)
+# 
+# With large counts, patients are well-localized around their true parameter value
+# -> Confidence intervals should be similar to fixed case (Cox error dominates)
+# 
+# Group 0 (low density, < 0.5): Better survival (later death times)
+# Group 1 (high density, >= 0.5): Worse survival (earlier death times)
+# 
+# Using large num values so sqrt(N)/N ~ 2-3% uncertainty
+# -> Poisson error is small, Cox error dominates
+------------
+survival_time	10	12	15	18	20	24	28	30	35	40	3	5	7	9	12	15	18	20	25	30
+censored	0	0	0	1	1	1	1	1	1	1	0	0	0	0	0	1	1	1	1	1
+num	100	150	200	250	300	350	400	400	450	500	550	600	650	700	750	800	850	900	950	950
+area	1000	1000	1000	1000	1000	1000	1000	1000	1000	1000	1000	1000	1000	1000	1000	1000	1000	1000	1000	1000

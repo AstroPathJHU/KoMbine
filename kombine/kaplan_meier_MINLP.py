@@ -21,7 +21,7 @@ from .kaplan_meier import (
   KaplanMeierPatientBase,
   KaplanMeierPatient,
 )
-from .utilities import LOG_ZERO_EPSILON_DEFAULT
+from .utilities import LOG_ZERO_EPSILON_DEFAULT, GurobiOptimizerMixin, validate_class_probs
 
 def n_choose_d_term_table(n_patients) -> dict[tuple[int, int], float]:
   """
@@ -102,7 +102,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       res = scipy.optimize.minimize(
         obj,
         x0=np.array([0.0]),
-        method='BFGS',
+        method='Powell',
       )
       if not res.success:
         raise RuntimeError(f"Optimization failed:\n{res}")
@@ -133,10 +133,10 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       res = scipy.optimize.minimize(
         obj,
         x0=np.zeros(len(var_types)),
-        method='BFGS',
+        method='Powell',
         options={
           #loose tolerance - we don't actually care about the values of the nuisance parameters
-          "gtol": 1e-3,
+          "ftol": 1e-3,
         }
       )
       if not res.success:
@@ -415,6 +415,51 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       observed_ratio = numerator_count / denominator_count
     return cls(time, censored, wrapped, observed_ratio)
 
+  @classmethod
+  def from_discrete_class_probs(
+    cls,
+    time: float,
+    censored: bool,
+    class_probs: list[float],
+    *,
+    systematics: list[float] | None = None,
+  ):
+    """
+    Create a KaplanMeierPatientNLL from discrete class probabilities.
+
+    The parameter is the integer class index. The NLL is piecewise-constant
+    over intervals [k, k+1) with value -log(p_k).
+    """
+    systematics = systematics or []
+    if systematics:
+      raise NotImplementedError(
+        "Systematics are not supported for discrete class probabilities"
+      )
+    validate_class_probs(class_probs)
+    log_probs = [
+      float(np.log(prob)) if prob > 0 else -float('inf')
+      for prob in class_probs
+    ]
+
+    def full_nll_0d(eff: float) -> float:
+      if not np.isfinite(eff):
+        return float('inf')
+      if eff < 0:
+        return float('inf')
+      idx = int(math.floor(eff))
+      if idx >= len(log_probs):
+        return float('inf')
+      if np.isclose(eff, len(log_probs)):
+        return float('inf')
+      log_prob = log_probs[idx]
+      if not np.isfinite(log_prob):
+        return float('inf')
+      return -log_prob
+
+    wrapped = cls._solve_0d(full_nll_0d)
+    observed_param = float(int(np.argmax(class_probs)))
+    return cls(time, censored, wrapped, observed_param)
+
   @property
   def nominal(self) -> KaplanMeierPatient:
     """
@@ -426,7 +471,7 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       parameter=self.observed_parameter,
     )
 
-class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-attributes
+class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-methods, too-many-instance-attributes
   """
   Mixed Integer Nonlinear Programming for a point on the Kaplan-Meier curve.
   """
@@ -1642,57 +1687,6 @@ class MINLPForKM:  # pylint: disable=too-many-public-methods, too-many-instance-
           )
 
     model.update()
-
-  def _set_gurobi_params(self, model: gp.Model, params: dict):
-    """
-    Helper function to set multiple Gurobi parameters from a dictionary.
-    """
-    for param, value in params.items():
-      if value is not None:
-        model.setParam(param, value)
-
-  def _optimize_with_fallbacks(
-    self,
-    model: gp.Model,
-    initial_params: dict,
-    fallback_strategies: list[tuple[dict, str]],
-    verbose: bool,
-  ):
-    """
-    Attempts to optimize the Gurobi model, applying fallback strategies
-    if the initial optimization is suboptimal.
-
-    Args:
-        model: The Gurobi model to optimize.
-        initial_params: A dictionary of initial Gurobi parameters to apply.
-        fallback_strategies: A list of tuples, where each tuple contains:
-            - A dictionary of Gurobi parameters to apply for the fallback.
-            - A string description of the fallback strategy.
-        verbose: If True, print detailed optimization progress.
-
-    Returns:
-        The Gurobi model after optimization.
-    """
-    # Apply initial parameters
-    self._set_gurobi_params(model, initial_params)
-
-    if verbose:
-      print("Attempting initial optimization...")
-    model.optimize()
-
-    # Check for suboptimal status and apply fallbacks
-    if model.status == GRB.SUBOPTIMAL:
-      for i, (fallback_params, description) in enumerate(fallback_strategies):
-        if verbose:
-          print(f"Model returned suboptimal solution. Applying fallback {i+1}: {description}")
-          print(f"  New parameters: {fallback_params}")
-        self._set_gurobi_params(model, fallback_params)
-        model.optimize()
-        if model.status == GRB.OPTIMAL:
-          if verbose:
-            print(f"Fallback {i+1} successful. Model is now optimal.")
-          break
-    return model
 
   def run_MINLP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
     self,

@@ -7,6 +7,7 @@ import argparse
 import os
 from dataclasses import dataclass
 
+import matplotlib.axes
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -73,53 +74,64 @@ def simulate_pvalues( #pylint: disable=too-many-locals
 
   return results
 
-def plot_pvalue_comparison( #pylint: disable=too-many-arguments, too-many-locals
+def plot_pvalue_comparison( #pylint: disable=too-many-arguments, too-many-locals, too-many-statements
   pvalues: np.ndarray,
   title: str = "Comparison of p value methods",
   *,
+  ax: matplotlib.axes.Axes | None = None,
   saveas: os.PathLike | str | None = None,
   show: bool | None = None,
   config: PlotConfig | None = None,
   inlay_upper_limit: float = 0.1,
-) -> float:
+  add_legend: bool = True,
+) -> tuple[float, list, list]:
   """
   Make scatter plot and compute correlation coefficient.
-  
+
   Parameters
   ----------
   pvalues : np.ndarray
     Array of shape (n_trials, 2) with p values from MINLP and log-rank methods
   title : str
     Plot title
+  ax : plt.Axes | None
+    Axes to plot on. If None, creates a new figure and axes.
   saveas : os.PathLike | str | None
-    Filename to save plot
-  show : bool | None  
-    Whether to show plot
+    Filename to save plot (only used if ax is None)
+  show : bool | None
+    Whether to show plot (only used if ax is None)
   config : PlotConfig | None
     Plot styling configuration
   inlay_upper_limit : float
     Upper limit for the zoomed inlay (default 0.1)
-    
+  add_legend : bool
+    Whether to add legend to the plot
+
   Returns
   -------
-  float
-    Correlation coefficient
+  tuple of (correlation coefficient, handles, labels)
   """
   if show is None:
-    show = saveas is None
+    show = saveas is None and ax is None
   if config is None:
     config = PlotConfig()
+
+  # Create figure and axes if not provided
+  create_figure = ax is None
+  if create_figure:
+    _, ax = plt.subplots(figsize=config.figsize)
 
   minlp_vals, logrank_vals = pvalues[:, 0], pvalues[:, 1]
   r = np.corrcoef(minlp_vals, logrank_vals)[0, 1]
 
-  _, ax = plt.subplots(figsize=config.figsize)
-  ax.scatter(logrank_vals, minlp_vals, alpha=0.6, label="MC trials")
+  ax.scatter(logrank_vals, minlp_vals, alpha=0.6, s=20, label="MC trials")
   ax.plot([0, 1], [0, 1], "r--", label="$y=x$")
 
   ax.set_xlabel("Conventional log-rank $p$ value", fontsize=config.label_fontsize)
   ax.set_ylabel("MINLP (Cox penalty only) $p$ value", fontsize=config.label_fontsize)
-  ax.set_title(f"{title} ($r={r:.3f}$)", fontsize=config.title_fontsize)
+
+  if title:
+    ax.set_title(f"{title}\n$r={r:.3f}$", fontsize=config.title_fontsize)
 
   # Set limits to [0,1] and ensure square aspect ratio
   ax.set_xlim(0, 1)
@@ -129,8 +141,9 @@ def plot_pvalue_comparison( #pylint: disable=too-many-arguments, too-many-locals
   # Configure tick labels
   ax.tick_params(axis='both', which='major', labelsize=config.tick_fontsize)
 
-  # Add legend
-  ax.legend(fontsize=config.legend_fontsize)
+  # Add legend if requested
+  if add_legend:
+    ax.legend(fontsize=config.legend_fontsize)
 
   ax.grid(True)
 
@@ -147,7 +160,7 @@ def plot_pvalue_comparison( #pylint: disable=too-many-arguments, too-many-locals
   )
 
   # Plot the same data in the inlay but with zoomed limits
-  inlay_ax.scatter(logrank_vals, minlp_vals, alpha=0.6, s=10)  # Smaller points for inlay
+  inlay_ax.scatter(logrank_vals, minlp_vals, alpha=0.6, s=5)
   inlay_ax.plot([0, inlay_upper_limit], [0, inlay_upper_limit], "r--", linewidth=0.8)
 
   # Set zoomed limits
@@ -170,15 +183,18 @@ def plot_pvalue_comparison( #pylint: disable=too-many-arguments, too-many-locals
     spine.set_edgecolor('black')
     spine.set_linewidth(1.5)
 
-  plt.tight_layout()
+  # Only handle figure-level operations if we created the figure
+  if create_figure:
+    plt.tight_layout()
 
-  if saveas is not None:
-    plt.savefig(saveas)
-  if show:
-    plt.show()
-  plt.close()
+    if saveas is not None:
+      plt.savefig(saveas)
+    if show:
+      plt.show()
+    plt.close()
 
-  return r
+  handles, labels = ax.get_legend_handles_labels()
+  return r, handles, labels
 
 def main(args=None):
   """
@@ -226,7 +242,7 @@ def main(args=None):
     tick_fontsize=args.tick_fontsize,
   )
 
-  r = plot_pvalue_comparison(
+  r, _, _ = plot_pvalue_comparison(
     pvalues,
     saveas=args.save_as,
     show=False,

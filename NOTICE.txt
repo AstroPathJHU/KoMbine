@@ -1,8 +1,9 @@
 Copyright 2024-2025 AstroPath Collaboration
 
 Please cite the associated paper if you use this software or method to produce results.
-(Currently: submitted to arXiv and Journal of Statistical Software. Updated citation will be
-provided when available.)
+
+Roskes, J. (2025). Propagating Statistical and Systematic Errors to Kaplan-Meier Curves.
+arXiv:2509.15371 [stat.ME]. https://arxiv.org/abs/2509.15371
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

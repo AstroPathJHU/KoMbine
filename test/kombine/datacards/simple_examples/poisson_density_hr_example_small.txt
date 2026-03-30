@@ -1,0 +1,12 @@
+observable_type poisson_density
+------------
+# Poisson density example with SMALL counts (high Poisson error)
+# Expected HR ~ 2.3 (same observed densities as fixed/large/moderate)
+#
+# Uses num 2-19 with area 20 so observed parameters match the shared grid
+# -> sqrt(N)/N ~ 23-71% uncertainty, strong threshold ambiguity
+------------
+survival_time	10	12	15	18	20	24	28	30	35	40	3	5	7	9	12	15	18	20	25	30
+censored	0	0	0	1	1	1	1	1	1	1	0	0	0	0	0	1	1	1	1	1
+num	2	3	4	5	6	7	8	8	9	10	11	12	13	14	15	16	17	18	19	19
+area	20	20	20	20	20	20	20	20	20	20	20	20	20	20	20	20	20	20	20	20
