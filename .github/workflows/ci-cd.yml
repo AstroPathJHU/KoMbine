@@ -146,6 +146,10 @@ jobs:
           # Modify the datacard path to work with the test structure and remove plotting
           sed -n "${startlinenumber},${endlinenumber}p" README.md | sed 's|test/kombine/datacards/simple_examples/simple_km_few_deaths.txt|test/kombine/datacards/simple_examples/simple_km_few_deaths.txt|' | sed '/\.plot()/d' | python
 
+      - name: test discrete class observable
+        run: |
+          python -m test.kombine.test_discrete_class_observable
+
       - name: test discrete optimization module
         run: |
           python -m test.kombine.test_discrete_optimization
