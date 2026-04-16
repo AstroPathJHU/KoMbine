@@ -34,7 +34,7 @@ jupyter:
  - `05_compare_lifelines_greenwood.html`
    - a comparison of our Kaplan-Meier likelihood method to the
      `lifelines` package and Greenwood confidence intervals
- - `06_compare_tg_kmci.html`
+ - `06_compare_thomas_grunkemeier.html`
    - comparison of KoMbine binomial-only confidence intervals to
      Thomas and Grunkemeier as implemented in R package `km.ci`
  - `07_yi_method_comparison.html`
