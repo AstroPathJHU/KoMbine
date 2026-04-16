@@ -14,6 +14,10 @@ jupyter:
 ---
 
 ```python
+# pylint: disable=bad-indentation,line-too-long,missing-module-docstring,unspecified-encoding,wrong-import-position
+```
+
+```python
 import warnings
 warnings.simplefilter("error")
 ```

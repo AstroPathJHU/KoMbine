@@ -13,6 +13,10 @@ jupyter:
     name: python3
 ---
 
+```python
+# pylint: disable=bad-indentation,line-too-long,missing-module-docstring,redefined-outer-name,trailing-whitespace,too-many-locals,wrong-import-order
+```
+
 # Yi's Method vs KoMbine: Comprehensive Comparison
 
 This notebook provides a comprehensive side-by-side comparison between Yi's method for Kaplan-Meier likelihood estimation and KoMbine's approach (MINLP) across multiple measurement scenarios:
@@ -85,10 +89,8 @@ $(1-e, e)$, and patients in the high group get $(e, 1-e)$.
 
 ```python
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 import pathlib
-from pathlib import Path
 from kombine.datacard import Datacard
 ```
 
