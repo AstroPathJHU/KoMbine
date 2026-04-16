@@ -158,21 +158,19 @@ While it would be desireable, with high data volumes, to estimate survival proba
 
 The biomarker measurements are subject to uncertainty, and it is desireable to incorporate this uncertainty into the \KM{} curve estimation. \KM{} curves are often shown without error bands, or with error bands that only take into account the statistical uncertainty resulting from the finite number of patients in the study.
 
-Previous literature~\citep{YiBook} contains a discussion of methods to handle measurement error in all kinds of regression analyses, with a chapter dedicated to survival analysis.  Most of that chapter focuses on modeling survival as a function of continuous covariates.  Section~3.7 discusses a method to handle misclassification error when using two discrete categories.
+Previous literature~\citep{YiBook} contains a discussion of methods to handle measurement error in all kinds of regression analyses, with a chapter dedicated to survival analysis.  Most of that chapter focuses on modeling survival as a function of continuous covariates.  Section~3.7 discusses our use case: a method to handle misclassification error when using two discrete categories.
 
-Yi's general strategy is to partially assign each patient to both categories, weighted by the probability that the patient belongs to that category.  Yi's method can be used to construct a likelihood function for the hazard ratio.  Importantly, however, while the best-fit hazard ratio estimated using her method is less biased than one estimated without accounting for measurement errors, the confidence intervals are not necessarily more accurate.  In particular, in the limit of large measurement errors, we would expect no constraint on the hazard ratio.  The confidence intervals from Yi's method do not have this feature.
+Yi's general strategy is to partially assign each patient to both categories, weighted by the probability that the patient belongs to that category, and construct a likelihood function for the hazard ratio.  Importantly, however, while the best-fit hazard ratio estimated using her method is less biased than one estimated without accounting for measurement errors, the confidence intervals are not necessarily more accurate.  In particular, in the limit of large measurement errors, we would expect no constraint on the hazard ratio.  The confidence intervals from Yi's method do not have this property.
 
 Yi's method can be trivially used to construct weighted \KM{} curves, where each patient is weighted in the at-risk and death counts by the probability that they belong to the category being plotted.  While one could construct confidence intervals using a generalized binomial pseudo-likelihood with fractional counts, these confidence intervals would still not take the patient-wise uncertainties into account, and would not grow with the patient-wise uncertainties.
 
-In this paper, we present the first method to calculate both statistical and systematic uncertainties on \KM{} curves.
+In this paper, we present the first method, which we call \KoMbine{}, to calculate both statistical and systematic uncertainties on \KM{} curves.
 
 The maximum likelihood techniques and modeling of systematic uncertainties used in our method are based on the \Combine{} package \citep{CAT-23-001}, which was developed by the CMS Collaboration in particle physics\@. \Combine, built on the \RooFit{} framework \citep{RooFit} and the \Minuit{} optimizer \citep{minuit}, is used for high-precision measurements of particle properties, which must account for tens or even hundreds of systematic uncertainties, and was used for such high-profile measurements as the discovery of the Higgs boson \citep{HIG-12-028} and subsequent measurements of its properties.
 
 No particle physics measurement is reported without a comprehensive assessment of the uncertainties that affect the measurement. This rigorous approach has led to a higher degree of reproducibility in particle physics results than in many other fields, including medical research.
 
 Our method handles the statistical uncertainty on the number of patients in a more rigorous way than conventional methods and incorporates patient-wise uncertainties into the calculation. The method also allows for calculating the statistical and patient-wise uncertainties separately. Determining which uncertainties dominate can help to plan the next iteration of the experiment.
-
-We call our method \KoMbine{}.  It is implemented in the \KoMbine{} package, which is available from PyPI via \texttt{pip install kombinekm} and from GitHub at \url{https://github.com/AstroPathJHU/KoMbine}.
 
 \section{Methodology}\label{sec:methodology}
 
@@ -448,7 +446,7 @@ Not applicable.
 The data used in this work are available together with the code at \url{https://github.com/AstroPathJHU/KoMbine}.
 
 \subsection*{Code availability}
-All code used in this work is available at \url{https://github.com/AstroPathJHU/KoMbine}.
+All code used in this work is available at \url{https://github.com/AstroPathJHU/KoMbine}, or at PyPI via \texttt{pip install kombinekm}.
 
 \subsection*{Authors' contributions}
 Not applicable. The author is solely responsible for all aspects of this work.
