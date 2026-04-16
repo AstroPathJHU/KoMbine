@@ -79,7 +79,7 @@ We do, in fact, get 1:1 agreement with `lifelines`.
 
 For completeness, KoMbine also provides logrank test p-values and hazard ratio calculations that match `lifelines` for fixed observables. These comparisons demonstrate that our implementation of standard survival analysis methods is correct.
 
-For measurement error corrections using Yi's method, see **notebook 06_yi_method_comparison.ipynb**.
+For measurement error corrections using Yi's method, see **notebook 07_yi_method_comparison.ipynb**.
 
 
 ### Fixed Observable: P-value and Hazard Ratio vs lifelines

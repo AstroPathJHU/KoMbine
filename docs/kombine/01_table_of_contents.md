@@ -27,9 +27,11 @@ jupyter:
      - Profile likelihood scans and confidence interval estimation
  - `05_compare_lifelines_greenwood.html`
    - a comparison of our Kaplan-Meier likelihood method to the `lifelines` package and Greenwood confidence intervals
- - `06_yi_method_comparison.html`
+ - `06_compare_tg_kmci.html`
+   - comparison of KoMbine binomial-only confidence intervals to Thomas and Grunkemeier as implemented in R package `km.ci`
+ - `07_yi_method_comparison.html`
    - comprehensive demonstration of Yi's misclassification correction method applied to Kaplan-Meier curves, p-values, and hazard ratios
- - `07_command_line_interface.html`
+ - `08_command_line_interface.html`
    - documentation for the command line interface (`kombine` and `kombine_twogroups` commands)
 
 # Compilation instructions
