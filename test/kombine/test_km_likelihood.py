@@ -591,9 +591,18 @@ def test_collapse_equivalence_with_tied_death_and_censoring():
   deaths must agree with no-collapse mode within numerical tolerance.
   """
   datacard = kombine.datacard.Datacard.parse_datacard(
-    datacards / "fixed_km_censoring_many_patients.txt"
+    datacards / "fixed_km_censoring_tied_small.txt"
   )
   cl_value = 0.95
+
+  death_times = {
+    patient.time for patient in datacard.patients if not patient.censored
+  }
+  censor_times = {
+    patient.time for patient in datacard.patients if patient.censored
+  }
+  tied_times = death_times & censor_times
+  assert tied_times, "Regression datacard must include tied death/censoring times"
 
   kml_collapse = datacard.km_likelihood(
     parameter_min=-np.inf,
@@ -607,6 +616,7 @@ def test_collapse_equivalence_with_tied_death_and_censoring():
   )
 
   times_for_plot = sorted(kml_no_collapse.patient_death_times)
+  assert len(times_for_plot) <= 6
 
   for binomial_only in (True, False):
     surv_collapse, ci_collapse = kml_collapse.survival_probabilities_likelihood(
