@@ -590,24 +590,21 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
         next_time = unique_times[j]
 
         # Check if there are any censored patients in the interval (group_end, next_time)
-        # We use strict inequalities because:
-        # - Censoring at group_end doesn't affect the next_time death (already processed)
-        # - Censoring at next_time doesn't prevent the next_time death (death happens first)
+        # using strict inequalities so censoring exactly at next_time does not block
+        # the death at next_time (KM convention: deaths before censoring at same time).
         censored_between = np.any(
           self.patient_censored &
           (self.patient_times > group_end) &
           (self.patient_times < next_time)
         )
 
-        # However, we need to check if there's censoring at group_end that would
-        # affect the risk set for subsequent deaths
-        if group_end != current_time:  # Not the first death in the group
-          censored_at_group_end = np.any(
-            self.patient_censored & (self.patient_times == group_end)
-          )
-          if censored_at_group_end:
-            # Censoring at the end of the current group affects subsequent deaths
-            break
+        # Censoring at group_end always affects risk sets for subsequent death times,
+        # so it blocks extending the collapsed interval.
+        censored_at_group_end = np.any(
+          self.patient_censored & (self.patient_times == group_end)
+        )
+        if censored_at_group_end:
+          break
 
         if censored_between:
           # Can't include next_time in this group due to intervening censoring
@@ -670,13 +667,13 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
           (self.patient_times < next_time)
         )
 
-        # Check for censoring at group_end that would affect subsequent deaths
-        if group_end != current_time:  # Not the first death in the group
-          censored_at_group_end = np.any(
-            self.patient_censored & (self.patient_times == group_end)
-          )
-          if censored_at_group_end:
-            break
+        # Censoring at group_end always affects risk sets for subsequent death times,
+        # so it blocks extending the collapsed interval.
+        censored_at_group_end = np.any(
+          self.patient_censored & (self.patient_times == group_end)
+        )
+        if censored_at_group_end:
+          break
 
         if censored_between:
           break

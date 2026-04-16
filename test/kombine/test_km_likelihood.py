@@ -583,6 +583,120 @@ def test_times_to_consider_collapse_logic(): # pylint: disable=too-many-locals
       f"patient_still_at_risk({t}) failed: {at_risk} != {expected_at_risk}"
     assert died == expected_died, f"patient_died({t}) failed: {died} != {expected_died}"
 
+def test_collapse_equivalence_with_tied_death_and_censoring():
+  """
+  Regression test for tied death/censoring timepoints.
+
+  For the same datacard and same requested output times, collapsing consecutive
+  deaths must agree with no-collapse mode within numerical tolerance.
+  """
+  datacard = kombine.datacard.Datacard.parse_datacard(
+    datacards / "fixed_km_censoring_many_patients.txt"
+  )
+  cl_value = 0.95
+
+  kml_collapse = datacard.km_likelihood(
+    parameter_min=-np.inf,
+    parameter_max=np.inf,
+    collapse_consecutive_deaths=True,
+  )
+  kml_no_collapse = datacard.km_likelihood(
+    parameter_min=-np.inf,
+    parameter_max=np.inf,
+    collapse_consecutive_deaths=False,
+  )
+
+  times_for_plot = sorted(kml_no_collapse.patient_death_times)
+
+  for binomial_only in (True, False):
+    surv_collapse, ci_collapse = kml_collapse.survival_probabilities_likelihood(
+      CLs=[cl_value],
+      times_for_plot=times_for_plot,
+      binomial_only=binomial_only,
+    )
+    surv_no_collapse, ci_no_collapse = kml_no_collapse.survival_probabilities_likelihood(
+      CLs=[cl_value],
+      times_for_plot=times_for_plot,
+      binomial_only=binomial_only,
+    )
+
+    np.testing.assert_allclose(
+      surv_collapse,
+      surv_no_collapse,
+      rtol=0.0,
+      atol=1e-6,
+    )
+
+    ci_collapse = np.asarray(ci_collapse, dtype=float)
+    ci_no_collapse = np.asarray(ci_no_collapse, dtype=float)
+    finite_ci = np.isfinite(ci_collapse) & np.isfinite(ci_no_collapse)
+    np.testing.assert_allclose(
+      ci_collapse[finite_ci],
+      ci_no_collapse[finite_ci],
+      rtol=0.0,
+      atol=3e-5,
+    )
+
+def test_collapse_equivalence_nonfixed_observable():
+  """
+  Regression test for non-fixed observables.
+
+  Collapse and no-collapse modes must agree numerically for likelihood-based
+  KM outputs even when the observable has measurement uncertainty.
+  """
+  datacard = kombine.datacard.Datacard.parse_datacard(
+    datacards / "poisson_ratio_km_censoring.txt"
+  )
+
+  kml_collapse = datacard.km_likelihood(
+    parameter_min=0.19,
+    parameter_max=0.79,
+    collapse_consecutive_deaths=True,
+  )
+  kml_no_collapse = datacard.km_likelihood(
+    parameter_min=0.19,
+    parameter_max=0.79,
+    collapse_consecutive_deaths=False,
+  )
+
+  times_for_plot = sorted(kml_no_collapse.patient_death_times)
+
+  likelihood_modes = [
+    {},
+    {"patient_wise_only": True},
+  ]
+
+  for mode_kwargs in likelihood_modes:
+    surv_collapse, ci_collapse = kml_collapse.survival_probabilities_likelihood(
+      CLs=[0.95],
+      times_for_plot=times_for_plot,
+      **mode_kwargs,
+    )
+    surv_no_collapse, ci_no_collapse = kml_no_collapse.survival_probabilities_likelihood(
+      CLs=[0.95],
+      times_for_plot=times_for_plot,
+      **mode_kwargs,
+    )
+
+    np.testing.assert_allclose(
+      surv_collapse,
+      surv_no_collapse,
+      rtol=0.0,
+      atol=1e-6,
+      err_msg=f"Mismatch for mode {mode_kwargs}",
+    )
+
+    ci_collapse = np.asarray(ci_collapse, dtype=float)
+    ci_no_collapse = np.asarray(ci_no_collapse, dtype=float)
+    finite_ci = np.isfinite(ci_collapse) & np.isfinite(ci_no_collapse)
+    np.testing.assert_allclose(
+      ci_collapse[finite_ci],
+      ci_no_collapse[finite_ci],
+      rtol=0.0,
+      atol=3e-5,
+      err_msg=f"CI mismatch for mode {mode_kwargs}",
+    )
+
 def main(args=None):
   """
   Main function to run the test.
@@ -612,6 +726,8 @@ def main(args=None):
 
   if args.collapse_logic_only:
     test_times_to_consider_collapse_logic()
+    test_collapse_equivalence_with_tied_death_and_censoring()
+    test_collapse_equivalence_nonfixed_observable()
     return
 
   if not args.censoring and not args.no_censoring:
@@ -624,6 +740,8 @@ def main(args=None):
 
   # Run additional tests
   test_times_to_consider_collapse_logic()
+  test_collapse_equivalence_with_tied_death_and_censoring()
+  test_collapse_equivalence_nonfixed_observable()
 
 if __name__ == "__main__":
   main()
