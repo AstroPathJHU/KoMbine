@@ -221,7 +221,7 @@ For clarity, we will distinguish the two types of uncertainty: the statistical u
 
 \subsubsection{Binomial uncertainty}\label{sec:binomial-uncertainty}
 
-The binomial contribution to the \KM{} curve is computed from the number of patients at risk and the number of patients who died at each time point \citep{ThomasGrunkemeier}:
+The binomial contribution to the \KM{} curve is computed from the number of patients at risk and the number of patients who died at each time point (\citealp{ThomasGrunkemeier}; see also \citealp{Li1995}, who shows that this represents a genuine nonparametric likelihood ratio):
 \begin{equation}
 \mathcal{L}_{\text{binomial}}(p_i^\text{s}, a_j) = \prod_{i=1}^{n} \binom{r_i}{d_i} {\left(p_i^\text{d}\right)}^{d_i} {\left(p_i^\text{s}\right)}^{r_i-d_i},
 \end{equation}
