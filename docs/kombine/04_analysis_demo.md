@@ -13,6 +13,10 @@ jupyter:
     name: python3
 ---
 
+```python
+# pylint: disable=bad-indentation,line-too-long,missing-module-docstring,unspecified-encoding,wrong-import-order,wrong-import-position
+```
+
 # Comprehensive P-value and Hazard Ratio Analysis with KoMbine
 
 This notebook demonstrates likelihood-based p-values and hazard ratio estimation with KoMbine, then explores how the likelihood behaves across different data-count scenarios and parameter restrictions.
@@ -29,11 +33,10 @@ This notebook demonstrates likelihood-based p-values and hazard ratio estimation
   - [Why does that create a plateau in the scan?](#why-does-that-create-a-plateau-in-the-scan)
 
 ```python
-import warnings
 import pathlib
 import numpy as np
 import matplotlib.pyplot as plt
-from kombine.datacard import Datacard, FixedObservable, PoissonDensityObservable
+from kombine.datacard import Datacard
 
 # For reproducibility
 np.random.seed(42)

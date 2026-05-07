@@ -73,11 +73,22 @@ def collect_test_modules(test_root: pathlib.Path) -> set[str]:
 
 def test_cli_documentation_completeness():
   """
-  Test that all CLI arguments are documented in 07_command_line_interface.md
+  Test that all CLI arguments are documented in *_command_line_interface.md
   and that all documented arguments actually exist in the CLI.
   """
   here = pathlib.Path(__file__).parent.parent.parent
-  doc_file = here / "docs" / "kombine" / "07_command_line_interface.md"
+  docs_dir = here / "docs" / "kombine"
+  doc_candidates = sorted(docs_dir.glob("[0-9][0-9]_command_line_interface.md"))
+
+  assert doc_candidates, (
+    "CLI documentation file not found in docs/kombine. "
+    "Expected a file matching [0-9][0-9]_command_line_interface.md"
+  )
+  assert len(doc_candidates) == 1, (
+    "Multiple CLI documentation files found in docs/kombine: "
+    f"{', '.join(str(path.name) for path in doc_candidates)}"
+  )
+  doc_file = doc_candidates[0]
 
   # Check that the documentation file exists
   assert doc_file.exists(), f"CLI documentation file not found: {doc_file}"

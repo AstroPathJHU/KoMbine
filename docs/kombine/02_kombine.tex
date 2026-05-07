@@ -156,23 +156,25 @@
 
 While it would be desireable, with high data volumes, to estimate survival probability as a function of a continuous biomarker, a more common approach is to stratify patients into discrete categories, such as ``high'' and ``low'' expression of a certain gene or density of a certain cell.  If the curves differ significantly, these biomarkers can be used to guide treatment decisions.
 
-The biomarker measurements are subject to uncertainty, and it is desireable to incorporate this uncertainty into the \KM{} curve estimation. \KM{} curves are often shown without error bands, or with error bands that only take into account the statistical uncertainty resulting from the finite number of patients in the study.
+The biomarker measurements are subject to uncertainty, and it is desireable to incorporate this uncertainty into the \KM{} curve estimation.
 
-Previous literature~\citep{YiBook} contains a discussion of methods to handle measurement error in all kinds of regression analyses, with a chapter dedicated to survival analysis.  Most of that chapter focuses on modeling survival as a function of continuous covariates.  Section~3.7 discusses a method to handle misclassification error when using two discrete categories.
+Uncertainty estimates on \KM{} curves typically take into account only one source of uncertainty: the statistical uncertainty from the finite number of patients in the study.  This is typically done using Greenwood confidence intervals, which are based on the binomial distribution of deaths among at-risk patients \citep{Greenwood,GreenwoodNotes}.  Greenwood's formula uses several approximations and behaves poorly in limiting cases, such as before the first death and after the last.
 
-Yi's general strategy is to partially assign each patient to both categories, weighted by the probability that the patient belongs to that category.  Yi's method can be used to construct a likelihood function for the hazard ratio.  Importantly, however, while the best-fit hazard ratio estimated using her method is less biased than one estimated without accounting for measurement errors, the confidence intervals are not necessarily more accurate.  In particular, in the limit of large measurement errors, we would expect no constraint on the hazard ratio.  The confidence intervals from Yi's method do not have this feature.
+\Citet{FayBrittainProschan2013} survey several methods to calculate confidence intervals on \KM{} curves, including some that avoid these edge cases.  One that we wish to highlight is the method of \citet{ThomasGrunkemeier}, which uses a likelihood ratio to construct confidence intervals.  \Citeauthor{FayBrittainProschan2013} propose a beta product confidence procedure, which has better pointwise coverage for low sample sizes, and also has the desireable property of changing the error bounds when patients are censored, not only when they die.  Their method, like the others they survey, only accounts for the binomial uncertainty from the finite number of patients.
 
-Yi's method can be trivially used to construct weighted \KM{} curves, where each patient is weighted in the at-risk and death counts by the probability that they belong to the category being plotted.  While one could construct confidence intervals using a generalized binomial pseudo-likelihood with fractional counts, these confidence intervals would still not take the patient-wise uncertainties into account, and would not grow with the patient-wise uncertainties.
+\citet{YiBook} discusses methods to handle measurement error in all kinds of regression analyses, with a chapter dedicated to survival analysis.  Most of that chapter focuses on modeling survival as a function of continuous covariates.  Section~3.7 discusses our use case: a method to handle misclassification error when using two discrete categories.
 
-In this paper, we present the first method to calculate both statistical and systematic uncertainties on \KM{} curves.
+\citeauthor{YiBook}'s general strategy is to partially assign each patient to both categories, weighted by the probability that the patient belongs to that category, and construct a likelihood function for the hazard ratio.  Importantly, however, while the \emph{best-fit} hazard ratio estimated using her method is less biased than one estimated without accounting for measurement errors, the \emph{confidence intervals} are not necessarily more accurate.  In particular, in the limit of large measurement errors, we would expect no constraint on the hazard ratio.  The confidence intervals from \citeauthor{YiBook}'s method do not have this property.  The confidence intervals are only based on the binomial uncertainty and, after the initial correction, do not take patient-wise uncertainties into account.
 
-The maximum likelihood techniques and modeling of systematic uncertainties used in our method are based on the \Combine{} package \citep{CAT-23-001}, which was developed by the CMS Collaboration in particle physics\@. \Combine, built on the \RooFit{} framework \citep{RooFit} and the \Minuit{} optimizer \citep{minuit}, is used for high-precision measurements of particle properties, which must account for tens or even hundreds of systematic uncertainties, and was used for such high-profile measurements as the discovery of the Higgs boson \citep{HIG-12-028} and subsequent measurements of its properties.
+\citeauthor{YiBook}'s method can be trivially used to construct weighted \KM{} curves, where each patient is weighted in the at-risk and death counts by the probability that they belong to the category being plotted.  While one could construct confidence intervals using a generalized binomial pseudo-likelihood with fractional counts, these confidence intervals would still not take the patient-wise uncertainties into account, and would not grow with the patient-wise uncertainties, similar to the confidence intervals on the hazard ratio.
+
+In this paper, we present the first method, which we call \KoMbine{}, to calculate both statistical and systematic uncertainties on \KM{} curves.
+
+The maximum likelihood techniques and modeling of systematic uncertainties used in our method are based on the \Combine{} package \citep{CAT-23-001}, which was developed by the CMS Collaboration in particle physics\@. \Combine, built on the \RooFit{} framework \citep{RooFit} and the \Minuit{} optimizer \citep{Minuit}, is used for high-precision measurements of particle properties, which must account for tens or even hundreds of systematic uncertainties, and was used for such high-profile measurements as the discovery of the Higgs boson \citep{HIG-12-028} and subsequent measurements of its properties.
 
 No particle physics measurement is reported without a comprehensive assessment of the uncertainties that affect the measurement. This rigorous approach has led to a higher degree of reproducibility in particle physics results than in many other fields, including medical research.
 
 Our method handles the statistical uncertainty on the number of patients in a more rigorous way than conventional methods and incorporates patient-wise uncertainties into the calculation. The method also allows for calculating the statistical and patient-wise uncertainties separately. Determining which uncertainties dominate can help to plan the next iteration of the experiment.
-
-We call our method \KoMbine{}.  It is implemented in the \KoMbine{} package, which is available from PyPI via \texttt{pip install kombinekm} and from GitHub at \url{https://github.com/AstroPathJHU/KoMbine}.
 
 \section{Methodology}\label{sec:methodology}
 
@@ -211,7 +213,7 @@ where \(\hat{S}\) is the nominal value of the survival function, given by Eq.~(\
 
 \citet{GreenwoodNotes} gives the derivation of these formulas, which makes certain approximations: the ``delta-method'' approximation, which requires that the true and observed probabilities are close enough that \(\log\left(-\log S(t)\right)\) can be treated as approximately linear, and the approximation of the binomial distribution by a normal distribution.
 
-With large numbers of patients, these approximations hold, but their validity decreases for smaller cohort sizes. Our log likelihood method avoids these approximations.
+With large numbers of patients, these approximations hold, but their validity decreases for smaller cohort sizes.  Several of the methods surveyed by \citet{FayBrittainProschan2013} avoid these approximations.  We choose to extend the likelihood method of \citet{ThomasGrunkemeier}.  Although \citeauthor{FayBrittainProschan2013}'s method has some advantages over \citeauthor{ThomasGrunkemeier}'s, our goal is to incorporate patient-wise uncertainty, and the likelihood method provides a natural way to do so.
 
 \subsection{Log likelihood method}
 
@@ -219,7 +221,7 @@ For clarity, we will distinguish the two types of uncertainty: the statistical u
 
 \subsubsection{Binomial uncertainty}\label{sec:binomial-uncertainty}
 
-The binomial contribution to the \KM{} curve is computed from the number of patients at risk and the number of patients who died at each time point:
+The binomial contribution to the \KM{} curve is computed from the number of patients at risk and the number of patients who died at each time point (\citealp{ThomasGrunkemeier}; see also \citealp{Li1995}, who shows that this represents a genuine nonparametric likelihood ratio):
 \begin{equation}
 \mathcal{L}_{\text{binomial}}(p_i^\text{s}, a_j) = \prod_{i=1}^{n} \binom{r_i}{d_i} {\left(p_i^\text{d}\right)}^{d_i} {\left(p_i^\text{s}\right)}^{r_i-d_i},
 \end{equation}
@@ -232,7 +234,7 @@ We are not interested in the individual \(p_i^\text{s}\) values, but rather the 
 
 \subsubsection{Patient-wise uncertainty}\label{sec:patient-wise-uncertainty}
 
-We now consider that the patients themselves may be subject to uncertainty. Some patients who were nominally included in the \KM{} curve may actually be excluded or vice versa.
+We now extend \citeauthor{ThomasGrunkemeier}'s likelihood and consider that the patients themselves may be subject to uncertainty. Some patients who were nominally included in the \KM{} curve may actually be excluded or vice versa.
 
 The classic case when this happens is when dividing the patients into groups based on a continuous parameter, such as gene expression or the density of a certain cell type. The parameter measurement is subject to uncertainty, which must be considered when determining the overall uncertainty on the \KM{} curve. (This is in contrast to \KM{} curves based on discrete categories with no error, such as treatment vs.\ placebo, where patient-wise uncertainty likely does not enter.)
 
@@ -448,7 +450,7 @@ Not applicable.
 The data used in this work are available together with the code at \url{https://github.com/AstroPathJHU/KoMbine}.
 
 \subsection*{Code availability}
-All code used in this work is available at \url{https://github.com/AstroPathJHU/KoMbine}.
+All code used in this work is available at \url{https://github.com/AstroPathJHU/KoMbine}, or at PyPI via \texttt{pip install kombinekm}.
 
 \subsection*{Authors' contributions}
 Not applicable. The author is solely responsible for all aspects of this work.

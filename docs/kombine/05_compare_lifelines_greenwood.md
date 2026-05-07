@@ -14,6 +14,10 @@ jupyter:
 ---
 
 ```python
+# pylint: disable=bad-indentation,line-too-long,missing-module-docstring,unspecified-encoding,wrong-import-order,wrong-import-position
+```
+
+```python
 import warnings
 warnings.simplefilter("error")
 ```
@@ -34,15 +38,7 @@ import lifelines  #noqa: E402
 import matplotlib.pyplot as plt  #noqa: E402
 import numpy as np  #noqa: E402
 
-from kombine.datacard import Datacard, FixedObservable  #noqa: E402
-
-
-# Try to import Pandas4Warning for pandas v3 compatibility
-# On older pandas versions, this doesn't exist
-try:
-    from pandas.errors import Pandas4Warning  # pyright: ignore[reportAttributeAccessIssue]
-except ImportError:
-    Pandas4Warning = None
+from kombine.datacard import Datacard  #noqa: E402
 ```
 
 ```python
@@ -79,7 +75,7 @@ We do, in fact, get 1:1 agreement with `lifelines`.
 
 For completeness, KoMbine also provides logrank test p-values and hazard ratio calculations that match `lifelines` for fixed observables. These comparisons demonstrate that our implementation of standard survival analysis methods is correct.
 
-For measurement error corrections using Yi's method, see **notebook 06_yi_method_comparison.ipynb**.
+For measurement error corrections using Yi's method, see **notebook 07_yi_method_comparison.ipynb**.
 
 
 ### Fixed Observable: P-value and Hazard Ratio vs lifelines

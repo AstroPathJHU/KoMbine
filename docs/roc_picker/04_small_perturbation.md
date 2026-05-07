@@ -1,7 +1,7 @@
 ---
 jupyter:
   jupytext:
-    formats: ipynb,md,py
+    formats: ipynb,md,py:percent
     text_representation:
       extension: .md
       format_name: markdown
@@ -12,6 +12,10 @@ jupyter:
     language: python
     name: python3
 ---
+
+```python
+# pylint: disable=bad-indentation,line-too-long,missing-module-docstring,wrong-import-position
+```
 
 ```python
 import warnings

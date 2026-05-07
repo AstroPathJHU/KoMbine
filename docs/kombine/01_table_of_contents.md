@@ -11,6 +11,10 @@ jupyter:
       jupytext_version: 1.18.1
 ---
 
+```python
+# pylint: disable=line-too-long
+```
+
 # KoMbine Documentation - Table of Contents
 
  - `01_table_of_contents.html`
@@ -19,17 +23,24 @@ jupyter:
    - This paper, submitted to JSS, contains a detailed explanation of the math that
      goes into the Kaplan-Meier likelihood methods.
  - `03_kaplan_meier_example.html`
-   - an example of how to use the likelihood method for uncertainties on Kaplan-Meier curves
+   - an example of how to use the likelihood method for uncertainties
+     on Kaplan-Meier curves
  - `04_analysis_demo.html`
    - comprehensive guide to p-value (logrank test) and hazard ratio calculations:
      - Basic analysis with simple examples
-     - Detailed hazard ratio comparisons across fixed, large count, and moderate count measurement scenarios
+     - Detailed hazard ratio comparisons across fixed, large count,
+       and moderate count measurement scenarios
      - Profile likelihood scans and confidence interval estimation
  - `05_compare_lifelines_greenwood.html`
-   - a comparison of our Kaplan-Meier likelihood method to the `lifelines` package and Greenwood confidence intervals
- - `06_yi_method_comparison.html`
-   - comprehensive demonstration of Yi's misclassification correction method applied to Kaplan-Meier curves, p-values, and hazard ratios
- - `07_command_line_interface.html`
+   - a comparison of our Kaplan-Meier likelihood method to the
+     `lifelines` package and Greenwood confidence intervals
+ - `06_compare_thomas_grunkemeier.html`
+   - comparison of KoMbine binomial-only confidence intervals to
+     Thomas and Grunkemeier as implemented in R package `km.ci`
+ - `07_yi_method_comparison.html`
+   - comprehensive demonstration of Yi's misclassification correction
+     method applied to Kaplan-Meier curves, p-values, and hazard ratios
+ - `08_command_line_interface.html`
    - documentation for the command line interface (`kombine` and `kombine_twogroups` commands)
 
 # Compilation instructions

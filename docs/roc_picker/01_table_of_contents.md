@@ -2,7 +2,7 @@
 jupyter:
   jupytext:
     cell_metadata_filter: -all
-    formats: ipynb,md,py
+    formats: ipynb,md,py:percent
     main_language: python
     text_representation:
       extension: .md
