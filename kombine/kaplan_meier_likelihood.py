@@ -68,7 +68,10 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
                           converges within tolerances between consecutive iterations.
   include_median_survival: If True, include the median survival time in the legend.
   title: Title for the plot.
-  xlabel: Label for the x-axis.
+  xlabel: Label for the x-axis. If provided, this overrides time_unit.
+  time_unit: Unit for the x-axis time label (e.g., "months", "years").
+              If provided and xlabel is not explicitly set, the label will be
+              "Time (unit)". If neither is provided, the label defaults to "Time".
   ylabel: Label for the y-axis.
   show_grid: If True, display a grid on the plot.
   figsize: Size of the figure as a tuple (width, height).
@@ -119,7 +122,8 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   rerun_until_convergence: bool = False
   include_median_survival: bool = False
   title: str | None = "Kaplan-Meier Curves"
-  xlabel: str = "Time"
+  xlabel: str | None = None
+  time_unit: str | None = None
   ylabel: str = "Survival Probability"
   show_grid: bool = True
   figsize: tuple[float, float] = (10, 7)
@@ -208,6 +212,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     endpoint_epsilon: float = 1e-6,
     log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
     collapse_consecutive_deaths: bool = True,
+    time_unit: str | None = None,
   ):
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min
@@ -215,6 +220,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     self.__endpoint_epsilon = endpoint_epsilon
     self.__log_zero_epsilon = log_zero_epsilon
     self.__collapse_consecutive_deaths = collapse_consecutive_deaths
+    self.__time_unit = time_unit
 
   @property
   def all_patients(self) -> list[KaplanMeierPatientNLL]:
@@ -236,6 +242,13 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     The maximum parameter value.
     """
     return self.__parameter_max
+
+  @property
+  def time_unit(self) -> str | None:
+    """
+    The time unit for the x-axis label, inherited from the datacard.
+    """
+    return self.__time_unit
 
   @property
   def patient_death_times(self) -> frozenset:
@@ -640,7 +653,13 @@ class KaplanMeierLikelihood(KaplanMeierBase):
   def plot(self, config: KaplanMeierPlotConfig | None = None, **kwargs) -> dict:
     """
     Plots the Kaplan-Meier curves based on the provided configuration.
+    
+    If time_unit is not explicitly provided in config or kwargs, the method
+    will use the time_unit inherited from the datacard (if available).
     """
+    # If time_unit not in kwargs, use the time_unit from this KaplanMeierLikelihood object
+    if 'time_unit' not in kwargs:
+      kwargs['time_unit'] = self.time_unit
     if config is None:
       config = KaplanMeierPlotConfig(**kwargs)
     elif kwargs:
@@ -981,7 +1000,14 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     config: KaplanMeierPlotConfig,
   ):
     """Adds final plot elements and handles saving/showing/closing."""
-    ax.set_xlabel(config.xlabel, fontsize=config.label_fontsize)
+    # Resolve xlabel: explicit xlabel > time_unit > default "Time"
+    xlabel = config.xlabel
+    if xlabel is None:
+      if config.time_unit is not None:
+        xlabel = f"Time ({config.time_unit})"
+      else:
+        xlabel = "Time"
+    ax.set_xlabel(xlabel, fontsize=config.label_fontsize)
     ax.set_ylabel(config.ylabel, fontsize=config.label_fontsize)
     if config.title is not None:
       ax.set_title(config.title, fontsize=config.title_fontsize)

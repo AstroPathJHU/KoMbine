@@ -1,4 +1,5 @@
 observable_type poisson_ratio
+time_unit months
 ------------
 # List of patients
 ------------

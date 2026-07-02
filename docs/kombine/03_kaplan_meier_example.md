@@ -79,6 +79,7 @@ First, let's display both curves with nominal survival probabilities (no error b
 
 ```python
 # Plot both curves with nominal only (no error bands)
+# The time_unit is automatically inherited from the datacard
 plt.figure()
 _ = kml_low.plot(
     nominal_color="blue",
@@ -87,7 +88,6 @@ _ = kml_low.plot(
     include_nominal=True,
     include_full_NLL=False,
     include_best_fit=False,
-    xlabel="Time (months)"
 )
 _ = kml_high.plot(
     nominal_color="red",
@@ -96,7 +96,6 @@ _ = kml_high.plot(
     include_nominal=True,
     include_full_NLL=False,
     include_best_fit=False,
-    xlabel="Time (months)"
 )
 plt.legend()
 plt.show()
@@ -105,8 +104,9 @@ plt.show()
 Now we will show error bands to visualize the uncertainty in the survival probability estimates.
 
 ```python
-_ = kml_low.plot(xlabel="Time (months)")
-_ = kml_high.plot(xlabel="Time (months)")
+# time_unit is automatically inherited from the datacard
+_ = kml_low.plot()
+_ = kml_high.plot()
 ```
 
 Note that, counterintuitively, the best fit does not agree with the nominal survival probability, and at some points the nominal probability is not even within the 1-sigma band.  This is not a bug.  For more information, see the math in the LaTeX documentation.
@@ -115,6 +115,7 @@ Note that, counterintuitively, the best fit does not agree with the nominal surv
 Or, to display them both on the same plot:
 
 ```python
+# time_unit is automatically inherited from the datacard
 plt.figure()
 _ = kml_low.plot(
     best_color="blue",
@@ -122,7 +123,6 @@ _ = kml_low.plot(
     best_label="observable < 0.45",
     create_figure=False,
     include_nominal=False,
-    xlabel="Time (months)",
 )
 _ = kml_high.plot(
     best_color="red",
@@ -130,7 +130,6 @@ _ = kml_high.plot(
     best_label="observable >= 0.45",
     create_figure=False,
     include_nominal=False,
-    xlabel="Time (months)",
 )
 plt.legend()
 plt.show()
@@ -139,8 +138,9 @@ plt.show()
 We can also display the individual contributions of the binomial and patient-wise errors to the total error band.
 
 ```python
-_ = kml_low.plot(include_patient_wise_only=True, xlabel="Time (months)")
-_ = kml_low.plot(include_binomial_only=True, xlabel="Time (months)")
+# time_unit is automatically inherited from the datacard
+_ = kml_low.plot(include_patient_wise_only=True)
+_ = kml_low.plot(include_binomial_only=True)
 ```
 
 ```python
