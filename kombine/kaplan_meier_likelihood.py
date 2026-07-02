@@ -150,7 +150,32 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
         "At least one of include_binomial_only, include_patient_wise_only, "
         "include_full_NLL, include_greenwood, or include_nominal must be True"
       )
-    if len(self.CLs) > len(self.CL_colors):
+
+    # Helper variable for whether error bands will be computed
+    include_error_bands = (
+      self.include_full_NLL
+      or self.include_patient_wise_only
+      or self.include_binomial_only
+      or self.include_exponential_greenwood
+    )
+
+    include_hatched_error_bands = (
+      self.include_full_NLL and (
+        self.include_patient_wise_only
+        or self.include_binomial_only
+      )
+    )
+
+    # Error if best fit is requested but no error band options are available
+    if self.include_best_fit and not include_error_bands:
+      raise ValueError(
+        "include_best_fit=True requires at least one of include_full_NLL, "
+        "include_patient_wise_only, include_binomial_only, or "
+        "include_exponential_greenwood to be True"
+      )
+
+    # Only validate CL_colors length when error bands will be computed
+    if include_error_bands and len(self.CLs) > len(self.CL_colors):
       raise ValueError(
         f"Not enough colors provided for {len(self.CLs)} CLs, "
         f"got {len(self.CL_colors)} colors"
@@ -158,9 +183,8 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
     self.CL_colors = self.CL_colors[:len(self.CLs)]
 
     if (
-      len(self.CLs) > len(self.CL_hatches)
-      and self.include_full_NLL
-      and (self.include_binomial_only or self.include_patient_wise_only)
+      include_hatched_error_bands
+      and len(self.CLs) > len(self.CL_hatches)
     ):
       raise ValueError(
         f"Not enough hatches provided for {len(self.CLs)} CLs, "
