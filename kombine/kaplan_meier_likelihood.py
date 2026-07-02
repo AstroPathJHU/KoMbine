@@ -654,7 +654,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
   def plot(self, config: KaplanMeierPlotConfig | None = None, **kwargs) -> dict:
     """
     Plots the Kaplan-Meier curves based on the provided configuration.
-    
+
     If time_unit is not explicitly provided in config or kwargs, the method
     will use the time_unit inherited from the datacard (if available).
     """
