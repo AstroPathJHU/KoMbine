@@ -655,16 +655,30 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     """
     Plots the Kaplan-Meier curves based on the provided configuration.
 
-    If time_unit is not explicitly provided in config or kwargs, the method
-    will use the time_unit inherited from the datacard (if available).
+    The time_unit priority is:
+    1. kwargs["time_unit"] if explicitly provided and not None
+    2. config.time_unit if config is provided and its time_unit is not None
+    3. self.time_unit as fallback
     """
-    # If time_unit not in kwargs, use the time_unit from this KaplanMeierLikelihood object
-    if 'time_unit' not in kwargs:
-      kwargs['time_unit'] = self.time_unit
+    # Determine the effective time_unit following priority:
+    # kwargs["time_unit"] > config.time_unit > self.time_unit
+    effective_time_unit = None
+    if 'time_unit' in kwargs and kwargs['time_unit'] is not None:
+      effective_time_unit = kwargs['time_unit']
+    elif config is not None and config.time_unit is not None:
+      effective_time_unit = config.time_unit
+    else:
+      effective_time_unit = self.time_unit
+
     if config is None:
+      # Build kwargs with the effective time_unit for config creation
+      if 'time_unit' not in kwargs:
+        kwargs['time_unit'] = effective_time_unit
       config = KaplanMeierPlotConfig(**kwargs)
-    elif kwargs:
+    else:
       # If config is provided and kwargs are also given, update config with kwargs
+      # Only override config fields with kwargs values
+      kwargs["time_unit"] = effective_time_unit
       config = dataclasses.replace(config, **kwargs)
     # Use config.times_for_plot, falling back to self.get_times_for_plot(xmax) if None
     times_for_plot = config.times_for_plot
