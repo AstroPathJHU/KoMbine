@@ -37,8 +37,8 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   times_for_plot: Sequence of time points for plotting the survival probabilities.
   xmax: Maximum time for x-axis range. If provided, limits the plot to [0, xmax].
   include_binomial_only: If True, include error bands for the binomial error alone.
-  include_greenwood: If True, include error bands for the binomial error
-                     using the exponential Greenwood method.
+  include_exponential_greenwood: If True, include error bands for the binomial error
+                                 using the exponential Greenwood method.
   include_patient_wise_only: If True, include error bands for the patient-wise error alone.
   include_full_NLL: If True, include error bands for the full negative log-likelihood.
   include_best_fit: If True, include the best fit curve in the plot.
@@ -153,7 +153,7 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
     ):
       raise ValueError(
         "At least one of include_binomial_only, include_patient_wise_only, "
-        "include_full_NLL, include_greenwood, or include_nominal must be True"
+        "include_full_NLL, include_exponential_greenwood, or include_nominal must be True"
       )
 
     # Helper variable for whether error bands will be computed
