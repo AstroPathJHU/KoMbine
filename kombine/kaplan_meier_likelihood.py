@@ -14,6 +14,7 @@ import pathlib
 import matplotlib.axes
 import matplotlib.figure
 import matplotlib.pyplot as plt
+import matplotlib.typing
 import numpy as np
 import numpy.typing as npt
 import scipy.optimize
@@ -132,7 +133,7 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   label_fontsize: int = 12
   title_fontsize: int = 14
   tick_fontsize: int = 10
-  legend_loc: str | None = None
+  legend_loc: matplotlib.typing.LegendLocType | None = None
   dpi: int = 100
   pvalue_fontsize: int = 12
   pvalue_format: str = '.3g'
