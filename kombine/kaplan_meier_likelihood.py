@@ -144,10 +144,11 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
       or self.include_patient_wise_only
       or self.include_full_NLL
       or self.include_exponential_greenwood
+      or self.include_nominal
     ):
       raise ValueError(
         "At least one of include_binomial_only, include_patient_wise_only, "
-        "include_full_NLL, or include_greenwood must be True"
+        "include_full_NLL, include_greenwood, or include_nominal must be True"
       )
     if len(self.CLs) > len(self.CL_colors):
       raise ValueError(
@@ -870,8 +871,14 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         best_probabilities = best_prob_patient
         CL_probabilities = CL_prob_patient
 
-    # --- fail fast if we couldn't determine a best probability set ---
-    if best_probabilities is None or CL_probabilities is None:
+    # --- fail fast if we need error bands but couldn't determine a best probability set ---
+    has_error_band_option = (
+      config.include_full_NLL
+      or config.include_binomial_only
+      or config.include_exponential_greenwood
+      or config.include_patient_wise_only
+    )
+    if has_error_band_option and (best_probabilities is None or CL_probabilities is None):
       raise ValueError(
         "Could not determine best_probabilities or CL_probabilities. "
         "Check config flags and data returned by likelihood/greenwood calls."
