@@ -107,6 +107,9 @@ _ = kml_low.plot()
 _ = kml_high.plot()
 ```
 
+Note that, counterintuitively, the best fit does not agree with the nominal survival probability, and at some points the nominal probability is not even within the 1-sigma band.  This is not a bug.  For more information, see the math in the LaTeX documentation.
+
+
 Or, to display them both on the same plot:
 
 ```python
@@ -128,9 +131,6 @@ _ = kml_high.plot(
 plt.legend()
 plt.show()
 ```
-
-Note that, counterintuitively, the best fit does not agree with the nominal survival probability, and at some points the nominal probability is not even within the 1-sigma band.  This is not a bug.  For more information, see the math in the LaTeX documentation.
-
 
 We can also display the individual contributions of the binomial and patient-wise errors to the total error band.
 
