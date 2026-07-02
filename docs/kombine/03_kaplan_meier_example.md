@@ -75,6 +75,33 @@ kml_low = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=0.45)
 kml_high = datacard.km_likelihood(parameter_min=0.45, parameter_max=np.inf)
 ```
 
+First, let's display both curves with nominal survival probabilities (no error bands):
+
+```python
+# Plot both curves with nominal only (no error bands)
+plt.figure()
+_ = kml_low.plot(
+    nominal_color="blue",
+    nominal_label="observable < 0.45",
+    create_figure=False,
+    include_nominal=True,
+    include_full_NLL=False,
+    include_best_fit=False,
+)
+_ = kml_high.plot(
+    nominal_color="red",
+    nominal_label="observable >= 0.45",
+    create_figure=False,
+    include_nominal=True,
+    include_full_NLL=False,
+    include_best_fit=False,
+)
+plt.legend()
+plt.show()
+```
+
+Now we will show error bands to visualize the uncertainty in the survival probability estimates.
+
 ```python
 _ = kml_low.plot()
 _ = kml_high.plot()
