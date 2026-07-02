@@ -22,7 +22,7 @@ classifiers = [
 dynamic = ["version"]
 dependencies = [
     "gurobipy",
-    "matplotlib",
+    "matplotlib>=3.10.0",
     "numpy",
     "scipy>=1.15",
 ]
