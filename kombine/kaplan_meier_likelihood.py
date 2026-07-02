@@ -993,7 +993,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
     return results
 
-  def _finalize_plot(
+  def _finalize_plot(  #pylint: disable=too-many-branches
     self,
     fig: matplotlib.figure.Figure,
     ax: matplotlib.axes.Axes,
