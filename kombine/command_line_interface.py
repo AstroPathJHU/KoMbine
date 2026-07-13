@@ -110,14 +110,23 @@ def _make_common_parser(description: str) -> argparse.ArgumentParser:
 
 
 def _validate_plot_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-  if (
-    not args.include_full_NLL
-    and not args.include_binomial_only
-    and not args.include_patient_wise_only
-  ):
+  # Check if any error bands are requested
+  has_error_bands = (
+    args.include_full_NLL
+    or args.include_binomial_only
+    or args.include_patient_wise_only
+    or args.include_exponential_greenwood
+  )
+  # Check if nominal curve is requested
+  has_nominal = args.include_nominal
+
+  if not has_error_bands and not has_nominal:
     parser.error(
-      "If --exclude-full-nll is set, at least one of "
-      "--include-binomial-only or --include-patient-wise-only must be set."
+      "At least one of the following must be enabled: "
+      "full NLL (default, disable with --exclude-full-nll), "
+      "--include-binomial-only, --include-patient-wise-only, "
+      "--include-exponential-greenwood, or "
+      "nominal curve (default, disable with --exclude-nominal)."
     )
 
 

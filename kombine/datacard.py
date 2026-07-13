@@ -936,12 +936,17 @@ class Datacard:
   A datacard class to specify the inputs to ROC Picker.
   Refer to docs/03_examples.md for usage examples.
   """
-  def __init__(self, patients: list[Patient]):
+  def __init__(self, patients: list[Patient], time_unit: str | None = None):
     """
     Initialize a datacard.
     This function should not be called directly. Use `parse_datacard` instead.
+
+    Parameters:
+    patients: List of patients.
+    time_unit: Optional time unit for the x-axis label (e.g., "months", "years").
     """
     self.__patients = patients
+    self.__time_unit = time_unit
 
   @property
   def patients(self):
@@ -949,6 +954,13 @@ class Datacard:
     Get the patients in the datacard.
     """
     return self.__patients
+
+  @property
+  def time_unit(self):
+    """
+    Get the time unit for the datacard.
+    """
+    return self.__time_unit
 
   @property
   def observable_type(self):
@@ -989,6 +1001,7 @@ class Datacard:
     observable_type = None
     patients = None
     discrete_class_indices: set[int] = set()
+    time_unit = None
 
     unique_id_generator = itertools.count(0)
 
@@ -1008,6 +1021,12 @@ class Datacard:
           "discrete_classes",
         ]:
           raise ValueError(f"Invalid observable_type: {observable_type}")
+      elif split[0] == "time_unit":
+        if len(split) != 2:
+          raise ValueError(f"Invalid time_unit line: {line}")
+        if time_unit is not None:
+          raise ValueError("Multiple 'time_unit' lines found")
+        time_unit = split[1]
       elif split[0] == "bin":
         pass
       elif split[0] in ["response", "survival_time"]:
@@ -1106,6 +1125,7 @@ class Datacard:
         patient.observable.finalize_class_probs(n_classes)
     return Datacard(
       patients=patients,
+      time_unit=time_unit,
     )
 
   @classmethod
@@ -1331,6 +1351,7 @@ class Datacard:
       endpoint_epsilon=endpoint_epsilon,
       log_zero_epsilon=log_zero_epsilon,
       collapse_consecutive_deaths=collapse_consecutive_deaths,
+      time_unit=self.time_unit,
     )
 
   def km_p_value( #pylint: disable=too-many-arguments

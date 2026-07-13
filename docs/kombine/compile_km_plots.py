@@ -136,7 +136,7 @@ def plot_compare_to_greenwood(testing=False):
   fig, axes = plt.subplots(1, 2, figsize=(16, 7))
 
   # Add main title
-  fig.suptitle('Comparison to exponential Greenwood confidence intervals',
+  fig.suptitle('Thomas-Grunkemeier vs. exponential Greenwood confidence intervals',
                fontsize=FONT_SIZES['suptitle'], fontweight='bold')
 
   # Common configuration for exponential Greenwood plots
@@ -145,7 +145,7 @@ def plot_compare_to_greenwood(testing=False):
     'include_exponential_greenwood': True,
     'include_binomial_only': True,
     'include_full_NLL': False,
-    'binomial_only_suffix': 'KoMbine',
+    'binomial_only_suffix': 'T.-G.',
     'exponential_greenwood_suffix': 'e. G.',
   }
 

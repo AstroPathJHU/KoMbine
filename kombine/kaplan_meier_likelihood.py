@@ -14,6 +14,7 @@ import pathlib
 import matplotlib.axes
 import matplotlib.figure
 import matplotlib.pyplot as plt
+import matplotlib.typing
 import numpy as np
 import numpy.typing as npt
 import scipy.optimize
@@ -36,8 +37,8 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   times_for_plot: Sequence of time points for plotting the survival probabilities.
   xmax: Maximum time for x-axis range. If provided, limits the plot to [0, xmax].
   include_binomial_only: If True, include error bands for the binomial error alone.
-  include_greenwood: If True, include error bands for the binomial error
-                     using the exponential Greenwood method.
+  include_exponential_greenwood: If True, include error bands for the binomial error
+                                 using the exponential Greenwood method.
   include_patient_wise_only: If True, include error bands for the patient-wise error alone.
   include_full_NLL: If True, include error bands for the full negative log-likelihood.
   include_best_fit: If True, include the best fit curve in the plot.
@@ -68,7 +69,10 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
                           converges within tolerances between consecutive iterations.
   include_median_survival: If True, include the median survival time in the legend.
   title: Title for the plot.
-  xlabel: Label for the x-axis.
+  xlabel: Label for the x-axis. If provided, this overrides time_unit.
+  time_unit: Unit for the x-axis time label (e.g., "months", "years").
+              If provided and xlabel is not explicitly set, the label will be
+              "Time (unit)". If neither is provided, the label defaults to "Time".
   ylabel: Label for the y-axis.
   show_grid: If True, display a grid on the plot.
   figsize: Size of the figure as a tuple (width, height).
@@ -119,7 +123,8 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   rerun_until_convergence: bool = False
   include_median_survival: bool = False
   title: str | None = "Kaplan-Meier Curves"
-  xlabel: str = "Time"
+  xlabel: str | None = None
+  time_unit: str | None = None
   ylabel: str = "Survival Probability"
   show_grid: bool = True
   figsize: tuple[float, float] = (10, 7)
@@ -128,7 +133,7 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
   label_fontsize: int = 12
   title_fontsize: int = 14
   tick_fontsize: int = 10
-  legend_loc: str | None = None
+  legend_loc: matplotlib.typing.LegendLocType | None = None
   dpi: int = 100
   pvalue_fontsize: int = 12
   pvalue_format: str = '.3g'
@@ -144,12 +149,38 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
       or self.include_patient_wise_only
       or self.include_full_NLL
       or self.include_exponential_greenwood
+      or self.include_nominal
     ):
       raise ValueError(
         "At least one of include_binomial_only, include_patient_wise_only, "
-        "include_full_NLL, or include_greenwood must be True"
+        "include_full_NLL, include_exponential_greenwood, or include_nominal must be True"
       )
-    if len(self.CLs) > len(self.CL_colors):
+
+    # Helper variable for whether error bands will be computed
+    include_error_bands = (
+      self.include_full_NLL
+      or self.include_patient_wise_only
+      or self.include_binomial_only
+      or self.include_exponential_greenwood
+    )
+
+    include_hatched_error_bands = (
+      self.include_full_NLL and (
+        self.include_patient_wise_only
+        or self.include_binomial_only
+      )
+    )
+
+    # Error if best fit is requested but no error band options are available
+    if self.include_best_fit and not include_error_bands:
+      raise ValueError(
+        "include_best_fit=True requires at least one of include_full_NLL, "
+        "include_patient_wise_only, include_binomial_only, or "
+        "include_exponential_greenwood to be True"
+      )
+
+    # Only validate CL_colors length when error bands will be computed
+    if include_error_bands and len(self.CLs) > len(self.CL_colors):
       raise ValueError(
         f"Not enough colors provided for {len(self.CLs)} CLs, "
         f"got {len(self.CL_colors)} colors"
@@ -157,9 +188,8 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
     self.CL_colors = self.CL_colors[:len(self.CLs)]
 
     if (
-      len(self.CLs) > len(self.CL_hatches)
-      and self.include_full_NLL
-      and (self.include_binomial_only or self.include_patient_wise_only)
+      include_hatched_error_bands
+      and len(self.CLs) > len(self.CL_hatches)
     ):
       raise ValueError(
         f"Not enough hatches provided for {len(self.CLs)} CLs, "
@@ -183,6 +213,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     endpoint_epsilon: float = 1e-6,
     log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
     collapse_consecutive_deaths: bool = True,
+    time_unit: str | None = None,
   ):
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min
@@ -190,6 +221,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     self.__endpoint_epsilon = endpoint_epsilon
     self.__log_zero_epsilon = log_zero_epsilon
     self.__collapse_consecutive_deaths = collapse_consecutive_deaths
+    self.__time_unit = time_unit
 
   @property
   def all_patients(self) -> list[KaplanMeierPatientNLL]:
@@ -211,6 +243,13 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     The maximum parameter value.
     """
     return self.__parameter_max
+
+  @property
+  def time_unit(self) -> str | None:
+    """
+    The time unit for the x-axis label, inherited from the datacard.
+    """
+    return self.__time_unit
 
   @property
   def patient_death_times(self) -> frozenset:
@@ -615,11 +654,30 @@ class KaplanMeierLikelihood(KaplanMeierBase):
   def plot(self, config: KaplanMeierPlotConfig | None = None, **kwargs) -> dict:
     """
     Plots the Kaplan-Meier curves based on the provided configuration.
+
+    The time_unit priority is:
+    1. kwargs["time_unit"] if explicitly provided and not None
+    2. config.time_unit if config is provided and its time_unit is not None
+    3. self.time_unit as fallback
     """
+    # Determine the effective time_unit following priority:
+    # kwargs["time_unit"] > config.time_unit > self.time_unit
+    effective_time_unit = None
+    if kwargs.get('time_unit', None) is not None:
+      effective_time_unit = kwargs['time_unit']
+    elif config is not None and config.time_unit is not None:
+      effective_time_unit = config.time_unit
+    else:
+      effective_time_unit = self.time_unit
+
+    kwargs['time_unit'] = effective_time_unit
+
     if config is None:
+      # Build kwargs with the effective time_unit for config creation
       config = KaplanMeierPlotConfig(**kwargs)
-    elif kwargs:
+    else:
       # If config is provided and kwargs are also given, update config with kwargs
+      # Only override config fields with kwargs values
       config = dataclasses.replace(config, **kwargs)
     # Use config.times_for_plot, falling back to self.get_times_for_plot(xmax) if None
     times_for_plot = config.times_for_plot
@@ -870,8 +928,14 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         best_probabilities = best_prob_patient
         CL_probabilities = CL_prob_patient
 
-    # --- fail fast if we couldn't determine a best probability set ---
-    if best_probabilities is None or CL_probabilities is None:
+    # --- fail fast if we need error bands but couldn't determine a best probability set ---
+    has_error_band_option = (
+      config.include_full_NLL
+      or config.include_binomial_only
+      or config.include_exponential_greenwood
+      or config.include_patient_wise_only
+    )
+    if has_error_band_option and (best_probabilities is None or CL_probabilities is None):
       raise ValueError(
         "Could not determine best_probabilities or CL_probabilities. "
         "Check config flags and data returned by likelihood/greenwood calls."
@@ -943,14 +1007,21 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
     return results
 
-  def _finalize_plot(
+  def _finalize_plot(  #pylint: disable=too-many-branches
     self,
     fig: matplotlib.figure.Figure,
     ax: matplotlib.axes.Axes,
     config: KaplanMeierPlotConfig,
   ):
     """Adds final plot elements and handles saving/showing/closing."""
-    ax.set_xlabel(config.xlabel, fontsize=config.label_fontsize)
+    # Resolve xlabel: explicit xlabel > time_unit > default "Time"
+    xlabel = config.xlabel
+    if xlabel is None:
+      if config.time_unit is not None:
+        xlabel = f"Time ({config.time_unit})"
+      else:
+        xlabel = "Time"
+    ax.set_xlabel(xlabel, fontsize=config.label_fontsize)
     ax.set_ylabel(config.ylabel, fontsize=config.label_fontsize)
     if config.title is not None:
       ax.set_title(config.title, fontsize=config.title_fontsize)

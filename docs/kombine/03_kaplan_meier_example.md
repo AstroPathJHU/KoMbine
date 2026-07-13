@@ -75,14 +75,47 @@ kml_low = datacard.km_likelihood(parameter_min=-np.inf, parameter_max=0.45)
 kml_high = datacard.km_likelihood(parameter_min=0.45, parameter_max=np.inf)
 ```
 
+First, let's display both curves with nominal survival probabilities (no error bands):
+
 ```python
+# Plot both curves with nominal only (no error bands)
+# The time_unit is automatically inherited from the datacard
+plt.figure()
+_ = kml_low.plot(
+    nominal_color="blue",
+    nominal_label="observable < 0.45",
+    create_figure=False,
+    include_nominal=True,
+    include_full_NLL=False,
+    include_best_fit=False,
+)
+_ = kml_high.plot(
+    nominal_color="red",
+    nominal_label="observable >= 0.45",
+    create_figure=False,
+    include_nominal=True,
+    include_full_NLL=False,
+    include_best_fit=False,
+)
+plt.legend()
+plt.show()
+```
+
+Now we will show error bands to visualize the uncertainty in the survival probability estimates.
+
+```python
+# time_unit is automatically inherited from the datacard
 _ = kml_low.plot()
 _ = kml_high.plot()
 ```
 
+Note that, counterintuitively, the best fit does not agree with the nominal survival probability, and at some points the nominal probability is not even within the 1-sigma band.  This is not a bug.  For more information, see the math in the LaTeX documentation.
+
+
 Or, to display them both on the same plot:
 
 ```python
+# time_unit is automatically inherited from the datacard
 plt.figure()
 _ = kml_low.plot(
     best_color="blue",
@@ -102,12 +135,10 @@ plt.legend()
 plt.show()
 ```
 
-Note that, counterintuitively, the best fit does not agree with the nominal survival probability, and at some points the nominal probability is not even within the 1-sigma band.  This is not a bug.  For more information, see the math in the LaTeX documentation.
-
-
 We can also display the individual contributions of the binomial and patient-wise errors to the total error band.
 
 ```python
+# time_unit is automatically inherited from the datacard
 _ = kml_low.plot(include_patient_wise_only=True)
 _ = kml_low.plot(include_binomial_only=True)
 ```
