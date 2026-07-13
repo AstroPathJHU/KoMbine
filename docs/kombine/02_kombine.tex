@@ -356,19 +356,19 @@ This surprising result highlights the importance of the patient-wise uncertainti
 
 \subsection{Comparison with Greenwood confidence intervals}\label{sec:compare-to-greenwood}
 
-Figure~\ref{fig:compare-to-greenwood} shows \KM{} curves with the \KoMbine{} confidence intervals and the exponential Greenwood confidence intervals from Eq.~(\ref{eq:exponential-greenwood}). The \KoMbine{} confidence intervals are calculated with the binomial error only, to facilitate the comparison.
+Figure~\ref{fig:compare-to-greenwood} shows \KM{} curves with the Thomas-Grunkemeier confidence intervals and the exponential Greenwood confidence intervals from Eq.~(\ref{eq:exponential-greenwood}).
 
 \begin{figure}
 \centering
 \includegraphics[width=\linewidth]{comparison_to_greenwood.pdf}
-\caption{\label{fig:compare-to-greenwood} \KM{} curves with confidence intervals using only the binomial error, calculated using the exponential Greenwood (e. G.) formula from Eq.~(\ref{eq:exponential-greenwood}) (gold) and the likelihood method from \KoMbine{} (blue). Panel A shows a small cohort of 12 patients, while panel B shows a larger cohort of 100 patients.}
+\caption{\label{fig:compare-to-greenwood} \KM{} curves with confidence intervals using only the binomial error, calculated using the exponential Greenwood (e. G.) formula from Eq.~(\ref{eq:exponential-greenwood}) (gold) and the Thomas-Grunkemeier method implemented in \KoMbine{} (blue). Panel A shows a small cohort of 12 patients, while panel B shows a larger cohort of 100 patients.}
 \end{figure}
 
 In Fig.~\ref{fig:compare-to-greenwood}A, only 12 patients are included in the \KM{} curve, and the exponential Greenwood confidence intervals are noticeably different from the \KoMbine{} intervals. Figure~\ref{fig:compare-to-greenwood}B shows \KM{} curves with 100 patients, and the two confidence intervals are in agreement.
 
 One striking difference in both cases is that the Greenwood method cannot calculate confidence intervals for the first or last time points, when the probabilities are \(1\) and \(0\). This is a fundamental limitation of the Greenwood method, which approximates the uncertainty on the \emph{true} binomial probability using the \emph{observed} numbers of patients who were at risk and who survived. If everyone survived or died, the binomial uncertainty is \(0\).
 
-Our method, by contrast, calculates the binomial likelihood (and hence the uncertainty) using the \emph{true} survival probability, which we can do despite not knowing it in advance, because it is a parameter in the likelihood fit. This is the essential tradeoff of the likelihood method: we can be more precise, but the likelihood fit is more computationally intensive.
+The Thomas-Grunkemeier method, by contrast, calculates the binomial likelihood (and hence the uncertainty) using the \emph{true} survival probability, which we can do despite not knowing it in advance, because it is a parameter in the likelihood fit. This is the essential tradeoff of the likelihood method: we can be more precise, but the likelihood fit is more computationally intensive.
 
 \subsection[Conventional log-rank p~value estimation]{Conventional log-rank \(p\)~value estimation}\label{sec:compare-to-conventional-p-value}
 
