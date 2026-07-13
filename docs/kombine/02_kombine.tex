@@ -158,7 +158,7 @@ While it would be desireable, with high data volumes, to estimate survival proba
 
 The biomarker measurements are subject to uncertainty, and it is desireable to incorporate this uncertainty into the \KM{} curve estimation.
 
-Uncertainty estimates on \KM{} curves typically take into account only one source of uncertainty: the statistical uncertainty from the finite number of patients in the study.  This is typically done using Greenwood confidence intervals, which are based on the binomial distribution of deaths among at-risk patients \citep{Greenwood,GreenwoodNotes}.  Greenwood's formula uses several approximations and behaves poorly in limiting cases, such as before the first death and after the last.
+Uncertainty estimates on \KM{} curves typically take into account only one source of uncertainty: the statistical uncertainty from the finite number of patients in the study.  This is typically done using \citeauthor{Greenwood} confidence intervals, which are based on the binomial distribution of deaths among at-risk patients \citep{Greenwood,GreenwoodNotes}\@.  \citeauthor{Greenwood}'s formula uses several approximations and behaves poorly in limiting cases, such as before the first death and after the last.
 
 \Citet{FayBrittainProschan2013} survey several methods to calculate confidence intervals on \KM{} curves, including some that avoid these edge cases.  One that we wish to highlight is the method of \citet{ThomasGrunkemeier}, which uses a likelihood ratio to construct confidence intervals.  \Citeauthor{FayBrittainProschan2013} propose a beta product confidence procedure, which has better pointwise coverage for low sample sizes, and also has the desireable property of changing the error bounds when patients are censored, not only when they die.  Their method, like the others they survey, only accounts for the binomial uncertainty from the finite number of patients.
 
@@ -200,12 +200,12 @@ where \(p_i^\text{s}\) is the probability that a patient who has survived until 
 
 \subsection{Greenwood confidence intervals}\label{sec:greenwood}
 
-As mentioned earlier, confidence intervals on \KM{} curves are typically estimated using some variation of Greenwood's formula. At confidence level \(1-\alpha\), Greenwood's interval is given by
+As mentioned earlier, confidence intervals on \KM{} curves are typically estimated using some variation of \citeauthor{Greenwood}'s formula. At confidence level \(1-\alpha\), \citeauthor{Greenwood}'s interval is given by
 \begin{equation}
 \label{eq:greenwood}
 S(t)\in\hat{S}(t) \pm z_{\alpha/2} \sqrt{{\hat{S}(t)}^2{\sum_{i=1}^{n} \frac{d_i}{r_i(r_i-d_i)}}},
 \end{equation}
-where \(\hat{S}\) is the nominal value of the survival function, given by Eq.~(\ref{eq:km-nominal}). The exponential Greenwood interval is given by
+where \(\hat{S}\) is the nominal value of the survival function, given by Eq.~(\ref{eq:km-nominal}). The exponential \citeauthor{Greenwood} interval is given by
 \begin{equation}
 \label{eq:exponential-greenwood}
 \log{\left(-\log S(t)\right)} \in \log{\left(-\log \hat{S}(t)\right)} \pm z_{\alpha/2} \sqrt{\frac{1}{{\left(\log \hat{S}(t)\right)}^2} \sum_{i=1}^{n} \frac{d_i}{r_i(r_i-d_i)}}.
@@ -213,7 +213,15 @@ where \(\hat{S}\) is the nominal value of the survival function, given by Eq.~(\
 
 \citet{GreenwoodNotes} gives the derivation of these formulas, which makes certain approximations: the ``delta-method'' approximation, which requires that the true and observed probabilities are close enough that \(\log\left(-\log S(t)\right)\) can be treated as approximately linear, and the approximation of the binomial distribution by a normal distribution.
 
-With large numbers of patients, these approximations hold, but their validity decreases for smaller cohort sizes.  Several of the methods surveyed by \citet{FayBrittainProschan2013} avoid these approximations.  We choose to extend the likelihood method of \citet{ThomasGrunkemeier}.  Although \citeauthor{FayBrittainProschan2013}'s method has some advantages over \citeauthor{ThomasGrunkemeier}'s, our goal is to incorporate patient-wise uncertainty, and the likelihood method provides a natural way to do so.
+With large numbers of patients, these approximations hold, but their validity decreases for smaller cohort sizes.  Several of the methods surveyed by \citet{FayBrittainProschan2013} avoid these approximations and behave better with a small number of patients and in limiting cases, such as when all patients survive or all patients die, as shown in Fig.~\ref{fig:compare-to-greenwood}.
+
+\begin{figure}
+\centering
+\includegraphics[width=\linewidth]{comparison_to_greenwood.pdf}
+\caption{\label{fig:compare-to-greenwood} \KM{} curves with confidence intervals using only the binomial error, calculated using the exponential \citeauthor{Greenwood} (e. G.) formula from Eq.~(\ref{eq:exponential-greenwood}) (gold) and \citeauthor{ThomasGrunkemeier}'s method implemented in \KoMbine{} (blue). Panel A shows a small cohort of 12 patients, while panel B shows a larger cohort of 100 patients.}
+\end{figure}
+
+We choose to extend the likelihood method of \citet{ThomasGrunkemeier}.  Although \citeauthor{FayBrittainProschan2013}'s method has some advantages over \citeauthor{ThomasGrunkemeier}'s, our goal is to incorporate patient-wise uncertainty, and the likelihood method provides a natural way to do so.
 
 \subsection{Log likelihood method}
 
@@ -262,7 +270,7 @@ Although the total uncertainty on the \KM{} curve includes both the binomial and
 
 \subsubsection{Binomial uncertainty}
 
-To examine the binomial uncertainty, we can fix the parameters to their nominal values, fixing \(a_j=\hat{a}_j=1\) for the patients who are nominally included and \(0\) for those who are nominally excluded. These results are approximately equivalent to the Greenwood confidence intervals used in other packages. As will be illustrated in Section~\ref{sec:compare-to-greenwood}, our method is somewhat more precise, but it is also computationally slower.
+To examine the binomial uncertainty, we can fix the parameters to their nominal values, fixing \(a_j=\hat{a}_j=1\) for the patients who are nominally included and \(0\) for those who are nominally excluded. This is equivalent to \citeauthor{ThomasGrunkemeier}'s method.
 
 \subsubsection{Patient-wise uncertainty}
 
@@ -354,22 +362,6 @@ To understand this, imagine a case where 7 patients were at risk at a particular
 
 This surprising result highlights the importance of the patient-wise uncertainties. If the NLL penalty for including the patient really is that small, then we cannot, with any confidence, assign the patient to one \KM{} curve or the other.
 
-\subsection{Comparison with Greenwood confidence intervals}\label{sec:compare-to-greenwood}
-
-Figure~\ref{fig:compare-to-greenwood} shows \KM{} curves with the Thomas-Grunkemeier confidence intervals and the exponential Greenwood confidence intervals from Eq.~(\ref{eq:exponential-greenwood}).
-
-\begin{figure}
-\centering
-\includegraphics[width=\linewidth]{comparison_to_greenwood.pdf}
-\caption{\label{fig:compare-to-greenwood} \KM{} curves with confidence intervals using only the binomial error, calculated using the exponential Greenwood (e. G.) formula from Eq.~(\ref{eq:exponential-greenwood}) (gold) and the Thomas-Grunkemeier method implemented in \KoMbine{} (blue). Panel A shows a small cohort of 12 patients, while panel B shows a larger cohort of 100 patients.}
-\end{figure}
-
-In Fig.~\ref{fig:compare-to-greenwood}A, only 12 patients are included in the \KM{} curve, and the exponential Greenwood confidence intervals are noticeably different from the \KoMbine{} intervals. Figure~\ref{fig:compare-to-greenwood}B shows \KM{} curves with 100 patients, and the two confidence intervals are in agreement.
-
-One striking difference in both cases is that the Greenwood method cannot calculate confidence intervals for the first or last time points, when the probabilities are \(1\) and \(0\). This is a fundamental limitation of the Greenwood method, which approximates the uncertainty on the \emph{true} binomial probability using the \emph{observed} numbers of patients who were at risk and who survived. If everyone survived or died, the binomial uncertainty is \(0\).
-
-The Thomas-Grunkemeier method, by contrast, calculates the binomial likelihood (and hence the uncertainty) using the \emph{true} survival probability, which we can do despite not knowing it in advance, because it is a parameter in the likelihood fit. This is the essential tradeoff of the likelihood method: we can be more precise, but the likelihood fit is more computationally intensive.
-
 \subsection[Conventional log-rank p~value estimation]{Conventional log-rank \(p\)~value estimation}\label{sec:compare-to-conventional-p-value}
 
 In order to compare the \(p\)~values, we generate Monte Carlo cohorts of patients. We calculate the \(p\)~values using our method, disabling the patient-wise penalties, and with the conventional log-rank test. We plot the results in Fig.~\ref{fig:compare-p-value}. The top row allows patients to die at the same time, which means that we rely on the Breslow approximation in Eq.~(\ref{eq:cox-nll-breslow}). In the bottom row, no two patients die at the same time, so the Breslow approximation is identical to the exact formula in Eq.~(\ref{eq:cox-nll-exact}).
@@ -384,7 +376,7 @@ When there are no ties, the points scatter along the diagonal line \(y=x\), mean
 
 The Monte Carlo patients for the top row are simulated with integer survival times from \(1\) to \(10\), which means that we expect a tie rate of about \(10\%\). The error introduced by the Breslow approximation will increase with a higher tie rate.
 
-The scatter from the line or curve, which shrinks with larger cohort sizes, is because the full likelihood method avoids the asymptotic approximations used in the conventional method, similar to the difference between the \KoMbine{} and Greenwood confidence intervals in Section~\ref{sec:compare-to-greenwood}.
+The scatter from the line or curve, which shrinks with larger cohort sizes, is because the full likelihood method avoids the asymptotic approximations used in the conventional method, similar to the difference between the \citeauthor{ThomasGrunkemeier} and \citeauthor{Greenwood} confidence intervals (Fig.~\ref{fig:compare-to-greenwood}).
 
 \section{Application to Non-Small Cell Lung Cancer}
 
@@ -412,7 +404,7 @@ It should be noted that this is a fairly small cohort of only 25 patients. In a 
 
 \section{Discussion}
 
-In \KoMbine{}, we introduce a novel likelihood-based method for the propagation of statistical and systematic uncertainties through the \KM{} survival function. Our handling of the binomial uncertainty is more rigorous than the conventional Greenwood confidence intervals, and the method can handle patient-wise uncertainties for the first time.
+In \KoMbine{}, we introduce a novel likelihood-based method for the propagation of statistical and systematic uncertainties through the \KM{} survival function. Our handling of the binomial uncertainty is more rigorous than the conventional \citeauthor{Greenwood} confidence intervals, and the method can handle patient-wise uncertainties for the first time.
 
 In addition to providing more precise uncertainty estimates, our method can provide critical insight for experimental design.  Researchers can avoid wasting time and effort trying to reduce subdominant uncertainties and instead focus on their work on the parts of the experiment that have the highest impact on the results.
 
