@@ -321,15 +321,15 @@ The total NLL is then given by
 \end{equation}
 We find the hazard ratio \(H\) by minimizing the NLL over \(a_{jk}\) and \(H\). We then compute its confidence interval by scanning the NLL as a function of \(H\) and finding the points where it crosses thresholds derived from the \(\chi^2\) distribution with one degree of freedom.
 
-\subsection[p~value]{\(p\)~value}
+\subsection[p value]{\(p\) value}
 
 Building on the hazard ratio calculation, we can compute the \(p\)~value to reject the null hypothesis that two survival curves are identical. In \KoMbine{}, we use a log-rank approach, similar to the conventional approach used in \lifelines{} and similar packages. However, as in the case of the \KM{} error bars, our likelihood modeling does not rely on approximating the binomial distribution as normal, and we also include the patient-wise errors.
 
 The conventional approach defines the residual for each time point as
 \begin{align}
 \begin{aligned}
-U_i&=d_{i1} - d_{i1}^\text{exp} \\
-&=d_{i1} - (d_{i0} + d_{i1})\frac{n_{i1}}{n_{i0}+n_{i1}}.
+U_i&=d_{i0} - d_{i0}^\text{exp} \\
+&=d_{i0} - (d_{i0} + d_{i1})\frac{r_{i0}}{r_{i0}+r_{i1}}.
 \end{aligned}
 \end{align}
 By symmetry, if we swapped the two curves, \(U_i\rightarrow-U_i\). Summing the residuals and dividing by the variance gives us the test statistic,
@@ -341,9 +341,9 @@ which follows a \(\chi^2\) distribution with one degree of freedom~\citep[pp.~45
 
 In the likelihood approach, we use Eq.~(\ref{eq:hazard-ratio-nll}). The null hypothesis is that \(H=1\), meaning that the two curves are identical. The alternative hypothesis allows \(H\) to float.
 
-We evaluate the NLL for the null hypothesis by minimizing Eq.~(\ref{eq:hazard-ratio-nll}) over \(a_{jk}\) with the constraint \(H=1\). For the alternate hypothesis, we minimize Eq.~(\ref{eq:hazard-ratio-nll}) over both \(a_{jk}\) and \(H\). The difference between the two NLLs is used to compute the \(p\)~value using a \(\chi^2\) distribution with one degree of freedom.
+We evaluate the NLL for the null hypothesis by minimizing Eq.~(\ref{eq:hazard-ratio-nll}) over \(a_{jk}\) with the constraint \(H=1\). For the alternative hypothesis, we minimize Eq.~(\ref{eq:hazard-ratio-nll}) over both \(a_{jk}\) and \(H\). The difference between the two NLLs is used to compute the \(p\)~value using a \(\chi^2\) distribution with one degree of freedom.
 
-We also allow fixing \(a_{jk}\) and using only the Cox penalty. Because floating \(a_{jk}\) can decrease the NLL for both the null and alternate hypotheses, the \(p\)~value may be either larger or smaller than the \(p\)~value with fixed \(a_{jk}\). Section~\ref{sec:compare-to-conventional-p-value} compares our Cox-only \(p\)~value to the conventional log-rank test.
+We also allow fixing \(a_{jk}\) and using only the Cox penalty. Because floating \(a_{jk}\) can decrease the NLL for both the null and alternative hypotheses, the \(p\)~value may be either larger or smaller than the \(p\)~value with fixed \(a_{jk}\). Section~\ref{sec:compare-to-conventional-p-value} compares our Cox-only \(p\)~value to the conventional log-rank test.
 
 \section{Numerical examples}
 
