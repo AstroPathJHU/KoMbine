@@ -288,34 +288,18 @@ S \le S' & \text{ if } S' < \hat{S}
 \end{align}
 This gives an interpretable visualization of the patient-wise uncertainty: we obtain the NLL that the survival probability is at least as far from the nominal probability as \(S'\). By construction, \(-\log\mathcal{L}(S')\) has a single minimum (either a single point or, if some patients have a penalty of \(0\), a flat region) at \(S'=\hat{S}\) and increases as \(S'\) moves away in either direction.
 
-\subsection[p~values]{\(p\)~values}
+\subsection{Hazard ratio}
 
-We can also use a similar method to compute the \(p\)~value to reject the null hypothesis that two survival curves are identical. In \KoMbine{}, we use a log-rank approach, similar to the conventional approach used in \lifelines{} and similar packages. However, as in the case of the \KM{} error bars, our likelihood modeling does not rely on approximating the binomial distribution as normal, and we also include the patient-wise errors.
+We can also use a similar method to compute the hazard ratio and its confidence interval.  We have two curves, labeled \(k=0\) and \(k=1\), and we add this index to all relevant quantities. For example, each patient may be in one of the curves, and this inclusion is given by \(a_{jk}\). Each patient can be in at most one of the two curves, but we also allow for a patient to be in neither. (This is useful, for example, when stratifying patients into low, middle, and high categories based on a parameter\@. If we compare the curves pairwise, then in each comparison, some patients are in neither curve.)  Each patient has a positive or negative penalty, \(-\log\mathcal{L}_{jk}^\text{patient}\), to be included in each curve.
 
-We have two curves, labeled \(k=0\) and \(k=1\), and we add this index to all relevant quantities. For example, each patient may be in one of the curves, and this inclusion is given by \(a_{jk}\). Each patient can be in at most one of the two curves, but we also allow for a patient to be in neither. (This is useful, for example, when stratifying patients into low, middle, and high categories based on a parameter\@. \(p\)~values are computed pairwise between the curves, and in each pairwise comparison, some patients are in neither curve.)  Each patient has a positive or negative penalty, \(-\log\mathcal{L}_{jk}^\text{patient}\), to be included in each curve.
-
-Each curve has its probabilities of dying \(p^\text{d}_{ik}\). In the log-rank test, we take the proportional hazard model,
+Each curve has its probabilities of dying \(p^\text{d}_{ik}\). We take the proportional hazard model,
 \begin{equation}
 p^\text{d}_{i0} = H p^\text{d}_{i1},
 \label{eq:logrank-hazard}
 \end{equation}
-for a constant hazard ratio \(H\) across all time points. The null hypothesis is that \(H=1\), meaning that the two curves are identical. The alternative hypothesis allows \(H\) to float.
+for a constant hazard ratio \(H\) across all time points.
 
-In the conventional approach, we define the residual for each time point as
-\begin{align}
-\begin{aligned}
-U_i&=d_{i1} - d_{i1}^\text{exp} \\
-&=d_{i1} - (d_{i0} + d_{i1})\frac{n_{i1}}{n_{i0}+n_{i1}}.
-\end{aligned}
-\end{align}
-By symmetry, if we swapped the two curves, \(U_i\rightarrow-U_i\). Summing the residuals and dividing by the variance gives us the test statistic,
-\begin{align}
-U&=\sum_i U_i \\
-Q&=\frac{U^2}{\text{Var}(U)},
-\end{align}
-which follows a \(\chi^2\) distribution with one degree of freedom~\citep[pp.~45--47]{mantel1966evaluation,peto1972asymptotically,appliedsurvivalanalysis}.
-
-In the likelihood approach, we instead compute the full NLL, similar to Eq.~(\ref{eq:total-nll}). We have two separate patient-wise NLL penalties, one for each curve. The probability distribution representing the relationship between the curves is modeled with the Cox partial likelihood distribution with \(\beta=\log{H}\), which reduces to the hypergeometric distribution under the null hypothesis when \(H=1\)~\citep{cox1972regression,breslow1974covariance}:
+The NLL for the hazard ratio is similar to Eq.~(\ref{eq:total-nll}). We have two separate patient-wise NLL penalties, one for each curve. The probability distribution representing the relationship between the curves is modeled with the Cox partial likelihood distribution with \(\beta=\log{H}\), which reduces to the hypergeometric distribution when \(H=1\)~\citep{cox1972regression,breslow1974covariance}:
 \begin{align}
 -\log \mathcal{L}_{\text{Cox}}(a_{jk}, H)&=-\sum_i\left[\log\binom{r_{i0}}{d_{i0}}+\log\binom{r_{i1}}{d_{i1}}+d_{i1}\log H-\log Z_j(H)\right] \label{eq:cox-nll-exact}\\
 &\approx-\sum_i \left[d_{i1} \log H - d_i \log\left(r_{i0} + H r_{i1}\right)\right] \label{eq:cox-nll-breslow}
@@ -332,9 +316,29 @@ Eq.~(\ref{eq:cox-nll-breslow}) applies the Breslow approximation~\citep{breslow1
 
 The total NLL is then given by
 \begin{equation}
--\log \mathcal{L}_{\text{total}}(a_{jk}, H) = -\sum_{k}\log\mathcal{L}_\text{Cox}(H) - \sum_{k}\log\mathcal{L}_k^{\text{patient-wise}}(a_{jk}).
+-\log \mathcal{L}_{\text{total}}(a_{jk}, H) = -\sum_{k}\log\mathcal{L}_\text{Cox}(a_{jk}, H) - \sum_{k}\log\mathcal{L}_k^{\text{patient-wise}}(a_{jk}).
 \label{eq:p-value-nll}
 \end{equation}
+
+\subsection[p~value]{\(p\)~value}
+
+Building on the hazard ratio calculation, we can compute the \(p\)~value to reject the null hypothesis that two survival curves are identical. In \KoMbine{}, we use a log-rank approach, similar to the conventional approach used in \lifelines{} and similar packages. However, as in the case of the \KM{} error bars, our likelihood modeling does not rely on approximating the binomial distribution as normal, and we also include the patient-wise errors.
+
+The conventional approach defines the residual for each time point as
+\begin{align}
+\begin{aligned}
+U_i&=d_{i1} - d_{i1}^\text{exp} \\
+&=d_{i1} - (d_{i0} + d_{i1})\frac{n_{i1}}{n_{i0}+n_{i1}}.
+\end{aligned}
+\end{align}
+By symmetry, if we swapped the two curves, \(U_i\rightarrow-U_i\). Summing the residuals and dividing by the variance gives us the test statistic,
+\begin{align}
+U&=\sum_i U_i \\
+Q&=\frac{U^2}{\text{Var}(U)},
+\end{align}
+which follows a \(\chi^2\) distribution with one degree of freedom~\citep[pp.~45--47]{mantel1966evaluation,peto1972asymptotically,appliedsurvivalanalysis}.
+
+In the likelihood approach, we use Eq.~(\ref{eq:p-value-nll}). The null hypothesis is that \(H=1\), meaning that the two curves are identical. The alternative hypothesis allows \(H\) to float.
 
 We evaluate the NLL for the null hypothesis by minimizing Eq.~(\ref{eq:p-value-nll}) over \(a_{jk}\) with the constraint \(H=1\). For the alternate hypothesis, we minimize Eq.~(\ref{eq:p-value-nll}) over both \(a_{jk}\) and \(H\). The difference between the two NLLs is used to compute the \(p\)~value using a \(\chi^2\) distribution with one degree of freedom.
 
