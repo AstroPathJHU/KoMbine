@@ -295,7 +295,7 @@ We can also use a similar method to compute the hazard ratio and its confidence 
 Each curve has its probabilities of dying \(p^\text{d}_{ik}\). We take the proportional hazard model,
 \begin{equation}
 p^\text{d}_{i0} = H p^\text{d}_{i1},
-\label{eq:logrank-hazard}
+\label{eq:proportional-hazards}
 \end{equation}
 for a constant hazard ratio \(H\) across all time points.
 
@@ -317,7 +317,7 @@ Eq.~(\ref{eq:cox-nll-breslow}) applies the Breslow approximation~\citep{breslow1
 The total NLL is then given by
 \begin{equation}
 -\log \mathcal{L}_{\text{total}}(a_{jk}, H) = -\log\mathcal{L}_\text{Cox}(a_{jk}, H) - \sum_{k}\log\mathcal{L}_k^{\text{patient-wise}}(a_{jk}).
-\label{eq:p-value-nll}
+\label{eq:hazard-ratio-nll}
 \end{equation}
 
 \subsection[p~value]{\(p\)~value}
@@ -338,9 +338,9 @@ Q&=\frac{U^2}{\text{Var}(U)},
 \end{align}
 which follows a \(\chi^2\) distribution with one degree of freedom~\citep[pp.~45--47]{mantel1966evaluation,peto1972asymptotically,appliedsurvivalanalysis}.
 
-In the likelihood approach, we use Eq.~(\ref{eq:p-value-nll}). The null hypothesis is that \(H=1\), meaning that the two curves are identical. The alternative hypothesis allows \(H\) to float.
+In the likelihood approach, we use Eq.~(\ref{eq:hazard-ratio-nll}). The null hypothesis is that \(H=1\), meaning that the two curves are identical. The alternative hypothesis allows \(H\) to float.
 
-We evaluate the NLL for the null hypothesis by minimizing Eq.~(\ref{eq:p-value-nll}) over \(a_{jk}\) with the constraint \(H=1\). For the alternate hypothesis, we minimize Eq.~(\ref{eq:p-value-nll}) over both \(a_{jk}\) and \(H\). The difference between the two NLLs is used to compute the \(p\)~value using a \(\chi^2\) distribution with one degree of freedom.
+We evaluate the NLL for the null hypothesis by minimizing Eq.~(\ref{eq:hazard-ratio-nll}) over \(a_{jk}\) with the constraint \(H=1\). For the alternate hypothesis, we minimize Eq.~(\ref{eq:hazard-ratio-nll}) over both \(a_{jk}\) and \(H\). The difference between the two NLLs is used to compute the \(p\)~value using a \(\chi^2\) distribution with one degree of freedom.
 
 We also allow fixing \(a_{jk}\) and using only the Cox penalty. Because floating \(a_{jk}\) can decrease the NLL for both the null and alternate hypotheses, the \(p\)~value may be either larger or smaller than the \(p\)~value with fixed \(a_{jk}\). Section~\ref{sec:compare-to-conventional-p-value} compares our Cox-only \(p\)~value to the conventional log-rank test.
 
