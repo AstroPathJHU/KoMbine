@@ -218,7 +218,7 @@ With large numbers of patients, these approximations hold, but their validity de
 \begin{figure}
 \centering
 \includegraphics[width=\linewidth]{comparison_to_greenwood.pdf}
-\caption{\label{fig:compare-to-greenwood} \KM{} curves with confidence intervals using only the binomial error, calculated using the exponential \citeauthor{Greenwood} (e. G.) formula from Eq.~(\ref{eq:exponential-greenwood}) (gold) and \citeauthor{ThomasGrunkemeier}'s method implemented in \KoMbine{} (blue). Panel A shows a small cohort of 12 patients, while panel B shows a larger cohort of 100 patients.}
+\caption{\label{fig:compare-to-greenwood} \KM{} curves with confidence intervals using only the binomial error, calculated using the exponential \citeauthor{Greenwood} (e.\,G.) formula from Eq.~(\ref{eq:exponential-greenwood}) (gold) and \citeauthor{ThomasGrunkemeier}'s method implemented in \KoMbine{} (blue). Panel A shows a small cohort of 12 patients, while panel B shows a larger cohort of 100 patients.}
 \end{figure}
 
 We choose to extend the likelihood method of \citet{ThomasGrunkemeier}.  Although \citeauthor{FayBrittainProschan2013}'s method has some advantages over \citeauthor{ThomasGrunkemeier}'s, our goal is to incorporate patient-wise uncertainty, and the likelihood method provides a natural way to do so.
@@ -316,12 +316,12 @@ Eq.~(\ref{eq:cox-nll-breslow}) applies the Breslow approximation~\citep{breslow1
 
 The total NLL is then given by
 \begin{equation}
--\log \mathcal{L}_{\text{total}}(a_{jk}, H) = -\log\mathcal{L}_{\text{Cox}}(a_{jk}, H) - \sum_{k}\log\mathcal{L}_k^{\text{patient}}(a_{jk}).
+-\log \mathcal{L}_{\text{total}}(a_{jk}, H) = -\log\mathcal{L}_{\text{Cox}}(a_{jk}, H) - \sum_{k}\sum_{j} a_{jk}\log \mathcal{L}_{jk}^{\text{patient}}.
 \label{eq:hazard-ratio-nll}
 \end{equation}
 We find the hazard ratio \(H\) by minimizing the NLL over \(a_{jk}\) and \(H\). We then compute its confidence interval by scanning the NLL as a function of \(H\) and finding the points where it crosses thresholds derived from the \(\chi^2\) distribution with one degree of freedom.
 
-\subsection[p value]{\(p\) value}
+\subsection[p value]{\(p\)~value}
 
 Building on the hazard ratio calculation, we can compute the \(p\)~value to reject the null hypothesis that two survival curves are identical. In \KoMbine{}, we use a log-rank approach, similar to the conventional approach used in \lifelines{} and similar packages. However, as in the case of the \KM{} error bars, our likelihood modeling does not rely on approximating the binomial distribution as normal, and we also include the patient-wise errors.
 
