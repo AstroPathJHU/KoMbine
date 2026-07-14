@@ -316,9 +316,10 @@ Eq.~(\ref{eq:cox-nll-breslow}) applies the Breslow approximation~\citep{breslow1
 
 The total NLL is then given by
 \begin{equation}
--\log \mathcal{L}_{\text{total}}(a_{jk}, H) = -\log\mathcal{L}_\text{Cox}(a_{jk}, H) - \sum_{k}\log\mathcal{L}_k^{\text{patient-wise}}(a_{jk}).
+-\log \mathcal{L}_{\text{total}}(a_{jk}, H) = -\log\mathcal{L}_\text{Cox}(a_{jk}, H) - \sum_{k}\log\mathcal{L}_k^{\text{patient}}(a_{jk}).
 \label{eq:hazard-ratio-nll}
 \end{equation}
+We find the hazard ratio \(H\) by minimizing the NLL over \(a_{jk}\) and \(H\). We then compute its confidence interval by scanning the NLL as a function of \(H\) and finding the points where it crosses thresholds derived from the \(\chi^2\) distribution with one degree of freedom.
 
 \subsection[p~value]{\(p\)~value}
 
