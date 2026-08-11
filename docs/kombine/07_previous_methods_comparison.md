@@ -91,10 +91,10 @@ $$
 $$
 where $e$ is the misclassification rate shared by all patients.
 
-To match the binary examples and exercises, we use three error levels:
-- Small error: $e = 0.05$
-- Medium error: $e = 0.15$
-- Large error: $e = 0.30$
+We use three error levels large enough that KoMbine's discrete assignments can change:
+- Smaller error: $e = 0.28$
+- Medium error: $e = 0.35$
+- Large error: $e = 0.40$
 
 Each patient keeps the same survival time and censoring as the fixed baseline.
 Only the class probabilities change: patients in the low group get probabilities
@@ -126,21 +126,21 @@ scenarios = {
         'threshold': 0.5001,
     },
     'misclass_small': {
-        'file': 'discrete_classes_hr_example_small.txt',
-        'label': 'Disc. Classes (e=0.05)',
-        'description': 'e = 0.05',
+        'file': 'discrete_classes_hr_example_moderate.txt',
+        'label': 'Disc. Classes (e=0.28)',
+        'description': 'e = 0.28',
         'threshold': 1.0,
     },
     'misclass_moderate': {
-        'file': 'discrete_classes_hr_example_moderate.txt',
-        'label': 'Disc. Classes (e=0.15)',
-        'description': 'e = 0.15',
+        'file': 'discrete_classes_hr_example_large.txt',
+        'label': 'Disc. Classes (e=0.35)',
+        'description': 'e = 0.35',
         'threshold': 1.0,
     },
     'misclass_large': {
-        'file': 'discrete_classes_hr_example_large.txt',
-        'label': 'Disc. Classes (e=0.30)',
-        'description': 'e = 0.30',
+        'file': 'discrete_classes_hr_example_very_large.txt',
+        'label': 'Disc. Classes (e=0.40)',
+        'description': 'e = 0.40',
         'threshold': 1.0,
     },
     'large': {
@@ -745,9 +745,10 @@ patient and scores assignments using an explicit measurement-error model.
 
 ### Kaplan–Meier Curves (Qualitative)
 - **Fixed observable**: Yi, MC-SIMEX, and KoMbine produce identical curves because group membership is exact.
-- **Discrete classes (small e)**: Curves remain close to the fixed baseline. As e grows, Yi’s curves
-  drift toward each other while MC-SIMEX extrapolates the hard-label KM and KoMbine can maintain
-  separation using the most likely discrete assignment.
+- **Discrete classes**: At $e=0.28$ the KoMbine KM curves are still near the baseline, but the
+  profile HR interval already reaches the upper scan bound. At larger $e$, Yi’s curves drift
+  toward each other, MC-SIMEX extrapolates the hard-label KM, and KoMbine’s separate KM fits
+  can collapse because assignments are weakly identified.
 - **Poisson (large/moderate counts)**: Yi shrinks the group gap; MC-SIMEX is an extrapolated hard-label
   curve; KoMbine confidence bands widen as assignment uncertainty increases.
 - **Poisson (small counts)**: Differences can become qualitative (including apparent reversals in the
@@ -756,8 +757,9 @@ patient and scores assignments using an explicit measurement-error model.
 ### P-Values and Hazard Ratios
 - Yi’s p-values generally increase as uncertainty grows; its best-fit HR drifts toward 1.
 - MC-SIMEX p-values and HRs are those of an extrapolated hard-label statistic; the Wald HR interval stays finite.
-- KoMbine’s p-values are more stable; its best-fit HR stays near the baseline, but the
-  **confidence interval widens** as uncertainty grows.
+- KoMbine’s p-values need not increase with $e$: the point HR can stay near the baseline
+  while the profile interval widens, and at still larger $e$ the most likely assignment
+  can increase apparent separation.
 - Large disagreements among the three indicate that inference is driven by how group-membership
   uncertainty is modeled, not just by sampling noise.
 
