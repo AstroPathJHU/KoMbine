@@ -1,11 +1,11 @@
 observable_type discrete_classes
 ------------
 # Example datacard for hazard ratio calculation
-# Binary misclassification matrix with moderate error (e=0.28)
+# Binary misclassification matrix with moderate error (e=0.20)
 # Class 0 has better survival than class 1
 # Probabilities are homogeneous across patients within each true group
 ------------
 survival_time	10	12	15	18	20	24	28	30	35	40	3	5	7	9	12	15	18	20	25	30
 censored	0	0	0	1	1	1	1	1	1	1	0	0	0	0	0	1	1	1	1	1
-prob0	0.72	0.72	0.72	0.72	0.72	0.72	0.72	0.72	0.72	0.72	0.28	0.28	0.28	0.28	0.28	0.28	0.28	0.28	0.28	0.28
-prob1	0.28	0.28	0.28	0.28	0.28	0.28	0.28	0.28	0.28	0.28	0.72	0.72	0.72	0.72	0.72	0.72	0.72	0.72	0.72	0.72
+prob0	0.80	0.80	0.80	0.80	0.80	0.80	0.80	0.80	0.80	0.80	0.20	0.20	0.20	0.20	0.20	0.20	0.20	0.20	0.20	0.20
+prob1	0.20	0.20	0.20	0.20	0.20	0.20	0.20	0.20	0.20	0.20	0.80	0.80	0.80	0.80	0.80	0.80	0.80	0.80	0.80	0.80

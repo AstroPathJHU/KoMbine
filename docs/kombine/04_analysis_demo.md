@@ -69,9 +69,9 @@ print(f"Censored: {sum(1 for p in datacard.patients if p.censored)}")
 
 ### KoMbine p-value calculation
 
-KoMbine provides a likelihood-based p-value that accounts for measurement uncertainty when comparing survival curves across a biomarker threshold. For context, we also compute the standard logrank p-value.
+KoMbine provides a permutation likelihood-ratio p-value that accounts for measurement uncertainty when comparing survival curves across a biomarker threshold. For context, we also compute the standard logrank p-value.
 
-For this dataset and threshold, the likelihood p-value is $2.67\times 10^{-2}$ and the logrank p-value is $1.61\times 10^{-2}$.
+For this dataset and threshold, the KoMbine permutation p-value is $6.00\times 10^{-2}$ and the logrank p-value is $1.61\times 10^{-2}$.
 
 ```python
 # Define biomarker threshold to split patients into two groups
@@ -83,7 +83,11 @@ km_p_value_minlp = datacard.km_p_value(
     parameter_min=-np.inf,
     parameter_max=np.inf,
 )
-kombine_p_value, _, _ = km_p_value_minlp.solve_and_pvalue(cox_only=False)
+kombine_p_value, _, _ = km_p_value_minlp.solve_and_pvalue(
+    cox_only=False,
+    n_permutations=49,
+    rng=0,
+)
 
 # Conventional logrank p-value
 logrank_p_value = km_p_value_minlp.survival_curves_pvalue_logrank()

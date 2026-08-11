@@ -92,8 +92,8 @@ $$
 where $e$ is the misclassification rate shared by all patients.
 
 We use three error levels large enough that KoMbine's discrete assignments can change:
-- Smaller error: $e = 0.28$
-- Medium error: $e = 0.35$
+- Smaller error: $e = 0.20$
+- Medium error: $e = 0.25$
 - Large error: $e = 0.40$
 
 Each patient keeps the same survival time and censoring as the fixed baseline.
@@ -127,14 +127,14 @@ scenarios = {
     },
     'misclass_small': {
         'file': 'discrete_classes_hr_example_moderate.txt',
-        'label': 'Disc. Classes (e=0.28)',
-        'description': 'e = 0.28',
+        'label': 'Disc. Classes (e=0.20)',
+        'description': 'e = 0.20',
         'threshold': 1.0,
     },
     'misclass_moderate': {
         'file': 'discrete_classes_hr_example_large.txt',
-        'label': 'Disc. Classes (e=0.35)',
-        'description': 'e = 0.35',
+        'label': 'Disc. Classes (e=0.25)',
+        'description': 'e = 0.25',
         'threshold': 1.0,
     },
     'misclass_large': {
@@ -458,13 +458,13 @@ We compare p-values from:
 
 - **Yi**: a *weighted* logrank-style calculation using per-patient probabilistic group membership (fractional membership).
 - **MC-SIMEX**: the usual logrank statistic on extra-flipped hard labels, averaged vs $\lambda$ and extrapolated to $\lambda=-1$, then converted to a $\chi^2_1$ p-value.
-- **KoMbine**: a *likelihood-based* p-value using the full model (**`cox_only=False`**), which allows discrete group assignments to change in the fit when measurements are uncertain.
+- **KoMbine**: a *permutation* LRT of HR $=1$ using the full model (**`cox_only=False`**). Assignments are profiled on the observed data and on each shuffle of `(time, censored)`, so the null has the same reassignment freedom as the alternative.
 
 **What to expect**
 
 - As measurement error grows, **Yi's p-values typically increase** because fractional membership blurs the difference between groups.
 - **MC-SIMEX p-values** are those of an extrapolated hard-label statistic; they need not match Yi even though both start from the same $e_i$.
-- **KoMbine's p-values need not increase**: because it enforces discrete membership, it can keep (or even increase) apparent separation by choosing the most likely global assignment consistent with the assumed measurement-error model.
+- **KoMbine's permutation p-values** do not get smaller just because assignments become cheaper: the null can re-label too.
 - Large disagreements among the three p-values indicate that inference is being driven by how group-membership uncertainty is modeled, not just by sampling noise.
 
 ```python
@@ -496,7 +496,11 @@ for scenario_key, scenario_info in scenarios.items():
         parameter_min=-np.inf,
         parameter_max=np.inf,
     )
-    pval_kombine, _, _ = kombine_calc.solve_and_pvalue(cox_only=False)
+    pval_kombine, _, _ = kombine_calc.solve_and_pvalue(
+        cox_only=False,
+        n_permutations=49,
+        rng=simex_rng,
+    )
     
     pvalue_results[scenario_key] = {
         'yi': yi_result['p_value'],
@@ -745,7 +749,7 @@ patient and scores assignments using an explicit measurement-error model.
 
 ### Kaplan–Meier Curves (Qualitative)
 - **Fixed observable**: Yi, MC-SIMEX, and KoMbine produce identical curves because group membership is exact.
-- **Discrete classes**: At $e=0.28$ the KoMbine KM curves are still near the baseline, but the
+- **Discrete classes**: At $e=0.20$ the KoMbine KM curves are still near the baseline, but the
   profile HR interval already reaches the upper scan bound. At larger $e$, Yi’s curves drift
   toward each other, MC-SIMEX extrapolates the hard-label KM, and KoMbine’s separate KM fits
   can collapse because assignments are weakly identified.
@@ -757,9 +761,9 @@ patient and scores assignments using an explicit measurement-error model.
 ### P-Values and Hazard Ratios
 - Yi’s p-values generally increase as uncertainty grows; its best-fit HR drifts toward 1.
 - MC-SIMEX p-values and HRs are those of an extrapolated hard-label statistic; the Wald HR interval stays finite.
-- KoMbine’s p-values need not increase with $e$: the point HR can stay near the baseline
+- KoMbine’s plotted $p$ is a permutation LRT. The point HR can stay near the baseline
   while the profile interval widens, and at still larger $e$ the most likely assignment
-  can increase apparent separation.
+  can increase apparent separation, but that search is also available under the null.
 - Large disagreements among the three indicate that inference is driven by how group-membership
   uncertainty is modeled, not just by sampling noise.
 
