@@ -152,27 +152,48 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     ))).T
 
   @functools.cached_property
+  def assignment_nlls(self) -> npt.NDArray[np.float64]:
+    """
+    Absolute min NLL for each patient on low, high, and neither.
+
+    Returns an n x 3 array. An infinite bound makes that tail empty
+    (min NLL +inf). When both bounds are infinite, column 2 is +inf
+    and every patient must be assigned to a group.
+    """
+    nlls = np.empty((self.n_patients, 3), dtype=float)
+    for i, patient in enumerate(self.all_patients):
+      nlls[i, 0] = patient.min_nll_on_interval(
+        self.parameter_min, self.parameter_threshold,
+      )
+      nlls[i, 1] = patient.min_nll_on_interval(
+        self.parameter_threshold, self.parameter_max,
+      )
+      nlls[i, 2] = min(
+        patient.min_nll_on_interval(-np.inf, self.parameter_min),
+        patient.min_nll_on_interval(self.parameter_max, np.inf),
+      )
+    return nlls
+
+  @functools.cached_property
   def nll_penalty_for_patient_in_range(self) -> npt.NDArray[np.float64]:
     """
-    NLL penalty for assigning each patient to the low and high ranges.
+    Relative NLL for assigning each patient to the low and high ranges.
 
-    Each column is min NLL on that range minus min NLL on its complement.
-    Returns an n x 2 array.
+    Each column is min NLL on that range minus the best of low, high,
+    and neither. Returns an n x 2 array of non-negative values.
     """
-    penalties = np.empty((self.n_patients, 2), dtype=float)
-    ranges = (
-      (self.parameter_min, self.parameter_threshold),
-      (self.parameter_threshold, self.parameter_max),
-    )
-    for i, patient in enumerate(self.all_patients):
-      for j, (range_min, range_max) in enumerate(ranges):
-        min_in = patient.min_nll_on_interval(range_min, range_max)
-        min_out = min(
-          patient.min_nll_on_interval(-np.inf, range_min),
-          patient.min_nll_on_interval(range_max, np.inf),
-        )
-        penalties[i, j] = min_in - min_out
-    return penalties
+    best = np.min(self.assignment_nlls, axis=1, keepdims=True)
+    return self.assignment_nlls[:, :2] - best
+
+  @functools.cached_property
+  def nll_penalty_for_unassigned(self) -> npt.NDArray[np.float64]:
+    """
+    Relative NLL for leaving each patient in neither group.
+
+    This is min NLL on the tails minus the best of low, high, and neither.
+    """
+    best = np.min(self.assignment_nlls, axis=1)
+    return self.assignment_nlls[:, 2] - best
 
   def add_counter_variables_and_constraints(
     self,
@@ -577,35 +598,42 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     a: gp.tupledict[tuple[int, ...], gp.Var],
   ):
     """
-    Add the patient-wise penalty to the model.
-    This penalty is based on the negative log-likelihood of the patient's observed parameter
-    being within the specified range.
+    Add the patient-wise measurement NLL to the model.
+
+    Each patient pays the relative min NLL of the chosen bin (low, high,
+    or neither). The best bin is 0. A group-to-group flip costs one
+    measurement NLL difference, not two. Exclusion uses the tail NLL,
+    not the cost of flipping into the other group.
     """
     patient_penalties = []
+    rel_range = self.nll_penalty_for_patient_in_range
+    rel_neither = self.nll_penalty_for_unassigned
     for i in range(self.n_patients):
       for j in range(2):
-        if np.isfinite(self.nll_penalty_for_patient_in_range[i, j]):
-          penalty = self.nll_penalty_for_patient_in_range[i, j] * a[i, j]
-          if self.nll_penalty_for_patient_in_range[i, j] < 0:
-            # If the penalty is negative, it means the patient is nominally in the range
-            # We want the penalty to be 0 when all patients are at their nominal values
-            penalty -= self.nll_penalty_for_patient_in_range[i, j]
-          patient_penalties.append(penalty)
-        elif np.isneginf(self.nll_penalty_for_patient_in_range[i, j]):
-          #the patient must be selected, so we add a constraint
-          model.addConstr(
-            a[i, j] == 1, name=f"patient_{i}_must_be_in_curve_{j}",
-          )
-        elif np.isposinf(self.nll_penalty_for_patient_in_range[i, j]):
-          # The patient must not be selected, so we add a constraint
+        penalty_ij = rel_range[i, j]
+        if np.isfinite(penalty_ij):
+          patient_penalties.append(penalty_ij * a[i, j])
+        elif np.isposinf(penalty_ij):
           model.addConstr(
             a[i, j] == 0, name=f"patient_{i}_must_not_be_in_curve_{j}",
           )
         else:
           raise ValueError(
             f"Invalid negative log-likelihood penalty value for patient {i}, curve {j}:"
-            f"{self.nll_penalty_for_patient_in_range[i, j]}"
+            f"{penalty_ij}"
           )
+      neither_i = rel_neither[i]
+      if np.isfinite(neither_i):
+        patient_penalties.append(neither_i * (1 - a[i, 0] - a[i, 1]))
+      elif np.isposinf(neither_i):
+        model.addConstr(
+          a[i, 0] + a[i, 1] == 1,
+          name=f"patient_{i}_must_be_assigned",
+        )
+      else:
+        raise ValueError(
+          f"Invalid unassigned NLL penalty for patient {i}: {neither_i}"
+        )
     patient_penalty = gp.quicksum(patient_penalties)
     return patient_penalty
 
@@ -683,13 +711,17 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
         float: The patient-wise penalty value (not multiplied by 2)
     """
     penalty = 0.0
+    rel_range = self.nll_penalty_for_patient_in_range
+    rel_neither = self.nll_penalty_for_unassigned
     for i in range(self.n_patients):
-      for j in range(2):
-        if np.isfinite(self.nll_penalty_for_patient_in_range[i, j]):
-          contribution = self.nll_penalty_for_patient_in_range[i, j] * (
-            a[i, j].X - (1 if self.nll_penalty_for_patient_in_range[i, j] < 0 else 0)
-          )
-          penalty += contribution
+      assigned_low = a[i, 0].X
+      assigned_high = a[i, 1].X
+      if np.isfinite(rel_range[i, 0]):
+        penalty += rel_range[i, 0] * assigned_low
+      if np.isfinite(rel_range[i, 1]):
+        penalty += rel_range[i, 1] * assigned_high
+      if np.isfinite(rel_neither[i]):
+        penalty += rel_neither[i] * (1.0 - assigned_low - assigned_high)
     return penalty
 
   def _compute_cox_penalty(self, model: gp.Model):

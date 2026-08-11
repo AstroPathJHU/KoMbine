@@ -10,6 +10,7 @@ import numpy as np
 
 import kombine.datacard
 from kombine.datacard import DiscreteClassObservable
+from kombine.kaplan_meier_p_value_MINLP import MINLPforKMPValue
 
 
 def test_discrete_class_probability_in_range():
@@ -89,10 +90,45 @@ def test_discrete_class_two_group_penalty_uses_class_bins():
     observed_high = patient.observed_parameter >= 1.0
     if observed_high:
       np.testing.assert_allclose(penalties[i, 0], flip_cost, rtol=1e-10)
-      np.testing.assert_allclose(penalties[i, 1], -flip_cost, rtol=1e-10)
+      np.testing.assert_allclose(penalties[i, 1], 0.0, atol=1e-12)
     else:
-      np.testing.assert_allclose(penalties[i, 0], -flip_cost, rtol=1e-10)
+      np.testing.assert_allclose(penalties[i, 0], 0.0, atol=1e-12)
       np.testing.assert_allclose(penalties[i, 1], flip_cost, rtol=1e-10)
+  assert np.all(np.isposinf(hr_calc.nll_penalty_for_unassigned))
+
+
+def test_two_group_neither_bin_uses_tail_nll():
+  """
+  Exclusion must cost the tail NLL, not a group-to-group flip.
+
+  With three classes and finite bounds, neither is class 2. That cost
+  equals m_neither - m_best, which need not be flip_cost or 2*flip_cost.
+  """
+  obs_low = DiscreteClassObservable(class_probs=[0.90, 0.05, 0.05])
+  patient = obs_low.patient_nll(time=1.0, censored=False, systematics=None)
+  calc = MINLPforKMPValue(
+    [patient],
+    parameter_min=0.0,
+    parameter_threshold=1.0,
+    parameter_max=2.0,
+  )
+  m_low, m_high, m_neither = calc.assignment_nlls[0]
+  np.testing.assert_allclose(m_low, -math.log(0.90), rtol=1e-10)
+  np.testing.assert_allclose(m_high, -math.log(0.05), rtol=1e-10)
+  np.testing.assert_allclose(m_neither, -math.log(0.05), rtol=1e-10)
+  np.testing.assert_allclose(calc.nll_penalty_for_patient_in_range[0, 0], 0.0, atol=1e-12)
+  np.testing.assert_allclose(
+    calc.nll_penalty_for_patient_in_range[0, 1],
+    m_high - m_low,
+    rtol=1e-10,
+  )
+  np.testing.assert_allclose(
+    calc.nll_penalty_for_unassigned[0],
+    m_neither - m_low,
+    rtol=1e-10,
+  )
+  flip_to_high = m_high - m_low
+  assert not np.isclose(calc.nll_penalty_for_unassigned[0], 2.0 * flip_to_high)
 
 
 def test_discrete_class_hazard_ratio_stays_near_hard_labels():
@@ -135,5 +171,6 @@ if __name__ == "__main__":
   test_discrete_class_patient_nll()
   test_discrete_class_datacard_parsing()
   test_discrete_class_two_group_penalty_uses_class_bins()
+  test_two_group_neither_bin_uses_tail_nll()
   test_discrete_class_hazard_ratio_stays_near_hard_labels()
   print("[SUCCESS] Discrete class observable tests passed")
