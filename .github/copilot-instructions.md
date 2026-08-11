@@ -41,7 +41,7 @@ This repository contains two distinct Python packages for biomedical analysis:
   - `discrete_optimization.py`, `utilities.py` - Optimization utilities (used by KM methods)
   - `datacard.py` - Main Datacard class (core data parsing)
   - `command_line_interface.py` - KM-specific CLI functions
-  - `yi_correction.py` - Yi correction method
+  - `comparisons/` - published alternatives (Yi weights, Küchenhoff MC-SIMEX)
 
 ### Test Structure
 - **`test/roc_picker/`**: ROC Picker tests, datacards, and reference data
@@ -61,15 +61,16 @@ This repository contains two distinct Python packages for biomedical analysis:
 - `03_kaplan_meier_example.md` - Jupyter notebook showing Python API usage examples
 - `04_analysis_demo.md` - Jupyter notebook with analysis demonstration
 - `05_compare_lifelines_greenwood.md` - Jupyter notebook comparing to `lifelines` and Greenwood method
-- `06_yi_method_comparison.md` - Jupyter notebook comparing Yi correction method
-- `07_command_line_interface.md` - **Pure Markdown** (no Python cells) documenting all CLI options for `kombine` and `kombine_twogroups` commands (synced with Jupytext)
+- `06_compare_thomas_grunkemeier.md` - Jupyter notebook comparing Thomas–Grunkemeier intervals
+- `07_previous_methods_comparison.md` - Jupyter notebook comparing Yi, MC-SIMEX, and KoMbine
+- `08_command_line_interface.md` - **Pure Markdown** (no Python cells) documenting all CLI options for `kombine` and `kombine_twogroups` commands (synced with Jupytext)
 
 **Documentation style guidelines**:
-- Files `03_*.md` through `06_*.md` are Jupytext notebooks with Python cells for interactive examples
-- Files `01_*.md` and `07_*.md` are pure Markdown with Jupytext headers but no Python cells
+- Files `03_*.md` through `07_*.md` are Jupytext notebooks with Python cells for interactive examples
+- Files `01_*.md` and `08_*.md` are pure Markdown with Jupytext headers but no Python cells
 - All documentation markdown files must have Jupytext headers to allow `jupytext --sync` to process them
-- All CLI options must be documented in `07_command_line_interface.md` and verified by `test/kombine/test_ci_and_documentation.py`
-- When adding new CLI arguments, update `07_command_line_interface.md` and run the documentation test
+- All CLI options must be documented in `08_command_line_interface.md` and verified by `test/kombine/test_ci_and_documentation.py`
+- When adding new CLI arguments, update `08_command_line_interface.md` and run the documentation test
 - The table of contents (`01_table_of_contents.md`) must list all numbered documentation files
 
 **Compiling KoMbine LaTeX documentation (`02_kombine.tex`)**:
@@ -214,6 +215,7 @@ python -m test.kombine.test_km_likelihood           # ~2 minutes, requires unres
 python -m test.kombine.test_hazard_ratio
 python -m test.kombine.test_km_plotting
 python -m test.kombine.test_yi_correction
+python -m test.kombine.test_mc_simex
 python -m test.kombine.test_discrete_class_observable
 python -m test.kombine.test_ci_and_documentation
 ```

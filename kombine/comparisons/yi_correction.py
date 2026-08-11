@@ -36,7 +36,7 @@ import scipy.optimize
 import scipy.stats
 
 if TYPE_CHECKING:
-  from .datacard import Patient
+  from ..datacard import Patient
 
 
 class YiCorrectionBase:  # pylint: disable=too-few-public-methods

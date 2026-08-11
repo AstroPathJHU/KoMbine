@@ -37,9 +37,9 @@ jupyter:
  - `06_compare_thomas_grunkemeier.html`
    - comparison of KoMbine binomial-only confidence intervals to
      Thomas and Grunkemeier as implemented in R package `km.ci`
- - `07_yi_method_comparison.html`
-   - comprehensive demonstration of Yi's misclassification correction
-     method applied to Kaplan-Meier curves, p-values, and hazard ratios
+ - `07_previous_methods_comparison.html`
+   - comparison of Yi's weights, Küchenhoff MC-SIMEX, and KoMbine
+     on Kaplan-Meier curves, p-values, and hazard ratios
  - `08_command_line_interface.html`
    - documentation for the command line interface (`kombine` and `kombine_twogroups` commands)
 

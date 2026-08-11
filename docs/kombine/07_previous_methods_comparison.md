@@ -17,28 +17,33 @@ jupyter:
 # pylint: disable=bad-indentation,line-too-long,missing-module-docstring,redefined-outer-name,trailing-whitespace,too-many-locals,wrong-import-order
 ```
 
-# Yi's Method vs KoMbine: Comprehensive Comparison
+# Previous Methods vs KoMbine: Yi, MC-SIMEX, and Profile Likelihood
 
-This notebook provides a comprehensive side-by-side comparison between Yi's method for Kaplan-Meier likelihood estimation and KoMbine's approach (MINLP) across multiple measurement scenarios:
+This notebook compares two published recipes for discrete covariate misclassification — Yi's probability weights and Küchenhoff MC-SIMEX — to KoMbine's profile likelihood over group assignments. The seven scenarios and the threshold `0.5001` are the same as before:
 - Fixed Hazard Ratio (deterministic, no measurement error)
 - Discrete classes with class probabilities (small/medium/large uncertainty)
 - Poisson density with large effect size (small relative error ~2-3%)
 - Poisson density with moderate effect size (larger relative error ~5-7%)
 - Poisson density with small counts (high relative error ~25-70%)
-- Discrete class probabilities (controllable uncertainty via class distributions)
 
-Each analysis directly compares both methods to understand how they handle measurement uncertainty differently.
+All three methods use the same measurement model (`observable.probability_in_range`). They differ in what they do with those probabilities.
 
 
 ## Method Overview and Comparison
 
-| Aspect | Yi's Method | KoMbine |
-|--------|---|---|
-| **Core idea** | Weighted KM/logrank using probabilistic group membership | Full likelihood with explicit group assignment variables |
-| **Optimization** | Direct probability calculation (no optimization) | Mixed Integer Nonlinear Programming (Gurobi) |
-| **Computational cost** | Low | Medium-high |
-| **Accuracy (within model)** | Approximate to the full likelihood | Exact maximizer within solver tolerance |
-| **Core assumptions** | Known measurement error distribution; independent errors; fractional group membership is an adequate proxy for uncertain assignment | Known measurement error distribution; independent errors; patients belong to one group; event times treated as observed and discrete; likelihood model is correctly specified |
+| Aspect | Yi's Method | MC-SIMEX | KoMbine |
+|--------|---|---|---|
+| **Core idea** | Weighted KM/logrank using probabilistic group membership | Extra flips of hard labels, then extrapolate the naive estimator to zero error | Full likelihood with explicit group assignment variables |
+| **Optimization** | Direct probability calculation (no optimization) | Monte Carlo average at each $\lambda$, quadratic fit | Mixed Integer Nonlinear Programming (Gurobi) |
+| **Computational cost** | Low | Low–medium | Medium-high |
+| **Accuracy (within model)** | Approximate to the full likelihood | Approximate (simulation + extrapolation) | Exact maximizer within solver tolerance |
+| **Uncertainty** | Sampling CI of a weighted functional (no KM bands here) | Sampling CI of the extrapolated number (Wald for HR) | Profile likelihood |
+| **Core assumptions** | Known measurement error distribution; independent errors; fractional group membership is an adequate proxy for uncertain assignment | Known measurement error distribution; independent errors; quadratic extrapolation of the naive hard-label estimator is adequate | Known measurement error distribution; independent errors; patients belong to one group; event times treated as observed and discrete; likelihood model is correctly specified |
+
+### How the three recipes use the same $e_i$
+- **Yi averages with weights.** Each patient contributes to both groups in proportion to $P(G\mid\text{data})$.
+- **MC-SIMEX extrapolates a naive hard-label estimator.** The observed label $G^*_i$ is flipped with Küchenhoff probability $\bigl(1-(1-2e_i)^{\lambda}\bigr)/2$, the usual KM/logrank/Cox estimator is averaged over simulations, and that curve is fit vs $\lambda$ and evaluated at $\lambda=-1$.
+- **KoMbine profiles assignments.** A binary assignment is chosen for each patient, scored by the measurement model, and confidence sets come from the profile likelihood.
 
 ### How Yi's Method Works (Intuition)
 - Convert each patient's observed biomarker value into a probability of being below or above the threshold using the measurement error model.
@@ -47,6 +52,13 @@ Each analysis directly compares both methods to understand how they handle measu
 - Every patient contributes to both groups, in proportion to their probability of belonging there.
 - This yields fast, smooth estimates that tend to shrink group differences as measurement uncertainty grows.
 - It is an approximation because it does not enforce a single, discrete group assignment for each patient.
+
+### How MC-SIMEX Works (Intuition)
+- Keep the same $e_i=1-P(G=G^*_i\mid\text{data})$ that Yi uses, but then discard the probabilities and work with hard labels only.
+- At $\lambda=0$ the estimator is the usual naive KM / logrank / Cox fit on $G^*$.
+- At $\lambda>0$ additional flips are simulated; averaging the naive estimator traces how it changes as misclassification grows.
+- A quadratic in $\lambda$ is extrapolated to $\lambda=-1$ (no misclassification).
+- The HR interval is a Wald interval of that extrapolated $\log H$, not a likelihood-ratio interval. The $\Delta$2NLL curve plotted below is the Wald quadratic $(\log H-\widehat{\log H})^2/\hat\sigma^2$.
 
 ### How KoMbine Works (Intuition)
 - Introduce a binary assignment variable for each patient (low vs high group).
@@ -59,6 +71,7 @@ Each analysis directly compares both methods to understand how they handle measu
 - **Known measurement error distribution**: You have a reasonable model for how observed biomarker values deviate from the true value (e.g., Poisson noise).
 - **Independent errors**: One patient's measurement error does not influence another patient's measurement error.
 - **Fractional membership (Yi)**: It is acceptable to treat a patient as partly in each group, rather than forcing a single group.
+- **Hard labels plus extrapolation (MC-SIMEX)**: It is acceptable to keep a single group per simulated data set and correct bias by extrapolating the naive estimator.
 - **Discrete membership (KoMbine)**: Each patient ultimately belongs to one group, but the model allows uncertainty in that assignment.
 - **Correct likelihood model**: The survival model used (KM/logrank or Cox) is an appropriate description of the data-generating process.
 
@@ -86,6 +99,8 @@ To match the binary examples and exercises, we use three error levels:
 Each patient keeps the same survival time and censoring as the fixed baseline.
 Only the class probabilities change: patients in the low group get probabilities
 $(1-e, e)$, and patients in the high group get $(e, 1-e)$.
+
+MC-SIMEX uses the same $e$ as the per-patient flip rate.
 
 ```python
 import numpy as np
@@ -150,16 +165,17 @@ for key, info in scenarios.items():
     print(f"{info['label']}: {n_patients} patients, {n_deaths} deaths")
 
 threshold = 0.5001
+simex_rng = 0
 ```
 
 ## Analysis 1: Kaplan-Meier Curves
 
-Compare the Kaplan-Meier survival curves between Yi's method (dashed lines) and KoMbine's approach (solid lines with shaded 95% confidence intervals) across all scenarios. This visualization directly shows how measurement error affects the survival curve estimates and their uncertainties.
+Compare the Kaplan-Meier survival curves between Yi's method (dashed), MC-SIMEX (dotted), and KoMbine (solid lines with shaded 95% confidence intervals) across all scenarios. Yi and MC-SIMEX are point estimates only; they have no fill bands.
 
 ```python
-# Calculate both Yi's weighted KM and KoMbine KM for each scenario
+# Calculate Yi, MC-SIMEX, and KoMbine KM for each scenario
 km_results = {}
-label_width = 7
+label_width = 9
 
 for scenario_key, scenario_info in scenarios.items():
     dc = datacards[scenario_key]
@@ -175,13 +191,12 @@ for scenario_key, scenario_info in scenarios.items():
         parameter_max=np.inf,
     )
     
-    # Use the same time grids for Yi and KoMbine so curves align
+    # Use the same time grids for Yi, SIMEX, and KoMbine so curves align
     times_low = sorted(km_low.patient_death_times)
     times_high = sorted(km_high.patient_death_times)
     times_low_plot = [0.0] + times_low
     times_high_plot = [0.0] + times_high
 
-    # Yi's method (each curve is a parameter range, weighted by membership probability)
     result_low_yi = dc.km_survival_yi(
         parameter_min=-np.inf,
         parameter_max=threshold,
@@ -192,6 +207,19 @@ for scenario_key, scenario_info in scenarios.items():
         parameter_min=threshold,
         parameter_max=np.inf,
         times_for_plot=times_high_plot,
+    )
+
+    result_low_simex = dc.km_survival_mc_simex(
+        parameter_min=-np.inf,
+        parameter_max=threshold,
+        times_for_plot=times_low_plot,
+        rng=simex_rng,
+    )
+    result_high_simex = dc.km_survival_mc_simex(
+        parameter_min=threshold,
+        parameter_max=np.inf,
+        times_for_plot=times_high_plot,
+        rng=simex_rng,
     )
     
     # Calculate best-fit and 95% CI for KoMbine
@@ -213,6 +241,10 @@ for scenario_key, scenario_info in scenarios.items():
             'low': result_low_yi,
             'high': result_high_yi,
         },
+        'simex': {
+            'low': result_low_simex,
+            'high': result_high_simex,
+        },
         'kombine': {
             'low': {
                 'times': times_low,
@@ -230,6 +262,8 @@ for scenario_key, scenario_info in scenarios.items():
     print(f"\n{scenario_info['label']}:")
     print(f"  {'Yi':<{label_width}} - Low group final survival:  {result_low_yi['survival_probabilities'][-1]:.4f}")
     print(f"  {'Yi':<{label_width}} - High group final survival: {result_high_yi['survival_probabilities'][-1]:.4f}")
+    print(f"  {'MC-SIMEX':<{label_width}} - Low group final survival:  {result_low_simex['survival_probabilities'][-1]:.4f}")
+    print(f"  {'MC-SIMEX':<{label_width}} - High group final survival: {result_high_simex['survival_probabilities'][-1]:.4f}")
     
     if len(ci_low) > 0:
         ci_low_lower = ci_low[-1, 0, 0]
@@ -268,7 +302,7 @@ colors_palette = {
 
 
 def _plot_km_in_ax(ax, scenario_key, scenario_info, result):
-    """Plot KM curves (Yi dashed, KoMbine solid + CI shading) in a single axes."""
+    """Plot KM curves (Yi dashed, SIMEX dotted, KoMbine solid + CI shading)."""
     color_low = colors_palette[(scenario_key, 'low')]
     color_high = colors_palette[(scenario_key, 'high')]
 
@@ -281,6 +315,16 @@ def _plot_km_in_ax(ax, scenario_key, scenario_info, result):
     surv_high_yi = result['yi']['high']['survival_probabilities']
     ax.step(times_high_yi, surv_high_yi, where='post', linewidth=2.5,
             color=color_high, alpha=0.7, linestyle='--', label='Yi: High group')
+
+    times_low_simex = result['simex']['low']['times_for_plot']
+    surv_low_simex = result['simex']['low']['survival_probabilities']
+    ax.step(times_low_simex, surv_low_simex, where='post', linewidth=2.0,
+            color=color_low, alpha=0.85, linestyle=':', label='MC-SIMEX: Low group')
+
+    times_high_simex = result['simex']['high']['times_for_plot']
+    surv_high_simex = result['simex']['high']['survival_probabilities']
+    ax.step(times_high_simex, surv_high_simex, where='post', linewidth=2.0,
+            color=color_high, alpha=0.85, linestyle=':', label='MC-SIMEX: High group')
 
     times_low_kombine = result['kombine']['low']['times']
     best_low_kombine = result['kombine']['low']['best']
@@ -319,7 +363,7 @@ def _plot_km_in_ax(ax, scenario_key, scenario_info, result):
     ax.set_xlabel('Time', fontsize=10)
     ax.set_ylabel('Survival Probability', fontsize=10)
     ax.set_title(scenario_info['label'], fontsize=11, fontweight='bold')
-    ax.legend(fontsize=9, loc='lower left')
+    ax.legend(fontsize=8, loc='lower left')
     ax.grid(True, alpha=0.3)
     ax.set_ylim([0, 1.05])
 
@@ -371,7 +415,7 @@ for panel_key, row_label in zip(['dc_small', 'pois_large'],
         color='#333333', rotation=90, annotation_clip=False,
     )
 
-plt.suptitle('Kaplan-Meier Curves: Yi vs KoMbine Across Measurement Scenarios',
+plt.suptitle('Kaplan-Meier Curves: Yi, MC-SIMEX, and KoMbine',
              fontsize=14, fontweight='bold')
 plt.tight_layout()
 plt.show()
@@ -390,12 +434,13 @@ In the small-counts scenario, KoMbine’s best-fit *KM curves* can show the “h
 - In this notebook, the two KoMbine KM curves are fit **separately** (one KoMbine optimization for the low range and one for the high range). With large uncertainty, the best-fit assignments for those two separate optimizations need not form a perfectly complementary partition of patients.
 - The KoMbine **hazard ratio / p-value** calculations, in contrast, are *joint* two-group fits. Those joint fits are the self-consistent way to summarize “which group is worse” under the KoMbine model.
 
-**Why Yi looks different**
-- Yi’s method does not pick a single group; it spreads each borderline patient across both groups using probabilistic weights.
-- That softens the group contrast and tends to avoid hard reversals; as uncertainty grows, Yi’s estimates drift toward each other.
+**Why Yi and MC-SIMEX look different**
+- Yi’s method does not pick a single group; it spreads each borderline patient across both groups using probabilistic weights, which tends to shrink the group contrast as $e_i$ grows.
+- MC-SIMEX keeps hard labels, adds extra flips, and extrapolates the naive curve; that can move the point estimate *away* from the naive (attenuated) curve rather than averaging the two groups.
+- Neither method is a profile over discrete assignments, so both can disagree with KoMbine when membership is weakly identified.
 
 **Takeaway**
-When measurement error is large, probabilistic assignment (Yi) and discrete assignment (KoMbine) can tell qualitatively different stories. The right question is not “which is correct?”, but “how sensitive are the conclusions to how uncertain group membership is modeled?”
+When measurement error is large, probabilistic weights (Yi), extrapolated hard-label estimators (MC-SIMEX), and discrete assignment (KoMbine) can tell qualitatively different stories. The right question is not “which is correct?”, but “how sensitive are the conclusions to how uncertain group membership is modeled?”
 
 
 ## Analysis 2: P-Values (Logrank / Likelihood-Ratio Test)
@@ -403,18 +448,20 @@ When measurement error is large, probabilistic assignment (Yi) and discrete assi
 We compare p-values from:
 
 - **Yi**: a *weighted* logrank-style calculation using per-patient probabilistic group membership (fractional membership).
+- **MC-SIMEX**: the usual logrank statistic on extra-flipped hard labels, averaged vs $\lambda$ and extrapolated to $\lambda=-1$, then converted to a $\chi^2_1$ p-value.
 - **KoMbine**: a *likelihood-based* p-value using the full model (**`cox_only=False`**), which allows discrete group assignments to change in the fit when measurements are uncertain.
 
 **What to expect**
 
 - As measurement error grows, **Yi's p-values typically increase** because fractional membership blurs the difference between groups.
+- **MC-SIMEX p-values** are those of an extrapolated hard-label statistic; they need not match Yi even though both start from the same $e_i$.
 - **KoMbine's p-values need not increase**: because it enforces discrete membership, it can keep (or even increase) apparent separation by choosing the most likely global assignment consistent with the assumed measurement-error model.
-- Large disagreements between the two p-values indicate that inference is being driven by how group-membership uncertainty is modeled, not just by sampling noise.
+- Large disagreements among the three p-values indicate that inference is being driven by how group-membership uncertainty is modeled, not just by sampling noise.
 
 ```python
-# Calculate p-values (Yi vs KoMbine) for all scenarios
+# Calculate p-values (Yi vs MC-SIMEX vs KoMbine) for all scenarios
 pvalue_results = {}
-label_width = 7
+label_width = 9
 
 for scenario_key, scenario_info in scenarios.items():
     dc = datacards[scenario_key]
@@ -424,6 +471,13 @@ for scenario_key, scenario_info in scenarios.items():
         parameter_threshold=threshold,
         parameter_min=-np.inf,
         parameter_max=np.inf,
+    )
+
+    simex_result = dc.km_p_value_logrank_mc_simex(
+        parameter_threshold=threshold,
+        parameter_min=-np.inf,
+        parameter_max=np.inf,
+        rng=simex_rng,
     )
     
     # KoMbine (full likelihood; includes patient-wise uncertainty)
@@ -436,32 +490,34 @@ for scenario_key, scenario_info in scenarios.items():
     
     pvalue_results[scenario_key] = {
         'yi': yi_result['p_value'],
+        'simex': simex_result['p_value'],
         'kombine': pval_kombine
     }
     
     print(f"\n{scenario_info['label']}:")
     print(f"  {'Yi':<{label_width}} p-value: {yi_result['p_value']:.4e}")
+    print(f"  {'MC-SIMEX':<{label_width}} p-value: {simex_result['p_value']:.4e}")
     print(f"  {'KoMbine':<{label_width}} p-value: {pval_kombine:.4e}")
-    rel_diff = abs(yi_result['p_value'] - pval_kombine) / min(yi_result['p_value'], pval_kombine) * 100
-    print(f"  Relative diff: {rel_diff:.1f}%")
 ```
 
 ```python
 # Plot p-value comparison
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+fig, ax1 = plt.subplots(figsize=(14, 5))
 
 # Prepare data
 scenario_keys = list(scenarios.keys())
 scenario_labels = [scenarios[k]['label'] for k in scenario_keys]
 yi_pvals = [pvalue_results[k]['yi'] for k in scenario_keys]
+simex_pvals = [pvalue_results[k]['simex'] for k in scenario_keys]
 kombine_pvals = [pvalue_results[k]['kombine'] for k in scenario_keys]
 
 # Bar plot
 x = np.arange(len(scenario_labels))
-width = 0.35
+width = 0.25
 
-bars1 = ax1.bar(x - width/2, yi_pvals, width, label="Yi's Method", color='steelblue')
-bars2 = ax1.bar(x + width/2, kombine_pvals, width, label='KoMbine', color='coral')
+bars1 = ax1.bar(x - width, yi_pvals, width, label="Yi's Method", color='steelblue')
+bars2 = ax1.bar(x, simex_pvals, width, label='MC-SIMEX', color='mediumpurple')
+bars3 = ax1.bar(x + width, kombine_pvals, width, label='KoMbine', color='coral')
 
 ax1.set_ylabel('P-value', fontsize=12)
 ax1.set_title('Logrank Test P-Values Comparison', fontsize=13, fontweight='bold')
@@ -471,25 +527,11 @@ ax1.legend(fontsize=11)
 ax1.grid(True, alpha=0.3, axis='y')
 
 # Add value labels on bars
-for bars in [bars1, bars2]:
+for bars in [bars1, bars2, bars3]:
     for bar in bars:
         height = bar.get_height()
         ax1.text(bar.get_x() + bar.get_width()/2., height,
-                f'{height:.3e}', ha='center', va='bottom', fontsize=9)
-
-# Relative difference plot
-differences = [abs(yi_pvals[i] - kombine_pvals[i]) for i in range(len(scenario_labels))]
-rel_diffs = [differences[i] / min(yi_pvals[i], kombine_pvals[i]) * 100 for i in range(len(scenario_labels))]
-
-ax2.bar(scenario_labels, rel_diffs, color='green', alpha=0.7)
-ax2.set_ylabel('Relative Difference (%)', fontsize=12)
-ax2.set_title('Relative Difference: |Yi - KoMbine| / min(Yi, KoMbine)', fontsize=13, fontweight='bold')
-ax2.set_xticklabels(scenario_labels, rotation=15, ha='right')
-ax2.grid(True, alpha=0.3, axis='y')
-
-# Add value labels
-for i, (label, val) in enumerate(zip(scenario_labels, rel_diffs)):
-    ax2.text(i, val, f'{val:.1f}%', ha='center', va='bottom', fontsize=10)
+                f'{height:.3e}', ha='center', va='bottom', fontsize=8)
 
 plt.tight_layout()
 plt.show()
@@ -500,18 +542,21 @@ plt.show()
 We compare hazard ratios estimated using:
 
 - **Yi**: a weighted likelihood / weighted logrank-style construction based on fractional group membership.
+- **MC-SIMEX**: extrapolated $\widehat{\log H}$ with a Wald CI. The curve below is the Wald quadratic, **not** a profile likelihood.
 - **KoMbine**: the full profile likelihood (**`cox_only=False`**), which jointly optimizes discrete assignments and survival parameters.
 
 ### Why the confidence intervals behave differently
 
 As noted in the paper text, Yi’s approach can reduce bias in the *point estimate* of the hazard ratio compared to ignoring measurement error, but the **confidence interval does not necessarily reflect loss of identifiability** when measurement error becomes very large. In the extreme-uncertainty limit we would expect the data to place almost no constraint on the hazard ratio, but Yi-style weighting does not automatically produce that behavior.
 
+MC-SIMEX is in the same family: the Wald interval is the sampling interval of the extrapolated number. It stays finite even when labels are nearly uninformative.
+
 KoMbine’s likelihood framework, by contrast, can naturally widen the profile-likelihood confidence interval as patient-wise uncertainty increases, because the model explicitly accounts for the possibility that the discrete group assignment itself is uncertain.
 
 ```python
-# Calculate hazard ratios (Yi vs KoMbine) for all scenarios
+# Calculate hazard ratios (Yi vs MC-SIMEX vs KoMbine) for all scenarios
 hr_results = {}
-label_width = 7
+label_width = 9
 hazard_ratios_scan = np.logspace(-2, 2, 80)  # Match 04: 0.01 to 100 with 80 points
 chi2_95 = 3.84  # chi2.ppf(0.95, df=1) for a 95% two-sided CI
 
@@ -544,6 +589,18 @@ for scenario_key, scenario_info in scenarios.items():
         yi_upper_ci = hazard_ratios_scan[yi_ci_indices[-1]]
     else:
         yi_lower_ci = yi_upper_ci = np.nan
+
+    simex_calc = dc.km_hazard_ratio_mc_simex(
+        parameter_threshold=hr_threshold,
+        parameter_min=-np.inf,
+        parameter_max=np.inf,
+        rng=simex_rng,
+    )
+    simex_estimate = simex_calc.estimate_hazard_ratio()
+    simex_2nlls = [
+        simex_calc.compute_2nll_at_hazard_ratio(hr).x
+        for hr in hazard_ratios_scan
+    ]
     
     # KoMbine (full likelihood; allows assignments to change with HR)
     hr_calc = dc.km_hazard_ratio(
@@ -570,6 +627,10 @@ for scenario_key, scenario_info in scenarios.items():
         'yi_2nlls': yi_2nlls,
         'yi_lower': yi_lower_ci,
         'yi_upper': yi_upper_ci,
+        'simex_best': simex_estimate['hazard_ratio'],
+        'simex_2nlls': simex_2nlls,
+        'simex_lower': simex_estimate['ci_lower'],
+        'simex_upper': simex_estimate['ci_upper'],
         'kombine_best': best_hr_kombine,
         'kombine_2nlls': kombine_2nlls,
         'kombine_lower': lower_ci,
@@ -578,9 +639,8 @@ for scenario_key, scenario_info in scenarios.items():
     
     print(f"\n{scenario_info['label']}:")
     print(f"  {'Yi':<{label_width}} best-fit HR: {best_hr_yi:.3f} [{yi_lower_ci:.3f}, {yi_upper_ci:.3f}]")
+    print(f"  {'MC-SIMEX':<{label_width}} best-fit HR: {simex_estimate['hazard_ratio']:.3f} [{simex_estimate['ci_lower']:.3f}, {simex_estimate['ci_upper']:.3f}]")
     print(f"  {'KoMbine':<{label_width}} best-fit HR: {best_hr_kombine:.3f} [{lower_ci:.3f}, {upper_ci:.3f}]")
-    rel_hr_diff = abs(best_hr_yi - best_hr_kombine) / best_hr_kombine * 100
-    print(f"  Relative HR diff:     {rel_hr_diff:.1f}%")
 ```
 
 
@@ -613,14 +673,20 @@ for panel_key, scenario_key in mosaic_to_scenario.items():
     yi_2nlls = result['yi_2nlls']
     delta_yi = np.array(yi_2nlls) - min(yi_2nlls)
 
+    # Already a Wald quadratic (not a profile); do not subtract a scan minimum.
+    delta_simex = np.array(result['simex_2nlls'])
+
     kombine_2nlls = result['kombine_2nlls']
     delta_kombine = np.array(kombine_2nlls) - min(kombine_2nlls)
 
     ax.plot(hazard_ratios_scan, delta_yi, color='#1976d2', linewidth=2.5, marker='o', markersize=3,
             label="Yi's Method", zorder=3)
+    ax.plot(hazard_ratios_scan, delta_simex, color='#7b1fa2', linewidth=2.5, marker='^', markersize=3,
+            linestyle=':', label='MC-SIMEX (Wald)', zorder=3)
     ax.plot(hazard_ratios_scan, delta_kombine, color='#d32f2f', linewidth=2.5, marker='s', markersize=3,
             label='KoMbine', zorder=3)
     ax.axvline(result['yi_best'], color='#1976d2', linestyle='--', alpha=0.6, linewidth=1.5, zorder=2)
+    ax.axvline(result['simex_best'], color='#7b1fa2', linestyle=':', alpha=0.6, linewidth=1.5, zorder=2)
     ax.axvline(result['kombine_best'], color='#d32f2f', linestyle='--', alpha=0.6, linewidth=1.5, zorder=2)
     ax.axhline(3.84, color='gray', linestyle=':', alpha=0.6, linewidth=2.0,
                label='95% CL (χ²=3.84)', zorder=1)
@@ -628,7 +694,7 @@ for panel_key, scenario_key in mosaic_to_scenario.items():
     ax.set_xlabel('Hazard Ratio', fontsize=10)
     ax.set_ylabel(r'$-2 \Delta \ln L$', fontsize=10)
     ax.set_title(info['label'], fontsize=11, fontweight='bold')
-    ax.legend(fontsize=9, loc='upper left')
+    ax.legend(fontsize=8, loc='upper left')
     ax.grid(True, alpha=0.3, which='both')
     ax.set_xscale('log')
     ax.set_xlim([0.01, 100.0])
@@ -654,7 +720,7 @@ for panel_key, row_label in zip(['dc_small', 'pois_large'],
         color='#333333', rotation=90, annotation_clip=False,
     )
 
-plt.suptitle('Profile Likelihood for Hazard Ratio: Yi vs KoMbine',
+plt.suptitle('Hazard Ratio: Yi and KoMbine Profiles vs MC-SIMEX Wald',
              fontsize=14, fontweight='bold')
 plt.tight_layout()
 plt.show()
@@ -663,38 +729,41 @@ plt.show()
 
 ## Summary of Findings
 
-The key modeling difference is **fractional vs discrete assignment** under measurement uncertainty:
-Yi’s method assigns each patient to both groups with weights, while KoMbine enforces one group per
+The key modeling difference is **fractional weights vs extrapolated hard labels vs discrete assignment** under measurement uncertainty:
+Yi’s method assigns each patient to both groups with weights, MC-SIMEX extrapolates a naive hard-label estimator, and KoMbine enforces one group per
 patient and scores assignments using an explicit measurement-error model.
 
 ### Kaplan–Meier Curves (Qualitative)
-- **Fixed observable**: Yi and KoMbine produce identical curves because group membership is exact.
+- **Fixed observable**: Yi, MC-SIMEX, and KoMbine produce identical curves because group membership is exact.
 - **Discrete classes (small e)**: Curves remain close to the fixed baseline. As e grows, Yi’s curves
-  drift toward each other while KoMbine can maintain separation using the most likely discrete assignment.
-- **Poisson (large/moderate counts)**: Similar behavior — Yi shrinks the group gap; KoMbine confidence
-  bands widen as assignment uncertainty increases.
+  drift toward each other while MC-SIMEX extrapolates the hard-label KM and KoMbine can maintain
+  separation using the most likely discrete assignment.
+- **Poisson (large/moderate counts)**: Yi shrinks the group gap; MC-SIMEX is an extrapolated hard-label
+  curve; KoMbine confidence bands widen as assignment uncertainty increases.
 - **Poisson (small counts)**: Differences can become qualitative (including apparent reversals in the
   individual KM curve fits) because group membership is weakly identified under the error model.
 
 ### P-Values and Hazard Ratios
 - Yi’s p-values generally increase as uncertainty grows; its best-fit HR drifts toward 1.
+- MC-SIMEX p-values and HRs are those of an extrapolated hard-label statistic; the Wald HR interval stays finite.
 - KoMbine’s p-values are more stable; its best-fit HR stays near the baseline, but the
   **confidence interval widens** as uncertainty grows.
-- Large disagreements between the two indicate that inference is driven by how group-membership
+- Large disagreements among the three indicate that inference is driven by how group-membership
   uncertainty is modeled, not just by sampling noise.
 
 ### Practical Takeaways
-1. When measurement error is tiny, both methods agree and the choice is less critical.
+1. When measurement error is tiny, all three methods agree and the choice is less critical.
 2. When measurement error is moderate/large, treat the conclusion as model-dependent and
    report sensitivity to the modeling choice.
 3. Yi’s method is fast and often conservative (it blurs separation as uncertainty grows).
-4. KoMbine is likelihood-principled for the specified error model and can reveal when
+4. MC-SIMEX is also fast; its Wald interval is a sampling interval of the extrapolated number.
+5. KoMbine is likelihood-principled for the specified error model and can reveal when
    parameters become weakly identified via widening profile-likelihood intervals.
 
 ```python
 # Summary tables — computed live from pvalue_results and hr_results
-header = (f"{'Scenario':<36} {'Yi p-val':>10} {'KoMbine p-val':>14}"
-          f"  {'Yi HR [95% CI]':>22}  {'KoMbine HR [95% CI]':>25}")
+header = (f"{'Scenario':<36} {'Yi p':>9} {'SIMEX p':>9} {'KoMbine p':>11}"
+          f"  {'Yi HR [95% CI]':>20}  {'SIMEX HR [Wald]':>20}  {'KoMbine HR [95% CI]':>22}")
 print(header)
 print('-' * len(header))
 for key, info in scenarios.items():
@@ -702,9 +771,11 @@ for key, info in scenarios.items():
     hr = hr_results[key]
     yi_ci = (f"[{hr['yi_lower']:.3f}, {hr['yi_upper']:.3f}]"
              if not np.isnan(hr['yi_lower']) else '[n/a]')
+    simex_ci = f"[{hr['simex_lower']:.3f}, {hr['simex_upper']:.3f}]"
     ko_ci = f"[{hr['kombine_lower']:.3f}, {hr['kombine_upper']:.3f}]"
     yi_hr_str = f"{hr['yi_best']:.3f} {yi_ci}"
+    simex_hr_str = f"{hr['simex_best']:.3f} {simex_ci}"
     ko_hr_str = f"{hr['kombine_best']:.3f} {ko_ci}"
-    print(f"{info['label']:<36} {pv['yi']:>10.3e} {pv['kombine']:>14.3e}"
-          f"  {yi_hr_str:>22}  {ko_hr_str:>25}")
+    print(f"{info['label']:<36} {pv['yi']:>9.2e} {pv['simex']:>9.2e} {pv['kombine']:>11.2e}"
+          f"  {yi_hr_str:>20}  {simex_hr_str:>20}  {ko_hr_str:>22}")
 ```

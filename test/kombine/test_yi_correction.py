@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 """
 Test Yi's misclassification correction methods.
 
@@ -19,7 +20,7 @@ from kombine.datacard import (
   PoissonRatioObservable,
   Patient,
 )
-from kombine.yi_correction import YiCorrectionBase
+from kombine.comparisons import YiCorrectionBase
 from kombine.utilities import prob_poisson_density_in_range
 from ..utility_testing_functions import generate_two_group_datacard_from_hr
 
