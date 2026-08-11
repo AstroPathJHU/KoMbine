@@ -154,50 +154,25 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
   @functools.cached_property
   def nll_penalty_for_patient_in_range(self) -> npt.NDArray[np.float64]:
     """
-    Calculate the negative log-likelihood penalty for each patient
-    if that patient is within the parameter range.
-    This is negative if the patient's observed parameter is within the range
-    and positive if it is outside the range.
-    Returns an n x 2 array: for each patient, the penalty to be included
-    in the low and high curves.
+    NLL penalty for assigning each patient to the low and high ranges.
+
+    Each column is min NLL on that range minus min NLL on its complement.
+    Returns an n x 2 array.
     """
-    sgn_nll_penalty_for_patient_in_range = 2 * self.parameter_in_range - 1
-    observed_nll = np.array([
-      p.parameter(p.observed_parameter)
-      for p in self.all_patients
-    ])
-    parameter_min_nll: npt.NDArray[np.float64] = np.array([
-      p.parameter(self.parameter_min) if np.isfinite(self.parameter_min) else np.inf
-      for p in self.all_patients
-    ])
-    parameter_threshold_nll: npt.NDArray[np.float64] = np.array([
-      p.parameter(self.parameter_threshold) #parameter threshold must be finite
-      for p in self.all_patients
-    ])
-    parameter_max_nll: npt.NDArray[np.float64] = np.array([
-      p.parameter(self.parameter_max) if np.isfinite(self.parameter_max) else np.inf
-      for p in self.all_patients
-    ])
-
-    range_boundary_nll_low = np.min(
-      np.array([parameter_min_nll, parameter_threshold_nll]),
-      axis=0
+    penalties = np.empty((self.n_patients, 2), dtype=float)
+    ranges = (
+      (self.parameter_min, self.parameter_threshold),
+      (self.parameter_threshold, self.parameter_max),
     )
-    range_boundary_nll_high = np.min(
-      np.array([parameter_threshold_nll, parameter_max_nll]),
-      axis=0
-    )
-
-    range_boundary_nll: npt.NDArray[np.float64] = \
-      np.array([range_boundary_nll_low, range_boundary_nll_high]).T
-    abs_nll_penalty_for_patient_in_range = observed_nll - range_boundary_nll.T
-
-    nll_penalty_for_patient_in_range = (
-      sgn_nll_penalty_for_patient_in_range
-      * abs_nll_penalty_for_patient_in_range.T
-    )
-
-    return nll_penalty_for_patient_in_range
+    for i, patient in enumerate(self.all_patients):
+      for j, (range_min, range_max) in enumerate(ranges):
+        min_in = patient.min_nll_on_interval(range_min, range_max)
+        min_out = min(
+          patient.min_nll_on_interval(-np.inf, range_min),
+          patient.min_nll_on_interval(range_max, np.inf),
+        )
+        penalties[i, j] = min_in - min_out
+    return penalties
 
   def add_counter_variables_and_constraints(
     self,

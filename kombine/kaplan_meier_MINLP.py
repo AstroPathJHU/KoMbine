@@ -71,6 +71,48 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     """
     return self.__observed_parameter
 
+  def min_nll_on_interval(
+    self,
+    range_min: float,
+    range_max: float,
+  ) -> float:
+    """
+    Minimum parameter NLL for a value in [range_min, range_max).
+
+    Endpoints alone are not enough when the NLL is piecewise-constant on
+    integer class bins [k, k+1): the class boundary is a jump, not a
+    continuous fence. Candidates are the observed value (if inside), the
+    inclusive left / exclusive right edges, and class-bin midpoints.
+    """
+    if not range_min < range_max:
+      return float('inf')
+    candidates: list[float] = []
+    observed = self.observed_parameter
+    if range_min <= observed < range_max:
+      candidates.append(float(observed))
+    if np.isfinite(range_min):
+      candidates.append(float(range_min))
+    if np.isfinite(range_max):
+      just_inside = float(range_max) - LOG_ZERO_EPSILON_DEFAULT
+      if range_min <= just_inside < range_max:
+        candidates.append(just_inside)
+    if np.isfinite(range_min):
+      k_start = max(0, int(math.floor(range_min)))
+    else:
+      k_start = 0
+    if np.isfinite(range_max):
+      k_stop = int(math.floor(range_max - 1e-15)) + 1
+    else:
+      k_stop = k_start + 64
+    k_stop = min(k_stop, k_start + 64)
+    for class_index in range(k_start, max(k_start, k_stop)):
+      midpoint = class_index + 0.5
+      if range_min <= midpoint < range_max:
+        candidates.append(midpoint)
+    if not candidates:
+      return float('inf')
+    return float(min(self.parameter(value) for value in candidates))
+
   @staticmethod
   def _solve_0d(
     full_nll: collections.abc.Callable[[float], float],
@@ -912,43 +954,21 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
   @functools.cached_property
   def nll_penalty_for_patient_in_range(self) -> npt.NDArray[np.float64]:
     """
-    Calculate the negative log-likelihood penalty for each patient
-    if that patient is within the parameter range.
-    This is negative if the patient's observed parameter is within the range
-    and positive if it is outside the range.
+    Calculate the NLL penalty for assigning each patient to this range.
+
+    The value is min NLL on [parameter_min, parameter_max) minus min NLL
+    on the complement. Negative means the range is the better assignment.
     """
-    sgn_nll_penalty_for_patient_in_range = 2 * self.parameter_in_range - 1
-    observed_nll = np.array([
-      p.parameter(p.observed_parameter)
-      for p in self.all_patients
-    ])
-    if np.isfinite(self.parameter_min):
-      parameter_min_nll = np.array([
-        p.parameter(self.parameter_min)
-        for p in self.all_patients
-      ])
-    else:
-      parameter_min_nll = np.full(self.n_patients, np.inf)
-    if np.isfinite(self.parameter_max):
-      parameter_max_nll = np.array([
-        p.parameter(self.parameter_max)
-        for p in self.all_patients
-      ])
-    else:
-      parameter_max_nll = np.full(self.n_patients, np.inf)
-
-    range_boundary_nll = np.min(
-      np.array([parameter_min_nll, parameter_max_nll]),
-      axis=0
-    )
-    abs_nll_penalty_for_patient_in_range = observed_nll - range_boundary_nll
-
-    nll_penalty_for_patient_in_range = (
-      sgn_nll_penalty_for_patient_in_range
-      * abs_nll_penalty_for_patient_in_range
-    )
-
-    return nll_penalty_for_patient_in_range
+    return np.array([
+      (
+        patient.min_nll_on_interval(self.parameter_min, self.parameter_max)
+        - min(
+          patient.min_nll_on_interval(-np.inf, self.parameter_min),
+          patient.min_nll_on_interval(self.parameter_max, np.inf),
+        )
+      )
+      for patient in self.all_patients
+    ], dtype=float)
 
   @functools.cached_property
   def n_choose_d_term_table(self) -> dict[tuple[int, int], float]:

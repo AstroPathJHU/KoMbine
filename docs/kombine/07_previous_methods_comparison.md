@@ -19,7 +19,7 @@ jupyter:
 
 # Previous Methods vs KoMbine: Yi, MC-SIMEX, and Profile Likelihood
 
-This notebook compares two published recipes for discrete covariate misclassification — Yi's probability weights and Küchenhoff MC-SIMEX — to KoMbine's profile likelihood over group assignments. The seven scenarios and the threshold `0.5001` are the same as before:
+This notebook compares two published recipes for discrete covariate misclassification — Yi's probability weights and Küchenhoff MC-SIMEX — to KoMbine's profile likelihood over group assignments. The seven scenarios are the same as before. Fixed and Poisson cards are split at `0.5001` (a density/value cut). Discrete-class cards are split at `1` (the boundary between class indices 0 and 1):
 - Fixed Hazard Ratio (deterministic, no measurement error)
 - Discrete classes with class probabilities (small/medium/large uncertainty)
 - Poisson density with large effect size (small relative error ~2-3%)
@@ -102,6 +102,8 @@ $(1-e, e)$, and patients in the high group get $(e, 1-e)$.
 
 MC-SIMEX uses the same $e$ as the per-patient flip rate.
 
+KoMbine stores class $k$ as a piecewise-constant NLL on $[k, k+1)$. The two-group cut must therefore be the integer class boundary $1$, not $0.5001$. That density-style cut would leave part of the class-0 bin in both groups, so KoMbine could reassign class-0 patients at no extra NLL. Yi and MC-SIMEX compare the integer class index to the cut, so $0.5001$ and $1$ are equivalent for them.
+
 ```python
 import numpy as np
 import matplotlib.pyplot as plt
@@ -121,36 +123,43 @@ scenarios = {
         'file': 'fixed_hr_example.txt',
         'label': 'Fixed Observable',
         'description': 'no measurement error',
+        'threshold': 0.5001,
     },
     'misclass_small': {
         'file': 'discrete_classes_hr_example_small.txt',
         'label': 'Disc. Classes (e=0.05)',
         'description': 'e = 0.05',
+        'threshold': 1.0,
     },
     'misclass_moderate': {
         'file': 'discrete_classes_hr_example_moderate.txt',
         'label': 'Disc. Classes (e=0.15)',
         'description': 'e = 0.15',
+        'threshold': 1.0,
     },
     'misclass_large': {
         'file': 'discrete_classes_hr_example_large.txt',
         'label': 'Disc. Classes (e=0.30)',
         'description': 'e = 0.30',
+        'threshold': 1.0,
     },
     'large': {
         'file': 'poisson_density_hr_example_large.txt',
         'label': 'Poisson (large counts)',
         'description': '~2-3% relative error',
+        'threshold': 0.5001,
     },
     'moderate': {
         'file': 'poisson_density_hr_example_moderate.txt',
         'label': 'Poisson (moderate counts)',
         'description': '~5-7% relative error',
+        'threshold': 0.5001,
     },
     'small': {
         'file': 'poisson_density_hr_example_small.txt',
         'label': 'Poisson (small counts)',
         'description': '~25-70% relative error',
+        'threshold': 0.5001,
     },
 }
 
@@ -164,7 +173,6 @@ for key, info in scenarios.items():
     n_deaths = sum(1 for p in datacard.patients if not p.censored)
     print(f"{info['label']}: {n_patients} patients, {n_deaths} deaths")
 
-threshold = 0.5001
 simex_rng = 0
 ```
 
@@ -179,6 +187,7 @@ label_width = 9
 
 for scenario_key, scenario_info in scenarios.items():
     dc = datacards[scenario_key]
+    threshold = scenario_info['threshold']
     
     # KoMbine method with confidence bands
     km_low = dc.km_likelihood(
@@ -465,6 +474,7 @@ label_width = 9
 
 for scenario_key, scenario_info in scenarios.items():
     dc = datacards[scenario_key]
+    threshold = scenario_info['threshold']
     
     # Yi's method
     yi_result = dc.km_p_value_logrank_yi(
@@ -562,7 +572,7 @@ chi2_95 = 3.84  # chi2.ppf(0.95, df=1) for a 95% two-sided CI
 
 for scenario_key, scenario_info in scenarios.items():
     dc = datacards[scenario_key]
-    hr_threshold = threshold
+    hr_threshold = scenario_info['threshold']
     
     # Yi's method - profile likelihood scan
     yi_2nlls = []
