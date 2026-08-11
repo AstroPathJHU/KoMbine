@@ -7,6 +7,7 @@ import pathlib
 import tempfile
 
 import numpy as np
+import scipy.stats
 
 import kombine.datacard
 from kombine.datacard import DiscreteClassObservable
@@ -165,6 +166,76 @@ def test_discrete_class_hazard_ratio_stays_near_hard_labels():
   assert lower < kombine_hr < upper
 
 
+def test_permutation_pvalue_agrees_with_chi2_at_small_e():
+  """
+  At e=0.05 assignments do not move, so permutation p stays large.
+  """
+  datacard = kombine.datacard.Datacard.parse_datacard(
+    pathlib.Path(__file__).parent / "datacards" / "simple_examples"
+    / "discrete_classes_hr_example_small.txt"
+  )
+  calc = datacard.km_p_value(
+    parameter_threshold=1.0,
+    parameter_min=-np.inf,
+    parameter_max=np.inf,
+  )
+  p_perm, result_null, result_alt = calc.solve_and_pvalue(
+    cox_only=False,
+    n_permutations=19,
+    rng=0,
+  )
+  chi2_p = scipy.stats.chi2.sf(result_null.x - result_alt.x, 1)
+  assert chi2_p > 0.1, f"Expected a large chi2 p at e=0.05, got {chi2_p}"
+  assert p_perm > 0.1, f"Expected a large permutation p at e=0.05, got {p_perm}"
+
+
+def test_permutation_pvalue_not_tiny_when_chi2_is():
+  """
+  At large e the profile LRT chi2 p-value is tiny, but the permutation
+  p-value must not treat reassignment search as extra evidence.
+  """
+  datacard = kombine.datacard.Datacard.parse_datacard(
+    pathlib.Path(__file__).parent / "datacards" / "simple_examples"
+    / "discrete_classes_hr_example_very_large.txt"
+  )
+  calc = datacard.km_p_value(
+    parameter_threshold=1.0,
+    parameter_min=-np.inf,
+    parameter_max=np.inf,
+  )
+  p_perm, result_null, result_alt = calc.solve_and_pvalue(
+    cox_only=False,
+    n_permutations=39,
+    rng=0,
+  )
+  chi2_p = scipy.stats.chi2.sf(result_null.x - result_alt.x, 1)
+  assert chi2_p < 0.01, f"Expected a tiny chi2 p at e=0.40, got {chi2_p}"
+  assert p_perm > 0.05, f"Permutation p should not be tiny, got {p_perm}"
+  p_cox, _, _ = calc.solve_and_pvalue(cox_only=True)
+  assert p_cox > 0.1, f"Cox-only chi2 p should stay near the hard-label LRT, got {p_cox}"
+
+
+def test_solve_and_pvalue_rejects_negative_permutations():
+  """
+  n_permutations must be non-negative.
+  """
+  datacard = kombine.datacard.Datacard.parse_datacard(
+    pathlib.Path(__file__).parent / "datacards" / "simple_examples"
+    / "discrete_classes_hr_example_small.txt"
+  )
+  calc = datacard.km_p_value(
+    parameter_threshold=1.0,
+    parameter_min=-np.inf,
+    parameter_max=np.inf,
+  )
+  try:
+    calc.solve_and_pvalue(n_permutations=-1)
+  except ValueError as exc:
+    assert "n_permutations" in str(exc)
+  else:
+    raise AssertionError("Expected ValueError for n_permutations=-1")
+
+
 if __name__ == "__main__":
   test_discrete_class_probability_in_range()
   test_discrete_class_observed_parameter_tie_break()
@@ -173,4 +244,7 @@ if __name__ == "__main__":
   test_discrete_class_two_group_penalty_uses_class_bins()
   test_two_group_neither_bin_uses_tail_nll()
   test_discrete_class_hazard_ratio_stays_near_hard_labels()
+  test_permutation_pvalue_agrees_with_chi2_at_small_e()
+  test_permutation_pvalue_not_tiny_when_chi2_is()
+  test_solve_and_pvalue_rejects_negative_permutations()
   print("[SUCCESS] Discrete class observable tests passed")

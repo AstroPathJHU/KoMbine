@@ -226,7 +226,10 @@ def runtest(
   )
 
   nominal_hazard_ratio_breslow = km_p_value_minlp_breslow.nominal_hazard_ratio
-  p_value_breslow, _, _ = km_p_value_minlp_breslow.solve_and_pvalue()
+  p_value_breslow, _, _ = km_p_value_minlp_breslow.solve_and_pvalue(
+    n_permutations=19,
+    rng=0,
+  )
   p_value_cox_breslow, _, _ = km_p_value_minlp_breslow.solve_and_pvalue(cox_only=True)
 
   try:

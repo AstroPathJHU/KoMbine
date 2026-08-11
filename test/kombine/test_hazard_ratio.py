@@ -277,7 +277,10 @@ def test_consistency_with_p_value():
   )
 
   # Compute p-value
-  p_value, _, result_alt = pval_calc.solve_and_pvalue(cox_only=False)
+  p_value, _, result_alt = pval_calc.solve_and_pvalue(
+    cox_only=False,
+    n_permutations=0,
+  )
 
   # The hazard ratio from p-value calculation should match
   # the hazard ratio we get from the hazard ratio calculator at the same point
@@ -326,7 +329,10 @@ def test_hazard_ratio_at_null():
   result_hr_null = hr_calc.compute_2nll_at_hazard_ratio(1.0, cox_only=False)
 
   # Get the null hypothesis result from p-value calculator
-  _, result_null, _ = pval_calc.solve_and_pvalue(cox_only=False)
+  _, result_null, _ = pval_calc.solve_and_pvalue(
+    cox_only=False,
+    n_permutations=0,
+  )
 
   # The 2NLL values should match
   assert abs(result_hr_null.x - result_null.x) < 1e-2, \

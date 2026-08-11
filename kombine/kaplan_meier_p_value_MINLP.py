@@ -91,6 +91,13 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     return self.__parameter_max
 
   @property
+  def log_zero_epsilon(self) -> float:
+    """
+    Small epsilon used to avoid log(0) in the Gurobi model.
+    """
+    return self.__log_zero_epsilon
+
+  @property
   def log_hazard_ratio_bounds(self) -> tuple[float, float]:
     """
     The bounds on log(hazard ratio) for the Gurobi model.
@@ -946,11 +953,157 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
 
     model.update()
 
+  def _with_permuted_outcomes(
+    self,
+    rng: np.random.Generator,
+  ) -> "MINLPforKMPValue":
+    """
+    Copy this calculator with (time, censored) shuffled across patients.
+    """
+    n_patients = self.n_patients
+    times = [patient.time for patient in self.all_patients]
+    censored = [patient.censored for patient in self.all_patients]
+    order = rng.permutation(n_patients)
+    shuffled = [
+      KaplanMeierPatientNLL(
+        time=times[order[i]],
+        censored=bool(censored[order[i]]),
+        parameter_nll=patient.parameter,
+        observed_parameter=patient.observed_parameter,
+      )
+      for i, patient in enumerate(self.all_patients)
+    ]
+    return type(self)(
+      shuffled,
+      parameter_min=self.parameter_min,
+      parameter_threshold=self.parameter_threshold,
+      parameter_max=self.parameter_max,
+      log_zero_epsilon=self.log_zero_epsilon,
+      tie_handling=self.tie_handling,
+      log_hazard_ratio_bounds=self.log_hazard_ratio_bounds,
+    )
+
+  def _extract_optimize_result(
+    self,
+    model: gp.Model,
+    a: gp.tupledict[tuple[int, ...], gp.Var],
+    km_probability_at_time_low,
+    km_probability_at_time_high,
+  ) -> scipy.optimize.OptimizeResult:
+    """
+    Pack the current Gurobi solution into an OptimizeResult.
+    """
+    patients_low, patients_high = self._extract_patients_per_curve(a)
+    (
+      n_total_low, n_alive_low, km_prob_low,
+      n_total_high, n_alive_high, km_prob_high,
+    ) = self._extract_curve_statistics(
+      model, km_probability_at_time_low, km_probability_at_time_high,
+    )
+    log_hazard_ratio_var = model.getVarByName("log_hazard_ratio")
+    assert log_hazard_ratio_var is not None
+    return scipy.optimize.OptimizeResult(
+      x=model.ObjVal,
+      success=model.status == GRB.OPTIMAL,
+      patients_low=patients_low,
+      patients_high=patients_high,
+      n_total_low=n_total_low,
+      n_alive_low=n_alive_low,
+      n_total_high=n_total_high,
+      n_alive_high=n_alive_high,
+      km_probability_low=km_prob_low,
+      km_probability_high=km_prob_high,
+      cox_2NLL=2 * self._compute_cox_penalty(model),
+      patient_2NLL=2 * self._compute_patient_wise_penalty_value(a),
+      patient_penalties=self.nll_penalty_for_patient_in_range,
+      hazard_ratio=np.exp(log_hazard_ratio_var.X),
+      model=model,
+    )
+
+  def _fit_null_and_alternative(  # pylint: disable=too-many-arguments, too-many-locals
+    self,
+    *,
+    cox_only: bool,
+    patient_wise_only: bool,
+    verbose: bool,
+    print_progress: bool,
+    solve_null: bool,
+    MIPGap: float,
+    MIPGapAbs: float,
+    TimeLimit: float | None,
+    Threads: int | None,
+    MIPFocus: int | None,
+    LogFile: os.PathLike | None,
+  ) -> tuple[
+    scipy.optimize.OptimizeResult | None,
+    scipy.optimize.OptimizeResult,
+  ]:
+    """
+    Fit H0 and/or H1 on this calculator's observed (or permuted) data.
+    """
+    (
+      model,
+      null_hypothesis_indicator,
+      a,
+      km_probability_at_time_low,
+      km_probability_at_time_high,
+      beta,
+      use_cox_penalty_indicator,
+    ) = self.gurobi_model
+
+    self.update_model_with_cox_only_constraints(model, a, cox_only)
+    self.update_model_with_patient_wise_only_constraint(
+      model,
+      beta=beta,
+      null_hypothesis_indicator=null_hypothesis_indicator,
+      patient_wise_only=patient_wise_only,
+      use_cox_penalty_indicator=use_cox_penalty_indicator,
+    )
+
+    solver_kwargs = {
+      "verbose": verbose,
+      "MIPGap": MIPGap,
+      "MIPGapAbs": MIPGapAbs,
+      "TimeLimit": TimeLimit,
+      "Threads": Threads,
+      "MIPFocus": MIPFocus,
+      "LogFile": LogFile,
+    }
+
+    result_null = None
+    if solve_null:
+      if print_progress or verbose:
+        print("Solving for null hypothesis...")
+      self.update_model_for_null_hypothesis_or_not(
+        model, null_hypothesis_indicator, True,
+      )
+      model = self._setup_and_optimize(model, **solver_kwargs)
+      if model.status != GRB.OPTIMAL:
+        raise ValueError(f"Null model failed with status {model.status}")
+      result_null = self._extract_optimize_result(
+        model, a, km_probability_at_time_low, km_probability_at_time_high,
+      )
+
+    if print_progress or verbose:
+      print("Solving for alternative hypothesis...")
+    self.update_model_for_null_hypothesis_or_not(
+      model, null_hypothesis_indicator, False,
+    )
+    model = self._setup_and_optimize(model, **solver_kwargs)
+    if model.status != GRB.OPTIMAL:
+      raise ValueError(f"Alternative model failed with status {model.status}")
+    result_alt = self._extract_optimize_result(
+      model, a, km_probability_at_time_low, km_probability_at_time_high,
+    )
+    return result_null, result_alt
+
   def solve_and_pvalue( # pylint: disable=too-many-locals, too-many-arguments
     self,
     *,
     cox_only: bool = False,
     patient_wise_only: bool = False,
+    n_permutations: int = 199,
+    rng: int | np.random.Generator | None = None,
     verbose: bool = False,
     print_progress: bool = False,
     MIPGap: float | None = None,
@@ -963,6 +1116,12 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     """
     Solve the MINLP and return the p value.
 
+    When cox_only is False, the p-value is a permutation LRT: (time,
+    censored) are shuffled across patients while measurements stay fixed,
+    so the null has the same assignment freedom as the alternative.
+    When cox_only is True, assignments are locked and the reference is
+    chi-squared with 1 degree of freedom.
+
     Parameters
     ----------
     cox_only : bool, optional
@@ -972,6 +1131,11 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
         If True, only consider patient-wise errors and constrain the curves
         to be flipped relative to nominal at each death time point under the null hypothesis.
         Default is False.
+    n_permutations : int, optional
+        Number of outcome permutations when cox_only is False. Ignored
+        when cox_only is True. Default is 199.
+    rng : int or numpy.random.Generator or None, optional
+        Seed or generator for the permutations. Default is None.
     verbose : bool, optional
         If True, enable verbose output from Gurobi solver. Default is False.
     """
@@ -979,6 +1143,10 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
       print(f"Running p-value MINLP at {datetime.datetime.now()}")
     if cox_only and patient_wise_only:
       raise ValueError("cox_only and patient_wise_only cannot both be True")
+    if n_permutations < 0:
+      raise ValueError(
+        f"n_permutations must be >= 0, got {n_permutations}"
+      )
 
     if patient_wise_only:
       #make sure the nominal hazard ratio is cached before doing anything with the Gurobi model
@@ -990,144 +1158,48 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     if MIPGapAbs is None:
       MIPGapAbs = self.__default_MIPGapAbs
 
-    (  # pylint: disable=duplicate-code
-      model,
-      null_hypothesis_indicator,
-      a,
-      km_probability_at_time_low,
-      km_probability_at_time_high,
-      beta,
-      use_cox_penalty_indicator,
-    ) = self.gurobi_model
-
-    # Apply cox_only constraints if specified
-    self.update_model_with_cox_only_constraints(model, a, cox_only)
-
-    # Apply patient_wise_only constraints if specified
-    self.update_model_with_patient_wise_only_constraint(
-      model,
-      beta=beta,
-      null_hypothesis_indicator=null_hypothesis_indicator,
-      patient_wise_only=patient_wise_only,
-      use_cox_penalty_indicator=use_cox_penalty_indicator,
+    fit_kwargs = {
+      "cox_only": cox_only,
+      "patient_wise_only": patient_wise_only,
+      "verbose": verbose,
+      "print_progress": print_progress,
+      "MIPGap": MIPGap,
+      "MIPGapAbs": MIPGapAbs,
+      "TimeLimit": TimeLimit,
+      "Threads": Threads,
+      "MIPFocus": MIPFocus,
+      "LogFile": LogFile,
+    }
+    result_null, result_alt = self._fit_null_and_alternative(
+      solve_null=True,
+      **fit_kwargs,
     )
+    assert result_null is not None
 
-    # Setup and optimize with standard parameters and fallback strategies
-    if print_progress or verbose:
-      print("Solving for null hypothesis...")
-    self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, True)
-    # pylint: disable=duplicate-code
-    model = self._setup_and_optimize(
-      model,
-      verbose=verbose,
-      MIPGap=MIPGap,
-      MIPGapAbs=MIPGapAbs,
-      TimeLimit=TimeLimit,
-      Threads=Threads,
-      MIPFocus=MIPFocus,
-      LogFile=LogFile,
-    )
-    if model.status != GRB.OPTIMAL:
-      raise ValueError(f"Null model failed with status {model.status}")
-    # pylint: enable=duplicate-code
-    twonll_null = model.ObjVal
+    if cox_only:
+      lr_stat = result_null.x - result_alt.x
+      p_value = scipy.stats.chi2.sf(lr_stat, 1)
+      result_alt.n_permutations = None
+      result_alt.n_extreme = None
+      return p_value, result_null, result_alt
 
-    # Extract detailed information for null hypothesis result
-    patients_low_null, patients_high_null = self._extract_patients_per_curve(a)
-    patient_penalty_null = self._compute_patient_wise_penalty_value(a)
-    cox_penalty_null = self._compute_cox_penalty(model)
-
-    # Extract curve statistics for null hypothesis
-    (n_total_low_null, n_alive_low_null, km_prob_low_null,
-     n_total_high_null, n_alive_high_null, km_prob_high_null) = (
-      self._extract_curve_statistics(
-        model, km_probability_at_time_low, km_probability_at_time_high
+    generator = np.random.default_rng(rng)
+    n_extreme = 0
+    for i_perm in range(n_permutations):
+      if print_progress or verbose:
+        print(f"Permutation {i_perm + 1}/{n_permutations}...")
+      perm_calc = self._with_permuted_outcomes(generator)
+      _, perm_alt = perm_calc._fit_null_and_alternative(  # pylint: disable=protected-access
+        solve_null=False,
+        **fit_kwargs,
       )
-    )
+      # 2NLL_0 is invariant to pairing, so T_perm >= T_obs iff alt is as good.
+      if perm_alt.x <= result_alt.x:
+        n_extreme += 1
 
-    # Extract hazard ratio for null hypothesis (should be 1.0)
-    log_hazard_ratio_var = model.getVarByName("log_hazard_ratio")
-    assert log_hazard_ratio_var is not None
-    hazard_ratio_null = np.exp(log_hazard_ratio_var.X)
-
-    result_null = scipy.optimize.OptimizeResult(
-      x=model.ObjVal,
-      success=model.status == GRB.OPTIMAL,
-      patients_low=patients_low_null,
-      patients_high=patients_high_null,
-      n_total_low=n_total_low_null,
-      n_alive_low=n_alive_low_null,
-      n_total_high=n_total_high_null,
-      n_alive_high=n_alive_high_null,
-      km_probability_low=km_prob_low_null,
-      km_probability_high=km_prob_high_null,
-      cox_2NLL=2*cox_penalty_null,
-      patient_2NLL=2*patient_penalty_null,
-      patient_penalties=self.nll_penalty_for_patient_in_range,
-      hazard_ratio=hazard_ratio_null,
-      model=model,
-    )
-
-    if print_progress or verbose:
-      print("Solving for alternative hypothesis...")
-    self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, False)
-    # pylint: disable=duplicate-code
-    model = self._setup_and_optimize(
-      model,
-      verbose=verbose,
-      MIPGap=MIPGap,
-      MIPGapAbs=MIPGapAbs,
-      TimeLimit=TimeLimit,
-      Threads=Threads,
-      MIPFocus=MIPFocus,
-      LogFile=LogFile,
-    )
-    if model.status != GRB.OPTIMAL:
-      raise ValueError(f"Alternative model failed with status {model.status}")
-    # pylint: enable=duplicate-code
-    twonll_alt = model.ObjVal
-
-    # Extract detailed information for alternative hypothesis result
-    patients_low_alt, patients_high_alt = self._extract_patients_per_curve(a)
-    patient_penalty_alt = self._compute_patient_wise_penalty_value(a)
-    cox_penalty_alt = self._compute_cox_penalty(model)
-
-    # Extract curve statistics for alternative hypothesis
-    (n_total_low_alt, n_alive_low_alt, km_prob_low_alt,
-     n_total_high_alt, n_alive_high_alt, km_prob_high_alt) = (
-      self._extract_curve_statistics(
-        model, km_probability_at_time_low, km_probability_at_time_high
-      )
-    )
-
-    # Extract hazard ratio for alternative hypothesis (can be any value)
-    hazard_ratio_alt = np.exp(log_hazard_ratio_var.X)
-
-    result_alt = scipy.optimize.OptimizeResult(
-      x=model.ObjVal,
-      success=model.status == GRB.OPTIMAL,
-      patients_low=patients_low_alt,
-      patients_high=patients_high_alt,
-      n_total_low=n_total_low_alt,
-      n_alive_low=n_alive_low_alt,
-      n_total_high=n_total_high_alt,
-      n_alive_high=n_alive_high_alt,
-      km_probability_low=km_prob_low_alt,
-      km_probability_high=km_prob_high_alt,
-      cox_2NLL=2*cox_penalty_alt,
-      patient_2NLL=2*patient_penalty_alt,
-      patient_penalties=self.nll_penalty_for_patient_in_range,
-      hazard_ratio=hazard_ratio_alt,
-      model=model,
-    )
-
-    lr_stat = twonll_null - twonll_alt
-
-    # The degrees of freedom is 1: the only difference between null and alternative
-    # is whether the log hazard ratio is constrained to 0 (null) or free to float (alternative)
-    df = 1
-
-    p_value = scipy.stats.chi2.sf(lr_stat, df)
+    p_value = (1.0 + n_extreme) / (1.0 + n_permutations)
+    result_alt.n_permutations = n_permutations
+    result_alt.n_extreme = n_extreme
     return p_value, result_null, result_alt
 
   def survival_curves_pvalue_logrank(  #pylint: disable=too-many-locals, too-many-branches
