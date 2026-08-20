@@ -6,7 +6,7 @@ jupyter:
       extension: .md
       format_name: markdown
       format_version: '1.3'
-      jupytext_version: 1.18.1
+      jupytext_version: 1.19.5
   kernelspec:
     display_name: rocpicker
     language: python
@@ -19,12 +19,12 @@ jupyter:
 
 # Previous Methods vs KoMbine: Yi, MC-SIMEX, and Profile Likelihood
 
-This notebook compares two published recipes for discrete covariate misclassification — Yi's probability weights and Küchenhoff MC-SIMEX — to KoMbine's profile likelihood over group assignments. The seven scenarios are the same as before. Fixed and Poisson cards are split at `0.5001` (a density/value cut). Discrete-class cards are split at `1` (the boundary between class indices 0 and 1):
+This notebook compares two published recipes for discrete covariate misclassification — Yi's probability weights and Küchenhoff MC-SIMEX — to KoMbine's profile likelihood over group assignments. The seven scenarios share one stronger synthetic survival baseline (`methods_comparison_*`; $n=50$, target HR $=6$). Fixed and Poisson cards are split at `0.5001` (a density/value cut). Discrete-class cards are split at `1` (the boundary between class indices 0 and 1):
 - Fixed Hazard Ratio (deterministic, no measurement error)
 - Discrete classes with class probabilities (small/medium/large uncertainty)
-- Poisson density with large effect size (small relative error ~2-3%)
-- Poisson density with moderate effect size (larger relative error ~5-7%)
-- Poisson density with small counts (high relative error ~25-70%)
+- Poisson density with large counts (small relative error)
+- Poisson density with moderate counts
+- Poisson density with small counts (high relative error)
 
 All three methods use the same measurement model (`observable.probability_in_range`). They differ in what they do with those probabilities.
 
@@ -91,10 +91,10 @@ $$
 $$
 where $e$ is the misclassification rate shared by all patients.
 
-We use three error levels large enough that KoMbine's discrete assignments can change:
-- Smaller error: $e = 0.20$
-- Medium error: $e = 0.25$
-- Large error: $e = 0.40$
+We use three error levels chosen so the mid panel keeps KoMbine near the observed-label HR while the large-$e$ panel shows assignment search:
+- Smaller error: $e = 0.05$
+- Medium error: $e = 0.10$
+- Large error: $e = 0.25$
 
 Each patient keeps the same survival time and censoring as the fixed baseline.
 Only the class probabilities change: patients in the low group get probabilities
@@ -110,6 +110,20 @@ import matplotlib.pyplot as plt
 import pathlib
 from kombine.datacard import Datacard
 from kombine.comparisons import YiCorrectionForCoxPH
+
+# Single notebook budget (CI-friendly). Edit these if you want denser scans.
+N_PERMUTATIONS = 19
+N_HR_SCAN = 25
+SIMEX_B = 20
+
+
+def format_pvalue(p: float) -> str:
+    """Ordinary decimals for p >= 1e-3; scientific notation below that."""
+    if not np.isfinite(p):
+        return str(p)
+    if p >= 1e-3:
+        return f'{p:.4g}'
+    return f'{p:.3e}'
 ```
 
 ```python
@@ -118,46 +132,46 @@ here = pathlib.Path(".").resolve()
 test_dir = here.parent.parent / "test" / "kombine"
 datacards_dir = test_dir / "datacards" / "simple_examples"
 
-# Define the scenarios
+# Define the scenarios (methods_comparison_* family; shared survival times)
 scenarios = {
     'fixed': {
-        'file': 'fixed_hr_example.txt',
+        'file': 'methods_comparison_fixed.txt',
         'label': 'Fixed Observable',
         'description': 'no measurement error',
         'threshold': 0.5001,
     },
     'misclass_small': {
-        'file': 'discrete_classes_hr_example_moderate.txt',
-        'label': 'Disc. Classes (e=0.20)',
-        'description': 'e = 0.20',
+        'file': 'methods_comparison_discrete_e05.txt',
+        'label': 'Disc. Classes (e=0.05)',
+        'description': 'e = 0.05',
         'threshold': 1.0,
     },
     'misclass_moderate': {
-        'file': 'discrete_classes_hr_example_large.txt',
+        'file': 'methods_comparison_discrete_e10.txt',
+        'label': 'Disc. Classes (e=0.10)',
+        'description': 'e = 0.10',
+        'threshold': 1.0,
+    },
+    'misclass_large': {
+        'file': 'methods_comparison_discrete_e25.txt',
         'label': 'Disc. Classes (e=0.25)',
         'description': 'e = 0.25',
         'threshold': 1.0,
     },
-    'misclass_large': {
-        'file': 'discrete_classes_hr_example_very_large.txt',
-        'label': 'Disc. Classes (e=0.40)',
-        'description': 'e = 0.40',
-        'threshold': 1.0,
-    },
     'large': {
-        'file': 'poisson_density_hr_example_large.txt',
+        'file': 'methods_comparison_poisson_large.txt',
         'label': 'Poisson (large counts)',
-        'description': '~2-3% relative error',
+        'description': '~2-5% relative error',
         'threshold': 0.5001,
     },
     'moderate': {
-        'file': 'poisson_density_hr_example_moderate.txt',
+        'file': 'methods_comparison_poisson_moderate.txt',
         'label': 'Poisson (moderate counts)',
-        'description': '~5-7% relative error',
+        'description': '~10-20% relative error',
         'threshold': 0.5001,
     },
     'small': {
-        'file': 'poisson_density_hr_example_small.txt',
+        'file': 'methods_comparison_poisson_small.txt',
         'label': 'Poisson (small counts)',
         'description': '~25-70% relative error',
         'threshold': 0.5001,
@@ -224,12 +238,14 @@ for scenario_key, scenario_info in scenarios.items():
         parameter_max=threshold,
         times_for_plot=times_low_plot,
         rng=simex_rng,
+        B=SIMEX_B,
     )
     result_high_simex = dc.km_survival_mc_simex(
         parameter_min=threshold,
         parameter_max=np.inf,
         times_for_plot=times_high_plot,
         rng=simex_rng,
+        B=SIMEX_B,
     )
     
     # Calculate best-fit and 95% CI for KoMbine
@@ -461,6 +477,8 @@ We compare p-values from:
 - **MC-SIMEX**: the usual logrank statistic on extra-flipped hard labels, averaged vs $\lambda$ and extrapolated to $\lambda=-1$, then converted to a $\chi^2_1$ p-value.
 - **KoMbine**: a *permutation* LRT of HR $=1$ using the full model (**`cox_only=False`**). Assignments are profiled on the observed data and on each shuffle of `(time, censored)`, so the null has the same reassignment freedom as the alternative.
 
+On the **fixed** card, Yi and MC-SIMEX therefore report the same hard-label logrank $\chi^2$ $p$, while KoMbine’s $p$ is a coarse permutation LRT (here $B=19$) of the Cox alternative — they need not match even with zero measurement error.
+
 **What to expect**
 
 - As measurement error grows, **Yi's p-values typically increase** because fractional membership blurs the difference between groups.
@@ -489,6 +507,7 @@ for scenario_key, scenario_info in scenarios.items():
         parameter_min=-np.inf,
         parameter_max=np.inf,
         rng=simex_rng,
+        B=SIMEX_B,
     )
     
     # KoMbine (full likelihood; includes patient-wise uncertainty)
@@ -499,7 +518,7 @@ for scenario_key, scenario_info in scenarios.items():
     )
     pval_kombine, _, _ = kombine_calc.solve_and_pvalue(
         cox_only=False,
-        n_permutations=49,
+        n_permutations=N_PERMUTATIONS,
         rng=simex_rng,
     )
     
@@ -510,9 +529,9 @@ for scenario_key, scenario_info in scenarios.items():
     }
     
     print(f"\n{scenario_info['label']}:")
-    print(f"  {'Yi':<{label_width}} p-value: {yi_result['p_value']:.4e}")
-    print(f"  {'MC-SIMEX':<{label_width}} p-value: {simex_result['p_value']:.4e}")
-    print(f"  {'KoMbine':<{label_width}} p-value: {pval_kombine:.4e}")
+    print(f"  {'Yi':<{label_width}} p-value: {format_pvalue(yi_result['p_value'])}")
+    print(f"  {'MC-SIMEX':<{label_width}} p-value: {format_pvalue(simex_result['p_value'])}")
+    print(f"  {'KoMbine':<{label_width}} p-value: {format_pvalue(pval_kombine)}")
 ```
 
 ```python
@@ -550,7 +569,7 @@ for bars in [bars1, bars2, bars3]:
     for bar in bars:
         height = bar.get_height()
         ax1.text(bar.get_x() + bar.get_width()/2., height,
-                f'{height:.3e}', ha='center', va='bottom', fontsize=8)
+                format_pvalue(height), ha='center', va='bottom', fontsize=8)
 
 plt.tight_layout()
 plt.show()
@@ -560,7 +579,7 @@ plt.show()
 
 We compare hazard ratios estimated using:
 
-- **Yi**: the weighted Breslow partial likelihood. The table reports a **continuous** MLE in $\log H$ and a likelihood-ratio interval (same `minimize_scalar` / `brentq` recipe as KoMbine). The curve is that 2NLL on an 80-point log grid, recentered at the continuous MLE.
+- **Yi**: the weighted Breslow partial likelihood. The table reports a **continuous** MLE in $\log H$ and a likelihood-ratio interval (same `minimize_scalar` / `brentq` recipe as KoMbine). The curve is that 2NLL on an `N_HR_SCAN`-point log grid, recentered at the continuous MLE.
 - **MC-SIMEX**: extrapolated $\widehat{\log H}$ with a Wald CI. The curve below is the Wald quadratic, **not** a profile likelihood. On the **fixed** panel membership is exact and the point HR matches Yi/KoMbine, but the purple scan is still Wald, so it will not overlay the Breslow profiles.
 - **KoMbine**: the full profile likelihood (**`cox_only=False`**), which jointly optimizes discrete assignments and survival parameters.
 
@@ -576,7 +595,7 @@ KoMbine’s likelihood framework, by contrast, can naturally widen the profile-l
 # Calculate hazard ratios (Yi vs MC-SIMEX vs KoMbine) for all scenarios
 hr_results = {}
 label_width = 9
-hazard_ratios_scan = np.logspace(-2, 2, 80)  # Match 04: 0.01 to 100 with 80 points
+hazard_ratios_scan = np.logspace(-2, 2, N_HR_SCAN)  # 0.01 to 100
 
 for scenario_key, scenario_info in scenarios.items():
     dc = datacards[scenario_key]
@@ -605,6 +624,7 @@ for scenario_key, scenario_info in scenarios.items():
         parameter_min=-np.inf,
         parameter_max=np.inf,
         rng=simex_rng,
+        B=SIMEX_B,
     )
     simex_estimate = simex_calc.estimate_hazard_ratio()
     simex_2nlls = [
@@ -746,10 +766,9 @@ patient and scores assignments using an explicit measurement-error model.
 
 ### Kaplan–Meier Curves (Qualitative)
 - **Fixed observable**: Yi, MC-SIMEX, and KoMbine produce identical curves because group membership is exact.
-- **Discrete classes**: At $e=0.20$ the KoMbine KM curves are still near the baseline, but the
-  profile HR interval already reaches the upper scan bound. At larger $e$, Yi’s curves drift
-  toward each other, MC-SIMEX extrapolates the hard-label KM, and KoMbine’s separate KM fits
-  can collapse because assignments are weakly identified.
+- **Discrete classes**: At $e=0.05$–$0.10$ the KoMbine KM curves stay near the baseline.
+  At $e=0.25$, Yi’s curves drift toward each other, MC-SIMEX extrapolates the hard-label KM,
+  and KoMbine’s separate KM fits can collapse because assignments are weakly identified.
 - **Poisson (large/moderate counts)**: Yi shrinks the group gap; MC-SIMEX is an extrapolated hard-label
   curve; KoMbine confidence bands widen as assignment uncertainty increases.
 - **Poisson (small counts)**: Differences can become qualitative (including apparent reversals in the
@@ -793,6 +812,6 @@ for key, info in scenarios.items():
     yi_hr_str = f"{hr['yi_best']:.3f} {yi_ci}"
     simex_hr_str = f"{hr['simex_best']:.3f} {simex_ci}"
     ko_hr_str = f"{hr['kombine_best']:.3f} {ko_ci}"
-    print(f"{info['label']:<36} {pv['yi']:>9.2e} {pv['simex']:>9.2e} {pv['kombine']:>11.2e}"
+    print(f"{info['label']:<36} {format_pvalue(pv['yi']):>9} {format_pvalue(pv['simex']):>9} {format_pvalue(pv['kombine']):>11}"
           f"  {yi_hr_str:>20}  {simex_hr_str:>20}  {ko_hr_str:>22}")
 ```

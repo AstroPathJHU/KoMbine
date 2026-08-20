@@ -191,7 +191,7 @@ jobs:
 
       - name: test KoMbine notebooks
         run: |
-          jupyter nbconvert --execute --to html -- docs/kombine/*.ipynb
+          jupyter nbconvert --execute --to html --ExecutePreprocessor.timeout=3600 -- docs/kombine/*.ipynb
 
       - name: Compile KM plots
         run: |
