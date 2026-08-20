@@ -57,6 +57,8 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     self.__patient_constraints_for_cox_only = None
     self.__patient_wise_only_constraint = None
     self.__cox_penalty_constraint = None
+    self.__risk_set_r_vars = None
+    self.__risk_set_d_vars = None
 
   @property
   def all_patients(self) -> list[KaplanMeierPatientNLL]:
@@ -263,6 +265,43 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
         )
 
     return r, d, n_survived
+
+  def _refresh_death_incidence_constraints(
+    self,
+    model: gp.Model,
+    a: gp.tupledict[tuple[int, ...], gp.Var],
+    r: gp.tupledict[tuple[int, ...], gp.Var],
+    d: gp.tupledict[tuple[int, ...], gp.Var],
+  ) -> None:
+    """
+    Rebuild r/d incidence constraints after (time, censored) change.
+
+    Death-time grid size is invariant under outcome permutation; only which
+    patients contribute to each death/risk-set row changes.
+    """
+    death_times = self.all_death_times
+    for k, t in enumerate(death_times):
+      at_risk = self.patient_still_at_risk(t)
+      for j in range(2):
+        for name in (f"r_{k}_{j}", f"d_{k}_{j}"):
+          constr = model.getConstrByName(name)
+          if constr is not None:
+            model.remove(constr)
+        model.addConstr(
+          r[k, j] == gp.quicksum(
+            a[i, j] for i in range(self.n_patients) if at_risk[i]
+          ),
+          name=f"r_{k}_{j}",
+        )
+        model.addConstr(
+          d[k, j] == gp.quicksum(
+            a[i, j] for i in range(self.n_patients)
+            if self.all_patients[i].time == t
+            and not self.all_patients[i].censored
+          ),
+          name=f"d_{k}_{j}",
+        )
+    model.update()
 
   def add_kaplan_meier_probability_variables_and_constraints( #pylint: disable=too-many-locals
     self,
@@ -782,6 +821,8 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
       GRB.MINIMIZE,
     )
     model.update()
+    self.__risk_set_r_vars = r
+    self.__risk_set_d_vars = d
 
     return (  # pylint: disable=duplicate-code
       model,
@@ -952,6 +993,78 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
       )
 
     model.update()
+
+  def _get_risk_set_vars(self):
+    """Return cached r/d tupledicts from the current Gurobi model, if any."""
+    return self.__risk_set_r_vars, self.__risk_set_d_vars
+
+  def _dispose_gurobi_model(self) -> None:
+    """Dispose a cached Gurobi model and drop outcome-tied constraint handles."""
+    cached = self.__dict__.get("gurobi_model")
+    if cached is not None:
+      try:
+        cached[0].dispose()
+      except gp.GurobiError:
+        pass
+      self.__dict__.pop("gurobi_model", None)
+    self.__null_hypothesis_constraint = None
+    self.__patient_constraints_for_cox_only = None
+    self.__patient_wise_only_constraint = None
+    self.__cox_penalty_constraint = None
+    self.__risk_set_r_vars = None
+    self.__risk_set_d_vars = None
+
+  def _invalidate_outcome_dependent_state(self, *, keep_model: bool = False) -> None:
+    """
+    Clear caches that depend on (time, censored).
+
+    Measurement / assignment-NLL caches are kept: permutations shuffle
+    outcomes only. When keep_model is True, the Gurobi model is retained so
+    death-incidence constraints can be refreshed in place.
+    """
+    if keep_model:
+      for name in (
+        "patient_times",
+        "all_death_times",
+        "patient_censored",
+        "nominal_hazard_ratio",
+      ):
+        self.__dict__.pop(name, None)
+      return
+    self._dispose_gurobi_model()
+    for name in (
+      "patient_times",
+      "all_death_times",
+      "patient_censored",
+      "nominal_hazard_ratio",
+    ):
+      self.__dict__.pop(name, None)
+
+  def _set_patient_outcomes(
+    self,
+    times: list[float],
+    censored: list[bool],
+    *,
+    keep_model: bool = False,
+  ) -> None:
+    """
+    Replace each patient's (time, censored), keeping measurement NLLs fixed.
+    """
+    if len(times) != self.n_patients or len(censored) != self.n_patients:
+      raise ValueError(
+        "times and censored must have length n_patients "
+        f"({self.n_patients}), got {len(times)} and {len(censored)}"
+      )
+    self.__all_patients = [
+      KaplanMeierPatientNLL(
+        time=float(times[i]),
+        censored=bool(censored[i]),
+        parameter_nll=patient.parameter,
+        observed_parameter=patient.observed_parameter,
+      )
+      for i, patient in enumerate(self.all_patients)
+    ]
+    self._invalidate_outcome_dependent_state(keep_model=keep_model)
 
   def _with_permuted_outcomes(
     self,
@@ -1183,19 +1296,67 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
       result_alt.n_extreme = None
       return p_value, result_null, result_alt
 
+    base_times = [patient.time for patient in self.all_patients]
+    base_censored = [patient.censored for patient in self.all_patients]
+    perm_calc = type(self)(
+      list(self.all_patients),
+      parameter_min=self.parameter_min,
+      parameter_threshold=self.parameter_threshold,
+      parameter_max=self.parameter_max,
+      log_zero_epsilon=self.log_zero_epsilon,
+      tie_handling=self.tie_handling,
+      log_hazard_ratio_bounds=self.log_hazard_ratio_bounds,
+    )
+
     generator = np.random.default_rng(rng)
     n_extreme = 0
-    for i_perm in range(n_permutations):
-      if print_progress or verbose:
-        print(f"Permutation {i_perm + 1}/{n_permutations}...")
-      perm_calc = self._with_permuted_outcomes(generator)
-      _, perm_alt = perm_calc._fit_null_and_alternative(  # pylint: disable=protected-access
-        solve_null=False,
-        **fit_kwargs,
-      )
-      # 2NLL_0 is invariant to pairing, so T_perm >= T_obs iff alt is as good.
-      if perm_alt.x <= result_alt.x:
-        n_extreme += 1
+    try:
+      for i_perm in range(n_permutations):
+        if print_progress or verbose:
+          print(f"Permutation {i_perm + 1}/{n_permutations}...")
+        order = generator.permutation(self.n_patients)
+        reshuffled_times = [base_times[order[i]] for i in range(self.n_patients)]
+        reshuffled_censored = [
+          bool(base_censored[order[i]]) for i in range(self.n_patients)
+        ]
+        if i_perm == 0:
+          perm_calc._set_patient_outcomes(  # pylint: disable=protected-access
+            reshuffled_times,
+            reshuffled_censored,
+            keep_model=False,
+          )
+        else:
+          perm_calc._set_patient_outcomes(  # pylint: disable=protected-access
+            reshuffled_times,
+            reshuffled_censored,
+            keep_model=True,
+          )
+          (
+            model,
+            _null_hypothesis_indicator,
+            a,
+            _km_probability_at_time_low,
+            _km_probability_at_time_high,
+            _beta,
+            _use_cox_penalty_indicator,
+          ) = perm_calc.gurobi_model
+          r_vars, d_vars = perm_calc._get_risk_set_vars()  # pylint: disable=protected-access
+          assert r_vars is not None and d_vars is not None
+          perm_calc._refresh_death_incidence_constraints(  # pylint: disable=protected-access
+            model,
+            a,
+            r_vars,
+            d_vars,
+          )
+        _, perm_alt = perm_calc._fit_null_and_alternative(  # pylint: disable=protected-access
+          solve_null=False,
+          **fit_kwargs,
+        )
+        # 2NLL_0 is invariant to pairing, so T_perm >= T_obs iff alt is as good.
+        if perm_alt.x <= result_alt.x:
+          n_extreme += 1
+    finally:
+      perm_calc._dispose_gurobi_model()  # pylint: disable=protected-access
 
     p_value = (1.0 + n_extreme) / (1.0 + n_permutations)
     result_alt.n_permutations = n_permutations
