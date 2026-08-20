@@ -11,6 +11,7 @@ import tempfile
 import warnings
 
 import numpy as np
+import scipy.stats
 
 import kombine.datacard
 from kombine.datacard import (
@@ -20,7 +21,7 @@ from kombine.datacard import (
   PoissonRatioObservable,
   Patient,
 )
-from kombine.comparisons import YiCorrectionBase
+from kombine.comparisons import YiCorrectionBase, YiCorrectionForCoxPH
 from kombine.utilities import prob_poisson_density_in_range
 from ..utility_testing_functions import generate_two_group_datacard_from_hr
 
@@ -480,6 +481,46 @@ def test_yi_kaplan_meier_survival():
   print(f"  Final survival (high): {result_yi_high['survival_probabilities'][-1]:.4f}")
 
 
+def test_yi_continuous_hr_matches_naive_breslow_fixed_card():
+  """
+  On a fixed observable, Yi's continuous Breslow MLE matches MC-SIMEX.
+  """
+  datacard = kombine.datacard.Datacard.parse_datacard(
+    datacards / "fixed_hr_example.txt"
+  )
+  threshold = 0.5001
+  yi_calc = YiCorrectionForCoxPH(
+    patients=datacard.patients,
+    parameter_min=-np.inf,
+    parameter_max=np.inf,
+    parameter_threshold=threshold,
+  )
+  best_hr_yi, lower_ci, upper_ci, best_fit = yi_calc.hazard_ratio_confidence_interval(
+    confidence_level=0.95,
+    hazard_ratio_min=0.01,
+    hazard_ratio_max=100.0,
+  )
+  simex = datacard.km_hazard_ratio_mc_simex(
+    parameter_threshold=threshold,
+    parameter_min=-np.inf,
+    parameter_max=np.inf,
+    B=1,
+    rng=0,
+  )
+  estimate = simex.estimate_hazard_ratio()
+  np.testing.assert_allclose(
+    best_hr_yi,
+    estimate['hazard_ratio'],
+    rtol=1e-4,
+    atol=0.0,
+  )
+  chi2_95 = float(scipy.stats.chi2.ppf(0.95, df=1))
+  delta_lower = yi_calc.compute_2nll_at_hazard_ratio(lower_ci).x - best_fit.x
+  delta_upper = yi_calc.compute_2nll_at_hazard_ratio(upper_ci).x - best_fit.x
+  np.testing.assert_allclose(delta_lower, chi2_95, rtol=1e-3, atol=1e-2)
+  np.testing.assert_allclose(delta_upper, chi2_95, rtol=1e-3, atol=1e-2)
+  assert lower_ci < best_hr_yi < upper_ci
+
 
 if __name__ == "__main__":
   # Run tests
@@ -512,5 +553,9 @@ if __name__ == "__main__":
   print("Test 7: Yi's Kaplan-Meier survival probabilities...")
   test_yi_kaplan_meier_survival()
   print("[PASS] Yi's Kaplan-Meier survival probabilities")
+
+  print("Test 8: Continuous Yi HR matches naive Breslow on a fixed card...")
+  test_yi_continuous_hr_matches_naive_breslow_fixed_card()
+  print("[PASS] Continuous Yi HR matches naive Breslow on a fixed card")
 
   print("\n[SUCCESS] All tests passed!")

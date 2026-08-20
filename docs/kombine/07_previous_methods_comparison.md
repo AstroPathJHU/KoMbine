@@ -34,10 +34,10 @@ All three methods use the same measurement model (`observable.probability_in_ran
 | Aspect | Yi's Method | MC-SIMEX | KoMbine |
 |--------|---|---|---|
 | **Core idea** | Weighted KM/logrank using probabilistic group membership | Extra flips of hard labels, then extrapolate the naive estimator to zero error | Full likelihood with explicit group assignment variables |
-| **Optimization** | Direct probability calculation (no optimization) | Monte Carlo average at each $\lambda$, quadratic fit | Mixed Integer Nonlinear Programming (Gurobi) |
+| **Optimization** | 1-D scalar min of the weighted Breslow 2NLL | Monte Carlo average at each $\lambda$, quadratic fit | Mixed Integer Nonlinear Programming (Gurobi) |
 | **Computational cost** | Low | Low–medium | Medium-high |
 | **Accuracy (within model)** | Approximate to the full likelihood | Approximate (simulation + extrapolation) | Exact maximizer within solver tolerance |
-| **Uncertainty** | Sampling CI of a weighted functional (no KM bands here) | Sampling CI of the extrapolated number (Wald for HR) | Profile likelihood |
+| **Uncertainty** | Likelihood-ratio interval of the weighted Breslow 2NLL (no KM bands here) | Sampling CI of the extrapolated number (Wald for HR) | Profile likelihood |
 | **Core assumptions** | Known measurement error distribution; independent errors; fractional group membership is an adequate proxy for uncertain assignment | Known measurement error distribution; independent errors; quadratic extrapolation of the naive hard-label estimator is adequate | Known measurement error distribution; independent errors; patients belong to one group; event times treated as observed and discrete; likelihood model is correctly specified |
 
 ### How the three recipes use the same $e_i$
@@ -109,6 +109,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pathlib
 from kombine.datacard import Datacard
+from kombine.comparisons import YiCorrectionForCoxPH
 ```
 
 ```python
@@ -534,7 +535,11 @@ bars2 = ax1.bar(x, simex_pvals, width, label='MC-SIMEX', color='mediumpurple')
 bars3 = ax1.bar(x + width, kombine_pvals, width, label='KoMbine', color='coral')
 
 ax1.set_ylabel('P-value', fontsize=12)
-ax1.set_title('Logrank Test P-Values Comparison', fontsize=13, fontweight='bold')
+ax1.set_title(
+    'P-values: Yi / MC-SIMEX logrank χ² vs KoMbine permutation LRT',
+    fontsize=13,
+    fontweight='bold',
+)
 ax1.set_xticks(x)
 ax1.set_xticklabels(scenario_labels, rotation=15, ha='right')
 ax1.legend(fontsize=11)
@@ -555,8 +560,8 @@ plt.show()
 
 We compare hazard ratios estimated using:
 
-- **Yi**: a weighted likelihood / weighted logrank-style construction based on fractional group membership.
-- **MC-SIMEX**: extrapolated $\widehat{\log H}$ with a Wald CI. The curve below is the Wald quadratic, **not** a profile likelihood.
+- **Yi**: the weighted Breslow partial likelihood. The table reports a **continuous** MLE in $\log H$ and a likelihood-ratio interval (same `minimize_scalar` / `brentq` recipe as KoMbine). The curve is that 2NLL on an 80-point log grid, recentered at the continuous MLE.
+- **MC-SIMEX**: extrapolated $\widehat{\log H}$ with a Wald CI. The curve below is the Wald quadratic, **not** a profile likelihood. On the **fixed** panel membership is exact and the point HR matches Yi/KoMbine, but the purple scan is still Wald, so it will not overlay the Breslow profiles.
 - **KoMbine**: the full profile likelihood (**`cox_only=False`**), which jointly optimizes discrete assignments and survival parameters.
 
 ### Why the confidence intervals behave differently
@@ -572,37 +577,28 @@ KoMbine’s likelihood framework, by contrast, can naturally widen the profile-l
 hr_results = {}
 label_width = 9
 hazard_ratios_scan = np.logspace(-2, 2, 80)  # Match 04: 0.01 to 100 with 80 points
-chi2_95 = 3.84  # chi2.ppf(0.95, df=1) for a 95% two-sided CI
 
 for scenario_key, scenario_info in scenarios.items():
     dc = datacards[scenario_key]
     hr_threshold = scenario_info['threshold']
-    
-    # Yi's method - profile likelihood scan
-    yi_2nlls = []
-    for hr in hazard_ratios_scan:
-        result = dc.km_hazard_ratio_yi(
-            parameter_threshold=hr_threshold,
-            hazard_ratio=hr,
-            parameter_min=-np.inf,
-            parameter_max=np.inf,
+
+    yi_calc = YiCorrectionForCoxPH(
+        patients=dc.patients,
+        parameter_min=-np.inf,
+        parameter_max=np.inf,
+        parameter_threshold=hr_threshold,
+    )
+    best_hr_yi, yi_lower_ci, yi_upper_ci, yi_best_fit = (
+        yi_calc.hazard_ratio_confidence_interval(
+            confidence_level=0.95,
+            hazard_ratio_min=0.01,
+            hazard_ratio_max=100.0,
         )
-        yi_2nlls.append(result.x)
-    
-    best_idx_yi = np.argmin(yi_2nlls)
-    best_hr_yi = hazard_ratios_scan[best_idx_yi]
-    
-    # Calculate Yi's 95% CI from profile likelihood
-    min_yi_2nll = min(yi_2nlls)
-    delta_yi_2nll = np.array(yi_2nlls) - min_yi_2nll
-    # Find HR values where delta crosses the 95% threshold
-    below_threshold = delta_yi_2nll < chi2_95
-    if np.any(below_threshold):
-        yi_ci_indices = np.where(below_threshold)[0]
-        yi_lower_ci = hazard_ratios_scan[yi_ci_indices[0]]
-        yi_upper_ci = hazard_ratios_scan[yi_ci_indices[-1]]
-    else:
-        yi_lower_ci = yi_upper_ci = np.nan
+    )
+    yi_2nlls = [
+        yi_calc.compute_2nll_at_hazard_ratio(hr).x
+        for hr in hazard_ratios_scan
+    ]
 
     simex_calc = dc.km_hazard_ratio_mc_simex(
         parameter_threshold=hr_threshold,
@@ -639,6 +635,7 @@ for scenario_key, scenario_info in scenarios.items():
     hr_results[scenario_key] = {
         'yi_best': best_hr_yi,
         'yi_2nlls': yi_2nlls,
+        'yi_min_2nll': yi_best_fit.x,
         'yi_lower': yi_lower_ci,
         'yi_upper': yi_upper_ci,
         'simex_best': simex_estimate['hazard_ratio'],
@@ -685,7 +682,7 @@ for panel_key, scenario_key in mosaic_to_scenario.items():
     info = scenarios[scenario_key]
 
     yi_2nlls = result['yi_2nlls']
-    delta_yi = np.array(yi_2nlls) - min(yi_2nlls)
+    delta_yi = np.array(yi_2nlls) - result['yi_min_2nll']
 
     # Already a Wald quadratic (not a profile); do not subtract a scan minimum.
     delta_simex = np.array(result['simex_2nlls'])
@@ -760,7 +757,9 @@ patient and scores assignments using an explicit measurement-error model.
 
 ### P-Values and Hazard Ratios
 - Yi’s p-values generally increase as uncertainty grows; its best-fit HR drifts toward 1.
+  The printed Yi HR and CI are a continuous Breslow profile, not a grid argmin.
 - MC-SIMEX p-values and HRs are those of an extrapolated hard-label statistic; the Wald HR interval stays finite.
+  The plotted MC-SIMEX curve is that Wald quadratic even when $e_i=0$.
 - KoMbine’s plotted $p$ is a permutation LRT. The point HR can stay near the baseline
   while the profile interval widens, and at still larger $e$ the most likely assignment
   can increase apparent separation, but that search is also available under the null.
@@ -768,7 +767,9 @@ patient and scores assignments using an explicit measurement-error model.
   uncertainty is modeled, not just by sampling noise.
 
 ### Practical Takeaways
-1. When measurement error is tiny, all three methods agree and the choice is less critical.
+1. When measurement error is tiny, KM curves and the Cox **point** HR agree. The HR *scan*
+   is still Wald (MC-SIMEX) vs two Breslow profiles (Yi, KoMbine), and KoMbine’s $p$ is a
+   permutation LRT rather than logrank $\chi^2$.
 2. When measurement error is moderate/large, treat the conclusion as model-dependent and
    report sensitivity to the modeling choice.
 3. Yi’s method is fast and often conservative (it blurs separation as uncertainty grows).

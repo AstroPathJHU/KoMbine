@@ -469,6 +469,93 @@ class YiCorrectionForCoxPH(YiCorrectionWithThreshold):
 
     return result
 
+  def hazard_ratio_confidence_interval(  # pylint: disable=too-many-arguments,too-many-locals
+    self,
+    *,
+    confidence_level: float = 0.68,
+    hazard_ratio_min: float = 0.01,
+    hazard_ratio_max: float = 100.0,
+    tolerance: float = 1e-3,
+    prior_alpha: float = 0.5,
+    prior_beta: float = 0.0,
+  ) -> tuple[float, float, float, scipy.optimize.OptimizeResult]:
+    """
+    Continuous MLE and likelihood-ratio interval for the Yi-weighted Breslow Cox HR.
+
+    Minimizes 2NLL in log H, then finds where 2NLL crosses
+    min + chi2.ppf(confidence_level, 1).
+    """
+    if hazard_ratio_min <= 0.0 or hazard_ratio_max <= hazard_ratio_min:
+      raise ValueError(
+        "Need 0 < hazard_ratio_min < hazard_ratio_max, got "
+        f"{hazard_ratio_min}, {hazard_ratio_max}."
+      )
+    if not 0.0 < confidence_level < 1.0:
+      raise ValueError(
+        f"confidence_level must be in (0, 1), got {confidence_level}."
+      )
+
+    def objective(log_hr: float) -> float:
+      result = self.compute_2nll_at_hazard_ratio(
+        float(np.exp(log_hr)),
+        prior_alpha=prior_alpha,
+        prior_beta=prior_beta,
+      )
+      return float(result.x)
+
+    result_opt = scipy.optimize.minimize_scalar(
+      objective,
+      bounds=(np.log(hazard_ratio_min), np.log(hazard_ratio_max)),
+      method='bounded',
+      options={'xatol': tolerance * 0.1},
+    )
+    if not result_opt.success:
+      raise ValueError("Could not find best-fit hazard ratio")
+
+    best_fit_log_hr = float(result_opt.x)  # type: ignore[arg-type]
+    best_fit_hr = float(np.exp(best_fit_log_hr))
+    min_twonll = float(result_opt.fun)  # type: ignore[arg-type]
+    best_fit_result = self.compute_2nll_at_hazard_ratio(
+      best_fit_hr,
+      prior_alpha=prior_alpha,
+      prior_beta=prior_beta,
+    )
+    twonll_threshold = min_twonll + float(
+      scipy.stats.chi2.ppf(confidence_level, df=1)
+    )
+
+    def twonll_minus_threshold(log_hr: float) -> float:
+      result = self.compute_2nll_at_hazard_ratio(
+        float(np.exp(log_hr)),
+        prior_alpha=prior_alpha,
+        prior_beta=prior_beta,
+      )
+      return float(result.x) - twonll_threshold
+
+    try:
+      lower_log_hr = scipy.optimize.brentq(
+        twonll_minus_threshold,
+        np.log(hazard_ratio_min),
+        best_fit_log_hr,
+        xtol=tolerance,
+      )
+      lower_ci = float(np.exp(float(lower_log_hr)))  # type: ignore[arg-type]
+    except ValueError:
+      lower_ci = hazard_ratio_min
+
+    try:
+      upper_log_hr = scipy.optimize.brentq(
+        twonll_minus_threshold,
+        best_fit_log_hr,
+        np.log(hazard_ratio_max),
+        xtol=tolerance,
+      )
+      upper_ci = float(np.exp(float(upper_log_hr)))  # type: ignore[arg-type]
+    except ValueError:
+      upper_ci = hazard_ratio_max
+
+    return best_fit_hr, lower_ci, upper_ci, best_fit_result
+
 
 class YiCorrectionForKaplanMeier(YiCorrectionBase):
   """
