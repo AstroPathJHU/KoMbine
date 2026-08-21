@@ -17,7 +17,11 @@ import numpy.typing as npt
 import scipy.optimize
 import scipy.stats
 
-from .kaplan_meier_MINLP import KaplanMeierPatientNLL, n_choose_d_term_table, km_survival_from_risk_counts
+from .kaplan_meier_MINLP import (
+  KaplanMeierPatientNLL,
+  n_choose_d_term_table,
+  km_survival_from_risk_counts,
+)
 from .utilities import (
   LOG_ZERO_EPSILON_DEFAULT,
   GurobiOptimizerMixin,
@@ -54,7 +58,6 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     self.__tie_handling = tie_handling
     self.__log_hazard_ratio_bounds = log_hazard_ratio_bounds
     self.__null_hypothesis_constraint = None
-    self.__patient_constraints_for_cox_only = None
     self.__patient_wise_only_constraint = None
     self.__cox_penalty_constraint = None
 
@@ -659,7 +662,7 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
 
     return patients_low, patients_high
 
-  def _extract_curve_statistics(self, model: gp.Model):
+  def _extract_curve_statistics(self, model: gp.Model):  # pylint: disable=too-many-locals
     """
     Extract statistics for each curve from the optimized model.
 
@@ -752,7 +755,7 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     #Binary decision variables: a[j, k] = 1 if patient j is in curve k
     a = model.addVars(self.n_patients, 2, vtype=gp.GRB.BINARY, name="a")
 
-    r, d, n_survived = self.add_counter_variables_and_constraints(model, a)
+    r, d, _n_survived = self.add_counter_variables_and_constraints(model, a)
 
     (
       cox_penalty,
@@ -834,7 +837,6 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
           a[i, j].LB = 0.0
           a[i, j].UB = 1.0
 
-    self.__patient_constraints_for_cox_only = None
     model.update()
 
   @functools.cached_property
@@ -925,7 +927,7 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
 
     model.update()
 
-  def solve_and_pvalue( # pylint: disable=too-many-locals, too-many-arguments
+  def solve_and_pvalue( # pylint: disable=too-many-locals, too-many-arguments, too-many-branches, too-many-statements
     self,
     *,
     cox_only: bool = False,

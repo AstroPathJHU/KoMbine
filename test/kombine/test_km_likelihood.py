@@ -13,6 +13,7 @@ import numpy as np
 
 import kombine.datacard
 from kombine.kaplan_meier_MINLP import KaplanMeierPatientNLL, MINLPForKM
+from kombine.kaplan_meier_likelihood import KaplanMeierLikelihood
 from ..utility_testing_functions import format_value_for_json, Tolerance
 
 warnings.simplefilter("error")
@@ -545,7 +546,7 @@ def test_rd_pair_is_feasible_last_time_and_single_group():
     collapse=True,
   )
   assert collapsed.n_times_to_consider == 1
-  assert list(collapsed.n_censored_between_times_max) == []
+  assert collapsed.n_censored_between_times_max.size == 0
   # Would be flow-infeasible if a later empty risk set existed.
   assert _rd_feasible(collapsed, 0, 4, 0)
   assert _rd_feasible(collapsed, 0, 4, 4)
@@ -909,7 +910,6 @@ def main(args=None):
   args = p.parse_args(args)
 
   if args.print_progress or args.gurobi_verbose:
-    from kombine.kaplan_meier_likelihood import KaplanMeierLikelihood
     _orig = KaplanMeierLikelihood.survival_probabilities_likelihood
     def _wrapped(self, *a, **kw):
       if args.print_progress:
