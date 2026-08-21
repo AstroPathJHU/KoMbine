@@ -644,7 +644,8 @@ def test_collapse_equivalence_with_tied_death_and_censoring():
       ci_collapse[finite_ci],
       ci_no_collapse[finite_ci],
       rtol=0.0,
-      atol=3e-5,
+      # CI edges come from brentq over MINLP 2NLL; allow ~MIPGap (1e-4) noise.
+      atol=1e-4,
     )
 
 def test_collapse_equivalence_nonfixed_observable():
@@ -703,7 +704,8 @@ def test_collapse_equivalence_nonfixed_observable():
       ci_collapse[finite_ci],
       ci_no_collapse[finite_ci],
       rtol=0.0,
-      atol=3e-5,
+      # CI edges come from brentq over MINLP 2NLL; allow ~MIPGap (1e-4) noise.
+      atol=1e-4,
       err_msg=f"CI mismatch for mode {mode_kwargs}",
     )
 
@@ -730,9 +732,31 @@ def main(args=None):
   g.add_argument(
     "--collapse-logic-only",
     action="store_true",
-    help="Test only the collapse logic.",
+    help="Test only the collapse logic (short; ~2 min).",
+  )
+  p.add_argument(
+    "--print-progress",
+    action="store_true",
+    help="Print progress during MINLP / likelihood walks.",
+  )
+  p.add_argument(
+    "--gurobi-verbose",
+    action="store_true",
+    help="Enable Gurobi OutputFlag logging during solves.",
   )
   args = p.parse_args(args)
+
+  if args.print_progress or args.gurobi_verbose:
+    from kombine.kaplan_meier_likelihood import KaplanMeierLikelihood
+    _orig = KaplanMeierLikelihood.survival_probabilities_likelihood
+    def _wrapped(self, *a, **kw):
+      if args.print_progress:
+        kw["print_progress"] = True
+      if args.gurobi_verbose:
+        kw["gurobi_verbose"] = True
+        kw["optimize_verbose"] = True
+      return _orig(self, *a, **kw)
+    KaplanMeierLikelihood.survival_probabilities_likelihood = _wrapped
 
   if args.collapse_logic_only:
     test_times_to_consider_collapse_logic()

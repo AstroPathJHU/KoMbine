@@ -279,9 +279,12 @@ class KaplanMeierLikelihood(KaplanMeierBase):
   def minlp_for_km(
     self,
     time_point: float,
+    *,
+    binomial_only: bool = False,
+    patient_wise_only: bool = False,
   ):
     """
-    Get the MINLP for the given time point.
+    Get the MINLP for the given time point and likelihood mode.
     """
     return MINLPForKM(
       all_patients=self.all_patients,
@@ -291,6 +294,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       endpoint_epsilon=self.__endpoint_epsilon,
       log_zero_epsilon=self.__log_zero_epsilon,
       collapse_consecutive_deaths=self.__collapse_consecutive_deaths,
+      binomial_only=binomial_only,
+      patient_wise_only=patient_wise_only,
     )
 
   def get_twoNLL_function( # pylint: disable=too-many-arguments
@@ -321,7 +326,12 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     if MIPGapAbs is None:
       MIPGapAbs = self.__default_MIPGapAbs
 
-    minlp = self.minlp_for_km(time_point=time_point)
+    minlp = self.minlp_for_km(
+      time_point=time_point,
+      binomial_only=binomial_only,
+      patient_wise_only=patient_wise_only,
+    )
+
     @InspectableCache
     def run_MINLP(expected_probability: float | None) -> scipy.optimize.OptimizeResult:
       """

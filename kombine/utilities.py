@@ -295,7 +295,7 @@ class GurobiOptimizerMixin:  # pylint: disable=too-few-public-methods
   ):
     """
     Attempts to optimize the Gurobi model, applying fallback strategies
-    if the initial optimization is suboptimal.
+    if the initial optimization is suboptimal or hits the time limit.
 
     Args:
         model: The Gurobi model to optimize.
@@ -318,11 +318,14 @@ class GurobiOptimizerMixin:  # pylint: disable=too-few-public-methods
       print("Attempting initial optimization...")
     model.optimize()
 
-    # Check for suboptimal status and apply fallbacks
-    if model.status == GRB.SUBOPTIMAL:
+    needs_fallback = model.status in (GRB.SUBOPTIMAL, GRB.TIME_LIMIT)
+    if needs_fallback:
       for i, (fallback_params, description) in enumerate(fallback_strategies):
         if verbose:
-          print(f"Model returned suboptimal solution. Applying fallback {i+1}: {description}")
+          print(
+            f"Model returned status {model.status}. "
+            f"Applying fallback {i+1}: {description}"
+          )
           print(f"  New parameters: {fallback_params}")
         self._set_gurobi_params(model, fallback_params)
         model.optimize()

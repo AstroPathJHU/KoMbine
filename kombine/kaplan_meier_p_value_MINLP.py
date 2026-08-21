@@ -17,7 +17,7 @@ import numpy.typing as npt
 import scipy.optimize
 import scipy.stats
 
-from .kaplan_meier_MINLP import KaplanMeierPatientNLL, n_choose_d_term_table
+from .kaplan_meier_MINLP import KaplanMeierPatientNLL, n_choose_d_term_table, km_survival_from_risk_counts
 from .utilities import (
   LOG_ZERO_EPSILON_DEFAULT,
   GurobiOptimizerMixin,
@@ -89,6 +89,13 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     The maximum parameter value to be included in the "high" Kaplan-Meier curve.
     """
     return self.__parameter_max
+
+  @property
+  def log_zero_epsilon(self) -> float:
+    """
+    Small epsilon used to avoid log(0) in the Gurobi model.
+    """
+    return self.__log_zero_epsilon
 
   @property
   def log_hazard_ratio_bounds(self) -> tuple[float, float]:
@@ -652,9 +659,7 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
 
     return patients_low, patients_high
 
-  def _extract_curve_statistics( #pylint: disable=too-many-locals
-    self, model: gp.Model, km_probability_at_time_low, km_probability_at_time_high
-  ):
+  def _extract_curve_statistics(self, model: gp.Model):
     """
     Extract statistics for each curve from the optimized model.
 
@@ -662,39 +667,45 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
         tuple: (n_total_low, n_alive_low, km_prob_low,
                 n_total_high, n_alive_high, km_prob_high)
     """
-    # Extract KM probabilities for each curve
-    km_prob_low = [
-      km_prob.X for _, km_prob in km_probability_at_time_low.items()
-    ]
-    km_prob_high = [
-      km_prob.X for _, km_prob in km_probability_at_time_high.items()
-    ]
-
-    # For n_total and n_alive, we need to look at the r and d variables per curve
-    # These represent at-risk and died counts for each curve
+    n_times = len(self.all_death_times)
+    r_low = []
+    r_high = []
+    s_low = []
+    s_high = []
     n_total_low = 0
     n_alive_low = 0
     n_total_high = 0
     n_alive_high = 0
+    for i in range(n_times):
+      r0 = model.getVarByName(f"r[{i},0]")
+      r1 = model.getVarByName(f"r[{i},1]")
+      d0 = model.getVarByName(f"d[{i},0]")
+      d1 = model.getVarByName(f"d[{i},1]")
+      s0 = model.getVarByName(f"n_survived[{i},0]")
+      s1 = model.getVarByName(f"n_survived[{i},1]")
+      assert r0 is not None and r1 is not None
+      assert d0 is not None and d1 is not None
+      assert s0 is not None and s1 is not None
+      r_low.append(r0.X)
+      r_high.append(r1.X)
+      s_low.append(s0.X)
+      s_high.append(s1.X)
+      if i == 0:
+        n_total_low = int(np.rint(r0.X))
+        n_total_high = int(np.rint(r1.X))
+      n_alive_low = n_total_low - int(np.rint(d0.X))
+      n_alive_high = n_total_high - int(np.rint(d1.X))
 
-    for i in range(len(self.all_death_times)):
-      r_low = model.getVarByName(f"r[{i},0]")
-      r_high = model.getVarByName(f"r[{i},1]")
-      d_low = model.getVarByName(f"d[{i},0]")
-      d_high = model.getVarByName(f"d[{i},1]")
-      assert r_low is not None
-      assert r_high is not None
-      assert d_low is not None
-      assert d_high is not None
-
-      if i == 0:  # Use first time point as representative
-        n_total_low = int(np.rint(r_low.X))
-      if i == 0:  # Use first time point as representative
-        n_total_high = int(np.rint(r_high.X))
-
-      n_alive_low = n_total_low - int(np.rint(d_low.X))
-      n_alive_high = n_total_high - int(np.rint(d_high.X))
-
+    km_prob_low = km_survival_from_risk_counts(
+      r_low, s_low,
+      log_zero_epsilon=self.log_zero_epsilon,
+      cumulative=True,
+    )
+    km_prob_high = km_survival_from_risk_counts(
+      r_high, s_high,
+      log_zero_epsilon=self.log_zero_epsilon,
+      cumulative=True,
+    )
     return (
       n_total_low, n_alive_low, km_prob_low,
       n_total_high, n_alive_high, km_prob_high,
@@ -743,14 +754,6 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
 
     r, d, n_survived = self.add_counter_variables_and_constraints(model, a)
 
-    # Add Kaplan-Meier probability variables and constraints
-    (
-      km_probability_at_time_low,
-      km_probability_at_time_high
-    ) = self.add_kaplan_meier_probability_variables_and_constraints(
-      model, r, n_survived
-    )
-
     (
       cox_penalty,
       null_hypothesis_indicator,
@@ -773,8 +776,6 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
       model,
       null_hypothesis_indicator,
       a,
-      km_probability_at_time_low,
-      km_probability_at_time_high,
       beta,
       use_cox_penalty_indicator,
     )
@@ -987,8 +988,6 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
       model,
       null_hypothesis_indicator,
       a,
-      km_probability_at_time_low,
-      km_probability_at_time_high,
       beta,
       use_cox_penalty_indicator,
     ) = self.gurobi_model
@@ -1033,9 +1032,7 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     # Extract curve statistics for null hypothesis
     (n_total_low_null, n_alive_low_null, km_prob_low_null,
      n_total_high_null, n_alive_high_null, km_prob_high_null) = (
-      self._extract_curve_statistics(
-        model, km_probability_at_time_low, km_probability_at_time_high
-      )
+      self._extract_curve_statistics(model)
     )
 
     # Extract hazard ratio for null hypothesis (should be 1.0)
@@ -1088,9 +1085,7 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     # Extract curve statistics for alternative hypothesis
     (n_total_low_alt, n_alive_low_alt, km_prob_low_alt,
      n_total_high_alt, n_alive_high_alt, km_prob_high_alt) = (
-      self._extract_curve_statistics(
-        model, km_probability_at_time_low, km_probability_at_time_high
-      )
+      self._extract_curve_statistics(model)
     )
 
     # Extract hazard ratio for alternative hypothesis (can be any value)

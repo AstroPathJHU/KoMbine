@@ -203,8 +203,6 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
       model,
       null_hypothesis_indicator,
       a,
-      km_probability_at_time_low,
-      km_probability_at_time_high,
       beta,
       use_cox_penalty_indicator,
     ) = self.gurobi_model
@@ -272,9 +270,7 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
     # Extract curve statistics
     (n_total_low, n_alive_low, km_prob_low,
      n_total_high, n_alive_high, km_prob_high) = (
-      self._extract_curve_statistics(
-        model, km_probability_at_time_low, km_probability_at_time_high
-      )
+      self._extract_curve_statistics(model)
     )
 
     result = scipy.optimize.OptimizeResult(
