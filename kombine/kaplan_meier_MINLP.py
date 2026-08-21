@@ -1118,12 +1118,28 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     return r_vals, d_vals, s_vals, sub_d_vals
 
   def _rd_pair_is_feasible(self, i: int, r_value: int, d_value: int) -> bool:
-    """Whether (r, d) at death-time index i is within per-time count bounds."""
-    return not (
+    """Whether (r, d) at death-time index i can occur given risk-set flow.
+
+    Survivors at time i cannot exceed the next risk-set maximum plus all
+    censoring in ``[times[i], times[i+1])``, and r cannot exceed the previous
+    risk-set maximum.  These bounds are valid for collapsed times because
+    ``times_to_consider`` are group ends and intervening censoring is what
+    splits groups.
+    """
+    if (
       r_value > self.n_at_risk_max[i]
       or d_value > self.n_died_max[i]
       or d_value > r_value
-    )
+    ):
+      return False
+    s_value = r_value - d_value
+    if i + 1 < self.n_times_to_consider:
+      cmax = int(self.n_censored_between_times_max[i])
+      if s_value > int(self.n_at_risk_max[i + 1]) + cmax:
+        return False
+    if i > 0 and r_value > int(self.n_at_risk_max[i - 1]):
+      return False
+    return True
 
   def add_counter_variables_and_constraints(
     self,
