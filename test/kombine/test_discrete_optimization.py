@@ -6,10 +6,12 @@ import typing
 import unittest
 
 import numpy as np
+import scipy.optimize
 
 from kombine.discrete_optimization import (
   minimize_discrete_single_minimum,
   binary_search_sign_change,
+  cached_level_crossings,
 )
 
 class TestMinimizeDiscreteSingleMinimum(unittest.TestCase):
@@ -437,6 +439,91 @@ class TestBinarySearchSignChange(unittest.TestCase):
     # Should terminate early and return a reasonable result near the sign change
     self.assertGreaterEqual(result, 0.1)
     self.assertLessEqual(result, 0.2)
+
+
+class TestCachedLevelCrossings(unittest.TestCase):
+  """Shared-evaluation multi-level brentq for a 1D profile."""
+
+  @staticmethod
+  def _quadratic(x):
+    return (x - 0.5) ** 2
+
+  def test_quadratic_both_sides_match_analytic(self):
+    """Crossings of (x-0.5)^2 match the analytic sqrt(level) points."""
+    inner = 0.01
+    outer = 0.04
+    levels = [inner, outer]
+    left = cached_level_crossings(self._quadratic, 0.0, 0.5, levels, xtol=1e-8, rtol=1e-8)
+    right = cached_level_crossings(self._quadratic, 1.0, 0.5, levels, xtol=1e-8, rtol=1e-8)
+    np.testing.assert_allclose(left, [0.5 - inner ** 0.5, 0.5 - outer ** 0.5], atol=1e-7)
+    np.testing.assert_allclose(right, [0.5 + inner ** 0.5, 0.5 + outer ** 0.5], atol=1e-7)
+
+  def test_level_order_does_not_change_results(self):
+    """Returned roots follow the requested level order."""
+    inner = 0.01
+    outer = 0.04
+    forward = cached_level_crossings(
+      self._quadratic, 0.0, 0.5, [inner, outer], xtol=1e-8, rtol=1e-8
+    )
+    backward = cached_level_crossings(
+      self._quadratic, 0.0, 0.5, [outer, inner], xtol=1e-8, rtol=1e-8
+    )
+    np.testing.assert_allclose(forward, [backward[1], backward[0]], atol=1e-10)
+
+  def test_fewer_evals_than_independent_brentq(self):
+    """Shared cache uses fewer func evals than independent brentq per level."""
+    inner = 0.01
+    outer = 0.04
+    levels = [inner, outer]
+    xtol = 1e-8
+    rtol = 1e-8
+
+    independent = []
+    def counting_independent(x):
+      independent.append(x)
+      return self._quadratic(x)
+
+    for level in levels:
+      scipy.optimize.brentq(
+        lambda x, _level=level: counting_independent(x) - _level,
+        0.0, 0.5, xtol=xtol, rtol=rtol,
+      )
+      scipy.optimize.brentq(
+        lambda x, _level=level: counting_independent(x) - _level,
+        0.5, 1.0, xtol=xtol, rtol=rtol,
+      )
+
+    shared = []
+    def counting_shared(x):
+      shared.append(x)
+      return self._quadratic(x)
+
+    cached_level_crossings(counting_shared, 0.0, 0.5, levels, xtol=xtol, rtol=rtol)
+    cached_level_crossings(counting_shared, 1.0, 0.5, levels, xtol=xtol, rtol=rtol)
+
+    self.assertLess(len(shared), len(independent))
+    # Early probes on the full [0, 0.5] interval must be reused for the outer cut.
+    self.assertTrue(any(x < 0.5 - inner ** 0.5 - 1e-6 for x in shared))
+
+  def test_outer_already_inside_returns_boundary(self):
+    """If the outer endpoint is already inside the cut, return that endpoint."""
+    # f(0) = 0.25, so a cut of 0.4 has no crossing on [0, 0.5].
+    result = cached_level_crossings(self._quadratic, 0.0, 0.5, [0.4], xtol=1e-6, rtol=1e-6)
+    self.assertEqual(result, [0.0])
+
+  def test_default_tolerances_stop_before_scipy_defaults(self):
+    """Default 1e-4 xtol/rtol stop with fewer evals than scipy's tight defaults."""
+    tight = []
+    loose = []
+    def f_tight(x):
+      tight.append(x)
+      return self._quadratic(x)
+    def f_loose(x):
+      loose.append(x)
+      return self._quadratic(x)
+    cached_level_crossings(f_tight, 0.0, 0.5, [0.04], xtol=2e-12, rtol=2e-15)
+    cached_level_crossings(f_loose, 0.0, 0.5, [0.04], xtol=1e-4, rtol=1e-4)
+    self.assertLess(len(loose), len(tight))
 
 
 if __name__ == "__main__":

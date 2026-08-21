@@ -7,6 +7,7 @@ import collections.abc
 import typing
 
 import numpy as np
+import scipy.optimize
 
 from .utilities import InspectableCache
 
@@ -351,3 +352,121 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
     print(f"{i_min + left:3d} {candidates[i_min]:6.3f} {values[i_min]:9.5g}")
 
   return candidates[i_min], values[i_min]
+
+
+def _bracket_for_level(
+  cache: dict[float, float],
+  level: float,
+  x_outer: float,
+  x_inner: float,
+) -> tuple[float, float]:
+  """Tightest cached [a, b] with a < b that brackets ``f(x) = level``.
+
+  ``f`` is assumed non-increasing toward ``x_inner``.  Endpoints must be in
+  ``cache``.  ``f(x_outer) >= level >= f(x_inner)``.
+  """
+  lo = min(x_outer, x_inner)
+  hi = max(x_outer, x_inner)
+  outside = [x for x, fx in cache.items() if lo <= x <= hi and fx >= level]
+  inside = [x for x, fx in cache.items() if lo <= x <= hi and fx <= level]
+  if not outside or not inside:
+    raise ValueError(
+      f"No cached sign change for level {level} on [{x_outer}, {x_inner}]"
+    )
+  if x_outer < x_inner:
+    left = max(outside)
+    right = min(inside)
+  else:
+    left = max(inside)
+    right = min(outside)
+  if left > right:
+    raise ValueError(
+      f"Cached bracket inverted for level {level}: [{left}, {right}]"
+    )
+  return left, right
+
+
+def cached_level_crossings(  # pylint: disable=too-many-locals, too-many-arguments
+  func: collections.abc.Callable[[float], float],
+  x_outer: float,
+  x_inner: float,
+  levels: collections.abc.Sequence[float],
+  *,
+  xtol: float = 1e-4,
+  rtol: float = 1e-4,
+) -> list[float]:
+  """Find where a 1D profile crosses several levels, sharing evaluations.
+
+  ``func`` should be nonnegative and smaller toward ``x_inner`` (e.g.
+  ``2NLL(p) - 2NLL_min`` on one side of the MLE).  ``levels`` are the
+  target heights (e.g. χ² cuts).  After every new evaluation, each
+  remaining cut uses the tightest cached sign-changing pair: the closest
+  point still outside the cut and the closest still inside.
+
+  If ``func(x_outer) <= level``, the whole interval is inside that cut and
+  the crossing is ``x_outer``.  Remaining cuts are solved widest-bracket
+  first (typically the outermost level).
+  """
+  if not levels:
+    return []
+  if x_outer == x_inner:
+    return [x_inner] * len(levels)
+
+  cache: dict[float, float] = {}
+
+  def f_cached(x: float) -> float:
+    if x not in cache:
+      cache[x] = float(func(x))
+    return cache[x]
+
+  f_cached(x_outer)
+  f_cached(x_inner)
+
+  results: list[float | None] = [None] * len(levels)
+  pending = list(range(len(levels)))
+
+  def remaining_width(index: int) -> float:
+    level = levels[index]
+    if f_cached(x_outer) <= level:
+      return -1.0
+    if f_cached(x_inner) >= level:
+      return -1.0
+    left, right = _bracket_for_level(cache, level, x_outer, x_inner)
+    return abs(right - left)
+
+  while pending:
+    pending.sort(key=lambda i: (remaining_width(i), levels[i]), reverse=True)
+    index = pending.pop(0)
+    level = levels[index]
+    f_outer = f_cached(x_outer)
+    f_inner = f_cached(x_inner)
+    if f_outer <= level:
+      results[index] = x_outer
+      continue
+    if f_inner >= level:
+      results[index] = x_inner
+      continue
+    left, right = _bracket_for_level(cache, level, x_outer, x_inner)
+    if left == right or _is_close(left, right, xtol, rtol):
+      closer = left if abs(f_cached(left) - level) <= abs(f_cached(right) - level) else right
+      results[index] = closer
+      continue
+    g_left = f_cached(left) - level
+    g_right = f_cached(right) - level
+    if g_left == 0.0:
+      results[index] = left
+      continue
+    if g_right == 0.0:
+      results[index] = right
+      continue
+    results[index] = float(
+      scipy.optimize.brentq(
+        lambda x, _level=level: f_cached(x) - _level,
+        left,
+        right,
+        xtol=xtol,
+        rtol=rtol,
+      )
+    )
+
+  return [float(x) for x in results]
