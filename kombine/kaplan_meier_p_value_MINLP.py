@@ -819,37 +819,22 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     cox_only: bool,
   ):
     """
-    Update the model with cox_only constraints.
-    If cox_only is True, we add constraints for a[i, j] to be either 0 or 1,
-    based on parameter_in_range.
+    Fix or unfix assignment variables for cox_only mode.
+
+    When cox_only is True, assignments are locked to the nominal in-range
+    groups via bounds so presolve can drop the assignment MIP.
     """
-    # Remove existing constraints if they exist
-    if self.__patient_constraints_for_cox_only is not None:
-      for constr in self.__patient_constraints_for_cox_only:
-        model.remove(constr)
-      self.__patient_constraints_for_cox_only = None
+    for i in range(self.n_patients):
+      for j in range(2):
+        if cox_only:
+          value = 1.0 if self.parameter_in_range[i, j] else 0.0
+          a[i, j].LB = value
+          a[i, j].UB = value
+        else:
+          a[i, j].LB = 0.0
+          a[i, j].UB = 1.0
 
-    if cox_only:
-      self.__patient_constraints_for_cox_only = []
-      for i in range(self.n_patients):
-        for j in range(2):  # j=0 for low curve, j=1 for high curve
-          if self.parameter_in_range[i, j]:
-            # The patient must be selected for this curve
-            self.__patient_constraints_for_cox_only.append(
-              model.addConstr(
-                a[i, j] == 1,
-                name=f"patient_{i}_must_be_selected_curve_{j}_cox_only",
-              )
-            )
-          else:
-            # The patient must not be selected for this curve
-            self.__patient_constraints_for_cox_only.append(
-              model.addConstr(
-                a[i, j] == 0,
-                name=f"patient_{i}_must_not_be_selected_curve_{j}_cox_only",
-              )
-            )
-
+    self.__patient_constraints_for_cox_only = None
     model.update()
 
   @functools.cached_property
@@ -1058,9 +1043,25 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
       model=model,
     )
 
+    start_a = None
+    start_beta = None
+    if not cox_only:
+      start_a = {
+        (i, j): float(a[i, j].X)
+        for i in range(self.n_patients)
+        for j in range(2)
+      }
+      if beta is not None:
+        start_beta = float(beta.X)
+
     if print_progress or verbose:
       print("Solving for alternative hypothesis...")
     self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, False)
+    if start_a is not None:
+      for (i, j), value in start_a.items():
+        a[i, j].Start = value
+      if start_beta is not None:
+        beta.Start = start_beta
     # pylint: disable=duplicate-code
     model = self._setup_and_optimize(
       model,

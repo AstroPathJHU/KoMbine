@@ -309,9 +309,11 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     MIPGap=None,
     MIPGapAbs=None,
     rerun_until_convergence=False,
+    assignment_starts=None,
   ) -> tuple[
     collections.abc.Callable[[float | None], scipy.optimize.OptimizeResult],
     collections.abc.Callable[[float | None], float],
+    MINLPForKM,
   ]:
     """
     Get the twoNLL function for the given time point.
@@ -331,6 +333,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       binomial_only=binomial_only,
       patient_wise_only=patient_wise_only,
     )
+    if assignment_starts is not None:
+      minlp.seed_assignment_starts(assignment_starts)
 
     @InspectableCache
     def run_MINLP(expected_probability: float | None) -> scipy.optimize.OptimizeResult:
@@ -398,7 +402,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       if not result.success:
         return np.inf
       return result.x
-    return run_MINLP, twoNLL
+    return run_MINLP, twoNLL, minlp
 
   def calculate_possible_probabilities(self, time_point: float) -> np.ndarray:
     """
@@ -523,7 +527,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         )
       survival_probabilities_time_point = []
       survival_probabilities.append(survival_probabilities_time_point)
-      run_MINLP, twoNLL = self.get_twoNLL_function(
+      run_MINLP, twoNLL, _minlp = self.get_twoNLL_function(
         time_point=t,
         binomial_only=binomial_only,
         patient_wise_only=patient_wise_only,
