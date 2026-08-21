@@ -354,39 +354,83 @@ def minimize_discrete_single_minimum( #pylint: disable=too-many-locals, too-many
   return candidates[i_min], values[i_min]
 
 
-def _bracket_for_level(
+def _innermost_bracket(
   cache: dict[float, float],
   level: float,
   x_outer: float,
   x_inner: float,
 ) -> tuple[float, float]:
-  """Tightest cached [a, b] with a < b that brackets ``f(x) = level``.
+  """Return ``(last_inside, first_outside)`` for the MLE-connected crossing.
 
-  ``f`` is assumed non-increasing toward ``x_inner``.  Endpoints must be in
-  ``cache``.  ``f(x_outer) >= level >= f(x_inner)``.
+  ``first_outside`` is the cached outside point closest to ``x_inner``.
+  ``last_inside`` is ``x_inner`` (or an inside point still closer to the MLE
+  than that outside point).  Do not walk through other inside points: a
+  MINLP profile can dip back below the cut in a disconnected valley.
+  Endpoints must be in ``cache`` with ``f(x_outer) >= level >= f(x_inner)``.
   """
   lo = min(x_outer, x_inner)
   hi = max(x_outer, x_inner)
   outside = [x for x, fx in cache.items() if lo <= x <= hi and fx >= level]
-  inside = [x for x, fx in cache.items() if lo <= x <= hi and fx <= level]
+  inside = [x for x, fx in cache.items() if lo <= x <= hi and fx < level]
   if not outside or not inside:
     raise ValueError(
       f"No cached sign change for level {level} on [{x_outer}, {x_inner}]"
     )
   if x_outer < x_inner:
-    left = max(outside)
-    right = min(inside)
+    first_outside = max(outside)
+    inner_side = [x for x in inside if x > first_outside]
+    last_inside = max(inner_side) if inner_side else x_inner
   else:
-    left = max(inside)
-    right = min(outside)
-  if left > right:
+    first_outside = min(outside)
+    inner_side = [x for x in inside if x < first_outside]
+    last_inside = min(inner_side) if inner_side else x_inner
+  if last_inside == first_outside:
     raise ValueError(
-      f"Cached bracket inverted for level {level}: [{left}, {right}]"
+      f"Cached bracket collapsed for level {level}: {last_inside}"
     )
-  return left, right
+  return last_inside, first_outside
 
 
-def cached_level_crossings(  # pylint: disable=too-many-locals, too-many-arguments
+def _adjacent_outside_bracket(  # pylint: disable=too-many-arguments, too-many-positional-arguments
+  f_cached: collections.abc.Callable[[float], float],
+  level: float,
+  last_inside: float,
+  first_outside: float,
+  xtol: float,
+  rtol: float,
+) -> tuple[float, float]:
+  """Double from ``last_inside`` toward ``first_outside`` until ``f >= level``.
+
+  Returns a left-to-right pair for ``brentq``.
+  """
+  if _is_close(last_inside, first_outside, xtol, rtol):
+    return min(last_inside, first_outside), max(last_inside, first_outside)
+  direction = 1.0 if first_outside > last_inside else -1.0
+  remaining = abs(first_outside - last_inside)
+  step = min(
+    max(
+      xtol,
+      rtol * max(abs(last_inside), abs(first_outside), 1e-12),
+      0.05 * remaining,
+    ),
+    remaining,
+  )
+  x = last_inside
+  while True:
+    x_next = x + direction * step
+    if (x_next - first_outside) * direction >= 0.0:
+      x_next = first_outside
+    if f_cached(x_next) >= level:
+      return (x, x_next) if x < x_next else (x_next, x)
+    if x_next == first_outside:
+      return (x, x_next) if x < x_next else (x_next, x)
+    x = x_next
+    step = min(step * 2.0, abs(first_outside - x))
+    if step <= 0.0:
+      return (x, first_outside) if x < first_outside else (first_outside, x)
+
+
+def cached_level_crossings(  # pylint: disable=too-many-locals, too-many-arguments, too-many-positional-arguments
   func: collections.abc.Callable[[float], float],
   x_outer: float,
   x_inner: float,
@@ -400,8 +444,10 @@ def cached_level_crossings(  # pylint: disable=too-many-locals, too-many-argumen
   ``func`` should be nonnegative and smaller toward ``x_inner`` (e.g.
   ``2NLL(p) - 2NLL_min`` on one side of the MLE).  ``levels`` are the
   target heights (e.g. χ² cuts).  After every new evaluation, each
-  remaining cut uses the tightest cached sign-changing pair: the closest
-  point still outside the cut and the closest still inside.
+  remaining cut walks cached points from ``x_inner`` outward and takes
+  the first exit (closest outside point, last inside point), then doubles
+  from that inside point until the cut is exceeded so a thin near-MLE
+  crossing is not skipped.
 
   If ``func(x_outer) <= level``, the whole interval is inside that cut and
   the crossing is ``x_outer``.  Remaining cuts are solved widest-bracket
@@ -431,7 +477,7 @@ def cached_level_crossings(  # pylint: disable=too-many-locals, too-many-argumen
       return -1.0
     if f_cached(x_inner) >= level:
       return -1.0
-    left, right = _bracket_for_level(cache, level, x_outer, x_inner)
+    left, right = _innermost_bracket(cache, level, x_outer, x_inner)
     return abs(right - left)
 
   while pending:
@@ -446,7 +492,10 @@ def cached_level_crossings(  # pylint: disable=too-many-locals, too-many-argumen
     if f_inner >= level:
       results[index] = x_inner
       continue
-    left, right = _bracket_for_level(cache, level, x_outer, x_inner)
+    last_inside, first_outside = _innermost_bracket(cache, level, x_outer, x_inner)
+    left, right = _adjacent_outside_bracket(
+      f_cached, level, last_inside, first_outside, xtol, rtol,
+    )
     if left == right or _is_close(left, right, xtol, rtol):
       closer = left if abs(f_cached(left) - level) <= abs(f_cached(right) - level) else right
       results[index] = closer

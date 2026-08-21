@@ -511,6 +511,19 @@ class TestCachedLevelCrossings(unittest.TestCase):
     result = cached_level_crossings(self._quadratic, 0.0, 0.5, [0.4], xtol=1e-6, rtol=1e-6)
     self.assertEqual(result, [0.0])
 
+  def test_innermost_crossing_when_profile_wiggles(self):
+    """A disconnected outer valley must not steal the MLE-connected crossing."""
+    knots = np.array([0.0, 0.2, 0.3, 0.4, 0.5])
+    values = np.array([0.2, 0.05, 0.02, 0.06, 0.0])
+
+    def wiggle(x):
+      return float(np.interp(x, knots, values))
+
+    # From the MLE at 0.5, 0.04 is first exceeded on (0.4, 0.5).
+    result = cached_level_crossings(wiggle, 0.0, 0.5, [0.04], xtol=1e-8, rtol=1e-8)
+    expected = 0.4 + 0.1 * (0.06 - 0.04) / 0.06
+    np.testing.assert_allclose(result, [expected], atol=1e-6)
+
   def test_default_tolerances_stop_before_scipy_defaults(self):
     """Default 1e-4 xtol/rtol stop with fewer evals than scipy's tight defaults."""
     tight = []
