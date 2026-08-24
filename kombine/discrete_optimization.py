@@ -508,14 +508,21 @@ def cached_level_crossings(  # pylint: disable=too-many-locals, too-many-argumen
     if g_right == 0.0:
       results[index] = right
       continue
-    results[index] = float(
+    results[index] = typing.cast(
+      float,
       scipy.optimize.brentq(
         lambda x, _level=level: f_cached(x) - _level,
         left,
         right,
         xtol=xtol,
-        rtol=rtol,
-      )
+        rtol=np.float64(rtol),
+        full_output=False,
+      ),
     )
 
-  return [float(x) for x in results]
+  crossings: list[float] = []
+  for x in results:
+    if x is None:
+      raise RuntimeError("cached_level_crossings left a level unsolved")
+    crossings.append(x)
+  return crossings

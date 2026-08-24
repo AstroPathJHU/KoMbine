@@ -623,20 +623,18 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
 
   def _store_profile_mip_starts(self) -> None:
     """Cache continuous profile incumbents for the next nearby expected_probability."""
-    if self.__profile_p_survived is None:
+    p_died = self.__profile_p_died
+    p_survived = self.__profile_p_survived
+    log_p_died = self.__profile_log_p_died
+    log_p_survived = self.__profile_log_p_survived
+    if p_died is None or p_survived is None or log_p_died is None or log_p_survived is None:
       self.__mip_start_profile = None
       return
     self.__mip_start_profile = {
-      "p_died": [float(self.__profile_p_died[i].X) for i in range(self.n_times_to_consider)],
-      "p_survived": [
-        float(self.__profile_p_survived[i].X) for i in range(self.n_times_to_consider)
-      ],
-      "log_p_died": [
-        float(self.__profile_log_p_died[i].X) for i in range(self.n_times_to_consider)
-      ],
-      "log_p_survived": [
-        float(self.__profile_log_p_survived[i].X) for i in range(self.n_times_to_consider)
-      ],
+      "p_died": [float(p_died[i].X) for i in range(self.n_times_to_consider)],
+      "p_survived": [float(p_survived[i].X) for i in range(self.n_times_to_consider)],
+      "log_p_died": [float(log_p_died[i].X) for i in range(self.n_times_to_consider)],
+      "log_p_survived": [float(log_p_survived[i].X) for i in range(self.n_times_to_consider)],
     }
 
   @property

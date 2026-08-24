@@ -486,11 +486,11 @@ class TestCachedLevelCrossings(unittest.TestCase):
     for level in levels:
       scipy.optimize.brentq(
         lambda x, _level=level: counting_independent(x) - _level,
-        0.0, 0.5, xtol=xtol, rtol=rtol,
+        0.0, 0.5, xtol=xtol, rtol=np.float64(rtol),
       )
       scipy.optimize.brentq(
         lambda x, _level=level: counting_independent(x) - _level,
-        0.5, 1.0, xtol=xtol, rtol=rtol,
+        0.5, 1.0, xtol=xtol, rtol=np.float64(rtol),
       )
 
     shared = []

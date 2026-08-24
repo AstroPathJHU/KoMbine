@@ -311,8 +311,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     rerun_until_convergence=False,
     assignment_starts=None,
   ) -> tuple[
-    collections.abc.Callable[[float | None], scipy.optimize.OptimizeResult],
-    collections.abc.Callable[[float | None], float],
+    InspectableCache[float | None, scipy.optimize.OptimizeResult],
+    InspectableCache[float | None, float],
     MINLPForKM,
   ]:
     """
