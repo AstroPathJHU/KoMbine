@@ -989,7 +989,6 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
         pass
       self.__dict__.pop("gurobi_model", None)
     self.__null_hypothesis_constraint = None
-    self.__patient_constraints_for_cox_only = None
     self.__patient_wise_only_constraint = None
     self.__cox_penalty_constraint = None
     self.__risk_set_r_vars = None
@@ -1166,7 +1165,7 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     result_alt = self._extract_optimize_result(model, a)
     return result_null, result_alt
 
-  def solve_and_pvalue( # pylint: disable=too-many-locals, too-many-arguments
+  def solve_and_pvalue( # pylint: disable=too-many-locals, too-many-arguments, too-many-branches
     self,
     *,
     cox_only: bool = False,
