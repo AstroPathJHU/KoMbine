@@ -23,6 +23,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import time
 import warnings
 
 import matplotlib.lines
@@ -838,14 +839,22 @@ Examples (run from parent directory):
     print("TESTING MODE: Using smaller datasets")
     print("=" * 60)
 
+  t_all = time.perf_counter()
+
   if generate_all or args.km_example:
+    t0 = time.perf_counter()
     plot_km_example(testing=args.testing)
+    print(f"  [km_example] elapsed {time.perf_counter() - t0:.1f}s", flush=True)
 
   if generate_all or args.greenwood:
+    t0 = time.perf_counter()
     plot_compare_to_greenwood(testing=args.testing)
+    print(f"  [greenwood] elapsed {time.perf_counter() - t0:.1f}s", flush=True)
 
   if generate_all or args.p_value:
+    t0 = time.perf_counter()
     plot_compare_p_value(testing=args.testing)
+    print(f"  [p_value] elapsed {time.perf_counter() - t0:.1f}s", flush=True)
 
   if generate_all or args.lung:
     # Handle lung plot testing options
@@ -867,10 +876,15 @@ Examples (run from parent directory):
             f"Testing panels: {', '.join(p for p, t in zip(panel_names, lung_testing) if t)}")
       print("=" * 60)
 
+    t0 = time.perf_counter()
     plot_lung_dataset(testing=lung_testing, survival_type=args.lung_survival_type)
+    print(f"  [lung] elapsed {time.perf_counter() - t0:.1f}s", flush=True)
 
   print("=" * 60)
-  print("Plot generation complete!")
+  print(
+    f"Plot generation complete! total_elapsed={time.perf_counter() - t_all:.1f}s",
+    flush=True,
+  )
 
 
 if __name__ == "__main__":

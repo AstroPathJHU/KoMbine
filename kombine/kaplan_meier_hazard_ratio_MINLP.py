@@ -69,6 +69,65 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
       tie_handling=tie_handling,
       log_hazard_ratio_bounds=log_hazard_ratio_bounds,
     )
+    # MIP starts from the previous nearby-HR solve on this calculator.
+    self.__mip_start_assignments: dict[tuple[int, int], float] | None = None
+    self.__mip_start_cox_only: bool | None = None
+    self.__mip_start_log_hr: float | None = None
+    # Only reuse starts when |Δ log H| is below this (avoids trapping on distant jumps).
+    self.__mip_start_max_log_hr_delta = 1.0
+
+  def _clear_hazard_ratio_mip_starts(self, a, beta_var=None) -> None:
+    """Drop cached starts and reset Gurobi Start attributes."""
+    self.__mip_start_assignments = None
+    self.__mip_start_cox_only = None
+    self.__mip_start_log_hr = None
+    for var in a.values():
+      var.Start = GRB.UNDEFINED
+    if beta_var is not None:
+      beta_var.Start = GRB.UNDEFINED
+
+  def _apply_hazard_ratio_mip_starts(
+    self,
+    a,
+    beta_var,
+    log_hazard_ratio: float,
+    cox_only: bool,
+  ) -> None:
+    """
+    Seed the next solve from the previous incumbent when cox_only matches
+    and the hazard ratio is close in log space.
+    """
+    if self.__mip_start_cox_only is not None and self.__mip_start_cox_only != cox_only:
+      self._clear_hazard_ratio_mip_starts(a, beta_var)
+      return
+
+    if (
+      self.__mip_start_assignments is None
+      or self.__mip_start_log_hr is None
+      or abs(log_hazard_ratio - self.__mip_start_log_hr)
+        > self.__mip_start_max_log_hr_delta
+    ):
+      for var in a.values():
+        var.Start = GRB.UNDEFINED
+      beta_var.Start = GRB.UNDEFINED
+      return
+
+    for key, value in self.__mip_start_assignments.items():
+      a[key].Start = value
+    beta_var.Start = log_hazard_ratio
+
+  def _store_hazard_ratio_mip_starts(
+    self,
+    a,
+    cox_only: bool,
+    log_hazard_ratio: float,
+  ) -> None:
+    """Cache assignment incumbents for the next nearby-HR solve."""
+    self.__mip_start_assignments = {
+      key: float(var.X) for key, var in a.items()
+    }
+    self.__mip_start_cox_only = cox_only
+    self.__mip_start_log_hr = log_hazard_ratio
 
   def compute_2nll_at_hazard_ratio(  # pylint: disable=too-many-locals, too-many-arguments
     self,
@@ -144,8 +203,6 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
       model,
       null_hypothesis_indicator,
       a,
-      km_probability_at_time_low,
-      km_probability_at_time_high,
       beta,
       use_cox_penalty_indicator,
     ) = self.gurobi_model
@@ -183,6 +240,8 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
       use_cox_penalty_indicator=use_cox_penalty_indicator,
     )
 
+    self._apply_hazard_ratio_mip_starts(a, beta_var, log_hazard_ratio, cox_only)
+
     # Setup and optimize with standard parameters and fallback strategies
     # pylint: disable=duplicate-code
     model = self._setup_and_optimize(
@@ -200,6 +259,8 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
       raise ValueError(f"Optimization failed with status {model.status}")
     # pylint: enable=duplicate-code
 
+    self._store_hazard_ratio_mip_starts(a, cox_only, log_hazard_ratio)
+
     # Extract results
     twonll = model.ObjVal
     patients_low, patients_high = self._extract_patients_per_curve(a)
@@ -209,9 +270,7 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
     # Extract curve statistics
     (n_total_low, n_alive_low, km_prob_low,
      n_total_high, n_alive_high, km_prob_high) = (
-      self._extract_curve_statistics(
-        model, km_probability_at_time_low, km_probability_at_time_high
-      )
+      self._extract_curve_statistics(model)
     )
 
     result = scipy.optimize.OptimizeResult(

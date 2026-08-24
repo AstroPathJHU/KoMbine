@@ -3,6 +3,7 @@ Test the Kaplan-Meier likelihood method.
 """
 
 import argparse
+import itertools
 import pathlib
 import json
 import math
@@ -12,12 +13,37 @@ import numpy as np
 
 import kombine.datacard
 from kombine.kaplan_meier_MINLP import KaplanMeierPatientNLL, MINLPForKM
+from kombine.kaplan_meier_likelihood import KaplanMeierLikelihood
 from ..utility_testing_functions import format_value_for_json, Tolerance
 
 warnings.simplefilter("error")
 
 here = pathlib.Path(__file__).parent
 datacards = here / "datacards" / "simple_examples"
+
+
+def _nll_patient(time, censored=False):
+  return KaplanMeierPatientNLL(
+    time=time,
+    censored=censored,
+    parameter_nll=lambda x: 0,
+    observed_parameter=0.5,
+  )
+
+
+def _minlp_for_rd(patients, time_point, *, collapse):
+  return MINLPForKM(
+    patients,
+    parameter_min=0.1,
+    parameter_max=0.9,
+    time_point=time_point,
+    collapse_consecutive_deaths=collapse,
+  )
+
+
+def _rd_feasible(minlp, i, r_value, d_value):
+  return minlp._rd_pair_is_feasible(i, r_value, d_value)  # pylint: disable=protected-access
+
 
 def runtest(
   censoring=False,
@@ -446,6 +472,143 @@ def runtest(
       )
     raise
 
+def test_rd_pair_is_feasible_per_time_bounds():
+  """Per-time (r, d) bounds: r and d caps, d ≤ r, and the empty assignment."""
+  patients = [
+    _nll_patient(1.0),
+    _nll_patient(1.0),
+    _nll_patient(1.5, censored=True),
+    _nll_patient(2.0),
+    _nll_patient(2.0),
+    _nll_patient(3.0),
+  ]
+  minlp = _minlp_for_rd(patients, 3.0, collapse=False)
+  np.testing.assert_allclose(minlp.times_to_consider, [1.0, 2.0, 3.0])
+  np.testing.assert_array_equal(minlp.n_at_risk_max, [6, 3, 1])
+  np.testing.assert_array_equal(minlp.n_died_max, [2, 2, 1])
+
+  assert _rd_feasible(minlp, 0, 0, 0)
+  assert _rd_feasible(minlp, 0, 6, 2)
+  assert not _rd_feasible(minlp, 0, 7, 0)
+  assert not _rd_feasible(minlp, 0, 6, 3)
+  assert not _rd_feasible(minlp, 0, 2, 3)
+  assert not _rd_feasible(minlp, 2, 2, 0)
+
+
+def test_rd_pair_is_feasible_flow_and_censoring_slack():
+  """Survivors cannot exceed the next risk-set max plus intervening censoring."""
+  patients = [
+    _nll_patient(1.0),
+    _nll_patient(1.0),
+    _nll_patient(1.5, censored=True),
+    _nll_patient(2.0),
+    _nll_patient(2.0),
+    _nll_patient(3.0),
+  ]
+  minlp = _minlp_for_rd(patients, 3.0, collapse=False)
+  np.testing.assert_array_equal(minlp.n_censored_between_times_max, [1, 0])
+
+  # i=0: s <= n_at_risk_max[1] + cmax = 3 + 1
+  assert _rd_feasible(minlp, 0, 6, 2)  # s=4 on the boundary
+  assert not _rd_feasible(minlp, 0, 6, 1)  # s=5
+  assert not _rd_feasible(minlp, 0, 6, 0)  # s=6
+  # cmax slack: s can exceed the next risk-set max, but not by more than cmax
+  assert _rd_feasible(minlp, 0, 4, 0)  # s=4 == 3 + 1
+  assert not _rd_feasible(minlp, 0, 5, 0)  # s=5
+
+  # i=1: no censoring in [2, 3), so s <= n_at_risk_max[2] = 1
+  assert _rd_feasible(minlp, 1, 3, 2)
+  assert _rd_feasible(minlp, 1, 1, 0)
+  assert not _rd_feasible(minlp, 1, 3, 1)
+  assert not _rd_feasible(minlp, 1, 3, 0)
+
+
+def test_rd_pair_is_feasible_last_time_and_single_group():
+  """No next-interval s-rule at the last time, or when collapse leaves one group."""
+  patients = [
+    _nll_patient(1.0),
+    _nll_patient(1.0),
+    _nll_patient(1.5, censored=True),
+    _nll_patient(2.0),
+    _nll_patient(2.0),
+    _nll_patient(3.0),
+  ]
+  minlp = _minlp_for_rd(patients, 3.0, collapse=False)
+  # Last time: s-rule does not apply, so (r=1, d=0) is allowed even though
+  # there is no later risk set.
+  assert _rd_feasible(minlp, 2, 1, 0)
+  assert _rd_feasible(minlp, 2, 1, 1)
+  assert not _rd_feasible(minlp, 2, 1, 2)
+
+  collapsed = _minlp_for_rd(
+    [_nll_patient(float(t)) for t in (1, 2, 3, 4)],
+    4.0,
+    collapse=True,
+  )
+  assert collapsed.n_times_to_consider == 1
+  assert collapsed.n_censored_between_times_max.size == 0
+  # Would be flow-infeasible if a later empty risk set existed.
+  assert _rd_feasible(collapsed, 0, 4, 0)
+  assert _rd_feasible(collapsed, 0, 4, 4)
+  assert not _rd_feasible(collapsed, 0, 5, 0)
+
+
+def test_rd_pair_is_feasible_previous_risk_injected():
+  """r cannot exceed the previous risk-set maximum (redundant on nested risk sets)."""
+  minlp = _minlp_for_rd(
+    [_nll_patient(1.0), _nll_patient(2.0)],
+    2.0,
+    collapse=False,
+  )
+  assert minlp.n_times_to_consider == 2
+  minlp.__dict__["n_at_risk_max"] = np.array([2, 5])
+  minlp.__dict__["n_died_max"] = np.array([2, 2])
+  minlp.__dict__["n_censored_between_times_max"] = np.array([0])
+
+  assert not _rd_feasible(minlp, 1, 3, 0)
+  assert _rd_feasible(minlp, 1, 2, 0)
+  # First time has no previous-r rule.
+  assert _rd_feasible(minlp, 0, 2, 0)
+
+
+def test_rd_pair_is_feasible_realizable_assignments_kept():
+  """Every 0/1 assignment's (r, d) stays feasible on the simple N=12 cards."""
+  cases = (
+    ("poisson_ratio_km.txt", 8.0),
+    ("poisson_ratio_km.txt", 8.8),
+    ("poisson_ratio_km_censoring.txt", 8.8),
+  )
+  for dcname, time_point in cases:
+    datacard = kombine.datacard.Datacard.parse_datacard(datacards / dcname)
+    kml = datacard.km_likelihood(
+      parameter_min=0.19,
+      parameter_max=0.79,
+      endpoint_epsilon=1e-4,
+    )
+    for collapse in (True, False):
+      minlp = MINLPForKM(
+        kml.all_patients,
+        parameter_min=0.19,
+        parameter_max=0.79,
+        time_point=time_point,
+        endpoint_epsilon=1e-4,
+        collapse_consecutive_deaths=collapse,
+      )
+      n_at = [minlp.patient_still_at_risk(t) for t in minlp.times_to_consider]
+      died = [minlp.patient_died(t) for t in minlp.times_to_consider]
+      n_patients = minlp.n_patients
+      assert n_patients <= 16
+      for bits in itertools.product((False, True), repeat=n_patients):
+        selected = np.array(bits, dtype=bool)
+        for i in range(minlp.n_times_to_consider):
+          r_value = int(np.count_nonzero(n_at[i] & selected))
+          d_value = int(np.count_nonzero(died[i] & selected))
+          assert _rd_feasible(minlp, i, r_value, d_value), (
+            f"{dcname} t={time_point} collapse={collapse} i={i} "
+            f"(r, d)=({r_value}, {d_value})"
+          )
+
+
 def test_times_to_consider_collapse_logic(): # pylint: disable=too-many-locals
   """
   Comprehensive tests for the times_to_consider collapsing logic.
@@ -644,7 +807,8 @@ def test_collapse_equivalence_with_tied_death_and_censoring():
       ci_collapse[finite_ci],
       ci_no_collapse[finite_ci],
       rtol=0.0,
-      atol=3e-5,
+      # CI edges come from brentq over MINLP 2NLL; allow ~MIPGap (1e-4) noise.
+      atol=1e-4,
     )
 
 def test_collapse_equivalence_nonfixed_observable():
@@ -703,7 +867,8 @@ def test_collapse_equivalence_nonfixed_observable():
       ci_collapse[finite_ci],
       ci_no_collapse[finite_ci],
       rtol=0.0,
-      atol=3e-5,
+      # CI edges come from brentq over MINLP 2NLL; allow ~MIPGap (1e-4) noise.
+      atol=1e-4,
       err_msg=f"CI mismatch for mode {mode_kwargs}",
     )
 
@@ -730,11 +895,37 @@ def main(args=None):
   g.add_argument(
     "--collapse-logic-only",
     action="store_true",
-    help="Test only the collapse logic.",
+    help="Test only the collapse logic (short; ~2 min).",
+  )
+  p.add_argument(
+    "--print-progress",
+    action="store_true",
+    help="Print progress during MINLP / likelihood walks.",
+  )
+  p.add_argument(
+    "--gurobi-verbose",
+    action="store_true",
+    help="Enable Gurobi OutputFlag logging during solves.",
   )
   args = p.parse_args(args)
 
+  if args.print_progress or args.gurobi_verbose:
+    _orig = KaplanMeierLikelihood.survival_probabilities_likelihood
+    def _wrapped(self, *a, **kw):
+      if args.print_progress:
+        kw["print_progress"] = True
+      if args.gurobi_verbose:
+        kw["gurobi_verbose"] = True
+        kw["optimize_verbose"] = True
+      return _orig(self, *a, **kw)
+    KaplanMeierLikelihood.survival_probabilities_likelihood = _wrapped
+
   if args.collapse_logic_only:
+    test_rd_pair_is_feasible_per_time_bounds()
+    test_rd_pair_is_feasible_flow_and_censoring_slack()
+    test_rd_pair_is_feasible_last_time_and_single_group()
+    test_rd_pair_is_feasible_previous_risk_injected()
+    test_rd_pair_is_feasible_realizable_assignments_kept()
     test_times_to_consider_collapse_logic()
     test_collapse_equivalence_with_tied_death_and_censoring()
     test_collapse_equivalence_nonfixed_observable()
@@ -749,6 +940,11 @@ def main(args=None):
     runtest(censoring=True)
 
   # Run additional tests
+  test_rd_pair_is_feasible_per_time_bounds()
+  test_rd_pair_is_feasible_flow_and_censoring_slack()
+  test_rd_pair_is_feasible_last_time_and_single_group()
+  test_rd_pair_is_feasible_previous_risk_injected()
+  test_rd_pair_is_feasible_realizable_assignments_kept()
   test_times_to_consider_collapse_logic()
   test_collapse_equivalence_with_tied_death_and_censoring()
   test_collapse_equivalence_nonfixed_observable()
