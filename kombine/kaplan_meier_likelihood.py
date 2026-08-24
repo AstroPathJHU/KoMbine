@@ -20,7 +20,7 @@ import numpy.typing as npt
 import scipy.optimize
 import scipy.stats
 
-from .discrete_optimization import binary_search_sign_change
+from .discrete_optimization import binary_search_sign_change, cached_level_crossings
 from .kaplan_meier import (
   KaplanMeierBase,
   KaplanMeierInstance,
@@ -279,9 +279,12 @@ class KaplanMeierLikelihood(KaplanMeierBase):
   def minlp_for_km(
     self,
     time_point: float,
+    *,
+    binomial_only: bool = False,
+    patient_wise_only: bool = False,
   ):
     """
-    Get the MINLP for the given time point.
+    Get the MINLP for the given time point and likelihood mode.
     """
     return MINLPForKM(
       all_patients=self.all_patients,
@@ -291,6 +294,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       endpoint_epsilon=self.__endpoint_epsilon,
       log_zero_epsilon=self.__log_zero_epsilon,
       collapse_consecutive_deaths=self.__collapse_consecutive_deaths,
+      binomial_only=binomial_only,
+      patient_wise_only=patient_wise_only,
     )
 
   def get_twoNLL_function( # pylint: disable=too-many-arguments
@@ -304,9 +309,11 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     MIPGap=None,
     MIPGapAbs=None,
     rerun_until_convergence=False,
+    assignment_starts=None,
   ) -> tuple[
-    collections.abc.Callable[[float | None], scipy.optimize.OptimizeResult],
-    collections.abc.Callable[[float | None], float],
+    InspectableCache[float | None, scipy.optimize.OptimizeResult],
+    InspectableCache[float | None, float],
+    MINLPForKM,
   ]:
     """
     Get the twoNLL function for the given time point.
@@ -321,7 +328,14 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     if MIPGapAbs is None:
       MIPGapAbs = self.__default_MIPGapAbs
 
-    minlp = self.minlp_for_km(time_point=time_point)
+    minlp = self.minlp_for_km(
+      time_point=time_point,
+      binomial_only=binomial_only,
+      patient_wise_only=patient_wise_only,
+    )
+    if assignment_starts is not None:
+      minlp.seed_assignment_starts(assignment_starts)
+
     @InspectableCache
     def run_MINLP(expected_probability: float | None) -> scipy.optimize.OptimizeResult:
       """
@@ -388,7 +402,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       if not result.success:
         return np.inf
       return result.x
-    return run_MINLP, twoNLL
+    return run_MINLP, twoNLL, minlp
 
   def calculate_possible_probabilities(self, time_point: float) -> np.ndarray:
     """
@@ -513,7 +527,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         )
       survival_probabilities_time_point = []
       survival_probabilities.append(survival_probabilities_time_point)
-      run_MINLP, twoNLL = self.get_twoNLL_function(
+      run_MINLP, twoNLL, _minlp = self.get_twoNLL_function(
         time_point=t,
         binomial_only=binomial_only,
         patient_wise_only=patient_wise_only,
@@ -544,34 +558,26 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           1 - self.__endpoint_epsilon,
         )
 
-      for CL in CLs:
-        if patient_wise_only and t < min(self.patient_death_times):
-          # If the time point is outside the range of patient times, we cannot
-          # calculate a patient-wise survival probability.
-          survival_probabilities_time_point.append((1, 1))
-          continue
+      if patient_wise_only:
+        for CL in CLs:
+          if t < min(self.patient_death_times):
+            survival_probabilities_time_point.append((1, 1))
+            continue
 
-        d2NLLcut = scipy.stats.chi2.ppf(CL, 1).item()
-        def objective_function(
-          expected_probability: float,
-          twoNLL=twoNLL, twoNLL_min=twoNLL_min, d2NLLcut=d2NLLcut
-        ) -> float:
-          return twoNLL(expected_probability) - twoNLL_min - d2NLLcut
-        if best_prob == best_prob_clipped:
-          #only do this if it's not too close to the edge
-          #to avoid edge effects
-          np.testing.assert_allclose(
-            objective_function(
-              best_prob
-            ),
-            -d2NLLcut,
-            atol=1e-2,
-          )
+          d2NLLcut = scipy.stats.chi2.ppf(CL, 1).item()
+          def objective_function(
+            expected_probability: float,
+            twoNLL=twoNLL, twoNLL_min=twoNLL_min, d2NLLcut=d2NLLcut
+          ) -> float:
+            return twoNLL(expected_probability) - twoNLL_min - d2NLLcut
+          if best_prob == best_prob_clipped:
+            np.testing.assert_allclose(
+              objective_function(best_prob),
+              -d2NLLcut,
+              atol=1e-2,
+            )
 
-        if patient_wise_only:
           probs = self.possible_probabilities(time_point=t)
-          #Explicitly add best_prob to the probabilities
-          #It should be there already, but sometimes isn't due to numerical issues
           if best_prob not in probs:
             probs = np.append(probs, best_prob)
             probs = np.sort(probs)
@@ -582,7 +588,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
             err_msg=f"Best probability {best_prob} not found in possible probabilities {probs}",
           )
 
-          # Check edge case: upper bound
           if objective_function(probs[-1]) < 0:
             upper_bound = 1
           else:
@@ -599,7 +604,6 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               raise RuntimeError("No upper sign change found")
             upper_bound = upper
 
-          # Check edge case: lower bound
           if objective_function(probs[0]) < 0:
             lower_bound = 0
           else:
@@ -615,40 +619,66 @@ class KaplanMeierLikelihood(KaplanMeierBase):
             if lower is None:
               raise RuntimeError("No lower sign change found")
             lower_bound = lower
+          survival_probabilities_time_point.append((lower_bound, upper_bound))
+      else:
+        levels = [scipy.stats.chi2.ppf(cl, 1).item() for cl in CLs]
 
+        def profile_excess(
+          expected_probability: float,
+          _twoNLL=twoNLL,
+          _twoNLL_min=twoNLL_min,
+        ) -> float:
+          return _twoNLL(expected_probability) - _twoNLL_min
+
+        if best_prob == best_prob_clipped:
+          np.testing.assert_allclose(profile_excess(best_prob), 0.0, atol=1e-2)
+
+        brentq_xtol = 1e-4
+        brentq_rtol = 1e-4
+        eps = self.__endpoint_epsilon
+        one_minus_eps = 1.0 - eps
+
+        if best_prob <= eps:
+          lowers = [0.0] * len(CLs)
         else:
-          if (
-            best_prob <= self.__endpoint_epsilon
-            or objective_function(self.__endpoint_epsilon) < 0
-          ):
-            lower_bound = 0
-          elif objective_function(best_prob_clipped) >= 0:
-            lower_bound = best_prob_clipped
-          else:
-            lower_bound = scipy.optimize.brentq(
-              objective_function,
-              self.__endpoint_epsilon,
-              best_prob_clipped,
-              xtol=MIPGapAbs,
-              rtol=np.float64(MIPGap),
-            )
-          if (
-            best_prob >= 1 - self.__endpoint_epsilon
-            or objective_function(1 - self.__endpoint_epsilon) < 0
-          ):
-            upper_bound = 1
-          elif objective_function(best_prob_clipped) >= 0:
-            upper_bound = best_prob_clipped
-          else:
-            upper_bound = scipy.optimize.brentq(
-              objective_function,
-              best_prob_clipped,
-              1 - self.__endpoint_epsilon,
-              xtol=MIPGapAbs,
-              rtol=np.float64(MIPGap),
-            )
+          lowers = cached_level_crossings(
+            profile_excess,
+            eps,
+            best_prob_clipped,
+            levels,
+            xtol=brentq_xtol,
+            rtol=brentq_rtol,
+          )
+          f_eps = profile_excess(eps)
+          lowers = [
+            0.0 if f_eps <= level else float(x)
+            for x, level in zip(lowers, levels, strict=True)
+          ]
 
-        survival_probabilities_time_point.append((lower_bound, upper_bound))
+        if best_prob >= one_minus_eps:
+          uppers = [1.0] * len(CLs)
+        else:
+          uppers = cached_level_crossings(
+            profile_excess,
+            one_minus_eps,
+            best_prob_clipped,
+            levels,
+            xtol=brentq_xtol,
+            rtol=brentq_rtol,
+          )
+          f_hi = profile_excess(one_minus_eps)
+          uppers = [
+            1.0 if f_hi <= level else float(x)
+            for x, level in zip(uppers, levels, strict=True)
+          ]
+
+        if print_progress:
+          print(
+            f"  CL crossings unique p evaluations={len(twoNLL.cache)} "
+            f"for time point {t}"
+          )
+        for lower_bound, upper_bound in zip(lowers, uppers, strict=True):
+          survival_probabilities_time_point.append((lower_bound, upper_bound))
     return np.array(best_probabilities), np.array(survival_probabilities)
 
   def plot(self, config: KaplanMeierPlotConfig | None = None, **kwargs) -> dict:

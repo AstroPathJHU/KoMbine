@@ -17,7 +17,11 @@ import numpy.typing as npt
 import scipy.optimize
 import scipy.stats
 
-from .kaplan_meier_MINLP import KaplanMeierPatientNLL, n_choose_d_term_table
+from .kaplan_meier_MINLP import (
+  KaplanMeierPatientNLL,
+  n_choose_d_term_table,
+  km_survival_from_risk_counts,
+)
 from .utilities import (
   LOG_ZERO_EPSILON_DEFAULT,
   GurobiOptimizerMixin,
@@ -54,7 +58,6 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     self.__tie_handling = tie_handling
     self.__log_hazard_ratio_bounds = log_hazard_ratio_bounds
     self.__null_hypothesis_constraint = None
-    self.__patient_constraints_for_cox_only = None
     self.__patient_wise_only_constraint = None
     self.__cox_penalty_constraint = None
     self.__risk_set_r_vars = None
@@ -701,9 +704,7 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
 
     return patients_low, patients_high
 
-  def _extract_curve_statistics( #pylint: disable=too-many-locals
-    self, model: gp.Model, km_probability_at_time_low, km_probability_at_time_high
-  ):
+  def _extract_curve_statistics(self, model: gp.Model):  # pylint: disable=too-many-locals
     """
     Extract statistics for each curve from the optimized model.
 
@@ -711,39 +712,45 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
         tuple: (n_total_low, n_alive_low, km_prob_low,
                 n_total_high, n_alive_high, km_prob_high)
     """
-    # Extract KM probabilities for each curve
-    km_prob_low = [
-      km_prob.X for _, km_prob in km_probability_at_time_low.items()
-    ]
-    km_prob_high = [
-      km_prob.X for _, km_prob in km_probability_at_time_high.items()
-    ]
-
-    # For n_total and n_alive, we need to look at the r and d variables per curve
-    # These represent at-risk and died counts for each curve
+    n_times = len(self.all_death_times)
+    r_low = []
+    r_high = []
+    s_low = []
+    s_high = []
     n_total_low = 0
     n_alive_low = 0
     n_total_high = 0
     n_alive_high = 0
+    for i in range(n_times):
+      r0 = model.getVarByName(f"r[{i},0]")
+      r1 = model.getVarByName(f"r[{i},1]")
+      d0 = model.getVarByName(f"d[{i},0]")
+      d1 = model.getVarByName(f"d[{i},1]")
+      s0 = model.getVarByName(f"n_survived[{i},0]")
+      s1 = model.getVarByName(f"n_survived[{i},1]")
+      assert r0 is not None and r1 is not None
+      assert d0 is not None and d1 is not None
+      assert s0 is not None and s1 is not None
+      r_low.append(r0.X)
+      r_high.append(r1.X)
+      s_low.append(s0.X)
+      s_high.append(s1.X)
+      if i == 0:
+        n_total_low = int(np.rint(r0.X))
+        n_total_high = int(np.rint(r1.X))
+      n_alive_low = n_total_low - int(np.rint(d0.X))
+      n_alive_high = n_total_high - int(np.rint(d1.X))
 
-    for i in range(len(self.all_death_times)):
-      r_low = model.getVarByName(f"r[{i},0]")
-      r_high = model.getVarByName(f"r[{i},1]")
-      d_low = model.getVarByName(f"d[{i},0]")
-      d_high = model.getVarByName(f"d[{i},1]")
-      assert r_low is not None
-      assert r_high is not None
-      assert d_low is not None
-      assert d_high is not None
-
-      if i == 0:  # Use first time point as representative
-        n_total_low = int(np.rint(r_low.X))
-      if i == 0:  # Use first time point as representative
-        n_total_high = int(np.rint(r_high.X))
-
-      n_alive_low = n_total_low - int(np.rint(d_low.X))
-      n_alive_high = n_total_high - int(np.rint(d_high.X))
-
+    km_prob_low = km_survival_from_risk_counts(
+      r_low, s_low,
+      log_zero_epsilon=self.log_zero_epsilon,
+      cumulative=True,
+    )
+    km_prob_high = km_survival_from_risk_counts(
+      r_high, s_high,
+      log_zero_epsilon=self.log_zero_epsilon,
+      cumulative=True,
+    )
     return (
       n_total_low, n_alive_low, km_prob_low,
       n_total_high, n_alive_high, km_prob_high,
@@ -794,15 +801,7 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     #Binary decision variables: a[j, k] = 1 if patient j is in curve k
     a = model.addVars(self.n_patients, 2, vtype=gp.GRB.BINARY, name="a")
 
-    r, d, n_survived = self.add_counter_variables_and_constraints(model, a)
-
-    # Add Kaplan-Meier probability variables and constraints
-    (
-      km_probability_at_time_low,
-      km_probability_at_time_high
-    ) = self.add_kaplan_meier_probability_variables_and_constraints(
-      model, r, n_survived
-    )
+    r, d, _n_survived = self.add_counter_variables_and_constraints(model, a)
 
     (
       cox_penalty,
@@ -828,8 +827,6 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
       model,
       null_hypothesis_indicator,
       a,
-      km_probability_at_time_low,
-      km_probability_at_time_high,
       beta,
       use_cox_penalty_indicator,
     )
@@ -873,36 +870,20 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     cox_only: bool,
   ):
     """
-    Update the model with cox_only constraints.
-    If cox_only is True, we add constraints for a[i, j] to be either 0 or 1,
-    based on parameter_in_range.
-    """
-    # Remove existing constraints if they exist
-    if self.__patient_constraints_for_cox_only is not None:
-      for constr in self.__patient_constraints_for_cox_only:
-        model.remove(constr)
-      self.__patient_constraints_for_cox_only = None
+    Fix or unfix assignment variables for cox_only mode.
 
-    if cox_only:
-      self.__patient_constraints_for_cox_only = []
-      for i in range(self.n_patients):
-        for j in range(2):  # j=0 for low curve, j=1 for high curve
-          if self.parameter_in_range[i, j]:
-            # The patient must be selected for this curve
-            self.__patient_constraints_for_cox_only.append(
-              model.addConstr(
-                a[i, j] == 1,
-                name=f"patient_{i}_must_be_selected_curve_{j}_cox_only",
-              )
-            )
-          else:
-            # The patient must not be selected for this curve
-            self.__patient_constraints_for_cox_only.append(
-              model.addConstr(
-                a[i, j] == 0,
-                name=f"patient_{i}_must_not_be_selected_curve_{j}_cox_only",
-              )
-            )
+    When cox_only is True, assignments are locked to the nominal in-range
+    groups via bounds so presolve can drop the assignment MIP.
+    """
+    for i in range(self.n_patients):
+      for j in range(2):
+        if cox_only:
+          value = 1.0 if self.parameter_in_range[i, j] else 0.0
+          a[i, j].LB = value
+          a[i, j].UB = value
+        else:
+          a[i, j].LB = 0.0
+          a[i, j].UB = 1.0
 
     model.update()
 
@@ -1066,42 +1047,10 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     ]
     self._invalidate_outcome_dependent_state(keep_model=keep_model)
 
-  def _with_permuted_outcomes(
-    self,
-    rng: np.random.Generator,
-  ) -> "MINLPforKMPValue":
-    """
-    Copy this calculator with (time, censored) shuffled across patients.
-    """
-    n_patients = self.n_patients
-    times = [patient.time for patient in self.all_patients]
-    censored = [patient.censored for patient in self.all_patients]
-    order = rng.permutation(n_patients)
-    shuffled = [
-      KaplanMeierPatientNLL(
-        time=times[order[i]],
-        censored=bool(censored[order[i]]),
-        parameter_nll=patient.parameter,
-        observed_parameter=patient.observed_parameter,
-      )
-      for i, patient in enumerate(self.all_patients)
-    ]
-    return type(self)(
-      shuffled,
-      parameter_min=self.parameter_min,
-      parameter_threshold=self.parameter_threshold,
-      parameter_max=self.parameter_max,
-      log_zero_epsilon=self.log_zero_epsilon,
-      tie_handling=self.tie_handling,
-      log_hazard_ratio_bounds=self.log_hazard_ratio_bounds,
-    )
-
   def _extract_optimize_result(
     self,
     model: gp.Model,
     a: gp.tupledict[tuple[int, ...], gp.Var],
-    km_probability_at_time_low,
-    km_probability_at_time_high,
   ) -> scipy.optimize.OptimizeResult:
     """
     Pack the current Gurobi solution into an OptimizeResult.
@@ -1110,9 +1059,7 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     (
       n_total_low, n_alive_low, km_prob_low,
       n_total_high, n_alive_high, km_prob_high,
-    ) = self._extract_curve_statistics(
-      model, km_probability_at_time_low, km_probability_at_time_high,
-    )
+    ) = self._extract_curve_statistics(model)
     log_hazard_ratio_var = model.getVarByName("log_hazard_ratio")
     assert log_hazard_ratio_var is not None
     return scipy.optimize.OptimizeResult(
@@ -1158,8 +1105,6 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
       model,
       null_hypothesis_indicator,
       a,
-      km_probability_at_time_low,
-      km_probability_at_time_high,
       beta,
       use_cox_penalty_indicator,
     ) = self.gurobi_model
@@ -1184,6 +1129,8 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     }
 
     result_null = None
+    start_a = None
+    start_beta = None
     if solve_null:
       if print_progress or verbose:
         print("Solving for null hypothesis...")
@@ -1193,21 +1140,30 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
       model = self._setup_and_optimize(model, **solver_kwargs)
       if model.status != GRB.OPTIMAL:
         raise ValueError(f"Null model failed with status {model.status}")
-      result_null = self._extract_optimize_result(
-        model, a, km_probability_at_time_low, km_probability_at_time_high,
-      )
+      result_null = self._extract_optimize_result(model, a)
+      if not cox_only:
+        start_a = {
+          (i, j): float(a[i, j].X)
+          for i in range(self.n_patients)
+          for j in range(2)
+        }
+        if beta is not None:
+          start_beta = float(beta.X)
 
     if print_progress or verbose:
       print("Solving for alternative hypothesis...")
     self.update_model_for_null_hypothesis_or_not(
       model, null_hypothesis_indicator, False,
     )
+    if start_a is not None:
+      for (i, j), value in start_a.items():
+        a[i, j].Start = value
+      if start_beta is not None:
+        beta.Start = start_beta
     model = self._setup_and_optimize(model, **solver_kwargs)
     if model.status != GRB.OPTIMAL:
       raise ValueError(f"Alternative model failed with status {model.status}")
-    result_alt = self._extract_optimize_result(
-      model, a, km_probability_at_time_low, km_probability_at_time_high,
-    )
+    result_alt = self._extract_optimize_result(model, a)
     return result_null, result_alt
 
   def solve_and_pvalue( # pylint: disable=too-many-locals, too-many-arguments
@@ -1335,8 +1291,6 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
             model,
             _null_hypothesis_indicator,
             a,
-            _km_probability_at_time_low,
-            _km_probability_at_time_high,
             _beta,
             _use_cox_penalty_indicator,
           ) = perm_calc.gurobi_model
@@ -1362,6 +1316,7 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     result_alt.n_permutations = n_permutations
     result_alt.n_extreme = n_extreme
     return p_value, result_null, result_alt
+
 
   def survival_curves_pvalue_logrank(  #pylint: disable=too-many-locals, too-many-branches
     self,

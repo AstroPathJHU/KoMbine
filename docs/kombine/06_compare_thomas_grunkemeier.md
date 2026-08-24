@@ -249,7 +249,7 @@ def compare_tg_vs_kombine(  # pylint: disable=too-many-arguments,too-many-positi
   datacard_path,
   conf_level=0.95,
   atol_surv=1e-6,
-  atol_ci=3e-5,
+  atol_ci=2e-4,  # brentq on MINLP 2NLL uses xtol/rtol 1e-4
 ):
   """Compare TG (R) and KoMbine (Python), return merged table and summary."""
   kombine_df, datacard = kombine_binomial_only(datacard_path, conf_level=conf_level)

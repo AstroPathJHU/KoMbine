@@ -38,6 +38,36 @@ def n_choose_d_term_table(n_patients) -> dict[tuple[int, int], float]:
   return table
 
 
+def km_survival_from_risk_counts(
+  r_vals: npt.ArrayLike,
+  s_vals: npt.ArrayLike,
+  *,
+  log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT,
+  cumulative: bool = False,
+) -> float | list[float]:
+  """
+  Kaplan-Meier survival from at-risk and survived counts.
+
+  Matches the Gurobi encoding: skip r == 0; otherwise use
+  log(s + eps) - log(r + eps). If ``cumulative``, return the survival
+  probability after each interval; otherwise the product over all intervals.
+  """
+  r_vals = np.asarray(r_vals, dtype=float)
+  s_vals = np.asarray(s_vals, dtype=float)
+  if r_vals.shape != s_vals.shape:
+    raise ValueError("r_vals and s_vals must have the same shape")
+  log_cum = 0.0
+  probs: list[float] = []
+  for r, s in zip(r_vals.tolist(), s_vals.tolist()):
+    if r > 0.5:
+      log_cum += math.log(s + log_zero_epsilon) - math.log(r + log_zero_epsilon)
+    if cumulative:
+      probs.append(float(math.exp(log_cum)))
+  if cumulative:
+    return probs
+  return float(math.exp(log_cum))
+
+
 class KaplanMeierPatientNLL(KaplanMeierPatientBase):
   """
   A patient with a time and a parameter.
@@ -530,7 +560,11 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     endpoint_epsilon: float = 1e-6,
     log_zero_epsilon: float = LOG_ZERO_EPSILON_DEFAULT, # New parameter for log arguments
     collapse_consecutive_deaths: bool = True,
+    binomial_only: bool = False,
+    patient_wise_only: bool = False,
   ):
+    if binomial_only and patient_wise_only:
+      raise ValueError("binomial_only and patient_wise_only cannot both be True")
     self.__all_patients = all_patients
     self.__parameter_min = parameter_min
     self.__parameter_max = parameter_max
@@ -538,13 +572,112 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     self.__endpoint_epsilon = endpoint_epsilon
     self.__log_zero_epsilon = log_zero_epsilon # Store the epsilon
     self.__collapse_consecutive_deaths = collapse_consecutive_deaths
+    self.__binomial_only = binomial_only
+    self.__patient_wise_only = patient_wise_only
     self.__expected_probability_constraint = None
-    self.__binomial_penalty_constraint = None
-    self.__patient_constraints_for_binomial_only = None
+    self.__risk_set_r_vars = None
+    self.__risk_set_s_vars = None
+    self.__profile_p_died = None
+    self.__profile_p_survived = None
+    self.__profile_log_p_died = None
+    self.__profile_log_p_survived = None
+    # MIP starts from the previous nearby expected_probability solve.
+    self.__mip_start_a: dict[int, float] | None = None
+    self.__mip_start_mode: tuple[bool, bool] | None = None
+    self.__mip_start_profile: dict[str, list[float]] | None = None
     if not np.isfinite(self.__parameter_min and self.__parameter_min != -np.inf):
       raise ValueError("parameter_min must be finite or -inf")
     if not np.isfinite(self.__parameter_max and self.__parameter_max != np.inf):
       raise ValueError("parameter_max must be finite or inf")
+
+  def seed_assignment_starts(self, starts: dict[int, float] | list[int]) -> None:
+    """
+    Seed binary assignment Starts from a previous solve (e.g. another time point).
+
+    ``starts`` may be a dict of patient index -> 0/1, or a list of selected indices.
+    """
+    if isinstance(starts, dict):
+      self.__mip_start_a = {int(k): float(v) for k, v in starts.items()}
+    else:
+      selected = set(int(j) for j in starts)
+      self.__mip_start_a = {
+        j: 1.0 if j in selected else 0.0 for j in range(self.n_patients)
+      }
+    # Mode unknown when seeded externally; allow first solve to use them.
+    self.__mip_start_mode = None
+
+  def _apply_assignment_mip_starts(
+    self,
+    a,
+    *,
+    binomial_only: bool,
+    patient_wise_only: bool,
+  ) -> None:
+    """Apply cached assignment Starts when the constraint mode matches."""
+    mode = (binomial_only, patient_wise_only)
+    if self.__mip_start_mode is not None and self.__mip_start_mode != mode:
+      self.__mip_start_a = None
+      self.__mip_start_mode = None
+      self.__mip_start_profile = None
+    if self.__mip_start_a is None:
+      for j in range(self.n_patients):
+        a[j].Start = GRB.UNDEFINED
+      return
+    for j, value in self.__mip_start_a.items():
+      if j < self.n_patients:
+        a[j].Start = value
+
+  def _store_assignment_mip_starts(
+    self,
+    a,
+    *,
+    binomial_only: bool,
+    patient_wise_only: bool,
+  ) -> None:
+    """Cache assignment incumbents for the next nearby expected_probability."""
+    self.__mip_start_a = {j: float(a[j].X) for j in range(self.n_patients)}
+    self.__mip_start_mode = (binomial_only, patient_wise_only)
+
+  def export_assignment_mip_starts(self) -> dict[int, float] | None:
+    """Return the cached assignment Starts, if any."""
+    if self.__mip_start_a is None:
+      return None
+    return dict(self.__mip_start_a)
+
+  def _apply_profile_mip_starts(self) -> None:
+    """Start continuous profile probabilities from the previous nearby solve."""
+    starts = self.__mip_start_profile
+    if starts is None:
+      return
+    var_map = {
+      "p_died": self.__profile_p_died,
+      "p_survived": self.__profile_p_survived,
+      "log_p_died": self.__profile_log_p_died,
+      "log_p_survived": self.__profile_log_p_survived,
+    }
+    for name, values in starts.items():
+      vars_by_time = var_map.get(name)
+      if vars_by_time is None:
+        continue
+      for i, value in enumerate(values):
+        if i < len(vars_by_time):
+          vars_by_time[i].Start = value
+
+  def _store_profile_mip_starts(self) -> None:
+    """Cache continuous profile incumbents for the next nearby expected_probability."""
+    p_died = self.__profile_p_died
+    p_survived = self.__profile_p_survived
+    log_p_died = self.__profile_log_p_died
+    log_p_survived = self.__profile_log_p_survived
+    if p_died is None or p_survived is None or log_p_died is None or log_p_survived is None:
+      self.__mip_start_profile = None
+      return
+    self.__mip_start_profile = {
+      "p_died": [float(p_died[i].X) for i in range(self.n_times_to_consider)],
+      "p_survived": [float(p_survived[i].X) for i in range(self.n_times_to_consider)],
+      "log_p_died": [float(log_p_died[i].X) for i in range(self.n_times_to_consider)],
+      "log_p_survived": [float(log_p_survived[i].X) for i in range(self.n_times_to_consider)],
+    }
 
   @property
   def all_patients(self) -> list[KaplanMeierPatientNLL]:
@@ -977,6 +1110,53 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     """
     return n_choose_d_term_table(n_patients=self.n_patients)
 
+  def _fixed_selected_counts(self) -> tuple[list[int], list[int], list[int], list[int]]:
+    """
+    At-risk, died, survived, and collapsed sub-death counts for the nominal
+    in-range assignment (used when ``binomial_only`` fixes ``a``).
+    """
+    selected = self.parameter_in_range
+    r_vals: list[int] = []
+    d_vals: list[int] = []
+    s_vals: list[int] = []
+    sub_d_vals: list[int] = []
+    for dt in self.times_to_consider:
+      r_value = int(np.count_nonzero(self.patient_still_at_risk(dt) & selected))
+      d_value = int(np.count_nonzero(self.patient_died(dt) & selected))
+      r_vals.append(r_value)
+      d_vals.append(d_value)
+      s_vals.append(r_value - d_value)
+      for collapsed_time in self._collapsed_time_groups[dt]:
+        sub_d_vals.append(int(np.count_nonzero(
+          self.patient_died(collapsed_time, collapse_consecutive_deaths=False)
+          & selected
+        )))
+    return r_vals, d_vals, s_vals, sub_d_vals
+
+  def _rd_pair_is_feasible(self, i: int, r_value: int, d_value: int) -> bool:
+    """Whether (r, d) at death-time index i can occur given risk-set flow.
+
+    Survivors at time i cannot exceed the next risk-set maximum plus all
+    censoring in ``[times[i], times[i+1])``, and r cannot exceed the previous
+    risk-set maximum.  These bounds are valid for collapsed times because
+    ``times_to_consider`` are group ends and intervening censoring is what
+    splits groups.
+    """
+    if (
+      r_value > self.n_at_risk_max[i]
+      or d_value > self.n_died_max[i]
+      or d_value > r_value
+    ):
+      return False
+    s_value = r_value - d_value
+    if i + 1 < self.n_times_to_consider:
+      cmax = int(self.n_censored_between_times_max[i])
+      if s_value > int(self.n_at_risk_max[i + 1]) + cmax:
+        return False
+    if i > 0 and r_value > int(self.n_at_risk_max[i - 1]):
+      return False
+    return True
+
   def add_counter_variables_and_constraints(
     self,
     model: gp.Model,
@@ -1213,7 +1393,11 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     To complicate things, we only know the overall expected survival probability,
     not the probability of survival in each group.
     So we need to profile those.
+
+    Survived counts enter through ``r - d`` on the choose-(r, d) indicators;
+    the ``s`` tupledict is unused here but kept for call-site compatibility.
     """
+    _ = s  # survived encoded as r - d on choose-(r, d) indicators
 
     #p_i = probability of dying at death time i
     p_died = model.addVars(
@@ -1249,7 +1433,6 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       lb=log_p_bounds[0],
       ub=log_p_bounds[1],
     )
-    sub_d_counter = -1
     for i in range(self.n_times_to_consider):
       model.addGenConstrExp(log_p_died[i], p_died[i], name=f"log_p_died_constr_{i}")
       model.addGenConstrExp(log_p_survived[i], p_survived[i], name=f"log_p_survived_constr_{i}")
@@ -1281,190 +1464,140 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       log_expected_probability == log_p_survived.sum(),
       name="overall_expected_probability_constraint",
     )
+    self.__profile_p_died = p_died
+    self.__profile_p_survived = p_survived
+    self.__profile_log_p_died = log_p_died
+    self.__profile_log_p_survived = log_p_survived
 
-    #Binomial terms
-    #binomial probability = (n_at_risk choose n_died)
-    #                       * dying probability ^ n_died
-    #                       * surviving probability ^ n_survived
-    #  ==> log likelihood = log(n_at_risk choose n_died)
-    #                       + n_died * log(dying probability)
-    #                       + (n_at_risk - n_died) * log(surviving probability)
-    #                     = log(n_at_risk choose n_died)
-    #                       + n_died * log_p_died
-    #                       + (n_at_risk - n_died) * log_p_survived
-
-    use_binomial_penalty_indicator = model.addVar(
-      vtype=GRB.BINARY,
-      name="use_binomial_penalty_indicator",
-    )
-
-    #n_at_risk choose n_died term
     n_choose_d_table = self.n_choose_d_term_table
-    all_n_choose_d_indicator_vars = model.addVars(
-      self.n_times_to_consider, len(n_choose_d_table),
-      vtype=GRB.BINARY,
-      name="n_choose_d_indicator",
-    )
-    n_choose_d_indicator_vars = {
-      (i, n, d): all_n_choose_d_indicator_vars[i, idx]
-      for i in range(self.n_times_to_consider)
-      for idx, (n, d) in enumerate(n_choose_d_table.keys())
-    }
-    n_died_indicator_vars = model.addVars(
-      self.n_times_to_consider, int(max(self.n_died_max)+1),
-      vtype=GRB.BINARY,
-      name="n_died_indicator",
-    )
-    n_survived_indicator_vars = model.addVars(
-      self.n_times_to_consider, self.n_patients + 1,
-      #could probably have somewhat fewer of these: the maximum is n_patients,
-      #but the minimum is not 0.
-      vtype=GRB.BINARY,
-      name="n_survived_indicator",
-    )
     binomial_terms = []
-    for i, time in enumerate(self.times_to_consider):
-      for (r_value, d_value), penalty in n_choose_d_table.items():
-        indicator = n_choose_d_indicator_vars[i, r_value, d_value]
-        model.addGenConstrIndicator(
-          indicator,
-          True,
-          r[i],
-          GRB.EQUAL,
-          r_value,
-          name=f"n_choose_d_indicator_r_{i}_{r_value}_{d_value}",
-        )
-        model.addGenConstrIndicator(
-          indicator,
-          True,
-          d[i],
-          GRB.EQUAL,
-          d_value,
-          name=f"n_choose_d_indicator_d_{i}_{r_value}_{d_value}",
-        )
-        if (
-          r_value > self.n_at_risk_max[i]
-          or d_value > self.n_died_max[i]
-          or d_value > r_value
-        ):
-          model.addConstr(
-            indicator == 0,
-            name=f"n_choose_d_indicator_impossible_{i}_{r_value}_{d_value}",
-          )
-        binomial_terms.append(-penalty * indicator)
-      # Ensure that exactly one n_choose_d_indicator is selected for each death time
-      indicators = [
-        all_n_choose_d_indicator_vars[i, idx]
-        for idx in range(len(n_choose_d_table))
-      ]
-      model.addConstr(
-        gp.quicksum(indicators) == 1,
-        name=f"one_n_choose_d_indicator_per_death_time_{i}",
-      )
 
-      for d_value in range(max(self.n_died_max) + 1):
-        model.addGenConstrIndicator(
-          n_died_indicator_vars[i, d_value],
-          True,
-          d[i],
-          GRB.EQUAL,
-          d_value,
-          name=f"n_died_indicator_{i}_{d_value}",
-        )
-        if d_value > self.n_died_max[i]:
-          model.addConstr(
-            n_died_indicator_vars[i, d_value] == 0,
-            name=f"n_died_indicator_impossible_{i}_{d_value}",
-          )
-        binomial_terms.append(
-          -d_value * log_p_died[i] * n_died_indicator_vars[i, d_value]
-        )
-      # Ensure that exactly one n_died_indicator is selected for each group
-      model.addConstr(
-        gp.quicksum(
-          n_died_indicator_vars[i, d_value]
-          for d_value in range(max(self.n_died_max)+1)
-        ) == 1,
-        name=f"one_n_died_indicator_per_death_time_{i}",
-      )
-
-      for s_value in range(self.n_patients + 1):
-        model.addGenConstrIndicator(
-          n_survived_indicator_vars[i, s_value],
-          True,
-          s[i],
-          GRB.EQUAL,
-          s_value,
-          name=f"n_survived_indicator_{i}_{s_value}",
-        )
-        if s_value > self.n_at_risk_max[i]:
-          model.addConstr(
-            n_survived_indicator_vars[i, s_value] == 0,
-            name=f"n_survived_indicator_impossible_{i}_{s_value}",
-          )
-        binomial_terms.append(
-          -s_value * log_p_survived[i] * n_survived_indicator_vars[i, s_value]
-        )
-
-      # Ensure that exactly one n_survived_indicator is selected for each group
-      model.addConstr(
-        gp.quicksum(
-          n_survived_indicator_vars[i, s_value]
-          for s_value in range(self.n_patients + 1)
-        ) == 1,
-        name=f"one_n_survived_indicator_per_death_time_{i}",
-      )
-
-      # Additional term needed when collapsing consecutive deaths
-      # See \ref{sec:collapsing-consecutive-deaths} in the paper
-      # Note that if collapse_consecutive_deaths is False (or if there's
-      # only one death time in the group), we add and subtract the same thing.
-      for sub_d_counter, collapsed_time in enumerate(
-        self._collapsed_time_groups[time],
-        start=sub_d_counter+1
-      ):
-        sub_d_var = sub_d[sub_d_counter]
-        max_sub_d = np.count_nonzero(
-          self.patient_died(collapsed_time, collapse_consecutive_deaths=False)
-        )
-        sub_d_indicators = []
-        for sub_d_value in range(max_sub_d + 1):
-          sub_d_indicator = model.addVar(
-            vtype=GRB.BINARY,
-            name=f"sub_d_indicator_{i}_{sub_d_counter}_{sub_d_value}",
-          )
-          sub_d_indicators.append(sub_d_indicator)
-          model.addGenConstrIndicator(
-            sub_d_indicator,
-            True,
-            sub_d_var,
-            GRB.EQUAL,
-            sub_d_value,
-            name=f"sub_d_indicator_constr_{i}_{sub_d_counter}_{sub_d_value}",
-          )
-          if sub_d_value > 0:
-            binomial_terms.append(
-              sub_d_indicator * (
-                math.lgamma(sub_d_value + 1) - sub_d_value * np.log(sub_d_value)
-              )
-            )
-        model.addConstr(
-          gp.quicksum(sub_d_indicators) == 1,
-          name=f"one_sub_d_indicator_per_sub_death_time_{i}_{sub_d_counter}",
-        )
-
-      for d_value in range(max(self.n_died_max) + 1):
+    if self.__binomial_only:
+      _ = (r, d, sub_d)
+      r_vals, d_vals, _s_vals, sub_d_vals = self._fixed_selected_counts()
+      sub_d_offset = 0
+      for i, time in enumerate(self.times_to_consider):
+        r_value = r_vals[i]
+        d_value = d_vals[i]
+        s_value = r_value - d_value
+        penalty = n_choose_d_table[(r_value, d_value)]
+        binomial_terms.append(-penalty)
+        binomial_terms.append(-d_value * log_p_died[i])
+        binomial_terms.append(-s_value * log_p_survived[i])
         if d_value > 0:
           binomial_terms.append(
-            -n_died_indicator_vars[i, d_value] * (
-              math.lgamma(d_value + 1) - d_value * np.log(d_value)
+            -(math.lgamma(d_value + 1) - d_value * np.log(d_value))
+          )
+        n_sub = len(self._collapsed_time_groups[time])
+        for sub_d_value in sub_d_vals[sub_d_offset:sub_d_offset + n_sub]:
+          if sub_d_value > 0:
+            binomial_terms.append(
+              math.lgamma(sub_d_value + 1) - sub_d_value * np.log(sub_d_value)
             )
+        sub_d_offset += n_sub
+    else:
+      # Binomial terms: one SOS1-style choose-(r,d) encoding per death time.
+      # Only flow-feasible (r,d) indicators are created; d*log p_d and s*log p_s
+      # are charged on the same indicator.
+      sub_d_counter = -1
+      for i, time in enumerate(self.times_to_consider):
+        feasible_indicators = []
+        for (r_value, d_value), penalty in n_choose_d_table.items():
+          if not self._rd_pair_is_feasible(i, r_value, d_value):
+            continue
+          indicator = model.addVar(
+            vtype=GRB.BINARY,
+            name=f"n_choose_d_indicator_{i}_{r_value}_{d_value}",
+          )
+          feasible_indicators.append(indicator)
+          model.addGenConstrIndicator(
+            indicator,
+            True,
+            r[i],
+            GRB.EQUAL,
+            r_value,
+            name=f"n_choose_d_indicator_r_{i}_{r_value}_{d_value}",
+          )
+          model.addGenConstrIndicator(
+            indicator,
+            True,
+            d[i],
+            GRB.EQUAL,
+            d_value,
+            name=f"n_choose_d_indicator_d_{i}_{r_value}_{d_value}",
+          )
+          s_value = r_value - d_value
+          binomial_terms.append(-penalty * indicator)
+          binomial_terms.append(-d_value * log_p_died[i] * indicator)
+          binomial_terms.append(-s_value * log_p_survived[i] * indicator)
+          if d_value > 0:
+            binomial_terms.append(
+              -indicator * (
+                math.lgamma(d_value + 1) - d_value * np.log(d_value)
+              )
+            )
+
+        if not feasible_indicators:
+          raise RuntimeError(
+            f"No feasible (r, d) pairs for death-time index {i} "
+            f"(n_at_risk_max={self.n_at_risk_max[i]}, n_died_max={self.n_died_max[i]})"
+          )
+        model.addConstr(
+          gp.quicksum(feasible_indicators) == 1,
+          name=f"one_n_choose_d_indicator_per_death_time_{i}",
+        )
+
+        for sub_d_counter, collapsed_time in enumerate(
+          self._collapsed_time_groups[time],
+          start=sub_d_counter+1
+        ):
+          sub_d_var = sub_d[sub_d_counter]
+          max_sub_d = np.count_nonzero(
+            self.patient_died(collapsed_time, collapse_consecutive_deaths=False)
+          )
+          sub_d_indicators = []
+          for sub_d_value in range(max_sub_d + 1):
+            sub_d_indicator = model.addVar(
+              vtype=GRB.BINARY,
+              name=f"sub_d_indicator_{i}_{sub_d_counter}_{sub_d_value}",
+            )
+            sub_d_indicators.append(sub_d_indicator)
+            model.addGenConstrIndicator(
+              sub_d_indicator,
+              True,
+              sub_d_var,
+              GRB.EQUAL,
+              sub_d_value,
+              name=f"sub_d_indicator_constr_{i}_{sub_d_counter}_{sub_d_value}",
+            )
+            if sub_d_value > 0:
+              binomial_terms.append(
+                sub_d_indicator * (
+                  math.lgamma(sub_d_value + 1) - sub_d_value * np.log(sub_d_value)
+                )
+              )
+          model.addConstr(
+            gp.quicksum(sub_d_indicators) == 1,
+            name=f"one_sub_d_indicator_per_sub_death_time_{i}_{sub_d_counter}",
           )
 
     binom_penalty_expr = gp.quicksum(binomial_terms)
     binom_penalty = model.addVar(
       vtype=GRB.CONTINUOUS,
       name="binom_penalty",
+    )
+    if self.__binomial_only:
+      model.addConstr(
+        binom_penalty == binom_penalty_expr,
+        name="binomial_penalty_definition",
+      )
+      return binom_penalty, expected_probability_var, None
+
+    # Full NLL: bilinear terms (indicator * log p). Keep the indicator + big-M
+    # sandwich so Gurobi does not treat this as a quadratic equality (status 13).
+    use_binomial_penalty_indicator = model.addVar(
+      vtype=GRB.BINARY,
+      name="use_binomial_penalty_indicator",
     )
     model.addGenConstrIndicator(
       use_binomial_penalty_indicator,
@@ -1474,10 +1607,8 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       0.0,
       name="binomial_penalty_inactive",
     )
-
-    #big M constraint to ensure binomial penalty is only used when the indicator is set
     max_penalty_term = max(
-      abs(penalty) for penalty in self.n_choose_d_term_table.values()
+      abs(penalty) for penalty in n_choose_d_table.values()
     )
     max_d = max(self.n_died_max)
     max_s = self.n_patients
@@ -1496,7 +1627,6 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       binom_penalty >= binom_penalty_expr - big_M * (1 - use_binomial_penalty_indicator),
       name="binomial_penalty_expr_lower_bound"
     )
-
     return binom_penalty, expected_probability_var, use_binomial_penalty_indicator
 
   def add_patient_wise_penalty(
@@ -1562,24 +1692,48 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       a=a,
     )
 
-    # Add Kaplan-Meier probability variables and constraints (replaces trajectory logic)
-    km_probability_var = self.add_kaplan_meier_probability_variables_and_constraints(
-      model=model,
-      r=r,
-      s=s,
-    )
+    km_probability_var = None
+    expected_probability_var = None
+    use_binomial_penalty_indicator = None
+    binom_penalty = 0.0
 
-    (
-      binom_penalty,
-      expected_probability_var,
-      use_binomial_penalty_indicator,
-    ) = self.add_binomial_penalty(
-      model=model,
-      r=r,
-      d=d,
-      sub_d=sub_d,
-      s=s,
-    )
+    if self.__patient_wise_only:
+      km_probability_var = self.add_kaplan_meier_probability_variables_and_constraints(
+        model=model,
+        r=r,
+        s=s,
+      )
+    else:
+      (
+        binom_penalty,
+        expected_probability_var,
+        use_binomial_penalty_indicator,
+      ) = self.add_binomial_penalty(
+        model=model,
+        r=r,
+        d=d,
+        sub_d=sub_d,
+        s=s,
+      )
+      if use_binomial_penalty_indicator is not None:
+        model.addConstr(
+          use_binomial_penalty_indicator == 1,
+          name="use_binomial_penalty",
+        )
+      if self.__binomial_only:
+        for j in range(self.n_patients):
+          if self.parameter_in_range[j]:
+            assert self.nll_penalty_for_patient_in_range[j] <= 0
+            model.addConstr(
+              a[j] == 1,
+              name=f"patient_{j}_must_be_selected_binomial_only",
+            )
+          else:
+            assert self.nll_penalty_for_patient_in_range[j] >= 0
+            model.addConstr(
+              a[j] == 0,
+              name=f"patient_{j}_must_not_be_selected_binomial_only",
+            )
 
     patient_penalty = self.add_patient_wise_penalty(
       model=model,
@@ -1592,6 +1746,8 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       GRB.MINIMIZE,
     )
     model.update()
+    self.__risk_set_r_vars = r
+    self.__risk_set_s_vars = s
 
     return (
       model,
@@ -1614,58 +1770,30 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     *,
     model: gp.Model,
     expected_probability: float | None,
-    patient_wise_only: bool,
-    binomial_only: bool,
-    a: gp.tupledict[int, gp.Var],
-    km_probability_var: gp.Var,
-    use_binomial_penalty_indicator: gp.Var,
-    expected_probability_var: gp.Var,
+    km_probability_var: gp.Var | None,
+    expected_probability_var: gp.Var | None,
   ):
     """
     Update the Gurobi model with the expected probability constraint.
     This is the only thing that changes between runs of the MINLP.
     """
-    #drop the previous constraints if they exist
     if self.__expected_probability_constraint is not None:
       model.remove(self.__expected_probability_constraint)
       self.__expected_probability_constraint = None
-    if self.__binomial_penalty_constraint is not None:
-      model.remove(self.__binomial_penalty_constraint)
-      self.__binomial_penalty_constraint = None
-    if self.__patient_constraints_for_binomial_only is not None:
-      for constr in self.__patient_constraints_for_binomial_only:
-        model.remove(constr)
-      self.__patient_constraints_for_binomial_only = None
 
-    if not patient_wise_only:
-      # ---------------------------
-      # Binomial penalty is active, constrain its expected probability
-      # ---------------------------
-      self.__binomial_penalty_constraint = model.addConstr(
-        use_binomial_penalty_indicator == 1,
-        name="use_binomial_penalty"
-      )
+    if not self.__patient_wise_only:
       if expected_probability is not None:
+        assert expected_probability_var is not None
         self.__expected_probability_constraint = model.addConstr(
           expected_probability_var == expected_probability,
           name="expected_probability_constraint",
         )
     else:
-      #no binomial penalty means there's nothing to constrain the observed
-      #probability to the expected probability.  In that case, what does
-      #it mean to get an NLL for the expected probability?
-      #Instead, we constrain the observed probability to be at least as
-      #far from the nominal observed probability as the expected
-      #and find the minimum patient-wise NLL.
-      self.__binomial_penalty_constraint = model.addConstr(
-        use_binomial_penalty_indicator == 0,
-        name="use_binomial_penalty"
-      )
-
       # Constrain the KM probability based on the expected_probability
       # If expected > observed, then KM_prob >= expected_probability
       # If expected < observed, then KM_prob <= expected_probability
       # If expected == observed or is None, then KM_prob is unconstrained
+      assert km_probability_var is not None
       if expected_probability is None:
         pass
       elif expected_probability > self.observed_KM_probability:
@@ -1678,30 +1806,8 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
           km_probability_var <= expected_probability + self.__endpoint_epsilon,
           name="km_prob_le_expected"
         )
-      else: # expected_probability == self.observed_KM_probability
+      else:
         assert expected_probability == self.observed_KM_probability
-
-    if binomial_only:
-      self.__patient_constraints_for_binomial_only = []
-      for j in range(self.n_patients):
-        if self.parameter_in_range[j]:
-          assert self.nll_penalty_for_patient_in_range[j] <= 0
-          #the patient must be selected
-          self.__patient_constraints_for_binomial_only.append(
-            model.addConstr(
-              a[j] == 1,
-              name=f"patient_{j}_must_be_selected_binomial_only",
-            )
-          )
-        else:
-          assert self.nll_penalty_for_patient_in_range[j] >= 0
-          #the patient must not be selected
-          self.__patient_constraints_for_binomial_only.append(
-            model.addConstr(
-              a[j] == 0,
-              name=f"patient_{j}_must_not_be_selected_binomial_only",
-            )
-          )
 
     model.update()
 
@@ -1728,13 +1834,17 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
         "Running MINLP for expected probability ", expected_probability,
         " at time point ", self.time_point, " at time ", datetime.datetime.now()
       )
+    if binomial_only != self.__binomial_only or patient_wise_only != self.__patient_wise_only:
+      raise ValueError(
+        "run_MINLP mode must match MINLPForKM construction "
+        f"(constructed binomial_only={self.__binomial_only}, "
+        f"patient_wise_only={self.__patient_wise_only})"
+      )
     if expected_probability is not None:
       if not patient_wise_only and (expected_probability <= 0 or expected_probability >= 1):
         raise ValueError(f"expected_probability={expected_probability} must be in (0, 1) or None")
       if expected_probability < 0 or expected_probability > 1:
         raise ValueError(f"expected_probability={expected_probability} must be in [0, 1] or None")
-    if binomial_only and patient_wise_only:
-      raise ValueError("binomial_only and patient_wise_only cannot both be True")
 
     if MIPGap is None:
       MIPGap = self.__default_MIPGap
@@ -1748,27 +1858,31 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       a,
       km_probability_var,
       expected_probability_var,
-      use_binomial_penalty_indicator,
+      _use_binomial_penalty_indicator,
     ) = self.gurobi_model
     self.update_model_with_expected_probability(
       model=model,
-      a=a,
       km_probability_var=km_probability_var,
       expected_probability=expected_probability,
-      patient_wise_only=patient_wise_only,
-      binomial_only=binomial_only,
       expected_probability_var=expected_probability_var,
-      use_binomial_penalty_indicator=use_binomial_penalty_indicator,
     )
 
-    # Initial Gurobi parameters
+    self._apply_assignment_mip_starts(
+      a,
+      binomial_only=binomial_only,
+      patient_wise_only=patient_wise_only,
+    )
+    self._apply_profile_mip_starts()
+
+    # Initial Gurobi parameters. FuncPieces starts at 1000; fallbacks may raise it.
+    # Cuts=-1 restores the default after a fallback that set Cuts=2.
     initial_gurobi_params = {
       'OutputFlag': 1 if verbose else 0,
       'DisplayInterval': 1,
       'MIPGap': MIPGap,
       'MIPGapAbs': MIPGapAbs,
       'NonConvex': 2,
-      'NumericFocus': 3 if patient_wise_only else 0,
+      'NumericFocus': 0,
       'Seed': 123456,
       'TimeLimit': TimeLimit,
       'Threads': Threads,
@@ -1779,91 +1893,42 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     if LogFile is not None:
       initial_gurobi_params['LogFile'] = os.fspath(LogFile)
 
-    # Define fallback strategies
+    # Recovery fallbacks, then a weaker MIPGap certificate, then verbose debug.
+    # Do not accept SUBOPTIMAL; TimeLimit retries are handled in _optimize_with_fallbacks.
     fallback_strategies = []
-
-    # Fallback 1: Try MIPFocus 2 if initial was suboptimal and not already 2
-    if MIPFocus != 2: # Only add this fallback if MIPFocus wasn't already 2
+    if MIPFocus != 2:
       fallback_strategies.append(
         ({'MIPFocus': 2}, "MIPFocus set to 2 (optimality focus)")
       )
-
-    # Fallback 2: Increase TimeLimit if it was set and still suboptimal
     if TimeLimit is not None:
       fallback_strategies.append(
         ({'TimeLimit': TimeLimit * 1.5}, "Increased TimeLimit by 50%")
       )
-
-    # Fallback 3: Increase FuncPieces
-    current_func_pieces = initial_gurobi_params.get('FuncPieces', 0)
-    if current_func_pieces < 2000: # Arbitrary upper limit to prevent excessive FuncPieces
-      fallback_strategies.append(
-        ({'FuncPieces': max(2000, int(current_func_pieces * 2))}, "Increased FuncPieces (doubled)")
-      )
-    if current_func_pieces < 5000:
-      fallback_strategies.append(
-        (
-          {'FuncPieces': max(5000, int(current_func_pieces * 2.5)), 'FuncPieceRatio': 0.75},
-          "Increased FuncPieces and adjusted FuncPieceRatio"
-        )
-      )
-
-    # Fallback 4: Try different NumericFocus
     fallback_strategies.append(
-      ({'NumericFocus': 2}, "Changed NumericFocus to 2 (accuracy)")
+      ({'FuncPieces': 2000, 'FuncPieceRatio': 0.5}, "Increased FuncPieces to 2000")
     )
-
-    # Fallback 5: Experiment with Cuts (more aggressive)
+    fallback_strategies.append(
+      ({'FuncPieces': 5000, 'FuncPieceRatio': 0.75}, "Increased FuncPieces to 5000")
+    )
+    fallback_strategies.append(
+      ({'NumericFocus': 3}, "NumericFocus set to 3 (highest precision)")
+    )
     fallback_strategies.append(
       ({'Cuts': 2}, "Aggressive cut generation")
     )
-
-    # Fallback 6: Experiment with Heuristics (less aggressive)
-    fallback_strategies.append(
-      ({'Heuristics': 0.5}, "Less aggressive heuristics")
-    )
-
-    #Fallback 7: Tighten barrier convergence tolerance
-    fallback_strategies.append(
-      ({'BarConvTol': 1e-8}, "Tightened barrier convergence tolerance")
-    )
-
-    #Fallback 8: Tighten feasibility tolerance
-    fallback_strategies.append(
-      ({'FeasibilityTol': 1e-8}, "Tightened feasibility tolerance")
-    )
-
-    # Fallback 9: Tighten optimality tolerance
-    fallback_strategies.append(
-      ({'OptimalityTol': 1e-8}, "Tightened optimality tolerance")
-    )
-
-    # Fallback 10: Use barrier method
-    fallback_strategies.append(
-      ({'Method': 2}, "Switched to barrier method")
-    )
-
-    #Fallback 11: Avoid switching back to simplex
-    fallback_strategies.append(
-      ({'CrossOver': 0}, "Avoided switching back to simplex method")
-    )
-
-    # Fallback 12: Barrier at all nodes
-    fallback_strategies.append(
-      ({'NodeMethod': 2}, "Used barrier method at all nodes")
-    )
-
-    # Last fallback: turn verbose output on
-    # This is not going to work, but it will help us debug the issue
+    if MIPGap < 1e-3:
+      fallback_strategies.append(
+        ({'MIPGap': 1e-3}, "Relaxed MIPGap to 1e-3")
+      )
+    if MIPGap < 1e-2:
+      fallback_strategies.append(
+        ({'MIPGap': 1e-2}, "Relaxed MIPGap to 1e-2")
+      )
     if not verbose:
       fallback_strategies.append(
         (
-          {
-            'OutputFlag': 1,
-            'DisplayInterval': 1,
-            'InfUnbdInfo': 1,
-          },
-          "Turned verbose output on"
+          {'OutputFlag': 1, 'DisplayInterval': 1},
+          "Enabled Gurobi output for debug after failed recovery",
         )
       )
 
@@ -1897,6 +1962,12 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       )
 
     assert all(var is not None for var in a)
+    self._store_assignment_mip_starts(
+      a,
+      binomial_only=binomial_only,
+      patient_wise_only=patient_wise_only,
+    )
+    self._store_profile_mip_starts()
     selected = [j for j in range(self.n_patients) if a[j].X > 0.5]
     n_total_val = sum(selected)
     n_alive_val = sum(
@@ -1912,14 +1983,27 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       ) for j in range(self.n_patients)
       if np.isfinite(nll_penalty_for_patient_in_range[j])
     )
-    binom_penalty_var = model.getVarByName("binom_penalty")
-    assert binom_penalty_var is not None
-    binomial_penalty_val = binom_penalty_var.X
-    p_survived_val = []
-    for i in range(self.n_times_to_consider):
-      var = model.getVarByName(f"p_survived[{i}]")
-      assert var is not None
-      p_survived_val.append(var.X)
+    if patient_wise_only:
+      binomial_penalty_val = 0.0
+      p_survived_val = [np.nan] * self.n_times_to_consider
+      assert km_probability_var is not None
+      km_probability_val = km_probability_var.X
+    else:
+      binom_penalty_var = model.getVarByName("binom_penalty")
+      assert binom_penalty_var is not None
+      binomial_penalty_val = binom_penalty_var.X
+      p_survived_val = []
+      for i in range(self.n_times_to_consider):
+        var = model.getVarByName(f"p_survived[{i}]")
+        assert var is not None
+        p_survived_val.append(var.X)
+      assert self.__risk_set_r_vars is not None
+      assert self.__risk_set_s_vars is not None
+      km_probability_val = km_survival_from_risk_counts(
+        [self.__risk_set_r_vars[i].X for i in range(self.n_times_to_consider)],
+        [self.__risk_set_s_vars[i].X for i in range(self.n_times_to_consider)],
+        log_zero_epsilon=self.__log_zero_epsilon,
+      )
     if verbose:
       print("Selected patients:", selected)
       print("n_total:          ", int(n_total_val))
@@ -1938,5 +2022,5 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       patient_penalties=nll_penalty_for_patient_in_range,
       selected=selected,
       model=model,
-      km_probability=km_probability_var.X,
+      km_probability=km_probability_val,
     )
