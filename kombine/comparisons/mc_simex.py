@@ -489,8 +489,7 @@ class McSimexForKaplanMeier(McSimexBase):
       if not death_times:
         raise ValueError("No death events found in the observed parameter range.")
       last_time = max(
-        max(death_times),
-        max((patient.time for patient in group_patients), default=0.0),
+        [*death_times, *(patient.time for patient in group_patients)]
       )
       times_for_plot = [0.0] + death_times + [1.1 * last_time]
 

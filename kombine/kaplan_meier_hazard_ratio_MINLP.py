@@ -17,7 +17,7 @@ import scipy.optimize
 import scipy.stats
 
 from .kaplan_meier_p_value_MINLP import MINLPforKMPValue
-from .utilities import LOG_ZERO_EPSILON_DEFAULT
+from .utilities import LOG_ZERO_EPSILON_DEFAULT, brentq_hazard_ratio_ci
 
 
 class MINLPforKMHazardRatio(MINLPforKMPValue):
@@ -261,35 +261,8 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
 
     self._store_hazard_ratio_mip_starts(a, cox_only, log_hazard_ratio)
 
-    # Extract results
-    twonll = model.ObjVal
-    patients_low, patients_high = self._extract_patients_per_curve(a)
-    patient_penalty = self._compute_patient_wise_penalty_value(a)
-    cox_penalty = self._compute_cox_penalty(model)
-
-    # Extract curve statistics
-    (n_total_low, n_alive_low, km_prob_low,
-     n_total_high, n_alive_high, km_prob_high) = (
-      self._extract_curve_statistics(model)
-    )
-
-    result = scipy.optimize.OptimizeResult(
-      x=twonll,
-      success=True,
-      patients_low=patients_low,
-      patients_high=patients_high,
-      n_total_low=n_total_low,
-      n_alive_low=n_alive_low,
-      n_total_high=n_total_high,
-      n_alive_high=n_alive_high,
-      km_probability_low=km_prob_low,
-      km_probability_high=km_prob_high,
-      cox_2NLL=2 * cox_penalty,
-      patient_2NLL=2 * patient_penalty,
-      hazard_ratio=hazard_ratio,
-      log_hazard_ratio=log_hazard_ratio,
-      model=model,
-    )
+    result = self._extract_optimize_result(model, a)
+    result.log_hazard_ratio = log_hazard_ratio
 
     # Check if we're at or near the bounds and warn
     self._check_hazard_ratio_bounds(hazard_ratio, log_hazard_ratio)
@@ -468,31 +441,13 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
       result = self.compute_2nll_at_hazard_ratio(hr, cox_only=cox_only)
       return result.x - twonll_threshold
 
-    # Lower bound: search between min and best-fit
-    try:
-      lower_log_hr = scipy.optimize.brentq(
-        twonll_minus_threshold,
-        np.log(hazard_ratio_min),
-        best_fit_log_hr,
-        xtol=tolerance
-      )
-      lower_ci = np.exp(float(lower_log_hr))  # type: ignore[arg-type]
-    except ValueError:
-      # If no crossing found, the lower bound is at the search limit
-      lower_ci = hazard_ratio_min
-
-    # Upper bound: search between best-fit and max
-    try:
-      upper_log_hr = scipy.optimize.brentq(
-        twonll_minus_threshold,
-        best_fit_log_hr,
-        np.log(hazard_ratio_max),
-        xtol=tolerance
-      )
-      upper_ci = np.exp(float(upper_log_hr))  # type: ignore[arg-type]
-    except ValueError:
-      # If no crossing found, the upper bound is at the search limit
-      upper_ci = hazard_ratio_max
+    lower_ci, upper_ci = brentq_hazard_ratio_ci(
+      twonll_minus_threshold,
+      best_fit_log_hr=best_fit_log_hr,
+      hazard_ratio_min=hazard_ratio_min,
+      hazard_ratio_max=hazard_ratio_max,
+      tolerance=tolerance,
+    )
 
     # Check if best fit is at or near the bounds
     self._check_hazard_ratio_bounds(best_fit_hr, best_fit_result.log_hazard_ratio)

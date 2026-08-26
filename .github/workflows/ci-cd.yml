@@ -125,16 +125,15 @@ jobs:
           pip install . ipykernel jupytext lifelines nbconvert pyflakes pylint texoutparse &&
           rm -r build
 
-      - name: Install Gurobi
+      # The gurobipy wheel installed by `pip install .` bundles the solver library,
+      # so no separate distribution is needed. The 10.0.3 tarball this replaces was
+      # installed over the wheel and downgraded the solver: Gurobi 10 approximates
+      # every log/exp with a 1000-piece linearization, which on the KM MINLPs is
+      # 2.7x slower than the exact handling in 11+ and shifts 2NLL by ~0.8.
+      # See docs/kombine/compute_budget.md.
+      - name: Report Gurobi version
         run: |
-          wget https://packages.gurobi.com/10.0/gurobi10.0.3_linux64.tar.gz
-          tar -xvzf gurobi10.0.3_linux64.tar.gz
-          echo "export GUROBI_HOME=$PWD/gurobi1003/linux64" >> $GITHUB_ENV
-          echo "$PWD/gurobi1003/linux64/bin" >> $GITHUB_PATH
-          echo "LD_LIBRARY_PATH=$PWD/gurobi1003/linux64/lib" >> $GITHUB_ENV
-          cd gurobi1003/linux64
-          python setup.py install
-          cd ../..
+          python -c "import gurobipy; print(gurobipy.gurobi.version())"
 
       - name: Configure Gurobi WLS license
         run: |
@@ -189,6 +188,9 @@ jobs:
         run: |
           jupytext --sync docs/kombine/*.md
 
+      # Notebook 07 defaults to n=20 hr_example cards (do not set
+      # KOMBINE_FULL_COMPARISON). Local hours-scale runs use that env var for the
+      # n=50 methods_comparison_* cards with quantile-binned death times.
       - name: test KoMbine notebooks
         run: |
           jupyter nbconvert --execute --to html --ExecutePreprocessor.timeout=3600 -- docs/kombine/*.ipynb

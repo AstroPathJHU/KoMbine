@@ -35,6 +35,8 @@ import numpy as np
 import scipy.optimize
 import scipy.stats
 
+from ..utilities import brentq_hazard_ratio_ci
+
 if TYPE_CHECKING:
   from ..datacard import Patient
 
@@ -532,27 +534,13 @@ class YiCorrectionForCoxPH(YiCorrectionWithThreshold):
       )
       return float(result.x) - twonll_threshold
 
-    try:
-      lower_log_hr = scipy.optimize.brentq(
-        twonll_minus_threshold,
-        np.log(hazard_ratio_min),
-        best_fit_log_hr,
-        xtol=tolerance,
-      )
-      lower_ci = float(np.exp(float(lower_log_hr)))  # type: ignore[arg-type]
-    except ValueError:
-      lower_ci = hazard_ratio_min
-
-    try:
-      upper_log_hr = scipy.optimize.brentq(
-        twonll_minus_threshold,
-        best_fit_log_hr,
-        np.log(hazard_ratio_max),
-        xtol=tolerance,
-      )
-      upper_ci = float(np.exp(float(upper_log_hr)))  # type: ignore[arg-type]
-    except ValueError:
-      upper_ci = hazard_ratio_max
+    lower_ci, upper_ci = brentq_hazard_ratio_ci(
+      twonll_minus_threshold,
+      best_fit_log_hr=best_fit_log_hr,
+      hazard_ratio_min=hazard_ratio_min,
+      hazard_ratio_max=hazard_ratio_max,
+      tolerance=tolerance,
+    )
 
     return best_fit_hr, lower_ci, upper_ci, best_fit_result
 
