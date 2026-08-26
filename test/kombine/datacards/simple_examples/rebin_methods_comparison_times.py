@@ -3,7 +3,8 @@
 
 Snaps every patient's survival_time onto K quantile-bin medians taken from the
 fixed baseline card, then writes the same survival_time / censored rows into
-every sibling methods_comparison_*.txt (observables unchanged).
+every sibling methods_comparison_*.txt under a gitignored ``rebinned/``
+directory (observables unchanged; tracked sources stay fine-grained).
 
 Notebook 07's full-comparison mode expects K=4 (chosen after capped probes:
 K=6 censored a KM arm past 15 min; K=4 finished a hard-card arm in ~8 min).
@@ -12,6 +13,11 @@ Usage (from repo root)::
 
     python test/kombine/datacards/simple_examples/rebin_methods_comparison_times.py
     python test/kombine/datacards/simple_examples/rebin_methods_comparison_times.py --n-bins 4
+
+Or from Python::
+
+    from rebin_methods_comparison_times import ensure_rebinned
+    datacards_dir = ensure_rebinned(n_bins=4)
 """
 
 from __future__ import annotations
@@ -24,6 +30,7 @@ import numpy as np
 HERE = pathlib.Path(__file__).resolve().parent
 BASELINE = HERE / "methods_comparison_fixed.txt"
 SIBLINGS = sorted(HERE.glob("methods_comparison_*.txt"))
+REBINNED_DIR = HERE / "rebinned"
 
 
 def rebin_times(times: np.ndarray, n_bins: int) -> np.ndarray:
@@ -50,14 +57,15 @@ def parse_rows(text: str) -> dict[str, list[str]]:
 
 
 def rewrite_card(
-  path: pathlib.Path,
+  source: pathlib.Path,
+  dest: pathlib.Path,
   times: np.ndarray,
   censored: list[str],
   *,
   n_bins: int,
   n_unique: int,
 ) -> None:
-  text = path.read_text(encoding="utf-8")
+  text = source.read_text(encoding="utf-8")
   lines = text.splitlines()
   out: list[str] = []
   header_done = False
@@ -103,7 +111,47 @@ def rewrite_card(
         )
         inserted = True
     out = final
-  path.write_text("\n".join(out) + "\n", encoding="utf-8")
+  dest.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+def ensure_rebinned(n_bins: int = 4, *, out_dir: pathlib.Path | None = None) -> pathlib.Path:
+  """Regenerate rebinned cards under ``out_dir`` and return that directory.
+
+  Always rewrites (cheap). Tracked sources in ``HERE`` are left unchanged.
+  """
+  if n_bins < 1:
+    raise ValueError(f"n_bins must be >= 1, got {n_bins}")
+  dest_dir = out_dir if out_dir is not None else REBINNED_DIR
+  dest_dir.mkdir(parents=True, exist_ok=True)
+
+  siblings = sorted(HERE.glob("methods_comparison_*.txt"))
+  if not siblings:
+    raise FileNotFoundError(f"no methods_comparison_*.txt sources in {HERE}")
+  if not BASELINE.is_file():
+    raise FileNotFoundError(f"baseline card missing: {BASELINE}")
+
+  baseline_text = BASELINE.read_text(encoding="utf-8")
+  rows = parse_rows(baseline_text)
+  raw_times = np.array([float(t) for t in rows["survival_time"]])
+  censored = rows["censored"]
+  binned = rebin_times(raw_times, n_bins)
+  # Death times among uncensored patients drive the KM grid.
+  death_mask = [c not in ("1", "True", "true") for c in censored]
+  n_unique = len({round(t, 10) for t, d in zip(binned, death_mask) if d})
+  print(
+    f"baseline n={len(raw_times)} raw_unique_deaths="
+    f"{len({round(t, 10) for t, d in zip(raw_times, death_mask) if d})} "
+    f"-> K={n_bins} unique_death_times={n_unique}",
+    flush=True,
+  )
+
+  for source in siblings:
+    dest = dest_dir / source.name
+    rewrite_card(
+      source, dest, binned, censored, n_bins=n_bins, n_unique=n_unique,
+    )
+    print(f"wrote {dest.relative_to(HERE)}", flush=True)
+  return dest_dir
 
 
 def main() -> None:
@@ -113,27 +161,7 @@ def main() -> None:
     help="quantile bins (default 4; notebook full-comparison mode)",
   )
   args = parser.parse_args()
-
-  baseline_text = BASELINE.read_text(encoding="utf-8")
-  rows = parse_rows(baseline_text)
-  raw_times = np.array([float(t) for t in rows["survival_time"]])
-  censored = rows["censored"]
-  binned = rebin_times(raw_times, args.n_bins)
-  # Death times among uncensored patients drive the KM grid.
-  death_mask = [c not in ("1", "True", "true") for c in censored]
-  n_unique = len({round(t, 10) for t, d in zip(binned, death_mask) if d})
-  print(
-    f"baseline n={len(raw_times)} raw_unique_deaths="
-    f"{len({round(t, 10) for t, d in zip(raw_times, death_mask) if d})} "
-    f"-> K={args.n_bins} unique_death_times={n_unique}",
-    flush=True,
-  )
-
-  for path in SIBLINGS:
-    rewrite_card(
-      path, binned, censored, n_bins=args.n_bins, n_unique=n_unique,
-    )
-    print(f"wrote {path.name}", flush=True)
+  ensure_rebinned(n_bins=args.n_bins)
 
 
 if __name__ == "__main__":

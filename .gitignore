@@ -26,3 +26,6 @@ test/kombine/datacards/lung/flatfielding_systematic/*.txt
 test/kombine/datacards/lung/poisson_and_flatfielding/*.txt
 test/kombine/datacards/lung/uncorrected_flatfielding_systematic/*.txt
 test/kombine/datacards/lung/poisson_and_uncorrected_flatfielding/*.txt
+
+# On-demand rebinned methods_comparison cards (from rebin_methods_comparison_times.py)
+test/kombine/datacards/simple_examples/rebinned/

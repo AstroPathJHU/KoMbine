@@ -24,7 +24,7 @@ This notebook compares two published recipes for discrete covariate misclassific
 **Two modes** (chosen at runtime):
 
 - **Default / CI** (unset env): `*_hr_example*` cards, $n=20$, ~7 distinct death times — finishes in minutes with real KM bands, p-values, and HR profiles.
-- **Full local comparison** (`KOMBINE_FULL_COMPARISON=1`): `methods_comparison_*` cards, $n=50$, survival times on **4** quantile-bin medians (hours-scale; stronger permutation power).
+- **Full local comparison** (`KOMBINE_FULL_COMPARISON=1`): regenerates `methods_comparison_*` cards on the fly into a gitignored `rebinned/` dir ($n=50$, **4** quantile-bin death-time medians; hours-scale; stronger permutation power).
 
 Fixed and Poisson cards are split at `0.5001` (a density/value cut). Discrete-class cards are split at `1` (the boundary between class indices 0 and 1):
 - Fixed Hazard Ratio (deterministic, no measurement error)
@@ -125,8 +125,8 @@ N_HR_SCAN = 25
 SIMEX_B = 20
 
 # Default / CI: n=20 hr_example cards (minutes).
-# Local full: set KOMBINE_FULL_COMPARISON=1 for n=50 methods_comparison_* cards
-# with 4 quantile-binned death times (hours-scale; stronger p-value power).
+# Local full: set KOMBINE_FULL_COMPARISON=1 to regenerate n=50 methods_comparison_*
+# cards with 4 quantile-binned death times under datacards/.../rebinned/.
 # Optional escape hatch: KOMBINE_SKIP_SLOW_ANALYSES skips Analyses 1–2 entirely.
 FULL_COMPARISON = bool(os.environ.get("KOMBINE_FULL_COMPARISON"))
 SKIP_SLOW_ANALYSES = bool(os.environ.get("KOMBINE_SKIP_SLOW_ANALYSES"))
@@ -160,11 +160,18 @@ def format_pvalue(p: float) -> str:
 
 ```python
 # Setup - Load the comparison datacards
+import sys
+
 here = pathlib.Path(".").resolve()
 test_dir = here.parent.parent / "test" / "kombine"
 datacards_dir = test_dir / "datacards" / "simple_examples"
 
 if FULL_COMPARISON:
+    # Regenerate K=4 rebinned cards into gitignored rebinned/ (instant).
+    if str(datacards_dir) not in sys.path:
+        sys.path.insert(0, str(datacards_dir))
+    from rebin_methods_comparison_times import ensure_rebinned
+    datacards_dir = ensure_rebinned(n_bins=4)
     # n=50, 4 quantile-binned death times (hours-scale local run)
     scenarios = {
         'fixed': {
