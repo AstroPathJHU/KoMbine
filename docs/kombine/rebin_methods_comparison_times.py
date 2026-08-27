@@ -11,12 +11,12 @@ K=6 censored a KM arm past 15 min; K=4 finished a hard-card arm in ~8 min).
 
 Usage (from repo root)::
 
-    python test/kombine/datacards/simple_examples/rebin_methods_comparison_times.py
-    python test/kombine/datacards/simple_examples/rebin_methods_comparison_times.py --n-bins 4
+    python docs/kombine/rebin_methods_comparison_times.py
+    python docs/kombine/rebin_methods_comparison_times.py --n-bins 4
 
-Or from Python::
+Or from Python (package import)::
 
-    from rebin_methods_comparison_times import ensure_rebinned
+    from docs.kombine.rebin_methods_comparison_times import ensure_rebinned
     datacards_dir = ensure_rebinned(n_bins=4)
 """
 
@@ -27,10 +27,12 @@ import pathlib
 
 import numpy as np
 
-HERE = pathlib.Path(__file__).resolve().parent
-BASELINE = HERE / "methods_comparison_fixed.txt"
-SIBLINGS = sorted(HERE.glob("methods_comparison_*.txt"))
-REBINNED_DIR = HERE / "rebinned"
+SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
+CARDS_DIR = (
+  SCRIPT_DIR.parent.parent / "test" / "kombine" / "datacards" / "simple_examples"
+)
+BASELINE = CARDS_DIR / "methods_comparison_fixed.txt"
+REBINNED_DIR = CARDS_DIR / "rebinned"
 
 
 def rebin_times(times: np.ndarray, n_bins: int) -> np.ndarray:
@@ -117,16 +119,16 @@ def rewrite_card(
 def ensure_rebinned(n_bins: int = 4, *, out_dir: pathlib.Path | None = None) -> pathlib.Path:
   """Regenerate rebinned cards under ``out_dir`` and return that directory.
 
-  Always rewrites (cheap). Tracked sources in ``HERE`` are left unchanged.
+  Always rewrites (cheap). Tracked sources in ``CARDS_DIR`` are left unchanged.
   """
   if n_bins < 1:
     raise ValueError(f"n_bins must be >= 1, got {n_bins}")
   dest_dir = out_dir if out_dir is not None else REBINNED_DIR
   dest_dir.mkdir(parents=True, exist_ok=True)
 
-  siblings = sorted(HERE.glob("methods_comparison_*.txt"))
+  siblings = sorted(CARDS_DIR.glob("methods_comparison_*.txt"))
   if not siblings:
-    raise FileNotFoundError(f"no methods_comparison_*.txt sources in {HERE}")
+    raise FileNotFoundError(f"no methods_comparison_*.txt sources in {CARDS_DIR}")
   if not BASELINE.is_file():
     raise FileNotFoundError(f"baseline card missing: {BASELINE}")
 
@@ -150,7 +152,7 @@ def ensure_rebinned(n_bins: int = 4, *, out_dir: pathlib.Path | None = None) -> 
     rewrite_card(
       source, dest, binned, censored, n_bins=n_bins, n_unique=n_unique,
     )
-    print(f"wrote {dest.relative_to(HERE)}", flush=True)
+    print(f"wrote {dest.relative_to(CARDS_DIR)}", flush=True)
   return dest_dir
 
 

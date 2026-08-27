@@ -14,7 +14,7 @@ jupyter:
 ---
 
 ```python
-# pylint: disable=bad-indentation,line-too-long,missing-module-docstring,redefined-outer-name,trailing-whitespace,too-many-locals,wrong-import-order
+# pylint: disable=bad-indentation,line-too-long,missing-module-docstring,redefined-outer-name,trailing-whitespace,too-many-locals,wrong-import-order,wrong-import-position
 ```
 
 # Previous Methods vs KoMbine: Yi, MC-SIMEX, and Profile Likelihood
@@ -113,11 +113,19 @@ KoMbine stores class $k$ as a piecewise-constant NLL on $[k, k+1)$. The two-grou
 
 ```python
 import os
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import pathlib
+
+# Repo root on path so docs.kombine imports work under nbconvert (cwd is docs/kombine).
+_repo_root = pathlib.Path(".").resolve().parent.parent
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+
 from kombine.datacard import Datacard
 from kombine.comparisons import YiCorrectionForCoxPH
+from docs.kombine.rebin_methods_comparison_times import ensure_rebinned
 
 # Single notebook budget. Edit these if you want denser scans.
 N_PERMUTATIONS = 19
@@ -160,17 +168,12 @@ def format_pvalue(p: float) -> str:
 
 ```python
 # Setup - Load the comparison datacards
-import sys
-
 here = pathlib.Path(".").resolve()
 test_dir = here.parent.parent / "test" / "kombine"
 datacards_dir = test_dir / "datacards" / "simple_examples"
 
 if FULL_COMPARISON:
     # Regenerate K=4 rebinned cards into gitignored rebinned/ (instant).
-    if str(datacards_dir) not in sys.path:
-        sys.path.insert(0, str(datacards_dir))
-    from rebin_methods_comparison_times import ensure_rebinned
     datacards_dir = ensure_rebinned(n_bins=4)
     # n=50, 4 quantile-binned death times (hours-scale local run)
     scenarios = {
