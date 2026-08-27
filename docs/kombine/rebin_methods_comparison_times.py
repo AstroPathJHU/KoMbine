@@ -48,6 +48,7 @@ def rebin_times(times: np.ndarray, n_bins: int) -> np.ndarray:
 
 
 def parse_rows(text: str) -> dict[str, list[str]]:
+  """Extract survival_time and censored columns from a datacard text blob."""
   rows: dict[str, list[str]] = {}
   for line in text.splitlines():
     parts = line.split("\t")
@@ -58,7 +59,7 @@ def parse_rows(text: str) -> dict[str, list[str]]:
   return rows
 
 
-def rewrite_card(
+def rewrite_card(  # pylint: disable=too-many-arguments
   source: pathlib.Path,
   dest: pathlib.Path,
   times: np.ndarray,
@@ -67,6 +68,7 @@ def rewrite_card(
   n_bins: int,
   n_unique: int,
 ) -> None:
+  """Write one card to ``dest`` with rebinned times and updated header comments."""
   text = source.read_text(encoding="utf-8")
   lines = text.splitlines()
   out: list[str] = []
@@ -157,6 +159,7 @@ def ensure_rebinned(n_bins: int = 4, *, out_dir: pathlib.Path | None = None) -> 
 
 
 def main() -> None:
+  """CLI entry point."""
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument(
     "--n-bins", type=int, default=4,
