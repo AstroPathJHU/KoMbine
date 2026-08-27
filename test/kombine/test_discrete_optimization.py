@@ -12,6 +12,7 @@ from kombine.discrete_optimization import (
   minimize_discrete_single_minimum,
   binary_search_sign_change,
   cached_level_crossings,
+  feasibility_assisted_level_crossings,
 )
 
 class TestMinimizeDiscreteSingleMinimum(unittest.TestCase):
@@ -537,6 +538,55 @@ class TestCachedLevelCrossings(unittest.TestCase):
     cached_level_crossings(f_tight, 0.0, 0.5, [0.04], xtol=2e-12, rtol=2e-15)
     cached_level_crossings(f_loose, 0.0, 0.5, [0.04], xtol=1e-4, rtol=1e-4)
     self.assertLess(len(loose), len(tight))
+
+
+class TestFeasibilityAssistedLevelCrossings(unittest.TestCase):
+  """Tests for feasibility_assisted_level_crossings."""
+
+  @staticmethod
+  def _quadratic(x: float) -> float:
+    return (x - 0.5) ** 2
+
+  def test_oracle_matches_cached_crossings(self):
+    """Boolean oracle + polish matches numeric cached_level_crossings."""
+    levels = [0.01, 0.04]
+
+    def oracle(p: float, level: float):
+      return "inside" if self._quadratic(p) <= level else "outside"
+
+    for outer, inner in ((0.0, 0.5), (1.0, 0.5)):
+      expected = cached_level_crossings(
+        self._quadratic, outer, inner, levels, xtol=1e-8, rtol=1e-8
+      )
+      got = feasibility_assisted_level_crossings(
+        self._quadratic, oracle, outer, inner, levels, xtol=1e-8, rtol=1e-8
+      )
+      np.testing.assert_allclose(got, expected, atol=1e-6)
+
+  def test_unknown_falls_back_to_value_func(self):
+    """unknown status uses value_func for the sign test."""
+    level = 0.04
+
+    def always_unknown(_p: float, _level: float):
+      return "unknown"
+
+    got = feasibility_assisted_level_crossings(
+      self._quadratic, always_unknown, 0.0, 0.5, [level], xtol=1e-8, rtol=1e-8
+    )
+    expected = cached_level_crossings(
+      self._quadratic, 0.0, 0.5, [level], xtol=1e-8, rtol=1e-8
+    )
+    np.testing.assert_allclose(got, expected, atol=1e-6)
+
+  def test_outer_inside_returns_boundary(self):
+    """Outer endpoint already inside the cut returns that endpoint."""
+    def oracle(p: float, level: float):
+      return "inside" if self._quadratic(p) <= level else "outside"
+
+    result = feasibility_assisted_level_crossings(
+      self._quadratic, oracle, 0.0, 0.5, [0.4], xtol=1e-6, rtol=1e-6
+    )
+    self.assertEqual(result, [0.0])
 
 
 if __name__ == "__main__":

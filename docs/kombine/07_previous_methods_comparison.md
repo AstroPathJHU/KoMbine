@@ -114,6 +114,7 @@ KoMbine stores class $k$ as a piecewise-constant NLL on $[k, k+1)$. The two-grou
 ```python
 import os
 import sys
+import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 import pathlib
@@ -135,6 +136,11 @@ SIMEX_B = 20
 # (regenerated into datacards/.../rebinned/). Set KOMBINE_QUICK_COMPARISON=1
 # for the n=20 hr_example cards used in CI (minutes-scale).
 QUICK_COMPARISON = bool(os.environ.get("KOMBINE_QUICK_COMPARISON"))
+
+
+def progress(msg: str) -> None:
+    """Print a progress line with a wall-clock timestamp."""
+    print(f"[{datetime.datetime.now()}] {msg}", flush=True)
 
 
 def format_pvalue(p: float) -> str:
@@ -261,10 +267,9 @@ for key, info in scenarios.items():
     n_patients = len(datacard.patients)
     n_deaths = sum(1 for p in datacard.patients if not p.censored)
     uniq_deaths = len({round(p.time, 10) for p in datacard.patients if not p.censored})
-    print(
+    progress(
         f"{info['label']}: {n_patients} patients, {n_deaths} deaths, "
-        f"{uniq_deaths} distinct death times",
-        flush=True,
+        f"{uniq_deaths} distinct death times"
     )
 
 simex_rng = 0
@@ -280,7 +285,7 @@ km_results = {}
 label_width = 9
 
 for scenario_key, scenario_info in scenarios.items():
-    print(f"\n[{scenario_info['label']}] starting…", flush=True)
+    progress(f"[{scenario_info['label']}] Analysis 1 starting…")
     dc = datacards[scenario_key]
     threshold = scenario_info['threshold']
     
@@ -300,12 +305,11 @@ for scenario_key, scenario_info in scenarios.items():
     times_high = sorted(km_high.patient_death_times)
     times_low_plot = [0.0] + times_low
     times_high_plot = [0.0] + times_high
-    print(
-        f"  death times: low={len(times_low)} high={len(times_high)}",
-        flush=True,
+    progress(
+        f"  death times: low={len(times_low)} high={len(times_high)}"
     )
 
-    print("  Yi…", flush=True)
+    progress("  Yi…")
     result_low_yi = dc.km_survival_yi(
         parameter_min=-np.inf,
         parameter_max=threshold,
@@ -318,7 +322,7 @@ for scenario_key, scenario_info in scenarios.items():
         times_for_plot=times_high_plot,
     )
 
-    print(f"  MC-SIMEX (B={SIMEX_B})…", flush=True)
+    progress(f"  MC-SIMEX (B={SIMEX_B})…")
     result_low_simex = dc.km_survival_mc_simex(
         parameter_min=-np.inf,
         parameter_max=threshold,
@@ -336,17 +340,21 @@ for scenario_key, scenario_info in scenarios.items():
     
     # Calculate best-fit and 95% CI for KoMbine
     # Use full likelihood (not binomial_only) to include measurement uncertainty!
-    print("  KoMbine low arm (full NLL, CLs=[0.95])…", flush=True)
+    progress("  KoMbine low arm (full NLL, CLs=[0.95], crossing_mode=feasibility)…")
     best_low, ci_low = km_low.survival_probabilities_likelihood(
         CLs=[0.95],
         times_for_plot=times_low,
         binomial_only=(scenario_key == 'fixed'),  # Only use binomial for fixed observable
+        print_progress=True,
+        crossing_mode="feasibility",
     )
-    print("  KoMbine high arm (full NLL, CLs=[0.95])…", flush=True)
+    progress("  KoMbine high arm (full NLL, CLs=[0.95], crossing_mode=feasibility)…")
     best_high, ci_high = km_high.survival_probabilities_likelihood(
         CLs=[0.95],
         times_for_plot=times_high,
         binomial_only=(scenario_key == 'fixed'),  # Only use binomial for fixed observable
+        print_progress=True,
+        crossing_mode="feasibility",
     )
     
     km_results[scenario_key] = {
@@ -587,14 +595,17 @@ label_width = 9
 for scenario_key, scenario_info in scenarios.items():
     dc = datacards[scenario_key]
     threshold = scenario_info['threshold']
+    progress(f"[{scenario_info['label']}] Analysis 2 starting…")
     
     # Yi's method
+    progress("  Yi logrank…")
     yi_result = dc.km_p_value_logrank_yi(
         parameter_threshold=threshold,
         parameter_min=-np.inf,
         parameter_max=np.inf,
     )
 
+    progress(f"  MC-SIMEX logrank (B={SIMEX_B})…")
     simex_result = dc.km_p_value_logrank_mc_simex(
         parameter_threshold=threshold,
         parameter_min=-np.inf,
@@ -604,7 +615,7 @@ for scenario_key, scenario_info in scenarios.items():
     )
     
     # KoMbine (full likelihood; includes patient-wise uncertainty)
-    print(f"  [{scenario_info['label']}] KoMbine permutation LRT (B={N_PERMUTATIONS})…", flush=True)
+    progress(f"  KoMbine permutation LRT (B={N_PERMUTATIONS})…")
     kombine_calc = dc.km_p_value(
         parameter_threshold=threshold,
         parameter_min=-np.inf,
@@ -614,6 +625,7 @@ for scenario_key, scenario_info in scenarios.items():
         cox_only=False,
         n_permutations=N_PERMUTATIONS,
         rng=simex_rng,
+        print_progress=True,
     )
     
     pvalue_results[scenario_key] = {
@@ -694,7 +706,9 @@ hazard_ratios_scan = np.logspace(-2, 2, N_HR_SCAN)  # 0.01 to 100
 for scenario_key, scenario_info in scenarios.items():
     dc = datacards[scenario_key]
     hr_threshold = scenario_info['threshold']
+    progress(f"[{scenario_info['label']}] Analysis 3 starting…")
 
+    progress("  Yi HR CI…")
     yi_calc = YiCorrectionForCoxPH(
         patients=dc.patients,
         parameter_min=-np.inf,
@@ -713,6 +727,7 @@ for scenario_key, scenario_info in scenarios.items():
         for hr in hazard_ratios_scan
     ]
 
+    progress(f"  MC-SIMEX HR (B={SIMEX_B})…")
     simex_calc = dc.km_hazard_ratio_mc_simex(
         parameter_threshold=hr_threshold,
         parameter_min=-np.inf,
@@ -733,6 +748,7 @@ for scenario_key, scenario_info in scenarios.items():
         parameter_max=np.inf,
     )
     
+    progress("  KoMbine HR profile CI…")
     best_hr_kombine, lower_ci, upper_ci, _ = hr_calc.hazard_ratio_confidence_interval(
         cox_only=False,
         confidence_level=0.95,
@@ -741,9 +757,12 @@ for scenario_key, scenario_info in scenarios.items():
     )
     
     # KoMbine profile likelihood scan
+    progress(f"  KoMbine HR 2NLL scan ({N_HR_SCAN} points)…")
     kombine_2nlls = []
     for hr in hazard_ratios_scan:
-        result = hr_calc.compute_2nll_at_hazard_ratio(hr, cox_only=False, verbose=False)
+        result = hr_calc.compute_2nll_at_hazard_ratio(
+            hr, cox_only=False, verbose=False, print_progress=True,
+        )
         kombine_2nlls.append(result.x)
     
     hr_results[scenario_key] = {

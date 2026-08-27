@@ -9,6 +9,7 @@ import functools
 import itertools
 import math
 import os
+import typing
 
 import gurobipy as gp
 from gurobipy import GRB
@@ -585,6 +586,9 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     self.__mip_start_a: dict[int, float] | None = None
     self.__mip_start_mode: tuple[bool, bool] | None = None
     self.__mip_start_profile: dict[str, list[float]] | None = None
+    self.__binom_penalty_var = None
+    self.__patient_penalty_var = None
+    self.__feasibility_cut_constraints: list = []
     if not np.isfinite(self.__parameter_min and self.__parameter_min != -np.inf):
       raise ValueError("parameter_min must be finite or -inf")
     if not np.isfinite(self.__parameter_max and self.__parameter_max != np.inf):
@@ -1739,10 +1743,27 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       model=model,
       a=a,
     )
+    # Aux var so feasibility oracles can cut the shifted patient piece alone.
+    patient_penalty_var = model.addVar(
+      lb=0.0,
+      vtype=GRB.CONTINUOUS,
+      name="patient_penalty",
+    )
+    model.addConstr(
+      patient_penalty_var == patient_penalty,
+      name="patient_penalty_definition",
+    )
+    self.__patient_penalty_var = patient_penalty_var
+    if self.__patient_wise_only:
+      self.__binom_penalty_var = None
+      objective_binom = 0.0
+    else:
+      self.__binom_penalty_var = binom_penalty
+      objective_binom = binom_penalty
 
     # Objective: minimize total penalty
     model.setObjective(
-      2 * (binom_penalty + patient_penalty),
+      2 * (objective_binom + patient_penalty_var),
       GRB.MINIMIZE,
     )
     model.update()
@@ -1811,6 +1832,156 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
 
     model.update()
 
+  def _clear_feasibility_cuts(self, model: gp.Model) -> None:
+    """Remove temporary CL-feasibility cuts from a prior excess_at_most call."""
+    for constr in self.__feasibility_cut_constraints:
+      try:
+        model.remove(constr)
+      except gp.GurobiError:
+        pass
+    self.__feasibility_cut_constraints = []
+    model.update()
+
+  def excess_at_most(  # pylint: disable=too-many-arguments, too-many-locals, too-many-branches
+    self,
+    expected_probability: float,
+    *,
+    twoNLL_min: float,
+    level: float,
+    component_cuts: bool = False,
+    verbose: bool = False,
+    print_progress: bool = False,
+    TimeLimit: float | None = None,
+    Threads: int | None = None,
+  ) -> typing.Literal["inside", "outside", "unknown"]:
+    """
+    Ask whether profile excess 2NLL(p) - twoNLL_min can be <= ``level``.
+
+    Adds ``2*(binom + patient) <= T`` (and optional redundant piece cuts) with
+    ``T = twoNLL_min + level``, then runs a feasibility-focused solve without
+    requiring a tight optimality certificate.
+
+    Returns
+    -------
+    "inside"
+        A feasible point under the cuts was found (excess can be <= level).
+    "outside"
+        Gurobi proved the cut model infeasible (excess > level).
+    "unknown"
+        Status inconclusive (e.g. time limit with no feasible point); caller
+        should fall back to a full ``run_MINLP`` / ``twoNLL`` evaluation.
+    """
+    if expected_probability <= 0 or expected_probability >= 1:
+      if not self.__patient_wise_only:
+        raise ValueError(
+          f"expected_probability={expected_probability} must be in (0, 1)"
+        )
+    if expected_probability < 0 or expected_probability > 1:
+      raise ValueError(
+        f"expected_probability={expected_probability} must be in [0, 1]"
+      )
+    if level < 0:
+      raise ValueError(f"level must be >= 0, got {level}")
+    if not np.isfinite(twoNLL_min):
+      raise ValueError(f"twoNLL_min must be finite, got {twoNLL_min}")
+
+    threshold = float(twoNLL_min + level)
+    if print_progress or verbose:
+      print(
+        f"[{datetime.datetime.now()}] Feasibility excess_at_most "
+        f"p={expected_probability} level={level} T={threshold} "
+        f"at time point {self.time_point}",
+        flush=True,
+      )
+
+    (
+      model,
+      a,
+      km_probability_var,
+      expected_probability_var,
+      _use_binomial_penalty_indicator,
+    ) = self.gurobi_model
+    self.update_model_with_expected_probability(
+      model=model,
+      km_probability_var=km_probability_var,
+      expected_probability=expected_probability,
+      expected_probability_var=expected_probability_var,
+    )
+    self._clear_feasibility_cuts(model)
+
+    patient_var = self.__patient_penalty_var
+    if patient_var is None:
+      raise RuntimeError("patient_penalty var missing; rebuild gurobi_model")
+    binom_var = self.__binom_penalty_var
+    total_2nll = 2 * (
+      (binom_var if binom_var is not None else 0.0) + patient_var
+    )
+    self.__feasibility_cut_constraints.append(
+      model.addConstr(total_2nll <= threshold, name="feas_total_2nll_cut")
+    )
+    if component_cuts:
+      if binom_var is not None:
+        self.__feasibility_cut_constraints.append(
+          model.addConstr(2 * binom_var <= threshold, name="feas_binom_2nll_cut")
+        )
+      self.__feasibility_cut_constraints.append(
+        model.addConstr(
+          2 * patient_var <= threshold, name="feas_patient_2nll_cut"
+        )
+      )
+
+    self._apply_assignment_mip_starts(
+      a,
+      binomial_only=self.__binomial_only,
+      patient_wise_only=self.__patient_wise_only,
+    )
+    self._apply_profile_mip_starts()
+
+    model.setParam("OutputFlag", 1 if verbose else 0)
+    model.setParam("DisplayInterval", 1)
+    model.setParam("NonConvex", 2)
+    model.setParam("Seed", 123456)
+    model.setParam("MIPFocus", 1)  # feasibility
+    model.setParam("FuncPieces", 1000)
+    model.setParam("FuncPieceRatio", 0.5)
+    # Stop at the first cut-feasible incumbent; proving outside still explores.
+    model.setParam("SolutionLimit", 1)
+    if TimeLimit is not None:
+      model.setParam("TimeLimit", TimeLimit)
+    if Threads is not None:
+      model.setParam("Threads", Threads)
+
+    try:
+      model.optimize()
+      status = model.status
+      sol_count = int(model.SolCount)
+
+      if sol_count > 0:
+        self._store_assignment_mip_starts(
+          a,
+          binomial_only=self.__binomial_only,
+          patient_wise_only=self.__patient_wise_only,
+        )
+        self._store_profile_mip_starts()
+        result: typing.Literal["inside", "outside", "unknown"] = "inside"
+      elif status == GRB.INFEASIBLE:
+        result = "outside"
+      else:
+        result = "unknown"
+
+      if print_progress or verbose:
+        print(
+          f"[{datetime.datetime.now()}] excess_at_most -> {result} "
+          f"(status={status}, SolCount={sol_count})",
+          flush=True,
+        )
+    finally:
+      # Do not leave SolutionLimit/MIPFocus for subsequent full minimizes.
+      model.setParam("SolutionLimit", 2000000000)
+      model.setParam("MIPFocus", 0)
+      self._clear_feasibility_cuts(model)
+    return result
+
   def run_MINLP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
     self,
     expected_probability: float | None,
@@ -1831,8 +2002,9 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     """
     if print_progress or verbose:
       print(
-        "Running MINLP for expected probability ", expected_probability,
-        " at time point ", self.time_point, " at time ", datetime.datetime.now()
+        f"[{datetime.datetime.now()}] Running MINLP for expected probability "
+        f"{expected_probability} at time point {self.time_point}",
+        flush=True,
       )
     if binomial_only != self.__binomial_only or patient_wise_only != self.__patient_wise_only:
       raise ValueError(
@@ -1860,6 +2032,8 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       expected_probability_var,
       _use_binomial_penalty_indicator,
     ) = self.gurobi_model
+    # Drop any leftover feasibility cuts before a full minimize.
+    self._clear_feasibility_cuts(model)
     self.update_model_with_expected_probability(
       model=model,
       km_probability_var=km_probability_var,

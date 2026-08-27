@@ -20,7 +20,11 @@ import numpy.typing as npt
 import scipy.optimize
 import scipy.stats
 
-from .discrete_optimization import binary_search_sign_change, cached_level_crossings
+from .discrete_optimization import (
+  binary_search_sign_change,
+  cached_level_crossings,
+  feasibility_assisted_level_crossings,
+)
 from .kaplan_meier import (
   KaplanMeierBase,
   KaplanMeierInstance,
@@ -479,6 +483,8 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     MIPGap=None,
     MIPGapAbs=None,
     rerun_until_convergence=False,
+    crossing_mode: typing.Literal["full", "feasibility"] = "full",
+    component_cuts: bool = False,
   ) -> tuple[np.ndarray, np.ndarray]:
     """
     Get the survival probabilities for the given quantiles.
@@ -505,12 +511,25 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         Gurobi absolute MIP gap tolerance (used for objective function tolerance)
     rerun_until_convergence : bool, default False
         If True, rerun the MINLP until the result converges within tolerances
+    crossing_mode : {"full", "feasibility"}, default "full"
+        How to locate profile-likelihood CL endpoints. ``full`` minimizes
+        2NLL at every trial ``p`` (legacy). ``feasibility`` uses
+        ``excess_at_most`` sign tests for bracketing, with full minimizes
+        only for MLE, oracle fallbacks, and brentq polish.
+    component_cuts : bool, default False
+        When ``crossing_mode="feasibility"``, also add redundant
+        ``2*binom <= T`` and ``2*patient <= T`` cuts. Off by default;
+        sum-only was faster with matching endpoints in hard-case ablations.
         
     Returns
     -------
     tuple[np.ndarray, np.ndarray]
         Best probabilities and survival probabilities for each confidence level
     """
+    if crossing_mode not in {"full", "feasibility"}:
+      raise ValueError(
+        f"crossing_mode must be 'full' or 'feasibility', got {crossing_mode!r}"
+      )
     # Set default tolerance values if not provided
     if MIPGap is None:
       MIPGap = self.__default_MIPGap
@@ -522,12 +541,13 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     for i, t in enumerate(times_for_plot, start=1):
       if print_progress:
         print(
-          f"Calculating survival probabilities for time point {t:.2f} "
-          f"({i} / {len(times_for_plot)}) at time {datetime.datetime.now()}"
+          f"[{datetime.datetime.now()}] Calculating survival probabilities "
+          f"for time point {t:.2f} ({i} / {len(times_for_plot)})",
+          flush=True,
         )
       survival_probabilities_time_point = []
       survival_probabilities.append(survival_probabilities_time_point)
-      run_MINLP, twoNLL, _minlp = self.get_twoNLL_function(
+      run_MINLP, twoNLL, minlp = self.get_twoNLL_function(
         time_point=t,
         binomial_only=binomial_only,
         patient_wise_only=patient_wise_only,
@@ -638,17 +658,46 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         eps = self.__endpoint_epsilon
         one_minus_eps = 1.0 - eps
 
-        if best_prob <= eps:
-          lowers = [0.0] * len(CLs)
-        else:
-          lowers = cached_level_crossings(
+        def resolve_crossings(x_outer: float, x_inner: float) -> list[float]:
+          if crossing_mode == "full":
+            return cached_level_crossings(
+              profile_excess,
+              x_outer,
+              x_inner,
+              levels,
+              xtol=brentq_xtol,
+              rtol=brentq_rtol,
+            )
+
+          def sign_oracle(
+            p: float,
+            level: float,
+            _minlp=minlp,
+            _twoNLL_min=twoNLL_min,
+          ) -> typing.Literal["inside", "outside", "unknown"]:
+            return _minlp.excess_at_most(
+              p,
+              twoNLL_min=_twoNLL_min,
+              level=level,
+              component_cuts=component_cuts,
+              verbose=gurobi_verbose,
+              print_progress=print_progress,
+            )
+
+          return feasibility_assisted_level_crossings(
             profile_excess,
-            eps,
-            best_prob_clipped,
+            sign_oracle,
+            x_outer,
+            x_inner,
             levels,
             xtol=brentq_xtol,
             rtol=brentq_rtol,
           )
+
+        if best_prob <= eps:
+          lowers = [0.0] * len(CLs)
+        else:
+          lowers = resolve_crossings(eps, best_prob_clipped)
           f_eps = profile_excess(eps)
           lowers = [
             0.0 if f_eps <= level else float(x)
@@ -658,14 +707,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         if best_prob >= one_minus_eps:
           uppers = [1.0] * len(CLs)
         else:
-          uppers = cached_level_crossings(
-            profile_excess,
-            one_minus_eps,
-            best_prob_clipped,
-            levels,
-            xtol=brentq_xtol,
-            rtol=brentq_rtol,
-          )
+          uppers = resolve_crossings(one_minus_eps, best_prob_clipped)
           f_hi = profile_excess(one_minus_eps)
           uppers = [
             1.0 if f_hi <= level else float(x)
@@ -674,8 +716,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
 
         if print_progress:
           print(
-            f"  CL crossings unique p evaluations={len(twoNLL.cache)} "
-            f"for time point {t}"
+            f"[{datetime.datetime.now()}]   CL crossings unique p "
+            f"evaluations={len(twoNLL.cache)} for time point {t} "
+            f"(mode={crossing_mode})",
+            flush=True,
           )
         for lower_bound, upper_bound in zip(lowers, uppers, strict=True):
           survival_probabilities_time_point.append((lower_bound, upper_bound))

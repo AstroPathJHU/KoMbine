@@ -526,3 +526,99 @@ def cached_level_crossings(  # pylint: disable=too-many-locals, too-many-argumen
       raise RuntimeError("cached_level_crossings left a level unsolved")
     crossings.append(x)
   return crossings
+
+
+SignOracleStatus = typing.Literal["inside", "outside", "unknown"]
+
+
+def feasibility_assisted_level_crossings(  # pylint: disable=too-many-locals, too-many-arguments, too-many-positional-arguments, too-many-branches
+  value_func: collections.abc.Callable[[float], float],
+  sign_oracle: collections.abc.Callable[[float, float], SignOracleStatus],
+  x_outer: float,
+  x_inner: float,
+  levels: collections.abc.Sequence[float],
+  *,
+  xtol: float = 1e-4,
+  rtol: float = 1e-4,
+) -> list[float]:
+  """Locate profile level crossings using a cheap inside/outside oracle.
+
+  ``value_func(p)`` returns nonnegative excess (e.g. ``2NLL(p)-2NLL_min``).
+  ``sign_oracle(p, level)`` returns whether excess can be ``<= level``
+  (``inside``), is proven ``> level`` (``outside``), or ``unknown``.
+
+  Coarse bracketing uses the oracle (falling back to ``value_func`` on
+  ``unknown``); the final root is polished with ``brentq`` on ``value_func``.
+  """
+  if not levels:
+    return []
+  if x_outer == x_inner:
+    return [x_inner] * len(levels)
+
+  value_cache: dict[float, float] = {}
+
+  def f_cached(x: float) -> float:
+    if x not in value_cache:
+      value_cache[x] = float(value_func(x))
+    return value_cache[x]
+
+  def classify(x: float, level: float) -> typing.Literal["inside", "outside"]:
+    status = sign_oracle(x, level)
+    if status == "unknown":
+      return "inside" if f_cached(x) <= level else "outside"
+    return status
+
+  crossings: list[float] = []
+  for level in levels:
+    outer_side = classify(x_outer, level)
+    if outer_side == "inside":
+      crossings.append(x_outer)
+      continue
+    inner_side = classify(x_inner, level)
+    if inner_side == "outside":
+      crossings.append(x_inner)
+      continue
+
+    inside = x_inner
+    outside = x_outer
+    while not _is_close(inside, outside, xtol, rtol):
+      mid = 0.5 * (inside + outside)
+      if _is_close(mid, inside, xtol, rtol) or _is_close(mid, outside, xtol, rtol):
+        break
+      if classify(mid, level) == "inside":
+        inside = mid
+      else:
+        outside = mid
+
+    left, right = (inside, outside) if inside < outside else (outside, inside)
+    if left == right or _is_close(left, right, xtol, rtol):
+      closer = left if abs(f_cached(left) - level) <= abs(f_cached(right) - level) else right
+      crossings.append(closer)
+      continue
+    g_left = f_cached(left) - level
+    g_right = f_cached(right) - level
+    if g_left == 0.0:
+      crossings.append(left)
+      continue
+    if g_right == 0.0:
+      crossings.append(right)
+      continue
+    if g_left * g_right > 0.0:
+      # Oracle bracket disagreed with numeric signs; pick closer endpoint.
+      closer = left if abs(g_left) <= abs(g_right) else right
+      crossings.append(closer)
+      continue
+    crossings.append(
+      typing.cast(
+        float,
+        scipy.optimize.brentq(
+          lambda x, _level=level: f_cached(x) - _level,
+          left,
+          right,
+          xtol=xtol,
+          rtol=np.float64(rtol),
+          full_output=False,
+        ),
+      )
+    )
+  return crossings

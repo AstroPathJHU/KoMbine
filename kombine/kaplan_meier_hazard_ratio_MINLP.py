@@ -197,7 +197,11 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
             The Gurobi model (for advanced users).
     """
     if print_progress or verbose:
-      print(f"Computing 2NLL at hazard ratio {hazard_ratio} at {datetime.datetime.now()}")
+      print(
+        f"[{datetime.datetime.now()}] Computing 2NLL at hazard ratio "
+        f"{hazard_ratio}",
+        flush=True,
+      )
 
     (  # pylint: disable=duplicate-code
       model,

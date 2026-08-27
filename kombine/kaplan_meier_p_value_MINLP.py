@@ -1132,7 +1132,10 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     start_beta = None
     if solve_null:
       if print_progress or verbose:
-        print("Solving for null hypothesis...")
+        print(
+          f"[{datetime.datetime.now()}] Solving for null hypothesis...",
+          flush=True,
+        )
       self.update_model_for_null_hypothesis_or_not(
         model, null_hypothesis_indicator, True,
       )
@@ -1150,7 +1153,10 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
           start_beta = float(beta.X)
 
     if print_progress or verbose:
-      print("Solving for alternative hypothesis...")
+      print(
+        f"[{datetime.datetime.now()}] Solving for alternative hypothesis...",
+        flush=True,
+      )
     self.update_model_for_null_hypothesis_or_not(
       model, null_hypothesis_indicator, False,
     )
@@ -1208,7 +1214,10 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
         If True, enable verbose output from Gurobi solver. Default is False.
     """
     if print_progress or verbose:
-      print(f"Running p-value MINLP at {datetime.datetime.now()}")
+      print(
+        f"[{datetime.datetime.now()}] Running p-value MINLP",
+        flush=True,
+      )
     if cox_only and patient_wise_only:
       raise ValueError("cox_only and patient_wise_only cannot both be True")
     if n_permutations < 0:
@@ -1268,7 +1277,11 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     try:
       for i_perm in range(n_permutations):
         if print_progress or verbose:
-          print(f"Permutation {i_perm + 1}/{n_permutations}...")
+          print(
+            f"[{datetime.datetime.now()}] Permutation "
+            f"{i_perm + 1}/{n_permutations}...",
+            flush=True,
+          )
         order = generator.permutation(self.n_patients)
         reshuffled_times = [base_times[order[i]] for i in range(self.n_patients)]
         reshuffled_censored = [
