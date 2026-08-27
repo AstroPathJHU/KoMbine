@@ -6,7 +6,7 @@ fixed baseline card, then writes the same survival_time / censored rows into
 every sibling methods_comparison_*.txt under a gitignored ``rebinned/``
 directory (observables unchanged; tracked sources stay fine-grained).
 
-Notebook 07's full-comparison mode expects K=4 (chosen after capped probes:
+Notebook 07's default mode expects K=4 (chosen after capped probes:
 K=6 censored a KM arm past 15 min; K=4 finished a hard-card arm in ~8 min).
 
 Usage (from repo root)::

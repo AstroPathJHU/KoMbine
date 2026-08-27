@@ -188,10 +188,11 @@ jobs:
         run: |
           jupytext --sync docs/kombine/*.md
 
-      # Notebook 07 defaults to n=20 hr_example cards (do not set
-      # KOMBINE_FULL_COMPARISON). Local hours-scale runs regenerate n=50
-      # methods_comparison_* cards into datacards/.../rebinned/ on load.
+      # Notebook 07 defaults to n=50 methods_comparison cards. CI sets
+      # KOMBINE_QUICK_COMPARISON=1 for the n=20 hr_example path (minutes).
       - name: test KoMbine notebooks
+        env:
+          KOMBINE_QUICK_COMPARISON: "1"
         run: |
           jupyter nbconvert --execute --to html --ExecutePreprocessor.timeout=3600 -- docs/kombine/*.ipynb
 
