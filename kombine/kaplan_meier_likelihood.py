@@ -29,7 +29,7 @@ from .kaplan_meier import (
   KaplanMeierBase,
   KaplanMeierInstance,
 )
-from .kaplan_meier_MINLP import MINLPForKM, KaplanMeierPatientNLL
+from .kaplan_meier_MINLP import GurobiWorkStats, MINLPForKM, KaplanMeierPatientNLL
 from .utilities import InspectableCache, LOG_ZERO_EPSILON_DEFAULT
 
 @dataclasses.dataclass
@@ -226,6 +226,12 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     self.__log_zero_epsilon = log_zero_epsilon
     self.__collapse_consecutive_deaths = collapse_consecutive_deaths
     self.__time_unit = time_unit
+    self._last_gurobi_work_stats: GurobiWorkStats | None = None
+
+  @property
+  def last_gurobi_work_stats(self) -> GurobiWorkStats | None:
+    """Work totals from the most recent ``survival_probabilities_likelihood`` call."""
+    return self._last_gurobi_work_stats
 
   @property
   def all_patients(self) -> list[KaplanMeierPatientNLL]:
@@ -314,6 +320,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     MIPGapAbs=None,
     rerun_until_convergence=False,
     assignment_starts=None,
+    minlp_time_limit: float | None = None,
   ) -> tuple[
     InspectableCache[float | None, scipy.optimize.OptimizeResult],
     InspectableCache[float | None, float],
@@ -353,6 +360,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         print_progress=print_progress,
         MIPGap=MIPGap,
         MIPGapAbs=MIPGapAbs,
+        TimeLimit=minlp_time_limit,
       )
 
       if not rerun_until_convergence or not result.success:
@@ -374,6 +382,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
             print_progress=print_progress,
             MIPGap=MIPGap,
             MIPGapAbs=MIPGapAbs,
+            TimeLimit=minlp_time_limit,
           )
         except Exception: #pylint: disable=broad-exception-caught
           # If rerun raises an exception, return the last successful result
@@ -485,6 +494,12 @@ class KaplanMeierLikelihood(KaplanMeierBase):
     rerun_until_convergence=False,
     crossing_mode: typing.Literal["full", "feasibility"] = "full",
     component_cuts: bool = False,
+    binom_time_cuts: bool = False,
+    cost_biased_bisection: bool = True,
+    r_prior: float = 0.5,
+    kappa: float = 4.0,
+    minlp_time_limit: float | None = None,
+    oracle_time_limit: float | None = None,
   ) -> tuple[np.ndarray, np.ndarray]:
     """
     Get the survival probabilities for the given quantiles.
@@ -520,6 +535,21 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         When ``crossing_mode="feasibility"``, also add redundant
         ``2*binom <= T`` and ``2*patient <= T`` cuts. Off by default;
         sum-only was faster with matching endpoints in hard-case ablations.
+    binom_time_cuts : bool, default False
+        When ``crossing_mode="feasibility"``, also add redundant
+        ``2*binom_piece[i] <= T`` per death time.
+    cost_biased_bisection : bool, default True
+        When ``crossing_mode="feasibility"``, use cost-biased oracle bisection
+        (prior probe fraction ``r_prior``; adapts from oracle timings).
+    r_prior : float, default 0.5
+        Initial probe fraction between inside and outside endpoints (0.5 =
+        midpoint bisection).
+    kappa : float, default 4.0
+        Prior strength (pseudo-counts) for the Beta prior on ``r``.
+    minlp_time_limit : float, optional
+        Gurobi TimeLimit (seconds) for each full ``run_MINLP`` call. None = no limit.
+    oracle_time_limit : float, optional
+        Gurobi TimeLimit (seconds) for each ``excess_at_most`` oracle call. None = no limit.
         
     Returns
     -------
@@ -556,6 +586,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         MIPGap=MIPGap,
         MIPGapAbs=MIPGapAbs,
         rerun_until_convergence=rerun_until_convergence,
+        minlp_time_limit=minlp_time_limit,
       )
       # Find the expected probability that minimizes the negative log-likelihood
       # for the given time point
@@ -658,7 +689,10 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         eps = self.__endpoint_epsilon
         one_minus_eps = 1.0 - eps
 
-        def resolve_crossings(x_outer: float, x_inner: float) -> list[float]:
+        def resolve_crossings(
+          x_outer: float,
+          x_inner: float,
+        ) -> tuple[list[float], list[typing.Literal["inside", "outside"] | None]]:
           if crossing_mode == "full":
             return cached_level_crossings(
               profile_excess,
@@ -667,24 +701,31 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               levels,
               xtol=brentq_xtol,
               rtol=brentq_rtol,
-            )
+            ), [None] * len(levels)
 
           def sign_oracle(
             p: float,
             level: float,
             _minlp=minlp,
             _twoNLL_min=twoNLL_min,
-          ) -> typing.Literal["inside", "outside", "unknown"]:
-            return _minlp.excess_at_most(
+          ) -> tuple[typing.Literal["inside", "outside", "unknown"], float]:
+            status = _minlp.excess_at_most(
               p,
               twoNLL_min=_twoNLL_min,
               level=level,
               component_cuts=component_cuts,
+              binom_time_cuts=binom_time_cuts,
               verbose=gurobi_verbose,
               print_progress=print_progress,
+              TimeLimit=oracle_time_limit,
             )
+            # Prefer Gurobi Work (sleep-immune). Fall back to a tiny positive
+            # cost so the tracker still gets an outcome-count update.
+            work = _minlp.last_oracle_work
+            return status, float(work) if work is not None and work > 0.0 else 1e-9
 
-          return feasibility_assisted_level_crossings(
+          outer_oracle: list[typing.Literal["inside", "outside"] | None] = []
+          crossings = feasibility_assisted_level_crossings(
             profile_excess,
             sign_oracle,
             x_outer,
@@ -692,37 +733,70 @@ class KaplanMeierLikelihood(KaplanMeierBase):
             levels,
             xtol=brentq_xtol,
             rtol=brentq_rtol,
+            cost_biased_bisection=cost_biased_bisection,
+            r_prior=r_prior,
+            kappa=kappa,
+            outer_oracle=outer_oracle,
           )
+          return crossings, outer_oracle
+
+        def _clip_lower_endpoint(
+          crossings: list[float],
+          outer_oracle: list[typing.Literal["inside", "outside"] | None],
+        ) -> list[float]:
+          clipped: list[float] = []
+          for x, level, ostatus in zip(crossings, levels, outer_oracle, strict=True):
+            if ostatus == "inside":
+              clipped.append(0.0)
+            elif ostatus == "outside":
+              clipped.append(float(x))
+            else:
+              f_outer = profile_excess(eps)
+              clipped.append(0.0 if f_outer <= level else float(x))
+          return clipped
+
+        def _clip_upper_endpoint(
+          crossings: list[float],
+          outer_oracle: list[typing.Literal["inside", "outside"] | None],
+        ) -> list[float]:
+          clipped: list[float] = []
+          for x, level, ostatus in zip(crossings, levels, outer_oracle, strict=True):
+            if ostatus == "inside":
+              clipped.append(1.0)
+            elif ostatus == "outside":
+              clipped.append(float(x))
+            else:
+              f_outer = profile_excess(one_minus_eps)
+              clipped.append(1.0 if f_outer <= level else float(x))
+          return clipped
 
         if best_prob <= eps:
           lowers = [0.0] * len(CLs)
         else:
-          lowers = resolve_crossings(eps, best_prob_clipped)
-          f_eps = profile_excess(eps)
-          lowers = [
-            0.0 if f_eps <= level else float(x)
-            for x, level in zip(lowers, levels, strict=True)
-          ]
+          lowers, lower_outer = resolve_crossings(eps, best_prob_clipped)
+          lowers = _clip_lower_endpoint(lowers, lower_outer)
 
         if best_prob >= one_minus_eps:
           uppers = [1.0] * len(CLs)
         else:
-          uppers = resolve_crossings(one_minus_eps, best_prob_clipped)
-          f_hi = profile_excess(one_minus_eps)
-          uppers = [
-            1.0 if f_hi <= level else float(x)
-            for x, level in zip(uppers, levels, strict=True)
-          ]
+          uppers, upper_outer = resolve_crossings(one_minus_eps, best_prob_clipped)
+          uppers = _clip_upper_endpoint(uppers, upper_outer)
 
         if print_progress:
+          ws = minlp.work_stats
           print(
             f"[{datetime.datetime.now()}]   CL crossings unique p "
             f"evaluations={len(twoNLL.cache)} for time point {t} "
-            f"(mode={crossing_mode})",
+            f"(mode={crossing_mode}); "
+            f"Work oracle={ws.oracle_work:.3f} minimize={ws.minimize_work:.3f} "
+            f"total={ws.total_work:.3f} "
+            f"(oracle_calls={ws.oracle_calls}, minimize_calls={ws.minimize_calls}, "
+            f"oracle_outside={ws.oracle_outside_calls})",
             flush=True,
           )
         for lower_bound, upper_bound in zip(lowers, uppers, strict=True):
           survival_probabilities_time_point.append((lower_bound, upper_bound))
+      self._last_gurobi_work_stats = minlp.work_stats
     return np.array(best_probabilities), np.array(survival_probabilities)
 
   def plot(self, config: KaplanMeierPlotConfig | None = None, **kwargs) -> dict:

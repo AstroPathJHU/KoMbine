@@ -4,6 +4,8 @@ that are only evaluated at discrete values.
 """
 
 import collections.abc
+import dataclasses
+import time
 import typing
 
 import numpy as np
@@ -529,26 +531,104 @@ def cached_level_crossings(  # pylint: disable=too-many-locals, too-many-argumen
 
 
 SignOracleStatus = typing.Literal["inside", "outside", "unknown"]
+SignOracleResult = SignOracleStatus | tuple[SignOracleStatus, float]
+
+
+@dataclasses.dataclass
+class OracleCostTracker:
+  """Online estimate of cost-biased bisection probe fraction ``r``.
+
+  Prior ``r₀=0.5`` (midpoint). Updates from outcome counts and unitless
+  wall-time ratios; clamps with uncertainty so outliers cannot poison ``r``.
+  """
+
+  r_prior: float = 0.5
+  kappa: float = 4.0
+  z: float = 1.0
+  epsilon_floor: float = 0.05
+  winsor_cap: float = 4.0
+  ema_alpha: float = 0.3
+  w_threshold: float = 2.0
+  alpha: float = dataclasses.field(init=False)
+  beta: float = dataclasses.field(init=False)
+  n_in: int = 0
+  n_out: int = 0
+  u_in: float = 1.0
+  u_out: float = 1.0
+  _times: list[float] = dataclasses.field(default_factory=list)
+
+  def __post_init__(self) -> None:
+    if not 0.0 < self.r_prior < 1.0:
+      raise ValueError(f"r_prior must be in (0, 1), got {self.r_prior}")
+    self.alpha = self.kappa * self.r_prior
+    self.beta = self.kappa * (1.0 - self.r_prior)
+
+  def record(self, outcome: typing.Literal["inside", "outside"], wall_time: float) -> None:
+    """Record one oracle outcome and its wall time (seconds)."""
+    t = float(wall_time)
+    if self._times:
+      median_all = float(np.median(self._times))
+      if median_all > 0.0:
+        t = min(t, self.winsor_cap * median_all)
+    self._times.append(t)
+    t_ref = float(np.median(self._times))
+    if t_ref <= 0.0:
+      t_ref = 1.0
+    norm_t = t / t_ref
+
+    if outcome == "inside":
+      self.n_in += 1
+      self.alpha += 1.0
+      self.u_in = (1.0 - self.ema_alpha) * self.u_in + self.ema_alpha * norm_t
+    else:
+      self.n_out += 1
+      self.beta += 1.0
+      self.u_out = (1.0 - self.ema_alpha) * self.u_out + self.ema_alpha * norm_t
+
+  def probe_fraction(self) -> float:
+    """Fraction from ``inside`` toward ``outside`` for the next probe."""
+    r_count = self.alpha / (self.alpha + self.beta)
+    if self.n_in >= 1 and self.n_out >= 1:
+      r_time = self.u_in / (self.u_in + self.u_out)
+      w = min(1.0, min(self.n_in, self.n_out) / self.w_threshold)
+      r_raw = w * r_time + (1.0 - w) * r_count
+    else:
+      r_raw = r_count
+
+    n_eff = self.n_in + self.n_out
+    denom = self.alpha + self.beta + n_eff
+    se_r = float(np.sqrt(max(r_raw * (1.0 - r_raw) / denom, 0.0)))
+    epsilon = min(0.5, self.z * se_r + self.epsilon_floor)
+    return float(np.clip(r_raw, epsilon, 1.0 - epsilon))
 
 
 def feasibility_assisted_level_crossings(  # pylint: disable=too-many-locals, too-many-arguments, too-many-positional-arguments, too-many-branches
   value_func: collections.abc.Callable[[float], float],
-  sign_oracle: collections.abc.Callable[[float, float], SignOracleStatus],
+  sign_oracle: collections.abc.Callable[[float, float], SignOracleResult],
   x_outer: float,
   x_inner: float,
   levels: collections.abc.Sequence[float],
   *,
   xtol: float = 1e-4,
   rtol: float = 1e-4,
+  cost_biased_bisection: bool = True,
+  r_prior: float = 0.5,
+  kappa: float = 4.0,
+  outer_oracle: list[SignOracleStatus | None] | None = None,
 ) -> list[float]:
   """Locate profile level crossings using a cheap inside/outside oracle.
 
   ``value_func(p)`` returns nonnegative excess (e.g. ``2NLL(p)-2NLL_min``).
   ``sign_oracle(p, level)`` returns whether excess can be ``<= level``
   (``inside``), is proven ``> level`` (``outside``), or ``unknown``.
+  It may also return ``(status, cost)`` where ``cost`` is a sleep-immune
+  effort measure (prefer Gurobi ``Work`` over wall-clock).
 
   Coarse bracketing uses the oracle (falling back to ``value_func`` on
   ``unknown``); the final root is polished with ``brentq`` on ``value_func``.
+
+  When ``cost_biased_bisection`` is True, probe points use ``OracleCostTracker``
+  (prior ``r_prior=0.5`` = midpoint until data arrives).
   """
   if not levels:
     return []
@@ -562,19 +642,63 @@ def feasibility_assisted_level_crossings(  # pylint: disable=too-many-locals, to
       value_cache[x] = float(value_func(x))
     return value_cache[x]
 
+  def _call_oracle(
+    x: float, level: float,
+  ) -> tuple[SignOracleStatus, float | None]:
+    raw = sign_oracle(x, level)
+    if isinstance(raw, tuple):
+      status, cost = raw
+      return status, float(cost)
+    return raw, None
+
   def classify(x: float, level: float) -> typing.Literal["inside", "outside"]:
-    status = sign_oracle(x, level)
+    status, _cost = _call_oracle(x, level)
     if status == "unknown":
       return "inside" if f_cached(x) <= level else "outside"
     return status
 
+  def classify_timed(
+    x: float,
+    level: float,
+    tracker: OracleCostTracker | None,
+  ) -> typing.Literal["inside", "outside"]:
+    # Prefer oracle-reported cost (Gurobi Work). Fall back to process CPU
+    # time — not wall clock — so OS sleep cannot poison the tracker.
+    t0 = time.process_time()
+    status, cost = _call_oracle(x, level)
+    if cost is None:
+      cost = time.process_time() - t0
+    if status == "unknown":
+      return "inside" if f_cached(x) <= level else "outside"
+    if tracker is not None:
+      tracker.record(status, cost)
+    return status
+
   crossings: list[float] = []
   for level in levels:
-    outer_side = classify(x_outer, level)
+    tracker = (
+      OracleCostTracker(r_prior=r_prior, kappa=kappa)
+      if cost_biased_bisection
+      else None
+    )
+    raw_outer, outer_cost = _call_oracle(x_outer, level)
+    if outer_oracle is not None:
+      outer_oracle.append(None if raw_outer == "unknown" else raw_outer)
+    if raw_outer == "unknown":
+      outer_side = "inside" if f_cached(x_outer) <= level else "outside"
+    else:
+      outer_side = raw_outer
+      if tracker is not None:
+        cost = outer_cost if outer_cost is not None else 0.0
+        tracker.record(outer_side, cost)
     if outer_side == "inside":
       crossings.append(x_outer)
       continue
-    inner_side = classify(x_inner, level)
+    inner_side = (
+      classify_timed(x_inner, level, tracker)
+      if tracker is not None
+      else classify(x_inner, level)
+    )
     if inner_side == "outside":
       crossings.append(x_inner)
       continue
@@ -582,10 +706,19 @@ def feasibility_assisted_level_crossings(  # pylint: disable=too-many-locals, to
     inside = x_inner
     outside = x_outer
     while not _is_close(inside, outside, xtol, rtol):
-      mid = 0.5 * (inside + outside)
+      if tracker is not None:
+        r = tracker.probe_fraction()
+        mid = inside + r * (outside - inside)
+      else:
+        mid = 0.5 * (inside + outside)
       if _is_close(mid, inside, xtol, rtol) or _is_close(mid, outside, xtol, rtol):
         break
-      if classify(mid, level) == "inside":
+      side = (
+        classify_timed(mid, level, tracker)
+        if tracker is not None
+        else classify(mid, level)
+      )
+      if side == "inside":
         inside = mid
       else:
         outside = mid
