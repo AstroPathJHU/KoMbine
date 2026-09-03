@@ -23,7 +23,7 @@ This notebook compares two published recipes for discrete covariate misclassific
 
 **Two modes** (chosen at runtime):
 
-- **Default**: regenerates `methods_comparison_*` cards on the fly into a gitignored `rebinned/` dir ($n=50$, **4** quantile-bin death-time medians; hours-scale; stronger permutation power).
+- **Default**: regenerates `methods_comparison_*` cards on the fly into a gitignored `rebinned/` dir ($n=50$, **4** quantile-bin death-time medians). KoMbine KM bands use `crossing_mode="feasibility"` (oracle bracketing + brentq polish). A full run is **~1 hour** locally (2026-09-01: Analysis 1 ~67 min, Analysis 2 ~4 min, Analysis 3 negligible); Poisson (small counts) dominates (~50 min of Analysis 1).
 - **Quick / CI** (`KOMBINE_QUICK_COMPARISON=1`): `*_hr_example*` cards, $n=20$, ~7 distinct death times — finishes in minutes with real KM bands, p-values, and HR profiles.
 
 Fixed and Poisson cards are split at `0.5001` (a density/value cut). Discrete-class cards are split at `1` (the boundary between class indices 0 and 1):
@@ -42,7 +42,7 @@ All three methods use the same measurement model (`observable.probability_in_ran
 |--------|---|---|---|
 | **Core idea** | Weighted KM/logrank using probabilistic group membership | Extra flips of hard labels, then extrapolate the naive estimator to zero error | Full likelihood with explicit group assignment variables |
 | **Optimization** | 1-D scalar min of the weighted Breslow 2NLL | Monte Carlo average at each $\lambda$, quadratic fit | Mixed Integer Nonlinear Programming (Gurobi) |
-| **Computational cost** | Low | Low–medium | Medium-high |
+| **Computational cost** | Low | Low–medium | Medium-high (~1 h for this notebook) |
 | **Accuracy (within model)** | Approximate to the full likelihood | Approximate (simulation + extrapolation) | Exact maximizer within solver tolerance |
 | **Uncertainty** | Likelihood-ratio interval of the weighted Breslow 2NLL (no KM bands here) | Sampling CI of the extrapolated number (Wald for HR) | Profile likelihood |
 | **Core assumptions** | Known measurement error distribution; independent errors; fractional group membership is an adequate proxy for uncertain assignment | Known measurement error distribution; independent errors; quadratic extrapolation of the naive hard-label estimator is adequate | Known measurement error distribution; independent errors; patients belong to one group; event times treated as observed and discrete; likelihood model is correctly specified |
@@ -72,7 +72,7 @@ All three methods use the same measurement model (`observable.probability_in_ran
 - Combine the survival likelihood with a measurement error penalty that scores how plausible each assignment is.
 - Solve a constrained optimization problem that finds the most likely set of assignments and survival parameters together.
 - Compute confidence intervals via profile likelihood, which naturally widens as uncertainty increases.
-- This is exact for the specified likelihood model but requires heavier computation.
+- This is exact for the specified likelihood model but requires heavier computation than Yi or MC-SIMEX.
 
 ### What the Assumptions Mean (Plain Language)
 - **Known measurement error distribution**: You have a reasonable model for how observed biomarker values deviate from the true value (e.g., Poisson noise).
@@ -879,24 +879,31 @@ patient and scores assignments using an explicit measurement-error model.
 
 ### Kaplan–Meier Curves (Qualitative)
 - **Fixed observable**: Yi, MC-SIMEX, and KoMbine produce identical curves because group membership is exact.
-- **Discrete classes**: At $e=0.05$–$0.10$ the KoMbine KM curves stay near the baseline.
-  At $e=0.25$, Yi’s curves drift toward each other, MC-SIMEX extrapolates the hard-label KM,
-  and KoMbine’s separate KM fits can collapse because assignments are weakly identified.
-- **Poisson (large/moderate counts)**: Yi shrinks the group gap; MC-SIMEX is an extrapolated hard-label
-  curve; KoMbine confidence bands widen as assignment uncertainty increases.
-- **Poisson (small counts)**: Differences can become qualitative (including apparent reversals in the
-  individual KM curve fits) because group membership is weakly identified under the error model.
+- **Discrete classes**: At $e=0.05$–$0.10$ the KoMbine KM curves and point HR stay near the fixed baseline (HR $\approx 2.08$).
+  At $e=0.25$, Yi’s curves and HR drift toward 1 ($\widehat H \approx 1.40$), MC-SIMEX extrapolates the hard-label KM ($\widehat H \approx 2.86$),
+  and KoMbine’s separate KM fits can collapse; the joint HR profile hits the scan bound ($\widehat H \approx 100$) with a wide interval.
+- **Poisson (large/moderate counts)**: Yi shrinks the group gap ($\widehat H$ from 2.03 to 1.79); MC-SIMEX is an extrapolated hard-label
+  curve with growing Wald intervals; KoMbine confidence bands and HR intervals widen as assignment uncertainty increases.
+- **Poisson (small counts)**: Differences become qualitative (including apparent reversals in the
+  separate KM fits). Yi is most conservative ($\widehat H \approx 1.58$, $p \approx 0.13$); MC-SIMEX can show the strongest separation ($\widehat H \approx 4.0$); KoMbine sits between them ($\widehat H \approx 3.0$) with a wide profile interval.
 
 ### P-Values and Hazard Ratios
 - Yi’s p-values generally increase as uncertainty grows; its best-fit HR drifts toward 1.
   The printed Yi HR and CI are a continuous Breslow profile, not a grid argmin.
 - MC-SIMEX p-values and HRs are those of an extrapolated hard-label statistic; the Wald HR interval stays finite.
   The plotted MC-SIMEX curve is that Wald quadratic even when $e_i=0$.
-- KoMbine’s plotted $p$ is a permutation LRT. The point HR can stay near the baseline
-  while the profile interval widens, and at still larger $e$ the most likely assignment
-  can increase apparent separation, but that search is also available under the null.
+- KoMbine’s plotted $p$ is a permutation LRT with $B=19$, so several scenarios floor at $0.05$ or $0.10$ even when the point HR stays near baseline.
+  The profile interval can widen while the point HR remains moderate; at $e=0.25$ the HR scan can pin at the upper bound.
 - Large disagreements among the three indicate that inference is driven by how group-membership
   uncertainty is modeled, not just by sampling noise.
+
+### Runtime (default cards, 2026-09-01)
+| Analysis | Wall time | Notes |
+|---|---:|---|
+| 1 — KM bands | ~67 min | Dominated by Poisson (small counts) ~50 min |
+| 2 — P-values | ~4 min | Permutation LRT ($B=19$) |
+| 3 — HR profiles | ~0.1 min | Grid scan ($N\_HR\_SCAN=25$) |
+| **Total** | **~72 min** |  |
 
 ### Practical Takeaways
 1. When measurement error is tiny, KM curves and the Cox **point** HR agree. The HR *scan*
