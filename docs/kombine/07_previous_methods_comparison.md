@@ -8,7 +8,7 @@ jupyter:
       format_version: '1.3'
       jupytext_version: 1.19.5
   kernelspec:
-    display_name: rocpicker
+    display_name: Python 3
     language: python
     name: python3
 ---
@@ -23,7 +23,7 @@ This notebook compares two published recipes for discrete covariate misclassific
 
 **Two modes** (chosen at runtime):
 
-- **Default**: regenerates `methods_comparison_*` cards on the fly into a gitignored `rebinned/` dir ($n=50$, **4** quantile-bin death-time medians). KoMbine KM bands use `crossing_mode="feasibility"` (oracle bracketing + brentq polish). A full run is **~85 min** locally (Analysis 1 ~63 min, Analysis 2 ~21 mi, Analysis 3 negligible); Poisson (small counts) dominates Analysis 1 (~50 min).
+- **Default**: regenerates `methods_comparison_*` cards on the fly into a gitignored `rebinned/` dir ($n=50$, **4** quantile-bin death-time medians). KoMbine KM bands use `crossing_mode="feasibility"` (oracle bracketing + brentq polish). A full run is **~85 min** locally (2026-09: Analysis 1 ~63 min, Analysis 2 ~21 min with $B=99$, Analysis 3 negligible); Poisson (small counts) dominates Analysis 1 (~50 min).
 - **Quick / CI** (`KOMBINE_QUICK_COMPARISON=1`): `*_hr_example*` cards, $n=20$, ~7 distinct death times — finishes in minutes with real KM bands, p-values, and HR profiles.
 
 Fixed and Poisson cards are split at `0.5001` (a density/value cut). Discrete-class cards are split at `1` (the boundary between class indices 0 and 1):
@@ -52,7 +52,7 @@ All three methods use the same measurement model (`observable.probability_in_ran
 - **MC-SIMEX extrapolates a naive hard-label estimator.** The observed label $G^*_i$ is flipped with Küchenhoff probability $\bigl(1-(1-2e_i)^{\lambda}\bigr)/2$, the usual KM/logrank/Cox estimator is averaged over simulations, and that curve is fit vs $\lambda$ and evaluated at $\lambda=-1$.
 - **KoMbine profiles assignments.** A binary assignment is chosen for each patient, scored by the measurement model, and confidence sets come from the profile likelihood.
 
-### How Yi's Method Works (Intuition)
+### How Yi's Method Works
 - Convert each patient's observed biomarker value into a probability of being below or above the threshold using the measurement error model.
 - Instead of a global misclassification matrix as Yi describes, we extend her method to compute these probabilities on a per-patient basis (allowing uncertainty to vary by individual measurement).
 - Use those per-patient probabilities as weights in the Kaplan-Meier estimator and logrank test.
@@ -60,27 +60,19 @@ All three methods use the same measurement model (`observable.probability_in_ran
 - This yields fast, smooth estimates that tend to shrink group differences as measurement uncertainty grows.
 - It is an approximation because it does not enforce a single, discrete group assignment for each patient.
 
-### How MC-SIMEX Works (Intuition)
+### How MC-SIMEX Works
 - Keep the same $e_i=1-P(G=G^*_i\mid\text{data})$ that Yi uses, but then discard the probabilities and work with hard labels only.
 - At $\lambda=0$ the estimator is the usual naive KM / logrank / Cox fit on $G^*$.
 - At $\lambda>0$ additional flips are simulated; averaging the naive estimator traces how it changes as misclassification grows.
 - A quadratic in $\lambda$ is extrapolated to $\lambda=-1$ (no misclassification).
 - The HR interval is a Wald interval of that extrapolated $\log H$, not a likelihood-ratio interval. The $\Delta$2NLL curve plotted below is the Wald quadratic $(\log H-\widehat{\log H})^2/\hat\sigma^2$.
 
-### How KoMbine Works (Intuition)
+### How KoMbine Works
 - Introduce a binary assignment variable for each patient (low vs high group).
 - Combine the survival likelihood with a measurement error penalty that scores how plausible each assignment is.
 - Solve a constrained optimization problem that finds the most likely set of assignments and survival parameters together.
 - Compute confidence intervals via profile likelihood, which naturally widens as uncertainty increases.
 - This is exact for the specified likelihood model but requires heavier computation than Yi or MC-SIMEX.
-
-### What the Assumptions Mean (Plain Language)
-- **Known measurement error distribution**: You have a reasonable model for how observed biomarker values deviate from the true value (e.g., Poisson noise).
-- **Independent errors**: One patient's measurement error does not influence another patient's measurement error.
-- **Fractional membership (Yi)**: It is acceptable to treat a patient as partly in each group, rather than forcing a single group.
-- **Hard labels plus extrapolation (MC-SIMEX)**: It is acceptable to keep a single group per simulated data set and correct bias by extrapolating the naive estimator.
-- **Discrete membership (KoMbine)**: Each patient ultimately belongs to one group, but the model allows uncertainty in that assignment.
-- **Correct likelihood model**: The survival model used (KM/logrank or Cox) is an appropriate description of the data-generating process.
 
 ### Key Comparisons
 1. **Kaplan-Meier Curves**: Visual comparison of survival estimates
@@ -108,8 +100,6 @@ Only the class probabilities change: patients in the low group get probabilities
 $(1-e, e)$, and patients in the high group get $(e, 1-e)$.
 
 MC-SIMEX uses the same $e$ as the per-patient flip rate.
-
-KoMbine stores class $k$ as a piecewise-constant NLL on $[k, k+1)$. The two-group cut must therefore be the integer class boundary $1$, not $0.5001$. That density-style cut would leave part of the class-0 bin in both groups, so KoMbine could reassign class-0 patients at no extra NLL. Yi and MC-SIMEX compare the integer class index to the cut, so $0.5001$ and $1$ are equivalent for them.
 
 ```python
 import os
@@ -935,4 +925,8 @@ for key, info in scenarios.items():
     ko_p_str = 'n/a' if pv['kombine'] is None else format_pvalue(pv['kombine'])
     print(f"{info['label']:<36} {format_pvalue(pv['yi']):>9} {format_pvalue(pv['simex']):>9} {ko_p_str:>11}"
           f"  {yi_hr_str:>20}  {simex_hr_str:>20}  {ko_hr_str:>22}")
+```
+
+```python
+
 ```
