@@ -23,7 +23,7 @@ This notebook compares two published recipes for discrete covariate misclassific
 
 **Two modes** (chosen at runtime):
 
-- **Default**: regenerates `methods_comparison_*` cards on the fly into a gitignored `rebinned/` dir ($n=50$, **4** quantile-bin death-time medians). KoMbine KM bands use `crossing_mode="feasibility"` (oracle bracketing + brentq polish). A full run is **~1 hour** locally (2026-09-01: Analysis 1 ~67 min, Analysis 2 ~4 min, Analysis 3 negligible); Poisson (small counts) dominates (~50 min of Analysis 1).
+- **Default**: regenerates `methods_comparison_*` cards on the fly into a gitignored `rebinned/` dir ($n=50$, **4** quantile-bin death-time medians). KoMbine KM bands use `crossing_mode="feasibility"` (oracle bracketing + brentq polish). A full run is **~85 min** locally (Analysis 1 ~63 min, Analysis 2 ~21 mi, Analysis 3 negligible); Poisson (small counts) dominates Analysis 1 (~50 min).
 - **Quick / CI** (`KOMBINE_QUICK_COMPARISON=1`): `*_hr_example*` cards, $n=20$, ~7 distinct death times — finishes in minutes with real KM bands, p-values, and HR profiles.
 
 Fixed and Poisson cards are split at `0.5001` (a density/value cut). Discrete-class cards are split at `1` (the boundary between class indices 0 and 1):
@@ -128,7 +128,7 @@ from kombine.datacard import Datacard
 from kombine.comparisons import YiCorrectionForCoxPH
 
 # Single notebook budget. Edit these if you want denser scans.
-N_PERMUTATIONS = 19
+N_PERMUTATIONS = 99
 N_HR_SCAN = 25
 SIMEX_B = 20
 
@@ -578,7 +578,7 @@ We compare p-values from:
 - **MC-SIMEX**: the usual logrank statistic on extra-flipped hard labels, averaged vs $\lambda$ and extrapolated to $\lambda=-1$, then converted to a $\chi^2_1$ p-value.
 - **KoMbine**: a *permutation* LRT of HR $=1$ using the full model (**`cox_only=False`**). Assignments are profiled on the observed data and on each shuffle of `(time, censored)`, so the null has the same reassignment freedom as the alternative.
 
-On the **fixed** card, Yi and MC-SIMEX therefore report the same hard-label logrank $\chi^2$ $p$, while KoMbine’s $p$ is a coarse permutation LRT (here $B=19$) of the Cox alternative — they need not match even with zero measurement error.
+On the **fixed** card, Yi and MC-SIMEX therefore report the same hard-label logrank $\chi^2$ $p$, while KoMbine’s $p$ is a permutation LRT (here $B=99$) of the Cox alternative — they need not match even with zero measurement error.
 
 **What to expect**
 
@@ -892,18 +892,18 @@ patient and scores assignments using an explicit measurement-error model.
   The printed Yi HR and CI are a continuous Breslow profile, not a grid argmin.
 - MC-SIMEX p-values and HRs are those of an extrapolated hard-label statistic; the Wald HR interval stays finite.
   The plotted MC-SIMEX curve is that Wald quadratic even when $e_i=0$.
-- KoMbine’s plotted $p$ is a permutation LRT with $B=19$, so several scenarios floor at $0.05$ or $0.10$ even when the point HR stays near baseline.
+- KoMbine’s plotted $p$ is a permutation LRT with $B=99$.
   The profile interval can widen while the point HR remains moderate; at $e=0.25$ the HR scan can pin at the upper bound.
 - Large disagreements among the three indicate that inference is driven by how group-membership
   uncertainty is modeled, not just by sampling noise.
 
-### Runtime (default cards, 2026-09-01)
+### Runtime (default cards, 2026-09)
 | Analysis | Wall time | Notes |
 |---|---:|---|
-| 1 — KM bands | ~67 min | Dominated by Poisson (small counts) ~50 min |
-| 2 — P-values | ~4 min | Permutation LRT ($B=19$) |
+| 1 — KM bands | ~63 min | Dominated by Poisson (small counts) ~50 min |
+| 2 — P-values | ~21 min | Permutation LRT ($B=99$) |
 | 3 — HR profiles | ~0.1 min | Grid scan ($N\_HR\_SCAN=25$) |
-| **Total** | **~72 min** |  |
+| **Total** | **~85 min** |  |
 
 ### Practical Takeaways
 1. When measurement error is tiny, KM curves and the Cox **point** HR agree. The HR *scan*
