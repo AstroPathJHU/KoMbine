@@ -28,15 +28,20 @@ jobs:
         run: |
           jupytext --sync docs/roc_picker/*.md docs/kombine/*.md
 
+      # success() || failure(): still run later linters if an earlier one fails
+      # (not if the job is cancelled). The job stays red if any step failed.
       - name: pyflakes (all python files)
+        if: success() || failure()
         run: |
           python -m pyflakes kombine roc_picker test docs .github/workflows/checklog.py .github/workflows/__init__.py
 
       - name: pylint (all python files)
+        if: success() || failure()
         run: |
           python -m pylint kombine roc_picker test docs .github/workflows/checklog.py .github/workflows/__init__.py
 
       - uses: jakebailey/pyright-action@v2.3.2
+        if: success() || failure()
         with:
           version: 1.1.400
 
