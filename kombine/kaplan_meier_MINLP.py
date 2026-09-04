@@ -612,9 +612,9 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     self.__mip_start_a: dict[int, float] | None = None
     self.__mip_start_mode: tuple[bool, bool] | None = None
     self.__mip_start_profile: dict[str, list[float]] | None = None
-    self.__binom_penalty_var = None
+    self.__binom_penalty_var: gp.Var | None = None
     self.__binom_piece_vars: list[gp.Var] | None = None
-    self.__patient_penalty_var = None
+    self.__patient_penalty_var: gp.Var | None = None
     self.__feasibility_cut_constraints: list = []
     # Sleep-immune cost proxy from the last excess_at_most call (Gurobi Work).
     self.last_oracle_work: float | None = None
@@ -1529,7 +1529,7 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     d: gp.tupledict[int, gp.Var],
     sub_d: gp.tupledict[int, gp.Var],
     s: gp.tupledict[int, gp.Var],
-  ):
+  ) -> tuple[gp.Var, gp.Var, gp.Var | None]:
     """
     Add the binomial penalty to the model.
     This penalty is based on the expected survival probability
@@ -1849,7 +1849,7 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     km_probability_var = None
     expected_probability_var = None
     use_binomial_penalty_indicator = None
-    binom_penalty = 0.0
+    binom_penalty: gp.Var | None = None
 
     if self.__patient_wise_only:
       km_probability_var = self.add_kaplan_meier_probability_variables_and_constraints(
@@ -1909,6 +1909,8 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       self.__binom_piece_vars = None
       objective_binom = 0.0
     else:
+      if binom_penalty is None:
+        raise RuntimeError("binom_penalty var missing; rebuild gurobi_model")
       self.__binom_penalty_var = binom_penalty
       objective_binom = binom_penalty
 

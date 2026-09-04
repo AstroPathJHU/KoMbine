@@ -17,7 +17,6 @@ jupyter:
 """Compare KoMbine binomial-only KM intervals against Thomas-Grunkemeier via R."""
 
 # pylint: disable=wrong-import-position
-# pyright: reportMissingImports=false
 ```
 
 ```python

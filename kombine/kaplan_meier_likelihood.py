@@ -21,6 +21,7 @@ import scipy.optimize
 import scipy.stats
 
 from .discrete_optimization import (
+  SignOracleStatus,
   binary_search_sign_change,
   cached_level_crossings,
   feasibility_assisted_level_crossings,
@@ -692,7 +693,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):  # pylint: disable=too-many-instan
         def resolve_crossings(  # pylint: disable=cell-var-from-loop
           x_outer: float,
           x_inner: float,
-        ) -> tuple[list[float], list[typing.Literal["inside", "outside"] | None]]:
+        ) -> tuple[list[float], list[SignOracleStatus | None]]:
           if crossing_mode == "full":
             return cached_level_crossings(
               profile_excess,
@@ -724,7 +725,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):  # pylint: disable=too-many-instan
             work = _minlp.last_oracle_work
             return status, float(work) if work is not None and work > 0.0 else 1e-9
 
-          outer_oracle: list[typing.Literal["inside", "outside"] | None] = []
+          outer_oracle: list[SignOracleStatus | None] = []
           crossings = feasibility_assisted_level_crossings(
             profile_excess,
             sign_oracle,
@@ -742,7 +743,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):  # pylint: disable=too-many-instan
 
         def _clip_lower_endpoint(  # pylint: disable=cell-var-from-loop
           crossings: list[float],
-          outer_oracle: list[typing.Literal["inside", "outside"] | None],
+          outer_oracle: list[SignOracleStatus | None],
         ) -> list[float]:
           clipped: list[float] = []
           for x, level, ostatus in zip(crossings, levels, outer_oracle, strict=True):
@@ -757,7 +758,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):  # pylint: disable=too-many-instan
 
         def _clip_upper_endpoint(  # pylint: disable=cell-var-from-loop
           crossings: list[float],
-          outer_oracle: list[typing.Literal["inside", "outside"] | None],
+          outer_oracle: list[SignOracleStatus | None],
         ) -> list[float]:
           clipped: list[float] = []
           for x, level, ostatus in zip(crossings, levels, outer_oracle, strict=True):
