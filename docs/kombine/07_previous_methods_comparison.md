@@ -2,29 +2,32 @@
 jupyter:
   jupytext:
     formats: ipynb,md,py:percent
+    kernelspec:
+      display_name: Python 3
+      language: python
+      name: python3
+    main_language: python
     text_representation:
       extension: .md
       format_name: markdown
       format_version: '1.3'
       jupytext_version: 1.19.5
-  kernelspec:
-    display_name: Python 3
-    language: python
-    name: python3
 ---
 
 ```python
-# pylint: disable=bad-indentation,line-too-long,missing-module-docstring,redefined-outer-name,trailing-whitespace,too-many-locals,wrong-import-order,wrong-import-position
+# pylint: disable=bad-indentation,line-too-long,missing-module-docstring,redefined-outer-name,trailing-whitespace,too-many-locals,too-many-statements,too-many-arguments,too-many-branches,too-many-positional-arguments,wrong-import-order,wrong-import-position
 ```
 
 # Previous Methods vs KoMbine: Yi, MC-SIMEX, and Profile Likelihood
 
 This notebook compares two published recipes for discrete covariate misclassification — Yi's probability weights and Küchenhoff MC-SIMEX — to KoMbine's profile likelihood over group assignments.
 
-**Two modes** (chosen at runtime):
+**Two families** (n=20 always; n=50 unless CI skips it):
 
-- **Default**: regenerates `methods_comparison_*` cards on the fly into a gitignored `rebinned/` dir ($n=50$, **4** quantile-bin death-time medians). KoMbine KM bands use `crossing_mode="feasibility"` (oracle bracketing + brentq polish). A full run is **~85 min** locally (2026-09: Analysis 1 ~63 min, Analysis 2 ~21 min with $B=99$, Analysis 3 negligible); Poisson (small counts) dominates Analysis 1 (~50 min).
-- **Quick / CI** (`KOMBINE_QUICK_COMPARISON=1`): `*_hr_example*` cards, $n=20$, ~7 distinct death times — finishes in minutes with real KM bands, p-values, and HR profiles.
+- **n=20** (`*_hr_example*`, ~7 distinct death times, discrete $e = 0.20$, $0.25$, $0.40$): minutes-scale. This is the discrete ladder where KoMbine KM bands widen / collapse at large $e$. Always run.
+- **n=50** (`methods_comparison_*`, regenerated into a gitignored `rebinned/` dir, **4** quantile-bin death-time medians, discrete $e = 0.05$, $0.10$, $0.25$): hours-scale. KoMbine KM bands use `crossing_mode="feasibility"` (oracle bracketing + brentq polish). A 2026-09 local n=50 pass was **~85 min** (Analysis 1 ~63 min, Analysis 2 ~21 min with $B=99$, Analysis 3 negligible); Poisson (small counts) dominates Analysis 1 (~50 min). Default (unset env) runs this family **after** n=20.
+
+**CI / skip n=50** (`KOMBINE_QUICK_COMPARISON=1`): n=20 only. The n=50 cells still run, but they print a skip message instead of loading cards or solving MINLPs.
 
 Fixed and Poisson cards are split at `0.5001` (a density/value cut). Discrete-class cards are split at `1` (the boundary between class indices 0 and 1):
 - Fixed Hazard Ratio (deterministic, no measurement error)
@@ -42,7 +45,7 @@ All three methods use the same measurement model (`observable.probability_in_ran
 |--------|---|---|---|
 | **Core idea** | Weighted KM/logrank using probabilistic group membership | Extra flips of hard labels, then extrapolate the naive estimator to zero error | Full likelihood with explicit group assignment variables |
 | **Optimization** | 1-D scalar min of the weighted Breslow 2NLL | Monte Carlo average at each $\lambda$, quadratic fit | Mixed Integer Nonlinear Programming (Gurobi) |
-| **Computational cost** | Low | Low–medium | Medium-high (~1 h for this notebook) |
+| **Computational cost** | Low | Low–medium | Medium-high (~1 h for the n=50 family) |
 | **Accuracy (within model)** | Approximate to the full likelihood | Approximate (simulation + extrapolation) | Exact maximizer within solver tolerance |
 | **Uncertainty** | Likelihood-ratio interval of the weighted Breslow 2NLL (no KM bands here) | Sampling CI of the extrapolated number (Wald for HR) | Profile likelihood |
 | **Core assumptions** | Known measurement error distribution; independent errors; fractional group membership is an adequate proxy for uncertain assignment | Known measurement error distribution; independent errors; quadratic extrapolation of the naive hard-label estimator is adequate | Known measurement error distribution; independent errors; patients belong to one group; event times treated as observed and discrete; likelihood model is correctly specified |
@@ -90,12 +93,14 @@ $$
 $$
 where $e$ is the misclassification rate shared by all patients.
 
-We use three error levels chosen so the mid panel keeps KoMbine near the observed-label HR while the large-$e$ panel shows assignment search:
+Each family uses three error levels chosen so the mid panel keeps KoMbine near the observed-label HR while the large-$e$ panel shows assignment search:
 
-- Default (`methods_comparison_*`): $e = 0.05$, $0.10$, $0.25$
-- Quick / CI (`KOMBINE_QUICK_COMPARISON=1`, `*_hr_example*`): $e = 0.20$, $0.25$, $0.40$
+- n=20 (`*_hr_example*`, always): $e = 0.20$, $0.25$, $0.40$ — KM bands stay similar at $0.20$ vs $0.25$ and widen / collapse at $e=0.40$
+- n=50 (`methods_comparison_*`, default only): $e = 0.05$, $0.10$, $0.25$ — KM bands stay similar (observed-label basin); the high panel is the joint HR assignment-search cliff
 
-Each patient keeps the same survival time and censoring as the fixed baseline.
+`KOMBINE_QUICK_COMPARISON=1` skips the n=50 family.
+
+Each patient keeps the same survival time and censoring as that family's fixed baseline.
 Only the class probabilities change: patients in the low group get probabilities
 $(1-e, e)$, and patients in the high group get $(e, 1-e)$.
 
@@ -121,11 +126,137 @@ from kombine.comparisons import YiCorrectionForCoxPH
 N_PERMUTATIONS = 99
 N_HR_SCAN = 25
 SIMEX_B = 20
+LABEL_WIDTH = 9
+HAZARD_RATIOS_SCAN = np.logspace(-2, 2, N_HR_SCAN)  # 0.01 to 100
 
-# Default: n=50 methods_comparison_* with 4 quantile-binned death times
-# (regenerated into datacards/.../rebinned/). Set KOMBINE_QUICK_COMPARISON=1
-# for the n=20 hr_example cards used in CI (minutes-scale).
+# Default: n=20 then n=50. Set KOMBINE_QUICK_COMPARISON=1 to skip n=50 (CI).
 QUICK_COMPARISON = bool(os.environ.get("KOMBINE_QUICK_COMPARISON"))
+SIMEX_RNG = 0
+
+TITLE_QUICK = "n=20, discrete e=0.20/0.25/0.40"
+TITLE_FULL = "n=50, discrete e=0.05/0.10/0.25"
+
+MOSAIC_LAYOUT = [
+    ['.', 'fixed', '.'],
+    ['dc_small', 'dc_moderate', 'dc_large'],
+    ['pois_large', 'pois_moderate', 'pois_small'],
+]
+MOSAIC_TO_SCENARIO = {
+    'fixed': 'fixed',
+    'dc_small': 'misclass_small',
+    'dc_moderate': 'misclass_moderate',
+    'dc_large': 'misclass_large',
+    'pois_large': 'large',
+    'pois_moderate': 'moderate',
+    'pois_small': 'small',
+}
+
+SCENARIOS_QUICK = {
+    'fixed': {
+        'file': 'fixed_hr_example.txt',
+        'label': 'Fixed Observable',
+        'description': 'no measurement error',
+        'threshold': 0.5001,
+    },
+    'misclass_small': {
+        'file': 'discrete_classes_hr_example_moderate.txt',
+        'label': 'Disc. Classes (e=0.20)',
+        'description': 'e = 0.20',
+        'threshold': 1.0,
+    },
+    'misclass_moderate': {
+        'file': 'discrete_classes_hr_example_large.txt',
+        'label': 'Disc. Classes (e=0.25)',
+        'description': 'e = 0.25',
+        'threshold': 1.0,
+    },
+    'misclass_large': {
+        'file': 'discrete_classes_hr_example_very_large.txt',
+        'label': 'Disc. Classes (e=0.40)',
+        'description': 'e = 0.40',
+        'threshold': 1.0,
+    },
+    'large': {
+        'file': 'poisson_density_hr_example_large.txt',
+        'label': 'Poisson (large counts)',
+        'description': '~2-3% relative error',
+        'threshold': 0.5001,
+    },
+    'moderate': {
+        'file': 'poisson_density_hr_example_moderate.txt',
+        'label': 'Poisson (moderate counts)',
+        'description': '~5-7% relative error',
+        'threshold': 0.5001,
+    },
+    'small': {
+        'file': 'poisson_density_hr_example_small.txt',
+        'label': 'Poisson (small counts)',
+        'description': '~25-70% relative error',
+        'threshold': 0.5001,
+    },
+}
+
+SCENARIOS_FULL = {
+    'fixed': {
+        'file': 'methods_comparison_fixed.txt',
+        'label': 'Fixed Observable',
+        'description': 'no measurement error',
+        'threshold': 0.5001,
+    },
+    'misclass_small': {
+        'file': 'methods_comparison_discrete_e05.txt',
+        'label': 'Disc. Classes (e=0.05)',
+        'description': 'e = 0.05',
+        'threshold': 1.0,
+    },
+    'misclass_moderate': {
+        'file': 'methods_comparison_discrete_e10.txt',
+        'label': 'Disc. Classes (e=0.10)',
+        'description': 'e = 0.10',
+        'threshold': 1.0,
+    },
+    'misclass_large': {
+        'file': 'methods_comparison_discrete_e25.txt',
+        'label': 'Disc. Classes (e=0.25)',
+        'description': 'e = 0.25',
+        'threshold': 1.0,
+    },
+    'large': {
+        'file': 'methods_comparison_poisson_large.txt',
+        'label': 'Poisson (large counts)',
+        'description': '~2-5% relative error',
+        'threshold': 0.5001,
+    },
+    'moderate': {
+        'file': 'methods_comparison_poisson_moderate.txt',
+        'label': 'Poisson (moderate counts)',
+        'description': '~10-20% relative error',
+        'threshold': 0.5001,
+    },
+    'small': {
+        'file': 'methods_comparison_poisson_small.txt',
+        'label': 'Poisson (small counts)',
+        'description': '~25-70% relative error',
+        'threshold': 0.5001,
+    },
+}
+
+COLORS_PALETTE = {
+    ('fixed', 'low'): '#0d47a1',
+    ('fixed', 'high'): '#6d1c1e',
+    ('misclass_small', 'low'): '#1b5e20',
+    ('misclass_small', 'high'): '#8e0000',
+    ('misclass_moderate', 'low'): '#2e7d32',
+    ('misclass_moderate', 'high'): '#b71c1c',
+    ('misclass_large', 'low'): '#66bb6a',
+    ('misclass_large', 'high'): '#e57373',
+    ('large', 'low'): '#1976d2',
+    ('large', 'high'): '#e53935',
+    ('moderate', 'low'): '#26a69a',
+    ('moderate', 'high'): '#fb8c00',
+    ('small', 'low'): '#80cbc4',
+    ('small', 'high'): '#ffd54f',
+}
 
 
 def progress(msg: str) -> None:
@@ -140,282 +271,154 @@ def format_pvalue(p: float) -> str:
     if p >= 1e-3:
         return f'{p:.4g}'
     return f'{p:.3e}'
-```
 
-```python
-# Setup - Load the comparison datacards
-here = pathlib.Path(".").resolve()
-test_dir = here.parent.parent / "test" / "kombine"
-datacards_dir = test_dir / "datacards" / "simple_examples"
 
-if QUICK_COMPARISON:
-    # n=20 hr_example cards (CI / minutes-scale)
-    scenarios = {
-        'fixed': {
-            'file': 'fixed_hr_example.txt',
-            'label': 'Fixed Observable',
-            'description': 'no measurement error',
-            'threshold': 0.5001,
-        },
-        'misclass_small': {
-            'file': 'discrete_classes_hr_example_moderate.txt',
-            'label': 'Disc. Classes (e=0.20)',
-            'description': 'e = 0.20',
-            'threshold': 1.0,
-        },
-        'misclass_moderate': {
-            'file': 'discrete_classes_hr_example_large.txt',
-            'label': 'Disc. Classes (e=0.25)',
-            'description': 'e = 0.25',
-            'threshold': 1.0,
-        },
-        'misclass_large': {
-            'file': 'discrete_classes_hr_example_very_large.txt',
-            'label': 'Disc. Classes (e=0.40)',
-            'description': 'e = 0.40',
-            'threshold': 1.0,
-        },
-        'large': {
-            'file': 'poisson_density_hr_example_large.txt',
-            'label': 'Poisson (large counts)',
-            'description': '~2-3% relative error',
-            'threshold': 0.5001,
-        },
-        'moderate': {
-            'file': 'poisson_density_hr_example_moderate.txt',
-            'label': 'Poisson (moderate counts)',
-            'description': '~5-7% relative error',
-            'threshold': 0.5001,
-        },
-        'small': {
-            'file': 'poisson_density_hr_example_small.txt',
-            'label': 'Poisson (small counts)',
-            'description': '~25-70% relative error',
-            'threshold': 0.5001,
-        },
-    }
-    mode_name = "QUICK_COMPARISON (n=20 hr_example cards)"
-else:
-    # Regenerate K=4 rebinned cards into gitignored rebinned/ (instant).
-    from docs.kombine.rebin_methods_comparison_times import ensure_rebinned
-    datacards_dir = ensure_rebinned(n_bins=4)
-    # n=50, 4 quantile-binned death times (default / hours-scale)
-    scenarios = {
-        'fixed': {
-            'file': 'methods_comparison_fixed.txt',
-            'label': 'Fixed Observable',
-            'description': 'no measurement error',
-            'threshold': 0.5001,
-        },
-        'misclass_small': {
-            'file': 'methods_comparison_discrete_e05.txt',
-            'label': 'Disc. Classes (e=0.05)',
-            'description': 'e = 0.05',
-            'threshold': 1.0,
-        },
-        'misclass_moderate': {
-            'file': 'methods_comparison_discrete_e10.txt',
-            'label': 'Disc. Classes (e=0.10)',
-            'description': 'e = 0.10',
-            'threshold': 1.0,
-        },
-        'misclass_large': {
-            'file': 'methods_comparison_discrete_e25.txt',
-            'label': 'Disc. Classes (e=0.25)',
-            'description': 'e = 0.25',
-            'threshold': 1.0,
-        },
-        'large': {
-            'file': 'methods_comparison_poisson_large.txt',
-            'label': 'Poisson (large counts)',
-            'description': '~2-5% relative error',
-            'threshold': 0.5001,
-        },
-        'moderate': {
-            'file': 'methods_comparison_poisson_moderate.txt',
-            'label': 'Poisson (moderate counts)',
-            'description': '~10-20% relative error',
-            'threshold': 0.5001,
-        },
-        'small': {
-            'file': 'methods_comparison_poisson_small.txt',
-            'label': 'Poisson (small counts)',
-            'description': '~25-70% relative error',
-            'threshold': 0.5001,
-        },
-    }
-    mode_name = "default (n=50, binned death times)"
-
-print(f"Notebook 07 mode: {mode_name}", flush=True)
-
-# Load all datacards
-datacards = {}
-for key, info in scenarios.items():
-    filepath = datacards_dir / info['file']
-    datacard = Datacard.parse_datacard(filepath)
-    datacards[key] = datacard
-    n_patients = len(datacard.patients)
-    n_deaths = sum(1 for p in datacard.patients if not p.censored)
-    uniq_deaths = len({round(p.time, 10) for p in datacard.patients if not p.censored})
+def skip_n50(what: str) -> None:
+    """Print why the n=50 family is omitted under KOMBINE_QUICK_COMPARISON."""
     progress(
-        f"{info['label']}: {n_patients} patients, {n_deaths} deaths, "
-        f"{uniq_deaths} distinct death times"
+        f"Skipping n=50 {what} because KOMBINE_QUICK_COMPARISON is set. "
+        "Unset it to run both the n=20 (e=0.20/0.25/0.40) and n=50 families."
     )
 
-simex_rng = 0
-```
 
-## Analysis 1: Kaplan-Meier Curves
+def load_datacards(directory, scenarios):
+    """Parse each scenario datacard and print n / deaths / distinct times."""
+    loaded = {}
+    for key, info in scenarios.items():
+        datacard = Datacard.parse_datacard(directory / info['file'])
+        loaded[key] = datacard
+        n_patients = len(datacard.patients)
+        n_deaths = sum(1 for patient in datacard.patients if not patient.censored)
+        uniq_deaths = len({
+            round(patient.time, 10)
+            for patient in datacard.patients if not patient.censored
+        })
+        progress(
+            f"{info['label']}: {n_patients} patients, {n_deaths} deaths, "
+            f"{uniq_deaths} distinct death times"
+        )
+    return loaded
 
-Compare the Kaplan-Meier survival curves between Yi's method (dashed), MC-SIMEX (dotted), and KoMbine (solid lines with shaded 95% confidence intervals) across all scenarios. Yi and MC-SIMEX are point estimates only; they have no fill bands.
 
-```python
-# Calculate Yi, MC-SIMEX, and KoMbine KM for each scenario
-km_results = {}
-label_width = 9
+def run_km_analysis(scenarios, datacards):
+    """Yi, MC-SIMEX, and KoMbine KM (with KoMbine 95% bands) for every scenario."""
+    km_results = {}
+    for scenario_key, scenario_info in scenarios.items():
+        progress(f"[{scenario_info['label']}] Analysis 1 starting…")
+        dc = datacards[scenario_key]
+        threshold = scenario_info['threshold']
 
-for scenario_key, scenario_info in scenarios.items():
-    progress(f"[{scenario_info['label']}] Analysis 1 starting…")
-    dc = datacards[scenario_key]
-    threshold = scenario_info['threshold']
-    
-    # KoMbine method with confidence bands
-    km_low = dc.km_likelihood(
-        parameter_min=-np.inf,
-        parameter_max=threshold,
-    )
-    
-    km_high = dc.km_likelihood(
-        parameter_min=threshold,
-        parameter_max=np.inf,
-    )
-    
-    # Use the same time grids for Yi, SIMEX, and KoMbine so curves align
-    times_low = sorted(km_low.patient_death_times)
-    times_high = sorted(km_high.patient_death_times)
-    times_low_plot = [0.0] + times_low
-    times_high_plot = [0.0] + times_high
-    progress(
-        f"  death times: low={len(times_low)} high={len(times_high)}"
-    )
+        km_low = dc.km_likelihood(
+            parameter_min=-np.inf,
+            parameter_max=threshold,
+        )
+        km_high = dc.km_likelihood(
+            parameter_min=threshold,
+            parameter_max=np.inf,
+        )
 
-    progress("  Yi…")
-    result_low_yi = dc.km_survival_yi(
-        parameter_min=-np.inf,
-        parameter_max=threshold,
-        times_for_plot=times_low_plot,
-    )
-    
-    result_high_yi = dc.km_survival_yi(
-        parameter_min=threshold,
-        parameter_max=np.inf,
-        times_for_plot=times_high_plot,
-    )
+        times_low = sorted(km_low.patient_death_times)
+        times_high = sorted(km_high.patient_death_times)
+        times_low_plot = [0.0] + times_low
+        times_high_plot = [0.0] + times_high
+        progress(
+            f"  death times: low={len(times_low)} high={len(times_high)}"
+        )
 
-    progress(f"  MC-SIMEX (B={SIMEX_B})…")
-    result_low_simex = dc.km_survival_mc_simex(
-        parameter_min=-np.inf,
-        parameter_max=threshold,
-        times_for_plot=times_low_plot,
-        rng=simex_rng,
-        B=SIMEX_B,
-    )
-    result_high_simex = dc.km_survival_mc_simex(
-        parameter_min=threshold,
-        parameter_max=np.inf,
-        times_for_plot=times_high_plot,
-        rng=simex_rng,
-        B=SIMEX_B,
-    )
-    
-    # Calculate best-fit and 95% CI for KoMbine
-    # Use full likelihood (not binomial_only) to include measurement uncertainty!
-    progress("  KoMbine low arm (full NLL, CLs=[0.95], crossing_mode=feasibility)…")
-    best_low, ci_low = km_low.survival_probabilities_likelihood(
-        CLs=[0.95],
-        times_for_plot=times_low,
-        binomial_only=(scenario_key == 'fixed'),  # Only use binomial for fixed observable
-        print_progress=True,
-        crossing_mode="feasibility",
-    )
-    progress("  KoMbine high arm (full NLL, CLs=[0.95], crossing_mode=feasibility)…")
-    best_high, ci_high = km_high.survival_probabilities_likelihood(
-        CLs=[0.95],
-        times_for_plot=times_high,
-        binomial_only=(scenario_key == 'fixed'),  # Only use binomial for fixed observable
-        print_progress=True,
-        crossing_mode="feasibility",
-    )
-    
-    km_results[scenario_key] = {
-        'yi': {
-            'low': result_low_yi,
-            'high': result_high_yi,
-        },
-        'simex': {
-            'low': result_low_simex,
-            'high': result_high_simex,
-        },
-        'kombine': {
-            'low': {
-                'times': times_low,
-                'best': best_low,
-                'ci': ci_low,
+        progress("  Yi…")
+        result_low_yi = dc.km_survival_yi(
+            parameter_min=-np.inf,
+            parameter_max=threshold,
+            times_for_plot=times_low_plot,
+        )
+        result_high_yi = dc.km_survival_yi(
+            parameter_min=threshold,
+            parameter_max=np.inf,
+            times_for_plot=times_high_plot,
+        )
+
+        progress(f"  MC-SIMEX (B={SIMEX_B})…")
+        result_low_simex = dc.km_survival_mc_simex(
+            parameter_min=-np.inf,
+            parameter_max=threshold,
+            times_for_plot=times_low_plot,
+            rng=SIMEX_RNG,
+            B=SIMEX_B,
+        )
+        result_high_simex = dc.km_survival_mc_simex(
+            parameter_min=threshold,
+            parameter_max=np.inf,
+            times_for_plot=times_high_plot,
+            rng=SIMEX_RNG,
+            B=SIMEX_B,
+        )
+
+        progress("  KoMbine low arm (full NLL, CLs=[0.95], crossing_mode=feasibility)…")
+        best_low, ci_low = km_low.survival_probabilities_likelihood(
+            CLs=[0.95],
+            times_for_plot=times_low,
+            binomial_only=(scenario_key == 'fixed'),
+            print_progress=True,
+            crossing_mode="feasibility",
+        )
+        progress("  KoMbine high arm (full NLL, CLs=[0.95], crossing_mode=feasibility)…")
+        best_high, ci_high = km_high.survival_probabilities_likelihood(
+            CLs=[0.95],
+            times_for_plot=times_high,
+            binomial_only=(scenario_key == 'fixed'),
+            print_progress=True,
+            crossing_mode="feasibility",
+        )
+
+        km_results[scenario_key] = {
+            'yi': {
+                'low': result_low_yi,
+                'high': result_high_yi,
             },
-            'high': {
-                'times': times_high,
-                'best': best_high,
-                'ci': ci_high,
+            'simex': {
+                'low': result_low_simex,
+                'high': result_high_simex,
+            },
+            'kombine': {
+                'low': {
+                    'times': times_low,
+                    'best': best_low,
+                    'ci': ci_low,
+                },
+                'high': {
+                    'times': times_high,
+                    'best': best_high,
+                    'ci': ci_high,
+                }
             }
         }
-    }
-    
-    print(f"\n{scenario_info['label']}:")
-    print(f"  {'Yi':<{label_width}} - Low group final survival:  {result_low_yi['survival_probabilities'][-1]:.4f}")
-    print(f"  {'Yi':<{label_width}} - High group final survival: {result_high_yi['survival_probabilities'][-1]:.4f}")
-    print(f"  {'MC-SIMEX':<{label_width}} - Low group final survival:  {result_low_simex['survival_probabilities'][-1]:.4f}")
-    print(f"  {'MC-SIMEX':<{label_width}} - High group final survival: {result_high_simex['survival_probabilities'][-1]:.4f}")
-    
-    if len(ci_low) > 0:
-        ci_low_lower = ci_low[-1, 0, 0]
-        ci_low_upper = ci_low[-1, 0, 1]
-        print(f"  {'KoMbine':<{label_width}} - Low group final survival:  {best_low[-1]:.4f} [{ci_low_lower:.4f}, {ci_low_upper:.4f}]")
-    else:
-        print(f"  {'KoMbine':<{label_width}} - Low group final survival:  {best_low[-1]:.4f}")
-    
-    if len(ci_high) > 0:
-        ci_high_lower = ci_high[-1, 0, 0]
-        ci_high_upper = ci_high[-1, 0, 1]
-        print(f"  {'KoMbine':<{label_width}} - High group final survival: {best_high[-1]:.4f} [{ci_high_lower:.4f}, {ci_high_upper:.4f}]")
-    else:
-        print(f"  {'KoMbine':<{label_width}} - High group final survival: {best_high[-1]:.4f}")
-```
 
+        print(f"\n{scenario_info['label']}:")
+        print(f"  {'Yi':<{LABEL_WIDTH}} - Low group final survival:  {result_low_yi['survival_probabilities'][-1]:.4f}")
+        print(f"  {'Yi':<{LABEL_WIDTH}} - High group final survival: {result_high_yi['survival_probabilities'][-1]:.4f}")
+        print(f"  {'MC-SIMEX':<{LABEL_WIDTH}} - Low group final survival:  {result_low_simex['survival_probabilities'][-1]:.4f}")
+        print(f"  {'MC-SIMEX':<{LABEL_WIDTH}} - High group final survival: {result_high_simex['survival_probabilities'][-1]:.4f}")
 
-```python
-# Define consistent color palette for all plots
-colors_palette = {
-    ('fixed', 'low'): '#0d47a1',           # Deep blue
-    ('fixed', 'high'): '#6d1c1e',          # Deep red
-    ('misclass_small', 'low'): '#1b5e20',  # Deep green
-    ('misclass_small', 'high'): '#8e0000', # Dark brick
-    ('misclass_moderate', 'low'): '#2e7d32',   # Green
-    ('misclass_moderate', 'high'): '#b71c1c',  # Dark red
-    ('misclass_large', 'low'): '#66bb6a',      # Light green
-    ('misclass_large', 'high'): '#e57373',     # Light red
-    ('large', 'low'): '#1976d2',           # Strong blue
-    ('large', 'high'): '#e53935',          # Strong red
-    ('moderate', 'low'): '#26a69a',        # Teal
-    ('moderate', 'high'): '#fb8c00',       # Orange
-    ('small', 'low'): '#80cbc4',           # Light teal
-    ('small', 'high'): '#ffd54f',          # Light amber
-}
+        if len(ci_low) > 0:
+            ci_low_lower = ci_low[-1, 0, 0]
+            ci_low_upper = ci_low[-1, 0, 1]
+            print(f"  {'KoMbine':<{LABEL_WIDTH}} - Low group final survival:  {best_low[-1]:.4f} [{ci_low_lower:.4f}, {ci_low_upper:.4f}]")
+        else:
+            print(f"  {'KoMbine':<{LABEL_WIDTH}} - Low group final survival:  {best_low[-1]:.4f}")
+
+        if len(ci_high) > 0:
+            ci_high_lower = ci_high[-1, 0, 0]
+            ci_high_upper = ci_high[-1, 0, 1]
+            print(f"  {'KoMbine':<{LABEL_WIDTH}} - High group final survival: {best_high[-1]:.4f} [{ci_high_lower:.4f}, {ci_high_upper:.4f}]")
+        else:
+            print(f"  {'KoMbine':<{LABEL_WIDTH}} - High group final survival: {best_high[-1]:.4f}")
+    return km_results
 
 
 def _plot_km_in_ax(ax, scenario_key, scenario_info, result):
     """Plot KM curves (Yi dashed, SIMEX dotted, KoMbine solid + CI shading)."""
-    color_low = colors_palette[(scenario_key, 'low')]
-    color_high = colors_palette[(scenario_key, 'high')]
+    color_low = COLORS_PALETTE[(scenario_key, 'low')]
+    color_high = COLORS_PALETTE[(scenario_key, 'high')]
 
     times_low_yi = result['yi']['low']['times_for_plot']
     surv_low_yi = result['yi']['low']['survival_probabilities']
@@ -485,57 +488,301 @@ def _plot_km_in_ax(ax, scenario_key, scenario_info, result):
     ax.set_ylim([0, 1.05])
 
 
-# Layout: fixed centered in row 0; cols aligned by uncertainty level
-# Row 0: Fixed (baseline, centered)
-# Row 1: Discrete Classes — small / moderate / large error
-# Row 2: Poisson Counts  — large / moderate / small counts
-mosaic_layout = [
-    ['.', 'fixed', '.'],
-    ['dc_small', 'dc_moderate', 'dc_large'],
-    ['pois_large', 'pois_moderate', 'pois_small'],
-]
-mosaic_to_scenario = {
-    'fixed':       'fixed',
-    'dc_small':    'misclass_small',
-    'dc_moderate': 'misclass_moderate',
-    'dc_large':    'misclass_large',
-    'pois_large':  'large',
-    'pois_moderate': 'moderate',
-    'pois_small':  'small',
-}
+def _annotate_comparison_mosaic(axes_dict):
+    """Column headers and row labels shared by KM and HR mosaics."""
+    col_headers_list = ['Small Uncertainty', 'Medium Uncertainty', 'Large Uncertainty']
+    for panel_key, header in zip(['dc_small', 'dc_moderate', 'dc_large'], col_headers_list):
+        axes_dict[panel_key].annotate(
+            header, xy=(0.5, 1.0), xytext=(0, 30),
+            xycoords='axes fraction', textcoords='offset points',
+            ha='center', va='bottom', fontsize=12, fontweight='bold',
+            color='#333333', annotation_clip=False,
+        )
+    for panel_key, row_label in zip(['dc_small', 'pois_large'],
+                                     ['Discrete\nClasses', 'Poisson\nCounts']):
+        axes_dict[panel_key].annotate(
+            row_label, xy=(0, 0.5), xytext=(-52, 0),
+            xycoords='axes fraction', textcoords='offset points',
+            ha='center', va='center', fontsize=11, fontweight='bold',
+            color='#333333', rotation=90, annotation_clip=False,
+        )
 
-fig, axes_dict = plt.subplot_mosaic(mosaic_layout, figsize=(14, 13),  # pyright: ignore[reportCallIssue, reportArgumentType]
-    gridspec_kw={'hspace': 0.52, 'wspace': 0.35},
+
+def plot_km_mosaic(scenarios, km_results, title):
+    """3-row comparison mosaic of KM curves."""
+    _, axes_dict = plt.subplot_mosaic(MOSAIC_LAYOUT, figsize=(14, 13),  # pyright: ignore[reportCallIssue, reportArgumentType]
+        gridspec_kw={'hspace': 0.52, 'wspace': 0.35},
+    )
+    for panel_key, scenario_key in MOSAIC_TO_SCENARIO.items():
+        _plot_km_in_ax(axes_dict[panel_key], scenario_key,
+                       scenarios[scenario_key], km_results[scenario_key])
+    _annotate_comparison_mosaic(axes_dict)
+    plt.suptitle(title, fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    plt.show()
+
+
+def run_pvalue_analysis(scenarios, datacards):
+    """Yi / MC-SIMEX logrank p-values and KoMbine permutation LRT."""
+    pvalue_results = {}
+    for scenario_key, scenario_info in scenarios.items():
+        dc = datacards[scenario_key]
+        threshold = scenario_info['threshold']
+        progress(f"[{scenario_info['label']}] Analysis 2 starting…")
+
+        progress("  Yi logrank…")
+        yi_result = dc.km_p_value_logrank_yi(
+            parameter_threshold=threshold,
+            parameter_min=-np.inf,
+            parameter_max=np.inf,
+        )
+
+        progress(f"  MC-SIMEX logrank (B={SIMEX_B})…")
+        simex_result = dc.km_p_value_logrank_mc_simex(
+            parameter_threshold=threshold,
+            parameter_min=-np.inf,
+            parameter_max=np.inf,
+            rng=SIMEX_RNG,
+            B=SIMEX_B,
+        )
+
+        progress(f"  KoMbine permutation LRT (B={N_PERMUTATIONS})…")
+        kombine_calc = dc.km_p_value(
+            parameter_threshold=threshold,
+            parameter_min=-np.inf,
+            parameter_max=np.inf,
+        )
+        pval_kombine, _, _ = kombine_calc.solve_and_pvalue(
+            cox_only=False,
+            n_permutations=N_PERMUTATIONS,
+            rng=SIMEX_RNG,
+            print_progress=True,
+        )
+
+        pvalue_results[scenario_key] = {
+            'yi': yi_result['p_value'],
+            'simex': simex_result['p_value'],
+            'kombine': pval_kombine
+        }
+
+        print(f"\n{scenario_info['label']}:")
+        print(f"  {'Yi':<{LABEL_WIDTH}} p-value: {format_pvalue(yi_result['p_value'])}")
+        print(f"  {'MC-SIMEX':<{LABEL_WIDTH}} p-value: {format_pvalue(simex_result['p_value'])}")
+        print(f"  {'KoMbine':<{LABEL_WIDTH}} p-value: {format_pvalue(pval_kombine)}")
+    return pvalue_results
+
+
+def plot_pvalue_bars(scenarios, pvalue_results, title):
+    """Grouped bar chart of Yi / MC-SIMEX / KoMbine p-values."""
+    _, ax1 = plt.subplots(figsize=(14, 5))
+    scenario_keys = list(scenarios.keys())
+    scenario_labels = [scenarios[k]['label'] for k in scenario_keys]
+    yi_pvals = [pvalue_results[k]['yi'] for k in scenario_keys]
+    simex_pvals = [pvalue_results[k]['simex'] for k in scenario_keys]
+    kombine_pvals = [pvalue_results[k]['kombine'] for k in scenario_keys]
+
+    x = np.arange(len(scenario_labels))
+    width = 0.25
+    bars1 = ax1.bar(x - width, yi_pvals, width, label="Yi's Method", color='steelblue')
+    bars2 = ax1.bar(x, simex_pvals, width, label='MC-SIMEX', color='mediumpurple')
+    bars3 = ax1.bar(x + width, kombine_pvals, width, label='KoMbine', color='coral')
+
+    ax1.set_ylabel('P-value', fontsize=12)
+    ax1.set_title(title, fontsize=13, fontweight='bold')
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(scenario_labels, rotation=15, ha='right')
+    ax1.legend(fontsize=11)
+    ax1.grid(True, alpha=0.3, axis='y')
+
+    for bar_group in [bars1, bars2, bars3]:
+        for rect in bar_group:
+            height = rect.get_height()
+            ax1.text(rect.get_x() + rect.get_width()/2., height,
+                    format_pvalue(height), ha='center', va='bottom', fontsize=8)
+
+    plt.tight_layout()
+    plt.show()
+
+
+def run_hr_analysis(scenarios, datacards):
+    """Yi Breslow profile, MC-SIMEX Wald, and KoMbine full-model HR profile."""
+    hr_results = {}
+    for scenario_key, scenario_info in scenarios.items():
+        dc = datacards[scenario_key]
+        hr_threshold = scenario_info['threshold']
+        progress(f"[{scenario_info['label']}] Analysis 3 starting…")
+
+        progress("  Yi HR CI…")
+        yi_calc = YiCorrectionForCoxPH(
+            patients=dc.patients,
+            parameter_min=-np.inf,
+            parameter_max=np.inf,
+            parameter_threshold=hr_threshold,
+        )
+        best_hr_yi, yi_lower_ci, yi_upper_ci, yi_best_fit = (
+            yi_calc.hazard_ratio_confidence_interval(
+                confidence_level=0.95,
+                hazard_ratio_min=0.01,
+                hazard_ratio_max=100.0,
+            )
+        )
+        yi_2nlls = [
+            yi_calc.compute_2nll_at_hazard_ratio(hr).x
+            for hr in HAZARD_RATIOS_SCAN
+        ]
+
+        progress(f"  MC-SIMEX HR (B={SIMEX_B})…")
+        simex_calc = dc.km_hazard_ratio_mc_simex(
+            parameter_threshold=hr_threshold,
+            parameter_min=-np.inf,
+            parameter_max=np.inf,
+            rng=SIMEX_RNG,
+            B=SIMEX_B,
+        )
+        simex_estimate = simex_calc.estimate_hazard_ratio()
+        simex_2nlls = [
+            simex_calc.compute_2nll_at_hazard_ratio(hr).x
+            for hr in HAZARD_RATIOS_SCAN
+        ]
+
+        hr_calc = dc.km_hazard_ratio(
+            parameter_threshold=hr_threshold,
+            parameter_min=-np.inf,
+            parameter_max=np.inf,
+        )
+
+        progress("  KoMbine HR profile CI…")
+        best_hr_kombine, lower_ci, upper_ci, _ = hr_calc.hazard_ratio_confidence_interval(
+            cox_only=False,
+            confidence_level=0.95,
+            hazard_ratio_min=0.01,
+            hazard_ratio_max=100.0,
+        )
+
+        progress(f"  KoMbine HR 2NLL scan ({N_HR_SCAN} points)…")
+        kombine_2nlls = []
+        for hr in HAZARD_RATIOS_SCAN:
+            result = hr_calc.compute_2nll_at_hazard_ratio(
+                hr, cox_only=False, verbose=False, print_progress=True,
+            )
+            kombine_2nlls.append(result.x)
+
+        hr_results[scenario_key] = {
+            'yi_best': best_hr_yi,
+            'yi_2nlls': yi_2nlls,
+            'yi_min_2nll': yi_best_fit.x,
+            'yi_lower': yi_lower_ci,
+            'yi_upper': yi_upper_ci,
+            'simex_best': simex_estimate['hazard_ratio'],
+            'simex_2nlls': simex_2nlls,
+            'simex_lower': simex_estimate['ci_lower'],
+            'simex_upper': simex_estimate['ci_upper'],
+            'kombine_best': best_hr_kombine,
+            'kombine_2nlls': kombine_2nlls,
+            'kombine_lower': lower_ci,
+            'kombine_upper': upper_ci,
+        }
+
+        print(f"\n{scenario_info['label']}:")
+        print(f"  {'Yi':<{LABEL_WIDTH}} best-fit HR: {best_hr_yi:.3f} [{yi_lower_ci:.3f}, {yi_upper_ci:.3f}]")
+        print(f"  {'MC-SIMEX':<{LABEL_WIDTH}} best-fit HR: {simex_estimate['hazard_ratio']:.3f} [{simex_estimate['ci_lower']:.3f}, {simex_estimate['ci_upper']:.3f}]")
+        print(f"  {'KoMbine':<{LABEL_WIDTH}} best-fit HR: {best_hr_kombine:.3f} [{lower_ci:.3f}, {upper_ci:.3f}]")
+    return hr_results
+
+
+def plot_hr_mosaic(scenarios, hr_results, title):
+    """3-row comparison mosaic of HR Δ2NLL scans."""
+    _, axes_dict = plt.subplot_mosaic(MOSAIC_LAYOUT, figsize=(14, 13),  # pyright: ignore[reportCallIssue, reportArgumentType]
+        gridspec_kw={'hspace': 0.52, 'wspace': 0.35},
+    )
+    for panel_key, scenario_key in MOSAIC_TO_SCENARIO.items():
+        ax = axes_dict[panel_key]
+        result = hr_results[scenario_key]
+        info = scenarios[scenario_key]
+
+        yi_2nlls = result['yi_2nlls']
+        delta_yi = np.array(yi_2nlls) - result['yi_min_2nll']
+        delta_simex = np.array(result['simex_2nlls'])
+        kombine_2nlls = result['kombine_2nlls']
+        delta_kombine = np.array(kombine_2nlls) - min(kombine_2nlls)
+
+        ax.plot(HAZARD_RATIOS_SCAN, delta_yi, color='#1976d2', linewidth=2.5, marker='o', markersize=3,
+                label="Yi's Method", zorder=3)
+        ax.plot(HAZARD_RATIOS_SCAN, delta_simex, color='#7b1fa2', linewidth=2.5, marker='^', markersize=3,
+                linestyle=':', label='MC-SIMEX (Wald)', zorder=3)
+        ax.plot(HAZARD_RATIOS_SCAN, delta_kombine, color='#d32f2f', linewidth=2.5, marker='s', markersize=3,
+                label='KoMbine', zorder=3)
+        ax.axvline(result['yi_best'], color='#1976d2', linestyle='--', alpha=0.6, linewidth=1.5, zorder=2)
+        ax.axvline(result['simex_best'], color='#7b1fa2', linestyle=':', alpha=0.6, linewidth=1.5, zorder=2)
+        ax.axvline(result['kombine_best'], color='#d32f2f', linestyle='--', alpha=0.6, linewidth=1.5, zorder=2)
+        ax.axhline(3.84, color='gray', linestyle=':', alpha=0.6, linewidth=2.0,
+                   label='95% CL (χ²=3.84)', zorder=1)
+
+        ax.set_xlabel('Hazard Ratio', fontsize=10)
+        ax.set_ylabel(r'$-2 \Delta \ln L$', fontsize=10)
+        ax.set_title(info['label'], fontsize=11, fontweight='bold')
+        ax.legend(fontsize=8, loc='upper left')
+        ax.grid(True, alpha=0.3, which='both')
+        ax.set_xscale('log')
+        ax.set_xlim([0.01, 100.0])
+        ax.set_ylim([0, 10])
+
+    _annotate_comparison_mosaic(axes_dict)
+    plt.suptitle(title, fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    plt.show()
+
+
+def print_summary_table(scenarios, pvalue_results, hr_results):
+    """Live p-value / HR table for one card family."""
+    header = (f"{'Scenario':<36} {'Yi p':>9} {'SIMEX p':>9} {'KoMbine p':>11}"
+              f"  {'Yi HR [95% CI]':>20}  {'SIMEX HR [Wald]':>20}  {'KoMbine HR [95% CI]':>22}")
+    print(header)
+    print('-' * len(header))
+    for key, info in scenarios.items():
+        pv = pvalue_results[key]
+        hr = hr_results[key]
+        yi_ci = (f"[{hr['yi_lower']:.3f}, {hr['yi_upper']:.3f}]"
+                 if not np.isnan(hr['yi_lower']) else '[n/a]')
+        simex_ci = f"[{hr['simex_lower']:.3f}, {hr['simex_upper']:.3f}]"
+        ko_ci = f"[{hr['kombine_lower']:.3f}, {hr['kombine_upper']:.3f}]"
+        yi_hr_str = f"{hr['yi_best']:.3f} {yi_ci}"
+        simex_hr_str = f"{hr['simex_best']:.3f} {simex_ci}"
+        ko_hr_str = f"{hr['kombine_best']:.3f} {ko_ci}"
+        ko_p_str = 'n/a' if pv['kombine'] is None else format_pvalue(pv['kombine'])
+        print(f"{info['label']:<36} {format_pvalue(pv['yi']):>9} {format_pvalue(pv['simex']):>9} {ko_p_str:>11}"
+              f"  {yi_hr_str:>20}  {simex_hr_str:>20}  {ko_hr_str:>22}")
+```
+
+```python
+here = pathlib.Path(".").resolve()
+test_dir = here.parent.parent / "test" / "kombine"
+datacards_dir_quick = test_dir / "datacards" / "simple_examples"
+
+if QUICK_COMPARISON:
+    mode_name = "n=20 only (KOMBINE_QUICK_COMPARISON=1; n=50 cells will skip)"
+else:
+    mode_name = "n=20 then n=50 (default)"
+
+progress(f"Notebook 07 mode: {mode_name}")
+progress(f"Loading n=20 hr_example cards ({TITLE_QUICK})")
+datacards_quick = load_datacards(datacards_dir_quick, SCENARIOS_QUICK)
+```
+
+## Analysis 1: Kaplan-Meier Curves
+
+Compare the Kaplan-Meier survival curves between Yi's method (dashed), MC-SIMEX (dotted), and KoMbine (solid lines with shaded 95% confidence intervals) across all scenarios. Yi and MC-SIMEX are point estimates only; they have no fill bands.
+
+### n=20 (`*_hr_example*`)
+
+```python
+progress(f"Analysis 1 — {TITLE_QUICK}")
+km_results_quick = run_km_analysis(SCENARIOS_QUICK, datacards_quick)
+plot_km_mosaic(
+    SCENARIOS_QUICK,
+    km_results_quick,
+    f"Kaplan-Meier Curves: Yi, MC-SIMEX, and KoMbine ({TITLE_QUICK})",
 )
-
-for panel_key, scenario_key in mosaic_to_scenario.items():
-    _plot_km_in_ax(axes_dict[panel_key], scenario_key,
-                   scenarios[scenario_key], km_results[scenario_key])
-
-# Column headers: uncertainty level above row 1
-col_headers_list = ['Small Uncertainty', 'Medium Uncertainty', 'Large Uncertainty']
-for panel_key, header in zip(['dc_small', 'dc_moderate', 'dc_large'], col_headers_list):
-    axes_dict[panel_key].annotate(
-        header, xy=(0.5, 1.0), xytext=(0, 30),
-        xycoords='axes fraction', textcoords='offset points',
-        ha='center', va='bottom', fontsize=12, fontweight='bold',
-        color='#333333', annotation_clip=False,
-    )
-
-# Row labels: observable type on the left of the first column
-for panel_key, row_label in zip(['dc_small', 'pois_large'],
-                                 ['Discrete\nClasses', 'Poisson\nCounts']):
-    axes_dict[panel_key].annotate(
-        row_label, xy=(0, 0.5), xytext=(-52, 0),
-        xycoords='axes fraction', textcoords='offset points',
-        ha='center', va='center', fontsize=11, fontweight='bold',
-        color='#333333', rotation=90, annotation_clip=False,
-    )
-
-plt.suptitle('Kaplan-Meier Curves: Yi, MC-SIMEX, and KoMbine',
-             fontsize=14, fontweight='bold')
-plt.tight_layout()
-plt.show()
 ```
 
 ### Understanding the Small Counts Anomaly: Why the High Group Can Look Better
@@ -577,98 +824,16 @@ On the **fixed** card, Yi and MC-SIMEX therefore report the same hard-label logr
 - **KoMbine's permutation p-values** do not get smaller just because assignments become cheaper: the null can re-label too.
 - Large disagreements among the three p-values indicate that inference is being driven by how group-membership uncertainty is modeled, not just by sampling noise.
 
-```python
-# Calculate p-values (Yi vs MC-SIMEX vs KoMbine) for all scenarios
-pvalue_results = {}
-label_width = 9
-
-for scenario_key, scenario_info in scenarios.items():
-    dc = datacards[scenario_key]
-    threshold = scenario_info['threshold']
-    progress(f"[{scenario_info['label']}] Analysis 2 starting…")
-    
-    # Yi's method
-    progress("  Yi logrank…")
-    yi_result = dc.km_p_value_logrank_yi(
-        parameter_threshold=threshold,
-        parameter_min=-np.inf,
-        parameter_max=np.inf,
-    )
-
-    progress(f"  MC-SIMEX logrank (B={SIMEX_B})…")
-    simex_result = dc.km_p_value_logrank_mc_simex(
-        parameter_threshold=threshold,
-        parameter_min=-np.inf,
-        parameter_max=np.inf,
-        rng=simex_rng,
-        B=SIMEX_B,
-    )
-    
-    # KoMbine (full likelihood; includes patient-wise uncertainty)
-    progress(f"  KoMbine permutation LRT (B={N_PERMUTATIONS})…")
-    kombine_calc = dc.km_p_value(
-        parameter_threshold=threshold,
-        parameter_min=-np.inf,
-        parameter_max=np.inf,
-    )
-    pval_kombine, _, _ = kombine_calc.solve_and_pvalue(
-        cox_only=False,
-        n_permutations=N_PERMUTATIONS,
-        rng=simex_rng,
-        print_progress=True,
-    )
-    
-    pvalue_results[scenario_key] = {
-        'yi': yi_result['p_value'],
-        'simex': simex_result['p_value'],
-        'kombine': pval_kombine
-    }
-    
-    print(f"\n{scenario_info['label']}:")
-    print(f"  {'Yi':<{label_width}} p-value: {format_pvalue(yi_result['p_value'])}")
-    print(f"  {'MC-SIMEX':<{label_width}} p-value: {format_pvalue(simex_result['p_value'])}")
-    print(f"  {'KoMbine':<{label_width}} p-value: {format_pvalue(pval_kombine)}")
-```
+### n=20 (`*_hr_example*`)
 
 ```python
-# Plot p-value comparison
-fig, ax1 = plt.subplots(figsize=(14, 5))
-
-# Prepare data
-scenario_keys = list(scenarios.keys())
-scenario_labels = [scenarios[k]['label'] for k in scenario_keys]
-yi_pvals = [pvalue_results[k]['yi'] for k in scenario_keys]
-simex_pvals = [pvalue_results[k]['simex'] for k in scenario_keys]
-kombine_pvals = [pvalue_results[k]['kombine'] for k in scenario_keys]
-
-# Bar plot
-x = np.arange(len(scenario_labels))
-width = 0.25
-
-bars1 = ax1.bar(x - width, yi_pvals, width, label="Yi's Method", color='steelblue')
-bars2 = ax1.bar(x, simex_pvals, width, label='MC-SIMEX', color='mediumpurple')
-bars3 = ax1.bar(x + width, kombine_pvals, width, label='KoMbine', color='coral')
-
-ax1.set_ylabel('P-value', fontsize=12)
-ax1.set_title(
-    'P-values: Yi / MC-SIMEX logrank χ² vs KoMbine permutation LRT',
-    fontsize=13,
-    fontweight='bold',
+progress(f"Analysis 2 — {TITLE_QUICK}")
+pvalue_results_quick = run_pvalue_analysis(SCENARIOS_QUICK, datacards_quick)
+plot_pvalue_bars(
+    SCENARIOS_QUICK,
+    pvalue_results_quick,
+    f"P-values: Yi / MC-SIMEX logrank χ² vs KoMbine permutation LRT ({TITLE_QUICK})",
 )
-ax1.set_xticks(x)
-ax1.set_xticklabels(scenario_labels, rotation=15, ha='right')
-ax1.legend(fontsize=11)
-ax1.grid(True, alpha=0.3, axis='y')
-
-# Add value labels on bars
-for bars in [bars1, bars2, bars3]:
-    for bar in bars:
-        height = bar.get_height()
-        ax1.text(bar.get_x() + bar.get_width()/2., height,
-                format_pvalue(height), ha='center', va='bottom', fontsize=8)
-
-plt.tight_layout()
-plt.show()
 ```
 
 ## Analysis 3: Hazard Ratios
@@ -687,177 +852,81 @@ MC-SIMEX is in the same family: the Wald interval is the sampling interval of th
 
 KoMbine’s likelihood framework, by contrast, can naturally widen the profile-likelihood confidence interval as patient-wise uncertainty increases, because the model explicitly accounts for the possibility that the discrete group assignment itself is uncertain.
 
+### n=20 (`*_hr_example*`)
+
 ```python
-# Calculate hazard ratios (Yi vs MC-SIMEX vs KoMbine) for all scenarios
-hr_results = {}
-label_width = 9
-hazard_ratios_scan = np.logspace(-2, 2, N_HR_SCAN)  # 0.01 to 100
-
-for scenario_key, scenario_info in scenarios.items():
-    dc = datacards[scenario_key]
-    hr_threshold = scenario_info['threshold']
-    progress(f"[{scenario_info['label']}] Analysis 3 starting…")
-
-    progress("  Yi HR CI…")
-    yi_calc = YiCorrectionForCoxPH(
-        patients=dc.patients,
-        parameter_min=-np.inf,
-        parameter_max=np.inf,
-        parameter_threshold=hr_threshold,
-    )
-    best_hr_yi, yi_lower_ci, yi_upper_ci, yi_best_fit = (
-        yi_calc.hazard_ratio_confidence_interval(
-            confidence_level=0.95,
-            hazard_ratio_min=0.01,
-            hazard_ratio_max=100.0,
-        )
-    )
-    yi_2nlls = [
-        yi_calc.compute_2nll_at_hazard_ratio(hr).x
-        for hr in hazard_ratios_scan
-    ]
-
-    progress(f"  MC-SIMEX HR (B={SIMEX_B})…")
-    simex_calc = dc.km_hazard_ratio_mc_simex(
-        parameter_threshold=hr_threshold,
-        parameter_min=-np.inf,
-        parameter_max=np.inf,
-        rng=simex_rng,
-        B=SIMEX_B,
-    )
-    simex_estimate = simex_calc.estimate_hazard_ratio()
-    simex_2nlls = [
-        simex_calc.compute_2nll_at_hazard_ratio(hr).x
-        for hr in hazard_ratios_scan
-    ]
-    
-    # KoMbine (full likelihood; allows assignments to change with HR)
-    hr_calc = dc.km_hazard_ratio(
-        parameter_threshold=hr_threshold,
-        parameter_min=-np.inf,
-        parameter_max=np.inf,
-    )
-    
-    progress("  KoMbine HR profile CI…")
-    best_hr_kombine, lower_ci, upper_ci, _ = hr_calc.hazard_ratio_confidence_interval(
-        cox_only=False,
-        confidence_level=0.95,
-        hazard_ratio_min=0.01,
-        hazard_ratio_max=100.0,
-    )
-    
-    # KoMbine profile likelihood scan
-    progress(f"  KoMbine HR 2NLL scan ({N_HR_SCAN} points)…")
-    kombine_2nlls = []
-    for hr in hazard_ratios_scan:
-        result = hr_calc.compute_2nll_at_hazard_ratio(
-            hr, cox_only=False, verbose=False, print_progress=True,
-        )
-        kombine_2nlls.append(result.x)
-    
-    hr_results[scenario_key] = {
-        'yi_best': best_hr_yi,
-        'yi_2nlls': yi_2nlls,
-        'yi_min_2nll': yi_best_fit.x,
-        'yi_lower': yi_lower_ci,
-        'yi_upper': yi_upper_ci,
-        'simex_best': simex_estimate['hazard_ratio'],
-        'simex_2nlls': simex_2nlls,
-        'simex_lower': simex_estimate['ci_lower'],
-        'simex_upper': simex_estimate['ci_upper'],
-        'kombine_best': best_hr_kombine,
-        'kombine_2nlls': kombine_2nlls,
-        'kombine_lower': lower_ci,
-        'kombine_upper': upper_ci,
-    }
-    
-    print(f"\n{scenario_info['label']}:")
-    print(f"  {'Yi':<{label_width}} best-fit HR: {best_hr_yi:.3f} [{yi_lower_ci:.3f}, {yi_upper_ci:.3f}]")
-    print(f"  {'MC-SIMEX':<{label_width}} best-fit HR: {simex_estimate['hazard_ratio']:.3f} [{simex_estimate['ci_lower']:.3f}, {simex_estimate['ci_upper']:.3f}]")
-    print(f"  {'KoMbine':<{label_width}} best-fit HR: {best_hr_kombine:.3f} [{lower_ci:.3f}, {upper_ci:.3f}]")
+progress(f"Analysis 3 — {TITLE_QUICK}")
+hr_results_quick = run_hr_analysis(SCENARIOS_QUICK, datacards_quick)
+plot_hr_mosaic(
+    SCENARIOS_QUICK,
+    hr_results_quick,
+    f"Hazard Ratio: Yi and KoMbine Profiles vs MC-SIMEX Wald ({TITLE_QUICK})",
+)
 ```
 
 
+## n=50 family (`methods_comparison_*`)
+
+Default (unset `KOMBINE_QUICK_COMPARISON`) repeats Analyses 1–3 on the stronger n=50 cards. CI sets the env var, so these cells print a skip message instead of solving.
+
 ```python
-# Plot hazard ratio profiles for all scenarios in a grid
-mosaic_layout = [
-    ['.', 'fixed', '.'],
-    ['dc_small', 'dc_moderate', 'dc_large'],
-    ['pois_large', 'pois_moderate', 'pois_small'],
-]
-mosaic_to_scenario = {
-    'fixed':         'fixed',
-    'dc_small':      'misclass_small',
-    'dc_moderate':   'misclass_moderate',
-    'dc_large':      'misclass_large',
-    'pois_large':    'large',
-    'pois_moderate': 'moderate',
-    'pois_small':    'small',
-}
+datacards_full = None
+km_results_full = None
+pvalue_results_full = None
+hr_results_full = None
 
-fig, axes_dict = plt.subplot_mosaic(mosaic_layout, figsize=(14, 13),  # pyright: ignore[reportCallIssue, reportArgumentType]
-    gridspec_kw={'hspace': 0.52, 'wspace': 0.35},
-)
+if QUICK_COMPARISON:
+    skip_n50("datacard load")
+else:
+    from docs.kombine.rebin_methods_comparison_times import ensure_rebinned
+    datacards_dir_full = ensure_rebinned(n_bins=4)
+    progress(f"Loading n=50 rebinned methods_comparison cards ({TITLE_FULL})")
+    datacards_full = load_datacards(datacards_dir_full, SCENARIOS_FULL)
+```
 
-for panel_key, scenario_key in mosaic_to_scenario.items():
-    ax = axes_dict[panel_key]
-    result = hr_results[scenario_key]
-    info = scenarios[scenario_key]
+### Analysis 1 (n=50 KM)
 
-    yi_2nlls = result['yi_2nlls']
-    delta_yi = np.array(yi_2nlls) - result['yi_min_2nll']
-
-    # Already a Wald quadratic (not a profile); do not subtract a scan minimum.
-    delta_simex = np.array(result['simex_2nlls'])
-
-    kombine_2nlls = result['kombine_2nlls']
-    delta_kombine = np.array(kombine_2nlls) - min(kombine_2nlls)
-
-    ax.plot(hazard_ratios_scan, delta_yi, color='#1976d2', linewidth=2.5, marker='o', markersize=3,
-            label="Yi's Method", zorder=3)
-    ax.plot(hazard_ratios_scan, delta_simex, color='#7b1fa2', linewidth=2.5, marker='^', markersize=3,
-            linestyle=':', label='MC-SIMEX (Wald)', zorder=3)
-    ax.plot(hazard_ratios_scan, delta_kombine, color='#d32f2f', linewidth=2.5, marker='s', markersize=3,
-            label='KoMbine', zorder=3)
-    ax.axvline(result['yi_best'], color='#1976d2', linestyle='--', alpha=0.6, linewidth=1.5, zorder=2)
-    ax.axvline(result['simex_best'], color='#7b1fa2', linestyle=':', alpha=0.6, linewidth=1.5, zorder=2)
-    ax.axvline(result['kombine_best'], color='#d32f2f', linestyle='--', alpha=0.6, linewidth=1.5, zorder=2)
-    ax.axhline(3.84, color='gray', linestyle=':', alpha=0.6, linewidth=2.0,
-               label='95% CL (χ²=3.84)', zorder=1)
-
-    ax.set_xlabel('Hazard Ratio', fontsize=10)
-    ax.set_ylabel(r'$-2 \Delta \ln L$', fontsize=10)
-    ax.set_title(info['label'], fontsize=11, fontweight='bold')
-    ax.legend(fontsize=8, loc='upper left')
-    ax.grid(True, alpha=0.3, which='both')
-    ax.set_xscale('log')
-    ax.set_xlim([0.01, 100.0])
-    ax.set_ylim([0, 10])
-
-# Column headers: uncertainty level above row 1
-col_headers_list = ['Small Uncertainty', 'Medium Uncertainty', 'Large Uncertainty']
-for panel_key, header in zip(['dc_small', 'dc_moderate', 'dc_large'], col_headers_list):
-    axes_dict[panel_key].annotate(
-        header, xy=(0.5, 1.0), xytext=(0, 30),
-        xycoords='axes fraction', textcoords='offset points',
-        ha='center', va='bottom', fontsize=12, fontweight='bold',
-        color='#333333', annotation_clip=False,
+```python
+if QUICK_COMPARISON:
+    skip_n50("KM analysis")
+else:
+    progress(f"Analysis 1 — {TITLE_FULL}")
+    km_results_full = run_km_analysis(SCENARIOS_FULL, datacards_full)
+    plot_km_mosaic(
+        SCENARIOS_FULL,
+        km_results_full,
+        f"Kaplan-Meier Curves: Yi, MC-SIMEX, and KoMbine ({TITLE_FULL})",
     )
+```
 
-# Row labels: observable type on the left of the first column
-for panel_key, row_label in zip(['dc_small', 'pois_large'],
-                                 ['Discrete\nClasses', 'Poisson\nCounts']):
-    axes_dict[panel_key].annotate(
-        row_label, xy=(0, 0.5), xytext=(-52, 0),
-        xycoords='axes fraction', textcoords='offset points',
-        ha='center', va='center', fontsize=11, fontweight='bold',
-        color='#333333', rotation=90, annotation_clip=False,
+### Analysis 2 (n=50 p-values)
+
+```python
+if QUICK_COMPARISON:
+    skip_n50("p-value analysis")
+else:
+    progress(f"Analysis 2 — {TITLE_FULL}")
+    pvalue_results_full = run_pvalue_analysis(SCENARIOS_FULL, datacards_full)
+    plot_pvalue_bars(
+        SCENARIOS_FULL,
+        pvalue_results_full,
+        f"P-values: Yi / MC-SIMEX logrank χ² vs KoMbine permutation LRT ({TITLE_FULL})",
     )
+```
 
-plt.suptitle('Hazard Ratio: Yi and KoMbine Profiles vs MC-SIMEX Wald',
-             fontsize=14, fontweight='bold')
-plt.tight_layout()
-plt.show()
+### Analysis 3 (n=50 hazard ratios)
+
+```python
+if QUICK_COMPARISON:
+    skip_n50("HR analysis")
+else:
+    progress(f"Analysis 3 — {TITLE_FULL}")
+    hr_results_full = run_hr_analysis(SCENARIOS_FULL, datacards_full)
+    plot_hr_mosaic(
+        SCENARIOS_FULL,
+        hr_results_full,
+        f"Hazard Ratio: Yi and KoMbine Profiles vs MC-SIMEX Wald ({TITLE_FULL})",
+    )
 ```
 
 
@@ -867,15 +936,16 @@ The key modeling difference is **fractional weights vs extrapolated hard labels 
 Yi’s method assigns each patient to both groups with weights, MC-SIMEX extrapolates a naive hard-label estimator, and KoMbine enforces one group per
 patient and scores assignments using an explicit measurement-error model.
 
+The two card families are calibrated for different stories. The n=20 high-$e$ row is where KoMbine KM bands widen; the n=50 low-$e$ row is where the joint HR profile jumps into assignment search while the separate KM bands stay similar.
+
 ### Kaplan–Meier Curves (Qualitative)
-- **Fixed observable**: Yi, MC-SIMEX, and KoMbine produce identical curves because group membership is exact.
-- **Discrete classes**: At $e=0.05$–$0.10$ the KoMbine KM curves and point HR stay near the fixed baseline (HR $\approx 2.08$).
-  At $e=0.25$, Yi’s curves and HR drift toward 1 ($\widehat H \approx 1.40$), MC-SIMEX extrapolates the hard-label KM ($\widehat H \approx 2.86$),
-  and KoMbine’s separate KM fits can collapse; the joint HR profile hits the scan bound ($\widehat H \approx 100$) with a wide interval.
-- **Poisson (large/moderate counts)**: Yi shrinks the group gap ($\widehat H$ from 2.03 to 1.79); MC-SIMEX is an extrapolated hard-label
+- **Fixed observable** (both families): Yi, MC-SIMEX, and KoMbine produce identical curves because group membership is exact.
+- **Discrete classes, n=20** ($e=0.20$, $0.25$, $0.40$): KoMbine KM bands stay similar at $e=0.20$ vs $0.25$ (observed-label basin; the HR interval may already hit the scan bound). At $e=0.40$ the separate KM fits widen / collapse. That is the KM-widening figure.
+- **Discrete classes, n=50** ($e=0.05$, $0.10$, $0.25$): At $e=0.05$–$0.10$ the KoMbine KM curves and point HR stay near the fixed baseline (HR $\approx 2.08$). At $e=0.25$ the KM bands remain similar (still not the $e=0.40$ collapse); Yi’s curves and HR drift toward 1 ($\widehat H \approx 1.40$), MC-SIMEX extrapolates the hard-label KM ($\widehat H \approx 2.86$), and the **joint** HR profile hits the scan bound ($\widehat H \approx 100$) with a wide interval.
+- **Poisson (large/moderate counts)**: Yi shrinks the group gap ($\widehat H$ from 2.03 to 1.79 on n=50); MC-SIMEX is an extrapolated hard-label
   curve with growing Wald intervals; KoMbine confidence bands and HR intervals widen as assignment uncertainty increases.
 - **Poisson (small counts)**: Differences become qualitative (including apparent reversals in the
-  separate KM fits). Yi is most conservative ($\widehat H \approx 1.58$, $p \approx 0.13$); MC-SIMEX can show the strongest separation ($\widehat H \approx 4.0$); KoMbine sits between them ($\widehat H \approx 3.0$) with a wide profile interval.
+  separate KM fits). On n=50, Yi is most conservative ($\widehat H \approx 1.58$, $p \approx 0.13$); MC-SIMEX can show the strongest separation ($\widehat H \approx 4.0$); KoMbine sits between them ($\widehat H \approx 3.0$) with a wide profile interval.
 
 ### P-Values and Hazard Ratios
 - Yi’s p-values generally increase as uncertainty grows; its best-fit HR drifts toward 1.
@@ -883,17 +953,18 @@ patient and scores assignments using an explicit measurement-error model.
 - MC-SIMEX p-values and HRs are those of an extrapolated hard-label statistic; the Wald HR interval stays finite.
   The plotted MC-SIMEX curve is that Wald quadratic even when $e_i=0$.
 - KoMbine’s plotted $p$ is a permutation LRT with $B=99$.
-  The profile interval can widen while the point HR remains moderate; at $e=0.25$ the HR scan can pin at the upper bound.
+  The profile interval can widen while the point HR remains moderate; on n=50 at $e=0.25$ the HR scan can pin at the upper bound.
 - Large disagreements among the three indicate that inference is driven by how group-membership
   uncertainty is modeled, not just by sampling noise.
 
-### Runtime (default cards, 2026-09)
-| Analysis | Wall time | Notes |
-|---|---:|---|
-| 1 — KM bands | ~63 min | Dominated by Poisson (small counts) ~50 min |
-| 2 — P-values | ~21 min | Permutation LRT ($B=99$) |
-| 3 — HR profiles | ~0.1 min | Grid scan ($N\_HR\_SCAN=25$) |
-| **Total** | **~85 min** |  |
+### Runtime
+| Family | Analysis | Wall time | Notes |
+|---|---|---:|---|
+| n=20 | 1–3 | minutes | Always run; CI path |
+| n=50 | 1 — KM bands | ~63 min (2026-09) | Dominated by Poisson (small counts) ~50 min |
+| n=50 | 2 — P-values | ~21 min | Permutation LRT ($B=99$) |
+| n=50 | 3 — HR profiles | ~0.1 min | Grid scan ($N\_HR\_SCAN=25$) |
+| n=50 | **Total** | **~85 min** | Skipped when `KOMBINE_QUICK_COMPARISON=1` |
 
 ### Practical Takeaways
 1. When measurement error is tiny, KM curves and the Cox **point** HR agree. The HR *scan*
@@ -907,26 +978,12 @@ patient and scores assignments using an explicit measurement-error model.
    parameters become weakly identified via widening profile-likelihood intervals.
 
 ```python
-# Summary tables — computed live from pvalue_results and hr_results
-header = (f"{'Scenario':<36} {'Yi p':>9} {'SIMEX p':>9} {'KoMbine p':>11}"
-          f"  {'Yi HR [95% CI]':>20}  {'SIMEX HR [Wald]':>20}  {'KoMbine HR [95% CI]':>22}")
-print(header)
-print('-' * len(header))
-for key, info in scenarios.items():
-    pv = pvalue_results[key]
-    hr = hr_results[key]
-    yi_ci = (f"[{hr['yi_lower']:.3f}, {hr['yi_upper']:.3f}]"
-             if not np.isnan(hr['yi_lower']) else '[n/a]')
-    simex_ci = f"[{hr['simex_lower']:.3f}, {hr['simex_upper']:.3f}]"
-    ko_ci = f"[{hr['kombine_lower']:.3f}, {hr['kombine_upper']:.3f}]"
-    yi_hr_str = f"{hr['yi_best']:.3f} {yi_ci}"
-    simex_hr_str = f"{hr['simex_best']:.3f} {simex_ci}"
-    ko_hr_str = f"{hr['kombine_best']:.3f} {ko_ci}"
-    ko_p_str = 'n/a' if pv['kombine'] is None else format_pvalue(pv['kombine'])
-    print(f"{info['label']:<36} {format_pvalue(pv['yi']):>9} {format_pvalue(pv['simex']):>9} {ko_p_str:>11}"
-          f"  {yi_hr_str:>20}  {simex_hr_str:>20}  {ko_hr_str:>22}")
-```
+progress(f"Summary table — {TITLE_QUICK}")
+print_summary_table(SCENARIOS_QUICK, pvalue_results_quick, hr_results_quick)
 
-```python
-
+if QUICK_COMPARISON:
+    skip_n50("summary table")
+else:
+    progress(f"Summary table — {TITLE_FULL}")
+    print_summary_table(SCENARIOS_FULL, pvalue_results_full, hr_results_full)
 ```

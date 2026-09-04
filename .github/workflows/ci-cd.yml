@@ -188,8 +188,8 @@ jobs:
         run: |
           jupytext --sync docs/kombine/*.md
 
-      # Notebook 07 defaults to n=50 methods_comparison cards. CI sets
-      # KOMBINE_QUICK_COMPARISON=1 for the n=20 hr_example path (minutes).
+      # Notebook 07 defaults to n=20 then n=50. CI sets
+      # KOMBINE_QUICK_COMPARISON=1 to skip n=50 (n=20 only, minutes).
       - name: test KoMbine notebooks
         env:
           KOMBINE_QUICK_COMPARISON: "1"
