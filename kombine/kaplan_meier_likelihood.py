@@ -201,7 +201,7 @@ class KaplanMeierPlotConfig:  #pylint: disable=too-many-instance-attributes
       )
     self.CL_hatches = self.CL_hatches[:len(self.CLs)]
 
-class KaplanMeierLikelihood(KaplanMeierBase):
+class KaplanMeierLikelihood(KaplanMeierBase):  # pylint: disable=too-many-instance-attributes
   """
   Kaplan-Meier curve with error bars calculated using the log-likelihood method.
   """
@@ -674,7 +674,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
       else:
         levels = [scipy.stats.chi2.ppf(cl, 1).item() for cl in CLs]
 
-        def profile_excess(
+        def profile_excess(  # pylint: disable=cell-var-from-loop
           expected_probability: float,
           _twoNLL=twoNLL,
           _twoNLL_min=twoNLL_min,
@@ -689,7 +689,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
         eps = self.__endpoint_epsilon
         one_minus_eps = 1.0 - eps
 
-        def resolve_crossings(
+        def resolve_crossings(  # pylint: disable=cell-var-from-loop
           x_outer: float,
           x_inner: float,
         ) -> tuple[list[float], list[typing.Literal["inside", "outside"] | None]]:
@@ -703,7 +703,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               rtol=brentq_rtol,
             ), [None] * len(levels)
 
-          def sign_oracle(
+          def sign_oracle(  # pylint: disable=cell-var-from-loop
             p: float,
             level: float,
             _minlp=minlp,
@@ -740,7 +740,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
           )
           return crossings, outer_oracle
 
-        def _clip_lower_endpoint(
+        def _clip_lower_endpoint(  # pylint: disable=cell-var-from-loop
           crossings: list[float],
           outer_oracle: list[typing.Literal["inside", "outside"] | None],
         ) -> list[float]:
@@ -755,7 +755,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):
               clipped.append(0.0 if f_outer <= level else float(x))
           return clipped
 
-        def _clip_upper_endpoint(
+        def _clip_upper_endpoint(  # pylint: disable=cell-var-from-loop
           crossings: list[float],
           outer_oracle: list[typing.Literal["inside", "outside"] | None],
         ) -> list[float]:

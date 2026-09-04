@@ -596,10 +596,12 @@ class TestOracleCostTracker(unittest.TestCase):
   """Tests for cost-biased bisection probe fraction estimation."""
 
   def test_initial_probe_fraction_is_prior(self):
+    """Unupdated tracker returns the prior probe fraction."""
     tracker = OracleCostTracker(r_prior=0.5, kappa=4.0, epsilon_floor=0.0)
     self.assertAlmostEqual(tracker.probe_fraction(), 0.5)
 
   def test_inside_cheap_drives_r_below_half(self):
+    """Cheap inside / expensive outside pulls r below 1/2."""
     tracker = OracleCostTracker(r_prior=0.5, kappa=4.0, epsilon_floor=0.01)
     for _ in range(5):
       tracker.record("inside", 1.0)
@@ -608,6 +610,7 @@ class TestOracleCostTracker(unittest.TestCase):
     self.assertLess(tracker.probe_fraction(), 0.5)
 
   def test_reversed_costs_drive_r_above_half(self):
+    """Expensive inside / cheap outside pulls r above 1/2."""
     tracker = OracleCostTracker(r_prior=0.5, kappa=4.0, epsilon_floor=0.01)
     for _ in range(5):
       tracker.record("inside", 10.0)
@@ -616,6 +619,7 @@ class TestOracleCostTracker(unittest.TestCase):
     self.assertGreater(tracker.probe_fraction(), 0.5)
 
   def test_stall_outlier_does_not_poison_r(self):
+    """A single huge inside time is winsorized and does not pin r."""
     tracker = OracleCostTracker(r_prior=0.5, kappa=4.0, epsilon_floor=0.05)
     for _ in range(4):
       tracker.record("inside", 1.0)
@@ -628,6 +632,7 @@ class TestOracleCostTracker(unittest.TestCase):
     self.assertLess(r, 0.5)
 
   def test_only_inside_early_stays_near_prior(self):
+    """Few inside-only samples keep r in a wide band around the prior."""
     tracker = OracleCostTracker(r_prior=0.5, kappa=4.0, epsilon_floor=0.05)
     for _ in range(3):
       tracker.record("inside", 1.0)
@@ -650,15 +655,15 @@ class TestCostBiasedFeasibilityCrossings(unittest.TestCase):
     def oracle(p: float, lvl: float):
       return "inside" if self._quadratic(p) <= lvl else "outside"
 
-    kwargs = dict(
-      value_func=self._quadratic,
-      sign_oracle=oracle,
-      x_outer=0.0,
-      x_inner=0.5,
-      levels=[level],
-      xtol=1e-8,
-      rtol=1e-8,
-    )
+    kwargs = {
+      "value_func": self._quadratic,
+      "sign_oracle": oracle,
+      "x_outer": 0.0,
+      "x_inner": 0.5,
+      "levels": [level],
+      "xtol": 1e-8,
+      "rtol": 1e-8,
+    }
     midpoint = feasibility_assisted_level_crossings(
       **kwargs, cost_biased_bisection=False,
     )
@@ -682,14 +687,14 @@ class TestCostBiasedFeasibilityCrossings(unittest.TestCase):
         return ("inside" if inside else "outside"), cost
       return oracle
 
-    kwargs = dict(
-      value_func=self._quadratic,
-      x_outer=0.0,
-      x_inner=0.5,
-      levels=[level],
-      xtol=1e-6,
-      rtol=1e-6,
-    )
+    kwargs = {
+      "value_func": self._quadratic,
+      "x_outer": 0.0,
+      "x_inner": 0.5,
+      "levels": [level],
+      "xtol": 1e-6,
+      "rtol": 1e-6,
+    }
     feasibility_assisted_level_crossings(
       sign_oracle=make_oracle("midpoint"),
       cost_biased_bisection=False,
@@ -703,6 +708,7 @@ class TestCostBiasedFeasibilityCrossings(unittest.TestCase):
     self.assertLessEqual(outside_calls["biased"], outside_calls["midpoint"])
 
   def test_outer_oracle_outside_recorded_at_endpoint(self):
+    """Outer endpoint marked outside is stored in outer_oracle."""
     level = 0.04
     outer_oracle: list = []
     feasibility_assisted_level_crossings(
@@ -727,6 +733,7 @@ class TestGurobiWorkStats(unittest.TestCase):
   """Tests for Gurobi Work accumulation helpers (no Gurobi license needed)."""
 
   def test_work_stats_reset_and_total(self):
+    """total_work sums both sides; reset clears counters."""
     stats = GurobiWorkStats(
       oracle_work=3.0,
       oracle_calls=2,
@@ -741,7 +748,9 @@ class TestGurobiWorkStats(unittest.TestCase):
     self.assertEqual(stats.minimize_calls, 0)
 
   def test_record_work_accumulates_oracle_and_minimize(self):
-    class _StubModel:
+    """Oracle and minimize Work accumulate separately, including outside oracles."""
+    # pylint: disable=protected-access
+    class _StubModel:  # pylint: disable=too-few-public-methods
       def __init__(self, work: float):
         self.Work = work
 

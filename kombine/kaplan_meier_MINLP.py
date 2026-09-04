@@ -558,9 +558,11 @@ class GurobiWorkStats:
 
   @property
   def total_work(self) -> float:
+    """Oracle plus minimize Work."""
     return self.oracle_work + self.minimize_work
 
   def reset(self) -> None:
+    """Clear accumulated Work counters."""
     self.oracle_work = 0.0
     self.oracle_calls = 0
     self.oracle_outside_calls = 0
@@ -1991,7 +1993,7 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     self.__feasibility_cut_constraints = []
     model.update()
 
-  def excess_at_most(  # pylint: disable=too-many-arguments, too-many-locals, too-many-branches
+  def excess_at_most(  # pylint: disable=too-many-arguments, too-many-locals, too-many-branches, too-many-statements
     self,
     expected_probability: float,
     *,

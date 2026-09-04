@@ -535,7 +535,7 @@ SignOracleResult = SignOracleStatus | tuple[SignOracleStatus, float]
 
 
 @dataclasses.dataclass
-class OracleCostTracker:
+class OracleCostTracker:  # pylint: disable=too-many-instance-attributes
   """Online estimate of cost-biased bisection probe fraction ``r``.
 
   Prior ``r₀=0.5`` (midpoint). Updates from outcome counts and unitless
@@ -602,7 +602,7 @@ class OracleCostTracker:
     return float(np.clip(r_raw, epsilon, 1.0 - epsilon))
 
 
-def feasibility_assisted_level_crossings(  # pylint: disable=too-many-locals, too-many-arguments, too-many-positional-arguments, too-many-branches
+def feasibility_assisted_level_crossings(  # pylint: disable=too-many-locals, too-many-arguments, too-many-positional-arguments, too-many-branches, too-many-statements
   value_func: collections.abc.Callable[[float], float],
   sign_oracle: collections.abc.Callable[[float, float], SignOracleResult],
   x_outer: float,
