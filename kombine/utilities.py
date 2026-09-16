@@ -5,6 +5,7 @@ import os
 import typing
 
 import numpy as np
+import scipy.optimize
 import scipy.stats
 
 # Default log zero epsilon value used across Kaplan-Meier likelihood methods
@@ -334,3 +335,44 @@ class GurobiOptimizerMixin:  # pylint: disable=too-few-public-methods
             print(f"Fallback {i+1} successful. Model is now optimal.")
           break
     return model
+
+
+def brentq_hazard_ratio_ci(  # pylint: disable=too-many-arguments
+  twonll_minus_threshold: typing.Callable[[float], float],
+  *,
+  best_fit_log_hr: float,
+  hazard_ratio_min: float,
+  hazard_ratio_max: float,
+  tolerance: float,
+) -> tuple[float, float]:
+  """
+  Find the profile-likelihood hazard-ratio CI by brentq on each side of the MLE.
+
+  ``twonll_minus_threshold`` should return 2NLL(log H) minus the chi-square
+  threshold, so the roots are the CI endpoints in log-H space. If a side has
+  no sign change inside the search window, that endpoint is left at the
+  corresponding search limit.
+  """
+  try:
+    lower_log_hr = scipy.optimize.brentq(
+      twonll_minus_threshold,
+      np.log(hazard_ratio_min),
+      best_fit_log_hr,
+      xtol=tolerance,
+    )
+    lower_ci = float(np.exp(float(lower_log_hr)))  # type: ignore[arg-type]
+  except ValueError:
+    lower_ci = hazard_ratio_min
+
+  try:
+    upper_log_hr = scipy.optimize.brentq(
+      twonll_minus_threshold,
+      best_fit_log_hr,
+      np.log(hazard_ratio_max),
+      xtol=tolerance,
+    )
+    upper_ci = float(np.exp(float(upper_log_hr)))  # type: ignore[arg-type]
+  except ValueError:
+    upper_ci = hazard_ratio_max
+
+  return lower_ci, upper_ci

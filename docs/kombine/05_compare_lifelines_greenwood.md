@@ -6,7 +6,7 @@ jupyter:
       extension: .md
       format_name: markdown
       format_version: '1.3'
-      jupytext_version: 1.18.1
+      jupytext_version: 1.19.5
   kernelspec:
     display_name: rocpicker
     language: python
@@ -75,7 +75,7 @@ We do, in fact, get 1:1 agreement with `lifelines`.
 
 For completeness, KoMbine also provides logrank test p-values and hazard ratio calculations that match `lifelines` for fixed observables. These comparisons demonstrate that our implementation of standard survival analysis methods is correct.
 
-For measurement error corrections using Yi's method, see **notebook 07_yi_method_comparison.ipynb**.
+For measurement error corrections using Yi's method and MC-SIMEX, see **notebook 07_previous_methods_comparison.ipynb**.
 
 
 ### Fixed Observable: P-value and Hazard Ratio vs lifelines

@@ -26,7 +26,14 @@ from .kaplan_meier_likelihood import (
 )
 from .kaplan_meier_p_value_MINLP import MINLPforKMPValue
 from .kaplan_meier_hazard_ratio_MINLP import MINLPforKMHazardRatio
-from .yi_correction import YiCorrectionForLogrank, YiCorrectionForCoxPH, YiCorrectionForKaplanMeier
+from .comparisons import (
+  McSimexForCoxPH,
+  McSimexForKaplanMeier,
+  McSimexForLogrank,
+  YiCorrectionForCoxPH,
+  YiCorrectionForKaplanMeier,
+  YiCorrectionForLogrank,
+)
 from .utilities import LOG_ZERO_EPSILON_DEFAULT, prob_poisson_density_in_range, validate_class_probs
 
 def _parse_prob_class_label(label: str) -> int | None:
@@ -931,7 +938,7 @@ class Patient: # pylint: disable=too-many-instance-attributes
       raise ValueError("Observable not set")
     return self.observable.observed_parameter()
 
-class Datacard:
+class Datacard:  # pylint: disable=too-many-public-methods
   """
   A datacard class to specify the inputs to ROC Picker.
   Refer to docs/03_examples.md for usage examples.
@@ -1710,6 +1717,101 @@ class Datacard:
 
     return yi_correction.compute_weighted_survival_probabilities(
       times_for_plot=times_for_plot,
+      prior_alpha=prior_alpha,
+      prior_beta=prior_beta,
+    )
+
+  def km_survival_mc_simex(  # pylint: disable=too-many-arguments,invalid-name
+    self,
+    *,
+    parameter_min: float = -np.inf,
+    parameter_max: float = np.inf,
+    times_for_plot: list[float] | None = None,
+    prior_alpha: float = 0.5,
+    prior_beta: float = 0.0,
+    lambda_grid: tuple[float, ...] | list[float] | None = None,
+    B: int = 100,
+    rng: np.random.Generator | int | None = None,
+  ) -> dict:
+    """
+    Kaplan-Meier point estimate using Küchenhoff MC-SIMEX on hard labels.
+
+    Extra flips are simulated at lambda >= 0 and the naive KM curve is
+    extrapolated quadratically to lambda = -1. There are no KM bands.
+    """
+    calculator = McSimexForKaplanMeier(
+      patients=self.patients,
+      parameter_min=parameter_min,
+      parameter_max=parameter_max,
+      lambda_grid=lambda_grid,
+      B=B,
+      rng=rng,
+    )
+    return calculator.estimate_survival(
+      times_for_plot=times_for_plot,
+      prior_alpha=prior_alpha,
+      prior_beta=prior_beta,
+    )
+
+  def km_p_value_logrank_mc_simex(  # pylint: disable=too-many-arguments,invalid-name
+    self,
+    *,
+    parameter_threshold: float,
+    parameter_min: float = -np.inf,
+    parameter_max: float = np.inf,
+    prior_alpha: float = 0.5,
+    prior_beta: float = 0.0,
+    lambda_grid: tuple[float, ...] | list[float] | None = None,
+    B: int = 100,
+    rng: np.random.Generator | int | None = None,
+  ) -> dict:
+    """
+    Logrank p-value using Küchenhoff MC-SIMEX on hard high/low labels.
+
+    The naive logrank statistic is averaged at each lambda and extrapolated
+    to lambda = -1. The p-value is from a chi-square_1 tail of that number.
+    """
+    calculator = McSimexForLogrank(
+      patients=self.patients,
+      parameter_min=parameter_min,
+      parameter_max=parameter_max,
+      parameter_threshold=parameter_threshold,
+      lambda_grid=lambda_grid,
+      B=B,
+      rng=rng,
+    )
+    return calculator.estimate_pvalue(
+      prior_alpha=prior_alpha,
+      prior_beta=prior_beta,
+    )
+
+  def km_hazard_ratio_mc_simex(  # pylint: disable=too-many-arguments,invalid-name
+    self,
+    *,
+    parameter_threshold: float,
+    parameter_min: float = -np.inf,
+    parameter_max: float = np.inf,
+    prior_alpha: float = 0.5,
+    prior_beta: float = 0.0,
+    lambda_grid: tuple[float, ...] | list[float] | None = None,
+    B: int = 100,
+    rng: np.random.Generator | int | None = None,
+  ) -> McSimexForCoxPH:
+    """
+    MC-SIMEX Cox calculator: extrapolated log H, Wald CI, and Wald Δ2NLL.
+
+    Call ``estimate_hazard_ratio`` for the point and Wald interval, and
+    ``compute_2nll_at_hazard_ratio`` to scan the Wald quadratic on the same
+    H grid used for Yi and KoMbine.
+    """
+    return McSimexForCoxPH(
+      patients=self.patients,
+      parameter_min=parameter_min,
+      parameter_max=parameter_max,
+      parameter_threshold=parameter_threshold,
+      lambda_grid=lambda_grid,
+      B=B,
+      rng=rng,
       prior_alpha=prior_alpha,
       prior_beta=prior_beta,
     )

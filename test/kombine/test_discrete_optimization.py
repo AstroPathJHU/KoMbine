@@ -12,7 +12,10 @@ from kombine.discrete_optimization import (
   minimize_discrete_single_minimum,
   binary_search_sign_change,
   cached_level_crossings,
+  feasibility_assisted_level_crossings,
+  OracleCostTracker,
 )
+from kombine.kaplan_meier_MINLP import GurobiWorkStats, MINLPForKM
 
 class TestMinimizeDiscreteSingleMinimum(unittest.TestCase):
   """
@@ -537,6 +540,233 @@ class TestCachedLevelCrossings(unittest.TestCase):
     cached_level_crossings(f_tight, 0.0, 0.5, [0.04], xtol=2e-12, rtol=2e-15)
     cached_level_crossings(f_loose, 0.0, 0.5, [0.04], xtol=1e-4, rtol=1e-4)
     self.assertLess(len(loose), len(tight))
+
+
+class TestFeasibilityAssistedLevelCrossings(unittest.TestCase):
+  """Tests for feasibility_assisted_level_crossings."""
+
+  @staticmethod
+  def _quadratic(x: float) -> float:
+    return (x - 0.5) ** 2
+
+  def test_oracle_matches_cached_crossings(self):
+    """Boolean oracle + polish matches numeric cached_level_crossings."""
+    levels = [0.01, 0.04]
+
+    def oracle(p: float, level: float):
+      return "inside" if self._quadratic(p) <= level else "outside"
+
+    for outer, inner in ((0.0, 0.5), (1.0, 0.5)):
+      expected = cached_level_crossings(
+        self._quadratic, outer, inner, levels, xtol=1e-8, rtol=1e-8
+      )
+      got = feasibility_assisted_level_crossings(
+        self._quadratic, oracle, outer, inner, levels, xtol=1e-8, rtol=1e-8,
+        cost_biased_bisection=False,
+      )
+      np.testing.assert_allclose(got, expected, atol=1e-6)
+
+  def test_unknown_falls_back_to_value_func(self):
+    """unknown status uses value_func for the sign test."""
+    level = 0.04
+
+    def always_unknown(_p: float, _level: float):
+      return "unknown"
+
+    got = feasibility_assisted_level_crossings(
+      self._quadratic, always_unknown, 0.0, 0.5, [level], xtol=1e-8, rtol=1e-8
+    )
+    expected = cached_level_crossings(
+      self._quadratic, 0.0, 0.5, [level], xtol=1e-8, rtol=1e-8
+    )
+    np.testing.assert_allclose(got, expected, atol=1e-6)
+
+  def test_outer_inside_returns_boundary(self):
+    """Outer endpoint already inside the cut returns that endpoint."""
+    def oracle(p: float, level: float):
+      return "inside" if self._quadratic(p) <= level else "outside"
+
+    result = feasibility_assisted_level_crossings(
+      self._quadratic, oracle, 0.0, 0.5, [0.4], xtol=1e-6, rtol=1e-6
+    )
+    self.assertEqual(result, [0.0])
+
+
+class TestOracleCostTracker(unittest.TestCase):
+  """Tests for cost-biased bisection probe fraction estimation."""
+
+  def test_initial_probe_fraction_is_prior(self):
+    """Unupdated tracker returns the prior probe fraction."""
+    tracker = OracleCostTracker(r_prior=0.5, kappa=4.0, epsilon_floor=0.0)
+    self.assertAlmostEqual(tracker.probe_fraction(), 0.5)
+
+  def test_inside_cheap_drives_r_below_half(self):
+    """Cheap inside / expensive outside pulls r below 1/2."""
+    tracker = OracleCostTracker(r_prior=0.5, kappa=4.0, epsilon_floor=0.01)
+    for _ in range(5):
+      tracker.record("inside", 1.0)
+    for _ in range(5):
+      tracker.record("outside", 10.0)
+    self.assertLess(tracker.probe_fraction(), 0.5)
+
+  def test_reversed_costs_drive_r_above_half(self):
+    """Expensive inside / cheap outside pulls r above 1/2."""
+    tracker = OracleCostTracker(r_prior=0.5, kappa=4.0, epsilon_floor=0.01)
+    for _ in range(5):
+      tracker.record("inside", 10.0)
+    for _ in range(5):
+      tracker.record("outside", 1.0)
+    self.assertGreater(tracker.probe_fraction(), 0.5)
+
+  def test_stall_outlier_does_not_poison_r(self):
+    """A single huge inside time is winsorized and does not pin r."""
+    tracker = OracleCostTracker(r_prior=0.5, kappa=4.0, epsilon_floor=0.05)
+    for _ in range(4):
+      tracker.record("inside", 1.0)
+    tracker.record("inside", 1_000.0)
+    for _ in range(4):
+      tracker.record("outside", 10.0)
+    r = tracker.probe_fraction()
+    self.assertGreaterEqual(r, 0.05)
+    self.assertLessEqual(r, 0.95)
+    self.assertLess(r, 0.5)
+
+  def test_only_inside_early_stays_near_prior(self):
+    """Few inside-only samples keep r in a wide band around the prior."""
+    tracker = OracleCostTracker(r_prior=0.5, kappa=4.0, epsilon_floor=0.05)
+    for _ in range(3):
+      tracker.record("inside", 1.0)
+    r = tracker.probe_fraction()
+    self.assertGreater(r, 0.2)
+    self.assertLess(r, 0.8)
+
+
+class TestCostBiasedFeasibilityCrossings(unittest.TestCase):
+  """Integration tests for timed oracle bisection."""
+
+  @staticmethod
+  def _quadratic(x: float) -> float:
+    return (x - 0.5) ** 2
+
+  def test_cost_biased_matches_midpoint_on_symmetric_oracle(self):
+    """Instant symmetric oracle: biased bisection matches midpoint."""
+    level = 0.04
+
+    def oracle(p: float, lvl: float):
+      return "inside" if self._quadratic(p) <= lvl else "outside"
+
+    kwargs = {
+      "value_func": self._quadratic,
+      "sign_oracle": oracle,
+      "x_outer": 0.0,
+      "x_inner": 0.5,
+      "levels": [level],
+      "xtol": 1e-8,
+      "rtol": 1e-8,
+    }
+    midpoint = feasibility_assisted_level_crossings(
+      **kwargs, cost_biased_bisection=False,
+    )
+    biased = feasibility_assisted_level_crossings(
+      **kwargs, cost_biased_bisection=True,
+    )
+    np.testing.assert_allclose(biased, midpoint, atol=1e-6)
+
+  def test_cost_biased_fewer_outside_on_asymmetric_timed_oracle(self):
+    """Oracle with costlier outside proofs; biased bisection should call outside less."""
+    level = 0.04
+    outside_calls = {"midpoint": 0, "biased": 0}
+
+    def make_oracle(bucket: str):
+      def oracle(p: float, lvl: float):
+        inside = self._quadratic(p) <= lvl
+        # Explicit sleep-immune costs (not wall-clock).
+        cost = 1.0 if inside else 10.0
+        if not inside:
+          outside_calls[bucket] += 1
+        return ("inside" if inside else "outside"), cost
+      return oracle
+
+    kwargs = {
+      "value_func": self._quadratic,
+      "x_outer": 0.0,
+      "x_inner": 0.5,
+      "levels": [level],
+      "xtol": 1e-6,
+      "rtol": 1e-6,
+    }
+    feasibility_assisted_level_crossings(
+      sign_oracle=make_oracle("midpoint"),
+      cost_biased_bisection=False,
+      **kwargs,
+    )
+    feasibility_assisted_level_crossings(
+      sign_oracle=make_oracle("biased"),
+      cost_biased_bisection=True,
+      **kwargs,
+    )
+    self.assertLessEqual(outside_calls["biased"], outside_calls["midpoint"])
+
+  def test_outer_oracle_outside_recorded_at_endpoint(self):
+    """Outer endpoint marked outside is stored in outer_oracle."""
+    level = 0.04
+    outer_oracle: list = []
+    feasibility_assisted_level_crossings(
+      value_func=self._quadratic,
+      sign_oracle=lambda p, lvl: (
+        "outside" if abs(p) < 1e-5 else (
+          "inside" if self._quadratic(p) <= lvl else "outside"
+        )
+      ),
+      x_outer=0.0,
+      x_inner=0.5,
+      levels=[level],
+      xtol=1e-8,
+      rtol=1e-8,
+      cost_biased_bisection=False,
+      outer_oracle=outer_oracle,
+    )
+    self.assertEqual(outer_oracle, ["outside"])
+
+
+class TestGurobiWorkStats(unittest.TestCase):
+  """Tests for Gurobi Work accumulation helpers (no Gurobi license needed)."""
+
+  def test_work_stats_reset_and_total(self):
+    """total_work sums both sides; reset clears counters."""
+    stats = GurobiWorkStats(
+      oracle_work=3.0,
+      oracle_calls=2,
+      oracle_outside_calls=1,
+      minimize_work=7.0,
+      minimize_calls=4,
+    )
+    self.assertAlmostEqual(stats.total_work, 10.0)
+    stats.reset()
+    self.assertEqual(stats.total_work, 0.0)
+    self.assertEqual(stats.oracle_calls, 0)
+    self.assertEqual(stats.minimize_calls, 0)
+
+  def test_record_work_accumulates_oracle_and_minimize(self):
+    """Oracle and minimize Work accumulate separately, including outside oracles."""
+    # pylint: disable=protected-access
+    class _StubModel:  # pylint: disable=too-few-public-methods
+      def __init__(self, work: float):
+        self.Work = work
+
+    minlp = MINLPForKM.__new__(MINLPForKM)
+    minlp.work_stats = GurobiWorkStats()
+
+    minlp._record_work(_StubModel(2.5), kind="oracle", side="inside")
+    minlp._record_work(_StubModel(18.0), kind="oracle", side="outside")
+    minlp._record_work(_StubModel(12.0), kind="minimize")
+
+    self.assertAlmostEqual(minlp.work_stats.oracle_work, 20.5)
+    self.assertEqual(minlp.work_stats.oracle_calls, 2)
+    self.assertEqual(minlp.work_stats.oracle_outside_calls, 1)
+    self.assertAlmostEqual(minlp.work_stats.minimize_work, 12.0)
+    self.assertEqual(minlp.work_stats.minimize_calls, 1)
+    self.assertAlmostEqual(minlp.work_stats.total_work, 32.5)
 
 
 if __name__ == "__main__":

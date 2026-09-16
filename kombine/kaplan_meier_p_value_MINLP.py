@@ -60,6 +60,8 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     self.__null_hypothesis_constraint = None
     self.__patient_wise_only_constraint = None
     self.__cox_penalty_constraint = None
+    self.__risk_set_r_vars = None
+    self.__risk_set_d_vars = None
 
   @property
   def all_patients(self) -> list[KaplanMeierPatientNLL]:
@@ -162,52 +164,48 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     ))).T
 
   @functools.cached_property
+  def assignment_nlls(self) -> npt.NDArray[np.float64]:
+    """
+    Absolute min NLL for each patient on low, high, and neither.
+
+    Returns an n x 3 array. An infinite bound makes that tail empty
+    (min NLL +inf). When both bounds are infinite, column 2 is +inf
+    and every patient must be assigned to a group.
+    """
+    nlls = np.empty((self.n_patients, 3), dtype=float)
+    for i, patient in enumerate(self.all_patients):
+      nlls[i, 0] = patient.min_nll_on_interval(
+        self.parameter_min, self.parameter_threshold,
+      )
+      nlls[i, 1] = patient.min_nll_on_interval(
+        self.parameter_threshold, self.parameter_max,
+      )
+      nlls[i, 2] = min(
+        patient.min_nll_on_interval(-np.inf, self.parameter_min),
+        patient.min_nll_on_interval(self.parameter_max, np.inf),
+      )
+    return nlls
+
+  @functools.cached_property
   def nll_penalty_for_patient_in_range(self) -> npt.NDArray[np.float64]:
     """
-    Calculate the negative log-likelihood penalty for each patient
-    if that patient is within the parameter range.
-    This is negative if the patient's observed parameter is within the range
-    and positive if it is outside the range.
-    Returns an n x 2 array: for each patient, the penalty to be included
-    in the low and high curves.
+    Relative NLL for assigning each patient to the low and high ranges.
+
+    Each column is min NLL on that range minus the best of low, high,
+    and neither. Returns an n x 2 array of non-negative values.
     """
-    sgn_nll_penalty_for_patient_in_range = 2 * self.parameter_in_range - 1
-    observed_nll = np.array([
-      p.parameter(p.observed_parameter)
-      for p in self.all_patients
-    ])
-    parameter_min_nll: npt.NDArray[np.float64] = np.array([
-      p.parameter(self.parameter_min) if np.isfinite(self.parameter_min) else np.inf
-      for p in self.all_patients
-    ])
-    parameter_threshold_nll: npt.NDArray[np.float64] = np.array([
-      p.parameter(self.parameter_threshold) #parameter threshold must be finite
-      for p in self.all_patients
-    ])
-    parameter_max_nll: npt.NDArray[np.float64] = np.array([
-      p.parameter(self.parameter_max) if np.isfinite(self.parameter_max) else np.inf
-      for p in self.all_patients
-    ])
+    best = np.min(self.assignment_nlls, axis=1, keepdims=True)
+    return self.assignment_nlls[:, :2] - best
 
-    range_boundary_nll_low = np.min(
-      np.array([parameter_min_nll, parameter_threshold_nll]),
-      axis=0
-    )
-    range_boundary_nll_high = np.min(
-      np.array([parameter_threshold_nll, parameter_max_nll]),
-      axis=0
-    )
+  @functools.cached_property
+  def nll_penalty_for_unassigned(self) -> npt.NDArray[np.float64]:
+    """
+    Relative NLL for leaving each patient in neither group.
 
-    range_boundary_nll: npt.NDArray[np.float64] = \
-      np.array([range_boundary_nll_low, range_boundary_nll_high]).T
-    abs_nll_penalty_for_patient_in_range = observed_nll - range_boundary_nll.T
-
-    nll_penalty_for_patient_in_range = (
-      sgn_nll_penalty_for_patient_in_range
-      * abs_nll_penalty_for_patient_in_range.T
-    )
-
-    return nll_penalty_for_patient_in_range
+    This is min NLL on the tails minus the best of low, high, and neither.
+    """
+    best = np.min(self.assignment_nlls, axis=1)
+    return self.assignment_nlls[:, 2] - best
 
   def add_counter_variables_and_constraints(
     self,
@@ -270,6 +268,43 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
         )
 
     return r, d, n_survived
+
+  def _refresh_death_incidence_constraints(
+    self,
+    model: gp.Model,
+    a: gp.tupledict[tuple[int, ...], gp.Var],
+    r: gp.tupledict[tuple[int, ...], gp.Var],
+    d: gp.tupledict[tuple[int, ...], gp.Var],
+  ) -> None:
+    """
+    Rebuild r/d incidence constraints after (time, censored) change.
+
+    Death-time grid size is invariant under outcome permutation; only which
+    patients contribute to each death/risk-set row changes.
+    """
+    death_times = self.all_death_times
+    for k, t in enumerate(death_times):
+      at_risk = self.patient_still_at_risk(t)
+      for j in range(2):
+        for name in (f"r_{k}_{j}", f"d_{k}_{j}"):
+          constr = model.getConstrByName(name)
+          if constr is not None:
+            model.remove(constr)
+        model.addConstr(
+          r[k, j] == gp.quicksum(
+            a[i, j] for i in range(self.n_patients) if at_risk[i]
+          ),
+          name=f"r_{k}_{j}",
+        )
+        model.addConstr(
+          d[k, j] == gp.quicksum(
+            a[i, j] for i in range(self.n_patients)
+            if self.all_patients[i].time == t
+            and not self.all_patients[i].censored
+          ),
+          name=f"d_{k}_{j}",
+        )
+    model.update()
 
   def add_kaplan_meier_probability_variables_and_constraints( #pylint: disable=too-many-locals
     self,
@@ -612,35 +647,42 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     a: gp.tupledict[tuple[int, ...], gp.Var],
   ):
     """
-    Add the patient-wise penalty to the model.
-    This penalty is based on the negative log-likelihood of the patient's observed parameter
-    being within the specified range.
+    Add the patient-wise measurement NLL to the model.
+
+    Each patient pays the relative min NLL of the chosen bin (low, high,
+    or neither). The best bin is 0. A group-to-group flip costs one
+    measurement NLL difference, not two. Exclusion uses the tail NLL,
+    not the cost of flipping into the other group.
     """
     patient_penalties = []
+    rel_range = self.nll_penalty_for_patient_in_range
+    rel_neither = self.nll_penalty_for_unassigned
     for i in range(self.n_patients):
       for j in range(2):
-        if np.isfinite(self.nll_penalty_for_patient_in_range[i, j]):
-          penalty = self.nll_penalty_for_patient_in_range[i, j] * a[i, j]
-          if self.nll_penalty_for_patient_in_range[i, j] < 0:
-            # If the penalty is negative, it means the patient is nominally in the range
-            # We want the penalty to be 0 when all patients are at their nominal values
-            penalty -= self.nll_penalty_for_patient_in_range[i, j]
-          patient_penalties.append(penalty)
-        elif np.isneginf(self.nll_penalty_for_patient_in_range[i, j]):
-          #the patient must be selected, so we add a constraint
-          model.addConstr(
-            a[i, j] == 1, name=f"patient_{i}_must_be_in_curve_{j}",
-          )
-        elif np.isposinf(self.nll_penalty_for_patient_in_range[i, j]):
-          # The patient must not be selected, so we add a constraint
+        penalty_ij = rel_range[i, j]
+        if np.isfinite(penalty_ij):
+          patient_penalties.append(penalty_ij * a[i, j])
+        elif np.isposinf(penalty_ij):
           model.addConstr(
             a[i, j] == 0, name=f"patient_{i}_must_not_be_in_curve_{j}",
           )
         else:
           raise ValueError(
             f"Invalid negative log-likelihood penalty value for patient {i}, curve {j}:"
-            f"{self.nll_penalty_for_patient_in_range[i, j]}"
+            f"{penalty_ij}"
           )
+      neither_i = rel_neither[i]
+      if np.isfinite(neither_i):
+        patient_penalties.append(neither_i * (1 - a[i, 0] - a[i, 1]))
+      elif np.isposinf(neither_i):
+        model.addConstr(
+          a[i, 0] + a[i, 1] == 1,
+          name=f"patient_{i}_must_be_assigned",
+        )
+      else:
+        raise ValueError(
+          f"Invalid unassigned NLL penalty for patient {i}: {neither_i}"
+        )
     patient_penalty = gp.quicksum(patient_penalties)
     return patient_penalty
 
@@ -722,13 +764,17 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
         float: The patient-wise penalty value (not multiplied by 2)
     """
     penalty = 0.0
+    rel_range = self.nll_penalty_for_patient_in_range
+    rel_neither = self.nll_penalty_for_unassigned
     for i in range(self.n_patients):
-      for j in range(2):
-        if np.isfinite(self.nll_penalty_for_patient_in_range[i, j]):
-          contribution = self.nll_penalty_for_patient_in_range[i, j] * (
-            a[i, j].X - (1 if self.nll_penalty_for_patient_in_range[i, j] < 0 else 0)
-          )
-          penalty += contribution
+      assigned_low = a[i, 0].X
+      assigned_high = a[i, 1].X
+      if np.isfinite(rel_range[i, 0]):
+        penalty += rel_range[i, 0] * assigned_low
+      if np.isfinite(rel_range[i, 1]):
+        penalty += rel_range[i, 1] * assigned_high
+      if np.isfinite(rel_neither[i]):
+        penalty += rel_neither[i] * (1.0 - assigned_low - assigned_high)
     return penalty
 
   def _compute_cox_penalty(self, model: gp.Model):
@@ -774,6 +820,8 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
       GRB.MINIMIZE,
     )
     model.update()
+    self.__risk_set_r_vars = r
+    self.__risk_set_d_vars = d
 
     return (  # pylint: disable=duplicate-code
       model,
@@ -927,11 +975,209 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
 
     model.update()
 
-  def solve_and_pvalue( # pylint: disable=too-many-locals, too-many-arguments, too-many-branches, too-many-statements
+  def _get_risk_set_vars(self):
+    """Return cached r/d tupledicts from the current Gurobi model, if any."""
+    return self.__risk_set_r_vars, self.__risk_set_d_vars
+
+  def _dispose_gurobi_model(self) -> None:
+    """Dispose a cached Gurobi model and drop outcome-tied constraint handles."""
+    cached = self.__dict__.get("gurobi_model")
+    if cached is not None:
+      try:
+        cached[0].dispose()
+      except gp.GurobiError:
+        pass
+      self.__dict__.pop("gurobi_model", None)
+    self.__null_hypothesis_constraint = None
+    self.__patient_wise_only_constraint = None
+    self.__cox_penalty_constraint = None
+    self.__risk_set_r_vars = None
+    self.__risk_set_d_vars = None
+
+  def _invalidate_outcome_dependent_state(self, *, keep_model: bool = False) -> None:
+    """
+    Clear caches that depend on (time, censored).
+
+    Measurement / assignment-NLL caches are kept: permutations shuffle
+    outcomes only. When keep_model is True, the Gurobi model is retained so
+    death-incidence constraints can be refreshed in place.
+    """
+    if keep_model:
+      for name in (
+        "patient_times",
+        "all_death_times",
+        "patient_censored",
+        "nominal_hazard_ratio",
+      ):
+        self.__dict__.pop(name, None)
+      return
+    self._dispose_gurobi_model()
+    for name in (
+      "patient_times",
+      "all_death_times",
+      "patient_censored",
+      "nominal_hazard_ratio",
+    ):
+      self.__dict__.pop(name, None)
+
+  def _set_patient_outcomes(
+    self,
+    times: list[float],
+    censored: list[bool],
+    *,
+    keep_model: bool = False,
+  ) -> None:
+    """
+    Replace each patient's (time, censored), keeping measurement NLLs fixed.
+    """
+    if len(times) != self.n_patients or len(censored) != self.n_patients:
+      raise ValueError(
+        "times and censored must have length n_patients "
+        f"({self.n_patients}), got {len(times)} and {len(censored)}"
+      )
+    self.__all_patients = [
+      KaplanMeierPatientNLL(
+        time=float(times[i]),
+        censored=bool(censored[i]),
+        parameter_nll=patient.parameter,
+        observed_parameter=patient.observed_parameter,
+      )
+      for i, patient in enumerate(self.all_patients)
+    ]
+    self._invalidate_outcome_dependent_state(keep_model=keep_model)
+
+  def _extract_optimize_result(
+    self,
+    model: gp.Model,
+    a: gp.tupledict[tuple[int, ...], gp.Var],
+  ) -> scipy.optimize.OptimizeResult:
+    """
+    Pack the current Gurobi solution into an OptimizeResult.
+    """
+    patients_low, patients_high = self._extract_patients_per_curve(a)
+    (
+      n_total_low, n_alive_low, km_prob_low,
+      n_total_high, n_alive_high, km_prob_high,
+    ) = self._extract_curve_statistics(model)
+    log_hazard_ratio_var = model.getVarByName("log_hazard_ratio")
+    assert log_hazard_ratio_var is not None
+    return scipy.optimize.OptimizeResult(
+      x=model.ObjVal,
+      success=model.status == GRB.OPTIMAL,
+      patients_low=patients_low,
+      patients_high=patients_high,
+      n_total_low=n_total_low,
+      n_alive_low=n_alive_low,
+      n_total_high=n_total_high,
+      n_alive_high=n_alive_high,
+      km_probability_low=km_prob_low,
+      km_probability_high=km_prob_high,
+      cox_2NLL=2 * self._compute_cox_penalty(model),
+      patient_2NLL=2 * self._compute_patient_wise_penalty_value(a),
+      patient_penalties=self.nll_penalty_for_patient_in_range,
+      hazard_ratio=np.exp(log_hazard_ratio_var.X),
+      model=model,
+    )
+
+  def _fit_null_and_alternative(  # pylint: disable=too-many-arguments, too-many-locals
+    self,
+    *,
+    cox_only: bool,
+    patient_wise_only: bool,
+    verbose: bool,
+    print_progress: bool,
+    solve_null: bool,
+    MIPGap: float,
+    MIPGapAbs: float,
+    TimeLimit: float | None,
+    Threads: int | None,
+    MIPFocus: int | None,
+    LogFile: os.PathLike | None,
+  ) -> tuple[
+    scipy.optimize.OptimizeResult | None,
+    scipy.optimize.OptimizeResult,
+  ]:
+    """
+    Fit H0 and/or H1 on this calculator's observed (or permuted) data.
+    """
+    (
+      model,
+      null_hypothesis_indicator,
+      a,
+      beta,
+      use_cox_penalty_indicator,
+    ) = self.gurobi_model
+
+    self.update_model_with_cox_only_constraints(model, a, cox_only)
+    self.update_model_with_patient_wise_only_constraint(
+      model,
+      beta=beta,
+      null_hypothesis_indicator=null_hypothesis_indicator,
+      patient_wise_only=patient_wise_only,
+      use_cox_penalty_indicator=use_cox_penalty_indicator,
+    )
+
+    solver_kwargs = {
+      "verbose": verbose,
+      "MIPGap": MIPGap,
+      "MIPGapAbs": MIPGapAbs,
+      "TimeLimit": TimeLimit,
+      "Threads": Threads,
+      "MIPFocus": MIPFocus,
+      "LogFile": LogFile,
+    }
+
+    result_null = None
+    start_a = None
+    start_beta = None
+    if solve_null:
+      if print_progress or verbose:
+        print(
+          f"[{datetime.datetime.now()}] Solving for null hypothesis...",
+          flush=True,
+        )
+      self.update_model_for_null_hypothesis_or_not(
+        model, null_hypothesis_indicator, True,
+      )
+      model = self._setup_and_optimize(model, **solver_kwargs)
+      if model.status != GRB.OPTIMAL:
+        raise ValueError(f"Null model failed with status {model.status}")
+      result_null = self._extract_optimize_result(model, a)
+      if not cox_only:
+        start_a = {
+          (i, j): float(a[i, j].X)
+          for i in range(self.n_patients)
+          for j in range(2)
+        }
+        if beta is not None:
+          start_beta = float(beta.X)
+
+    if print_progress or verbose:
+      print(
+        f"[{datetime.datetime.now()}] Solving for alternative hypothesis...",
+        flush=True,
+      )
+    self.update_model_for_null_hypothesis_or_not(
+      model, null_hypothesis_indicator, False,
+    )
+    if start_a is not None:
+      for (i, j), value in start_a.items():
+        a[i, j].Start = value
+      if start_beta is not None:
+        beta.Start = start_beta
+    model = self._setup_and_optimize(model, **solver_kwargs)
+    if model.status != GRB.OPTIMAL:
+      raise ValueError(f"Alternative model failed with status {model.status}")
+    result_alt = self._extract_optimize_result(model, a)
+    return result_null, result_alt
+
+  def solve_and_pvalue( # pylint: disable=too-many-locals, too-many-arguments, too-many-branches
     self,
     *,
     cox_only: bool = False,
     patient_wise_only: bool = False,
+    n_permutations: int = 199,
+    rng: int | np.random.Generator | None = None,
     verbose: bool = False,
     print_progress: bool = False,
     MIPGap: float | None = None,
@@ -944,6 +1190,12 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     """
     Solve the MINLP and return the p value.
 
+    When cox_only is False, the p-value is a permutation LRT: (time,
+    censored) are shuffled across patients while measurements stay fixed,
+    so the null has the same assignment freedom as the alternative.
+    When cox_only is True, assignments are locked and the reference is
+    chi-squared with 1 degree of freedom.
+
     Parameters
     ----------
     cox_only : bool, optional
@@ -953,13 +1205,25 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
         If True, only consider patient-wise errors and constrain the curves
         to be flipped relative to nominal at each death time point under the null hypothesis.
         Default is False.
+    n_permutations : int, optional
+        Number of outcome permutations when cox_only is False. Ignored
+        when cox_only is True. Default is 199.
+    rng : int or numpy.random.Generator or None, optional
+        Seed or generator for the permutations. Default is None.
     verbose : bool, optional
         If True, enable verbose output from Gurobi solver. Default is False.
     """
     if print_progress or verbose:
-      print(f"Running p-value MINLP at {datetime.datetime.now()}")
+      print(
+        f"[{datetime.datetime.now()}] Running p-value MINLP",
+        flush=True,
+      )
     if cox_only and patient_wise_only:
       raise ValueError("cox_only and patient_wise_only cannot both be True")
+    if n_permutations < 0:
+      raise ValueError(
+        f"n_permutations must be >= 0, got {n_permutations}"
+      )
 
     if patient_wise_only:
       #make sure the nominal hazard ratio is cached before doing anything with the Gurobi model
@@ -971,155 +1235,100 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     if MIPGapAbs is None:
       MIPGapAbs = self.__default_MIPGapAbs
 
-    (  # pylint: disable=duplicate-code
-      model,
-      null_hypothesis_indicator,
-      a,
-      beta,
-      use_cox_penalty_indicator,
-    ) = self.gurobi_model
+    fit_kwargs = {
+      "cox_only": cox_only,
+      "patient_wise_only": patient_wise_only,
+      "verbose": verbose,
+      "print_progress": print_progress,
+      "MIPGap": MIPGap,
+      "MIPGapAbs": MIPGapAbs,
+      "TimeLimit": TimeLimit,
+      "Threads": Threads,
+      "MIPFocus": MIPFocus,
+      "LogFile": LogFile,
+    }
+    result_null, result_alt = self._fit_null_and_alternative(
+      solve_null=True,
+      **fit_kwargs,
+    )
+    assert result_null is not None
 
-    # Apply cox_only constraints if specified
-    self.update_model_with_cox_only_constraints(model, a, cox_only)
+    if cox_only:
+      lr_stat = result_null.x - result_alt.x
+      p_value = scipy.stats.chi2.sf(lr_stat, 1)
+      result_alt.n_permutations = None
+      result_alt.n_extreme = None
+      return p_value, result_null, result_alt
 
-    # Apply patient_wise_only constraints if specified
-    self.update_model_with_patient_wise_only_constraint(
-      model,
-      beta=beta,
-      null_hypothesis_indicator=null_hypothesis_indicator,
-      patient_wise_only=patient_wise_only,
-      use_cox_penalty_indicator=use_cox_penalty_indicator,
+    base_times = [patient.time for patient in self.all_patients]
+    base_censored = [patient.censored for patient in self.all_patients]
+    perm_calc = type(self)(
+      list(self.all_patients),
+      parameter_min=self.parameter_min,
+      parameter_threshold=self.parameter_threshold,
+      parameter_max=self.parameter_max,
+      log_zero_epsilon=self.log_zero_epsilon,
+      tie_handling=self.tie_handling,
+      log_hazard_ratio_bounds=self.log_hazard_ratio_bounds,
     )
 
-    # Setup and optimize with standard parameters and fallback strategies
-    if print_progress or verbose:
-      print("Solving for null hypothesis...")
-    self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, True)
-    # pylint: disable=duplicate-code
-    model = self._setup_and_optimize(
-      model,
-      verbose=verbose,
-      MIPGap=MIPGap,
-      MIPGapAbs=MIPGapAbs,
-      TimeLimit=TimeLimit,
-      Threads=Threads,
-      MIPFocus=MIPFocus,
-      LogFile=LogFile,
-    )
-    if model.status != GRB.OPTIMAL:
-      raise ValueError(f"Null model failed with status {model.status}")
-    # pylint: enable=duplicate-code
-    twonll_null = model.ObjVal
+    generator = np.random.default_rng(rng)
+    n_extreme = 0
+    try:
+      for i_perm in range(n_permutations):
+        if print_progress or verbose:
+          print(
+            f"[{datetime.datetime.now()}] Permutation "
+            f"{i_perm + 1}/{n_permutations}...",
+            flush=True,
+          )
+        order = generator.permutation(self.n_patients)
+        reshuffled_times = [base_times[order[i]] for i in range(self.n_patients)]
+        reshuffled_censored = [
+          bool(base_censored[order[i]]) for i in range(self.n_patients)
+        ]
+        if i_perm == 0:
+          perm_calc._set_patient_outcomes(  # pylint: disable=protected-access
+            reshuffled_times,
+            reshuffled_censored,
+            keep_model=False,
+          )
+        else:
+          perm_calc._set_patient_outcomes(  # pylint: disable=protected-access
+            reshuffled_times,
+            reshuffled_censored,
+            keep_model=True,
+          )
+          (
+            model,
+            _null_hypothesis_indicator,
+            a,
+            _beta,
+            _use_cox_penalty_indicator,
+          ) = perm_calc.gurobi_model
+          r_vars, d_vars = perm_calc._get_risk_set_vars()  # pylint: disable=protected-access
+          assert r_vars is not None and d_vars is not None
+          perm_calc._refresh_death_incidence_constraints(  # pylint: disable=protected-access
+            model,
+            a,
+            r_vars,
+            d_vars,
+          )
+        _, perm_alt = perm_calc._fit_null_and_alternative(  # pylint: disable=protected-access
+          solve_null=False,
+          **fit_kwargs,
+        )
+        # 2NLL_0 is invariant to pairing, so T_perm >= T_obs iff alt is as good.
+        if perm_alt.x <= result_alt.x:
+          n_extreme += 1
+    finally:
+      perm_calc._dispose_gurobi_model()  # pylint: disable=protected-access
 
-    # Extract detailed information for null hypothesis result
-    patients_low_null, patients_high_null = self._extract_patients_per_curve(a)
-    patient_penalty_null = self._compute_patient_wise_penalty_value(a)
-    cox_penalty_null = self._compute_cox_penalty(model)
-
-    # Extract curve statistics for null hypothesis
-    (n_total_low_null, n_alive_low_null, km_prob_low_null,
-     n_total_high_null, n_alive_high_null, km_prob_high_null) = (
-      self._extract_curve_statistics(model)
-    )
-
-    # Extract hazard ratio for null hypothesis (should be 1.0)
-    log_hazard_ratio_var = model.getVarByName("log_hazard_ratio")
-    assert log_hazard_ratio_var is not None
-    hazard_ratio_null = np.exp(log_hazard_ratio_var.X)
-
-    result_null = scipy.optimize.OptimizeResult(
-      x=model.ObjVal,
-      success=model.status == GRB.OPTIMAL,
-      patients_low=patients_low_null,
-      patients_high=patients_high_null,
-      n_total_low=n_total_low_null,
-      n_alive_low=n_alive_low_null,
-      n_total_high=n_total_high_null,
-      n_alive_high=n_alive_high_null,
-      km_probability_low=km_prob_low_null,
-      km_probability_high=km_prob_high_null,
-      cox_2NLL=2*cox_penalty_null,
-      patient_2NLL=2*patient_penalty_null,
-      patient_penalties=self.nll_penalty_for_patient_in_range,
-      hazard_ratio=hazard_ratio_null,
-      model=model,
-    )
-
-    start_a = None
-    start_beta = None
-    if not cox_only:
-      start_a = {
-        (i, j): float(a[i, j].X)
-        for i in range(self.n_patients)
-        for j in range(2)
-      }
-      if beta is not None:
-        start_beta = float(beta.X)
-
-    if print_progress or verbose:
-      print("Solving for alternative hypothesis...")
-    self.update_model_for_null_hypothesis_or_not(model, null_hypothesis_indicator, False)
-    if start_a is not None:
-      for (i, j), value in start_a.items():
-        a[i, j].Start = value
-      if start_beta is not None:
-        beta.Start = start_beta
-    # pylint: disable=duplicate-code
-    model = self._setup_and_optimize(
-      model,
-      verbose=verbose,
-      MIPGap=MIPGap,
-      MIPGapAbs=MIPGapAbs,
-      TimeLimit=TimeLimit,
-      Threads=Threads,
-      MIPFocus=MIPFocus,
-      LogFile=LogFile,
-    )
-    if model.status != GRB.OPTIMAL:
-      raise ValueError(f"Alternative model failed with status {model.status}")
-    # pylint: enable=duplicate-code
-    twonll_alt = model.ObjVal
-
-    # Extract detailed information for alternative hypothesis result
-    patients_low_alt, patients_high_alt = self._extract_patients_per_curve(a)
-    patient_penalty_alt = self._compute_patient_wise_penalty_value(a)
-    cox_penalty_alt = self._compute_cox_penalty(model)
-
-    # Extract curve statistics for alternative hypothesis
-    (n_total_low_alt, n_alive_low_alt, km_prob_low_alt,
-     n_total_high_alt, n_alive_high_alt, km_prob_high_alt) = (
-      self._extract_curve_statistics(model)
-    )
-
-    # Extract hazard ratio for alternative hypothesis (can be any value)
-    hazard_ratio_alt = np.exp(log_hazard_ratio_var.X)
-
-    result_alt = scipy.optimize.OptimizeResult(
-      x=model.ObjVal,
-      success=model.status == GRB.OPTIMAL,
-      patients_low=patients_low_alt,
-      patients_high=patients_high_alt,
-      n_total_low=n_total_low_alt,
-      n_alive_low=n_alive_low_alt,
-      n_total_high=n_total_high_alt,
-      n_alive_high=n_alive_high_alt,
-      km_probability_low=km_prob_low_alt,
-      km_probability_high=km_prob_high_alt,
-      cox_2NLL=2*cox_penalty_alt,
-      patient_2NLL=2*patient_penalty_alt,
-      patient_penalties=self.nll_penalty_for_patient_in_range,
-      hazard_ratio=hazard_ratio_alt,
-      model=model,
-    )
-
-    lr_stat = twonll_null - twonll_alt
-
-    # The degrees of freedom is 1: the only difference between null and alternative
-    # is whether the log hazard ratio is constrained to 0 (null) or free to float (alternative)
-    df = 1
-
-    p_value = scipy.stats.chi2.sf(lr_stat, df)
+    p_value = (1.0 + n_extreme) / (1.0 + n_permutations)
+    result_alt.n_permutations = n_permutations
+    result_alt.n_extreme = n_extreme
     return p_value, result_null, result_alt
+
 
   def survival_curves_pvalue_logrank(  #pylint: disable=too-many-locals, too-many-branches
     self,

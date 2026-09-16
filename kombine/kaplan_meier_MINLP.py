@@ -4,11 +4,13 @@ Mixed Integer Nonlinear Programming implementation for the Kaplan-Meier likeliho
 """
 
 import collections.abc
+import dataclasses
 import datetime
 import functools
 import itertools
 import math
 import os
+import typing
 
 import gurobipy as gp
 from gurobipy import GRB
@@ -100,6 +102,48 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
     The observed value of the parameter.
     """
     return self.__observed_parameter
+
+  def min_nll_on_interval(
+    self,
+    range_min: float,
+    range_max: float,
+  ) -> float:
+    """
+    Minimum parameter NLL for a value in [range_min, range_max).
+
+    Endpoints alone are not enough when the NLL is piecewise-constant on
+    integer class bins [k, k+1): the class boundary is a jump, not a
+    continuous fence. Candidates are the observed value (if inside), the
+    inclusive left / exclusive right edges, and class-bin midpoints.
+    """
+    if not range_min < range_max:
+      return float('inf')
+    candidates: list[float] = []
+    observed = self.observed_parameter
+    if range_min <= observed < range_max:
+      candidates.append(float(observed))
+    if np.isfinite(range_min):
+      candidates.append(float(range_min))
+    if np.isfinite(range_max):
+      just_inside = float(range_max) - LOG_ZERO_EPSILON_DEFAULT
+      if range_min <= just_inside < range_max:
+        candidates.append(just_inside)
+    if np.isfinite(range_min):
+      k_start = max(0, int(math.floor(range_min)))
+    else:
+      k_start = 0
+    if np.isfinite(range_max):
+      k_stop = int(math.floor(range_max - 1e-15)) + 1
+    else:
+      k_stop = k_start + 64
+    k_stop = min(k_stop, k_start + 64)
+    for class_index in range(k_start, max(k_start, k_stop)):
+      midpoint = class_index + 0.5
+      if range_min <= midpoint < range_max:
+        candidates.append(midpoint)
+    if not candidates:
+      return float('inf')
+    return float(min(self.parameter(value) for value in candidates))
 
   @staticmethod
   def _solve_0d(
@@ -501,6 +545,31 @@ class KaplanMeierPatientNLL(KaplanMeierPatientBase):
       parameter=self.observed_parameter,
     )
 
+
+@dataclasses.dataclass
+class GurobiWorkStats:
+  """Accumulated Gurobi Work units for oracle vs full-minimize calls."""
+
+  oracle_work: float = 0.0
+  oracle_calls: int = 0
+  oracle_outside_calls: int = 0
+  minimize_work: float = 0.0
+  minimize_calls: int = 0
+
+  @property
+  def total_work(self) -> float:
+    """Oracle plus minimize Work."""
+    return self.oracle_work + self.minimize_work
+
+  def reset(self) -> None:
+    """Clear accumulated Work counters."""
+    self.oracle_work = 0.0
+    self.oracle_calls = 0
+    self.oracle_outside_calls = 0
+    self.minimize_work = 0.0
+    self.minimize_calls = 0
+
+
 class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-methods, too-many-instance-attributes
   """
   Mixed Integer Nonlinear Programming for a point on the Kaplan-Meier curve.
@@ -543,6 +612,16 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     self.__mip_start_a: dict[int, float] | None = None
     self.__mip_start_mode: tuple[bool, bool] | None = None
     self.__mip_start_profile: dict[str, list[float]] | None = None
+    self.__binom_penalty_var: gp.Var | None = None
+    self.__binom_piece_vars: list[gp.Var] | None = None
+    self.__patient_penalty_var: gp.Var | None = None
+    self.__feasibility_cut_constraints: list = []
+    # Sleep-immune cost proxy from the last excess_at_most call (Gurobi Work).
+    self.last_oracle_work: float | None = None
+    # Sum of Work across all optimize attempts in the last run_MINLP call.
+    self.last_minimize_work: float | None = None
+    self.work_stats = GurobiWorkStats()
+    self._last_minimize_call_work: float = 0.0
     if not np.isfinite(self.__parameter_min and self.__parameter_min != -np.inf):
       raise ValueError("parameter_min must be finite or -inf")
     if not np.isfinite(self.__parameter_max and self.__parameter_max != np.inf):
@@ -563,6 +642,90 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       }
     # Mode unknown when seeded externally; allow first solve to use them.
     self.__mip_start_mode = None
+
+  @staticmethod
+  def _work_from_model(model) -> float | None:
+    try:
+      return float(model.Work)
+    except (AttributeError, gp.GurobiError):
+      try:
+        return float(model.Runtime)
+      except (AttributeError, gp.GurobiError):
+        return None
+
+  def _record_work(
+    self,
+    model,
+    *,
+    kind: typing.Literal["oracle", "minimize"],
+    side: str | None = None,
+  ) -> float:
+    work = self._work_from_model(model) or 0.0
+    if kind == "oracle":
+      self.work_stats.oracle_work += work
+      self.work_stats.oracle_calls += 1
+      if side == "outside":
+        self.work_stats.oracle_outside_calls += 1
+    else:
+      self.work_stats.minimize_work += work
+      self.work_stats.minimize_calls += 1
+    return work
+
+  def _log_run_minlp_completion(
+    self,
+    *,
+    expected_probability: float | None,
+    status: int,
+    print_progress: bool,
+    verbose: bool,
+  ) -> None:
+    if not (print_progress or verbose):
+      return
+    work = self.last_minimize_work
+    work_str = f"{work:.3f}" if work is not None else "?"
+    outcome = "success" if status == GRB.OPTIMAL else f"status={status}"
+    print(
+      f"[{datetime.datetime.now()}] run_MINLP -> {outcome} "
+      f"(status={status}, Work={work_str}, p={expected_probability})",
+      flush=True,
+    )
+
+  def _optimize_with_fallbacks(
+    self,
+    model,
+    initial_params: dict,
+    fallback_strategies: list[tuple[dict, str]],
+    verbose: bool,
+  ):
+    self._set_gurobi_params(model, initial_params)
+    call_work = 0.0
+
+    if verbose:
+      print("Attempting initial optimization...")
+    model.optimize()
+    call_work += self._record_work(model, kind="minimize")
+
+    needs_fallback = model.status in (GRB.SUBOPTIMAL, GRB.TIME_LIMIT)
+    if needs_fallback:
+      for i, (fallback_params, description) in enumerate(fallback_strategies):
+        if verbose:
+          print(
+            f"Model returned status {model.status}. "
+            f"Applying fallback {i + 1}: {description}"
+          )
+          print(f"  New parameters: {fallback_params}")
+        self._set_gurobi_params(model, fallback_params)
+        model.optimize()
+        fallback_work = self._record_work(model, kind="minimize")
+        call_work += fallback_work
+        if verbose:
+          print(f"  fallback {i + 1} Work={fallback_work:.3f}: {description}")
+        if model.status == GRB.OPTIMAL:
+          if verbose:
+            print(f"Fallback {i + 1} successful. Model is now optimal.")
+          break
+    self._last_minimize_call_work = call_work
+    return model
 
   def _apply_assignment_mip_starts(
     self,
@@ -1045,43 +1208,21 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
   @functools.cached_property
   def nll_penalty_for_patient_in_range(self) -> npt.NDArray[np.float64]:
     """
-    Calculate the negative log-likelihood penalty for each patient
-    if that patient is within the parameter range.
-    This is negative if the patient's observed parameter is within the range
-    and positive if it is outside the range.
+    Calculate the NLL penalty for assigning each patient to this range.
+
+    The value is min NLL on [parameter_min, parameter_max) minus min NLL
+    on the complement. Negative means the range is the better assignment.
     """
-    sgn_nll_penalty_for_patient_in_range = 2 * self.parameter_in_range - 1
-    observed_nll = np.array([
-      p.parameter(p.observed_parameter)
-      for p in self.all_patients
-    ])
-    if np.isfinite(self.parameter_min):
-      parameter_min_nll = np.array([
-        p.parameter(self.parameter_min)
-        for p in self.all_patients
-      ])
-    else:
-      parameter_min_nll = np.full(self.n_patients, np.inf)
-    if np.isfinite(self.parameter_max):
-      parameter_max_nll = np.array([
-        p.parameter(self.parameter_max)
-        for p in self.all_patients
-      ])
-    else:
-      parameter_max_nll = np.full(self.n_patients, np.inf)
-
-    range_boundary_nll = np.min(
-      np.array([parameter_min_nll, parameter_max_nll]),
-      axis=0
-    )
-    abs_nll_penalty_for_patient_in_range = observed_nll - range_boundary_nll
-
-    nll_penalty_for_patient_in_range = (
-      sgn_nll_penalty_for_patient_in_range
-      * abs_nll_penalty_for_patient_in_range
-    )
-
-    return nll_penalty_for_patient_in_range
+    return np.array([
+      (
+        patient.min_nll_on_interval(self.parameter_min, self.parameter_max)
+        - min(
+          patient.min_nll_on_interval(-np.inf, self.parameter_min),
+          patient.min_nll_on_interval(self.parameter_max, np.inf),
+        )
+      )
+      for patient in self.all_patients
+    ], dtype=float)
 
   @functools.cached_property
   def n_choose_d_term_table(self) -> dict[tuple[int, int], float]:
@@ -1355,6 +1496,31 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
 
     return km_probability_var
 
+  def _attach_binom_piece_vars(
+    self,
+    model: gp.Model,
+    binomial_terms_by_time: list[list],
+  ) -> list[gp.Var]:
+    """Per-death-time auxiliaries for finer feasibility cuts."""
+    piece_vars: list[gp.Var] = []
+    for i in range(self.n_times_to_consider):
+      piece = model.addVar(
+        lb=0.0,
+        vtype=GRB.CONTINUOUS,
+        name=f"binom_piece[{i}]",
+      )
+      terms_i = binomial_terms_by_time[i]
+      if terms_i:
+        model.addConstr(
+          piece == gp.quicksum(terms_i),
+          name=f"binom_piece_{i}_definition",
+        )
+      else:
+        model.addConstr(piece == 0.0, name=f"binom_piece_{i}_zero")
+      piece_vars.append(piece)
+    self.__binom_piece_vars = piece_vars
+    return piece_vars
+
   def add_binomial_penalty(  # pylint: disable=too-many-locals, too-many-statements, too-many-arguments, too-many-branches
     self,
     model: gp.Model,
@@ -1363,7 +1529,7 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     d: gp.tupledict[int, gp.Var],
     sub_d: gp.tupledict[int, gp.Var],
     s: gp.tupledict[int, gp.Var],
-  ):
+  ) -> tuple[gp.Var, gp.Var, gp.Var | None]:
     """
     Add the binomial penalty to the model.
     This penalty is based on the expected survival probability
@@ -1450,28 +1616,31 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     self.__profile_log_p_survived = log_p_survived
 
     n_choose_d_table = self.n_choose_d_term_table
-    binomial_terms = []
+    binomial_terms_by_time: list[list] = [
+      [] for _ in range(self.n_times_to_consider)
+    ]
 
     if self.__binomial_only:
       _ = (r, d, sub_d)
       r_vals, d_vals, _s_vals, sub_d_vals = self._fixed_selected_counts()
       sub_d_offset = 0
       for i, time in enumerate(self.times_to_consider):
+        terms_i = binomial_terms_by_time[i]
         r_value = r_vals[i]
         d_value = d_vals[i]
         s_value = r_value - d_value
         penalty = n_choose_d_table[(r_value, d_value)]
-        binomial_terms.append(-penalty)
-        binomial_terms.append(-d_value * log_p_died[i])
-        binomial_terms.append(-s_value * log_p_survived[i])
+        terms_i.append(-penalty)
+        terms_i.append(-d_value * log_p_died[i])
+        terms_i.append(-s_value * log_p_survived[i])
         if d_value > 0:
-          binomial_terms.append(
+          terms_i.append(
             -(math.lgamma(d_value + 1) - d_value * np.log(d_value))
           )
         n_sub = len(self._collapsed_time_groups[time])
         for sub_d_value in sub_d_vals[sub_d_offset:sub_d_offset + n_sub]:
           if sub_d_value > 0:
-            binomial_terms.append(
+            terms_i.append(
               math.lgamma(sub_d_value + 1) - sub_d_value * np.log(sub_d_value)
             )
         sub_d_offset += n_sub
@@ -1481,6 +1650,7 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       # are charged on the same indicator.
       sub_d_counter = -1
       for i, time in enumerate(self.times_to_consider):
+        terms_i = binomial_terms_by_time[i]
         feasible_indicators = []
         for (r_value, d_value), penalty in n_choose_d_table.items():
           if not self._rd_pair_is_feasible(i, r_value, d_value):
@@ -1507,11 +1677,11 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
             name=f"n_choose_d_indicator_d_{i}_{r_value}_{d_value}",
           )
           s_value = r_value - d_value
-          binomial_terms.append(-penalty * indicator)
-          binomial_terms.append(-d_value * log_p_died[i] * indicator)
-          binomial_terms.append(-s_value * log_p_survived[i] * indicator)
+          terms_i.append(-penalty * indicator)
+          terms_i.append(-d_value * log_p_died[i] * indicator)
+          terms_i.append(-s_value * log_p_survived[i] * indicator)
           if d_value > 0:
-            binomial_terms.append(
+            terms_i.append(
               -indicator * (
                 math.lgamma(d_value + 1) - d_value * np.log(d_value)
               )
@@ -1551,7 +1721,7 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
               name=f"sub_d_indicator_constr_{i}_{sub_d_counter}_{sub_d_value}",
             )
             if sub_d_value > 0:
-              binomial_terms.append(
+              terms_i.append(
                 sub_d_indicator * (
                   math.lgamma(sub_d_value + 1) - sub_d_value * np.log(sub_d_value)
                 )
@@ -1561,6 +1731,10 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
             name=f"one_sub_d_indicator_per_sub_death_time_{i}_{sub_d_counter}",
           )
 
+    self._attach_binom_piece_vars(model, binomial_terms_by_time)
+    binomial_terms = [
+      term for terms_i in binomial_terms_by_time for term in terms_i
+    ]
     binom_penalty_expr = gp.quicksum(binomial_terms)
     binom_penalty = model.addVar(
       vtype=GRB.CONTINUOUS,
@@ -1675,7 +1849,7 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     km_probability_var = None
     expected_probability_var = None
     use_binomial_penalty_indicator = None
-    binom_penalty = 0.0
+    binom_penalty: gp.Var | None = None
 
     if self.__patient_wise_only:
       km_probability_var = self.add_kaplan_meier_probability_variables_and_constraints(
@@ -1719,10 +1893,30 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       model=model,
       a=a,
     )
+    # Aux var so feasibility oracles can cut the shifted patient piece alone.
+    patient_penalty_var = model.addVar(
+      lb=0.0,
+      vtype=GRB.CONTINUOUS,
+      name="patient_penalty",
+    )
+    model.addConstr(
+      patient_penalty_var == patient_penalty,
+      name="patient_penalty_definition",
+    )
+    self.__patient_penalty_var = patient_penalty_var
+    if self.__patient_wise_only:
+      self.__binom_penalty_var = None
+      self.__binom_piece_vars = None
+      objective_binom = 0.0
+    else:
+      if binom_penalty is None:
+        raise RuntimeError("binom_penalty var missing; rebuild gurobi_model")
+      self.__binom_penalty_var = binom_penalty
+      objective_binom = binom_penalty
 
     # Objective: minimize total penalty
     model.setObjective(
-      2 * (binom_penalty + patient_penalty),
+      2 * (objective_binom + patient_penalty_var),
       GRB.MINIMIZE,
     )
     model.update()
@@ -1791,6 +1985,179 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
 
     model.update()
 
+  def _clear_feasibility_cuts(self, model: gp.Model) -> None:
+    """Remove temporary CL-feasibility cuts from a prior excess_at_most call."""
+    for constr in self.__feasibility_cut_constraints:
+      try:
+        model.remove(constr)
+      except gp.GurobiError:
+        pass
+    self.__feasibility_cut_constraints = []
+    model.update()
+
+  def excess_at_most(  # pylint: disable=too-many-arguments, too-many-locals, too-many-branches, too-many-statements
+    self,
+    expected_probability: float,
+    *,
+    twoNLL_min: float,
+    level: float,
+    component_cuts: bool = False,
+    binom_time_cuts: bool = False,
+    verbose: bool = False,
+    print_progress: bool = False,
+    TimeLimit: float | None = None,
+    Threads: int | None = None,
+    LogFile: os.PathLike | None = None,
+  ) -> typing.Literal["inside", "outside", "unknown"]:
+    """
+    Ask whether profile excess 2NLL(p) - twoNLL_min can be <= ``level``.
+
+    Adds ``2*(binom + patient) <= T`` (and optional redundant piece cuts) with
+    ``T = twoNLL_min + level``, then runs a feasibility-focused solve without
+    requiring a tight optimality certificate.
+
+    Optional ``component_cuts`` adds aggregate ``2*binom`` and ``2*patient``
+    bounds; ``binom_time_cuts`` adds ``2*binom_piece[i]`` per death time.
+
+    Returns
+    -------
+    "inside"
+        A feasible point under the cuts was found (excess can be <= level).
+    "outside"
+        Gurobi proved the cut model infeasible (excess > level).
+    "unknown"
+        Status inconclusive (e.g. time limit with no feasible point); caller
+        should fall back to a full ``run_MINLP`` / ``twoNLL`` evaluation.
+    """
+    if expected_probability <= 0 or expected_probability >= 1:
+      if not self.__patient_wise_only:
+        raise ValueError(
+          f"expected_probability={expected_probability} must be in (0, 1)"
+        )
+    if expected_probability < 0 or expected_probability > 1:
+      raise ValueError(
+        f"expected_probability={expected_probability} must be in [0, 1]"
+      )
+    if level < 0:
+      raise ValueError(f"level must be >= 0, got {level}")
+    if not np.isfinite(twoNLL_min):
+      raise ValueError(f"twoNLL_min must be finite, got {twoNLL_min}")
+
+    threshold = float(twoNLL_min + level)
+    if print_progress or verbose:
+      print(
+        f"[{datetime.datetime.now()}] Feasibility excess_at_most "
+        f"p={expected_probability} level={level} T={threshold} "
+        f"at time point {self.time_point}",
+        flush=True,
+      )
+
+    (
+      model,
+      a,
+      km_probability_var,
+      expected_probability_var,
+      _use_binomial_penalty_indicator,
+    ) = self.gurobi_model
+    self.update_model_with_expected_probability(
+      model=model,
+      km_probability_var=km_probability_var,
+      expected_probability=expected_probability,
+      expected_probability_var=expected_probability_var,
+    )
+    self._clear_feasibility_cuts(model)
+
+    patient_var = self.__patient_penalty_var
+    if patient_var is None:
+      raise RuntimeError("patient_penalty var missing; rebuild gurobi_model")
+    binom_var = self.__binom_penalty_var
+    total_2nll = 2 * (
+      (binom_var if binom_var is not None else 0.0) + patient_var
+    )
+    self.__feasibility_cut_constraints.append(
+      model.addConstr(total_2nll <= threshold, name="feas_total_2nll_cut")
+    )
+    if component_cuts:
+      if binom_var is not None:
+        self.__feasibility_cut_constraints.append(
+          model.addConstr(2 * binom_var <= threshold, name="feas_binom_2nll_cut")
+        )
+      self.__feasibility_cut_constraints.append(
+        model.addConstr(
+          2 * patient_var <= threshold, name="feas_patient_2nll_cut"
+        )
+      )
+    if binom_time_cuts:
+      piece_vars = self.__binom_piece_vars
+      if piece_vars is None:
+        raise RuntimeError("binom_piece vars missing; rebuild gurobi_model")
+      for i, piece_var in enumerate(piece_vars):
+        self.__feasibility_cut_constraints.append(
+          model.addConstr(
+            2 * piece_var <= threshold,
+            name=f"feas_binom_piece_{i}_cut",
+          )
+        )
+
+    self._apply_assignment_mip_starts(
+      a,
+      binomial_only=self.__binomial_only,
+      patient_wise_only=self.__patient_wise_only,
+    )
+    self._apply_profile_mip_starts()
+
+    model.setParam("OutputFlag", 1 if verbose else 0)
+    model.setParam("DisplayInterval", 1)
+    model.setParam("NonConvex", 2)
+    model.setParam("Seed", 123456)
+    model.setParam("MIPFocus", 1)  # feasibility
+    model.setParam("FuncPieces", 1000)
+    model.setParam("FuncPieceRatio", 0.5)
+    # Stop at the first cut-feasible incumbent; proving outside still explores.
+    model.setParam("SolutionLimit", 1)
+    if TimeLimit is not None:
+      model.setParam("TimeLimit", TimeLimit)
+    if Threads is not None:
+      model.setParam("Threads", Threads)
+    if LogFile is not None:
+      model.setParam("LogFile", os.fspath(LogFile))
+
+    try:
+      model.optimize()
+      status = model.status
+      sol_count = int(model.SolCount)
+
+      if sol_count > 0:
+        self._store_assignment_mip_starts(
+          a,
+          binomial_only=self.__binomial_only,
+          patient_wise_only=self.__patient_wise_only,
+        )
+        self._store_profile_mip_starts()
+        result: typing.Literal["inside", "outside", "unknown"] = "inside"
+      elif status == GRB.INFEASIBLE:
+        result = "outside"
+      else:
+        result = "unknown"
+
+      self.last_oracle_work = self._record_work(
+        model, kind="oracle", side=result if result != "unknown" else None,
+      )
+
+      if print_progress or verbose:
+        print(
+          f"[{datetime.datetime.now()}] excess_at_most -> {result} "
+          f"(status={status}, SolCount={sol_count}"
+          f"{f', Work={self.last_oracle_work:.3f}' if self.last_oracle_work is not None else ''})",
+          flush=True,
+        )
+    finally:
+      # Do not leave SolutionLimit/MIPFocus for subsequent full minimizes.
+      model.setParam("SolutionLimit", 2000000000)
+      model.setParam("MIPFocus", 0)
+      self._clear_feasibility_cuts(model)
+    return result
+
   def run_MINLP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
     self,
     expected_probability: float | None,
@@ -1811,8 +2178,9 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     """
     if print_progress or verbose:
       print(
-        "Running MINLP for expected probability ", expected_probability,
-        " at time point ", self.time_point, " at time ", datetime.datetime.now()
+        f"[{datetime.datetime.now()}] Running MINLP for expected probability "
+        f"{expected_probability} at time point {self.time_point}",
+        flush=True,
       )
     if binomial_only != self.__binomial_only or patient_wise_only != self.__patient_wise_only:
       raise ValueError(
@@ -1840,6 +2208,8 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       expected_probability_var,
       _use_binomial_penalty_indicator,
     ) = self.gurobi_model
+    # Drop any leftover feasibility cuts before a full minimize.
+    self._clear_feasibility_cuts(model)
     self.update_model_with_expected_probability(
       model=model,
       km_probability_var=km_probability_var,
@@ -1916,8 +2286,15 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
     model = self._optimize_with_fallbacks(
         model, initial_gurobi_params, fallback_strategies, verbose
     )
+    self.last_minimize_work = self._last_minimize_call_work
 
     if model.status != GRB.OPTIMAL:
+      self._log_run_minlp_completion(
+        expected_probability=expected_probability,
+        status=model.status,
+        print_progress=print_progress,
+        verbose=verbose,
+      )
       if model.status == GRB.INFEASIBLE and patient_wise_only:
         # If the model is infeasible, it means that no patients can be selected
         # while satisfying the constraints. This can happen if the expected
@@ -1990,6 +2367,13 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       print("Binomial penalty: ", 2*binomial_penalty_val)
       print("Patient penalty:  ", 2*patient_penalty_val)
       print("Total penalty:    ", model.ObjVal)
+
+    self._log_run_minlp_completion(
+      expected_probability=expected_probability,
+      status=model.status,
+      print_progress=print_progress,
+      verbose=verbose,
+    )
 
     return scipy.optimize.OptimizeResult(
       x=model.ObjVal,
