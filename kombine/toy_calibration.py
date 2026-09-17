@@ -304,6 +304,36 @@ def logspaced_hr_probes(x_min: float, x_max: float, n_grid: int = 9) -> list[flo
   return np.geomspace(x_min, x_max, num=n_grid).tolist()
 
 
+def unique_unit_interval(*groups: typing.Iterable[float]) -> list[float]:
+  """Deduplicate finite values in (0, 1), preserving first-seen order."""
+  seen: set[float] = set()
+  ordered: list[float] = []
+  for group in groups:
+    for value in group:
+      probability = float(value)
+      if not math.isfinite(probability) or not 0.0 < probability < 1.0:
+        continue
+      key = round(probability, 10)
+      if key in seen:
+        continue
+      seen.add(key)
+      ordered.append(probability)
+  return ordered
+
+
+def linspaced_s_probes(
+  s_min: float, s_max: float, n_grid: int = 9,
+) -> list[float]:
+  """Linearly spaced survival-probability probes on ``[s_min, s_max]``."""
+  if not 0.0 < s_min <= s_max < 1.0:
+    raise ValueError(
+      f"Need 0 < s_min <= s_max < 1, got s_min={s_min}, s_max={s_max}"
+    )
+  if n_grid < 2:
+    raise ValueError(f"n_grid must be >= 2, got {n_grid}")
+  return np.linspace(s_min, s_max, num=n_grid).tolist()
+
+
 def first_interior(
   is_inside: typing.Callable[[float], bool],
   candidates: typing.Sequence[float],

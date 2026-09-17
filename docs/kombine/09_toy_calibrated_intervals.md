@@ -27,9 +27,9 @@ This notebook inverts the same profile LRT with **toys** on the n=20 cards from 
 1. Pretend a candidate $\theta$ (an $H$, or $S(t)$) is true.
 2. Simulate cohorts with biomarkers held fixed (weighted Cox permutation of the observed times for HR; binomial redraws on the observed death-time grid for KM).
 3. Ask only whether each toy's $\Delta 2\mathrm{NLL}$ is larger than the observed value (`excess_at_most`), and stop when remaining toys cannot change the 68%/95% decision.
-4. Search only interval **endpoints**, starting from a known-inside $H$ (the MLE if toys accept it, otherwise $H=1$, then a log-spaced grid). Interior points are not toy-tested.
+4. Search only interval **endpoints**, starting from a known-inside point (the MLE if toys accept it; otherwise $H=1$ / $S=0.5$, then a probe grid). Interior points are not toy-tested.
 
-The HR figure matches notebook 07's mosaic layout: KoMbine $\chi^2$ $\Delta 2\mathrm{NLL}$ vs $H$ (0.01–100, 25 scan points) with toy 68%/95% intervals overlaid as shaded ranges. Yi / MC-SIMEX are omitted here; toys calibrate KoMbine, not those approximations.
+The HR and KM figures match notebook 07's mosaic layout. Yi / MC-SIMEX are omitted here; toys calibrate KoMbine, not those approximations.
 
 CI sets `KOMBINE_SKIP_TOY_CALIBRATION=1` and skips the MINLP cells (same pattern as notebook 07 skipping n=50).
 
@@ -129,9 +129,27 @@ SCENARIOS = {
     },
 }
 hr_results = {}
+km_results = {}
+
+COLORS_PALETTE = {
+    ('fixed', 'low'): '#1565c0',
+    ('fixed', 'high'): '#c62828',
+    ('misclass_small', 'low'): '#2e7d32',
+    ('misclass_small', 'high'): '#c62828',
+    ('misclass_moderate', 'low'): '#43a047',
+    ('misclass_moderate', 'high'): '#b71c1c',
+    ('misclass_large', 'low'): '#66bb6a',
+    ('misclass_large', 'high'): '#e57373',
+    ('large', 'low'): '#1976d2',
+    ('large', 'high'): '#e53935',
+    ('moderate', 'low'): '#26a69a',
+    ('moderate', 'high'): '#fb8c00',
+    ('small', 'low'): '#80cbc4',
+    ('small', 'high'): '#ffd54f',
+}
 
 print("skip toy calibration MINLPs:", SKIP)
-print("n=20 Fixed / discrete / Poisson HR mosaic; N_MAX=", N_MAX, "Threads=", THREADS)
+print("n=20 Fixed / discrete / Poisson HR+KM mosaics; N_MAX=", N_MAX, "Threads=", THREADS)
 ```
 
 ```python
@@ -186,11 +204,56 @@ else:
 
 ```python
 if SKIP:
-    print("Skipping KM toy band probe (HR-only pass).")
+    print("Skipping n=20 toy KM mosaic (KOMBINE_SKIP_TOY_CALIBRATION=1).")
 else:
-    print("KM toy bands are out of scope for this pass; skipping.")
+    for key, info in SCENARIOS.items():
+        started = time.perf_counter()
+        dc = Datacard.parse_datacard(info["file"])
+        threshold = info["threshold"]
+        binomial_only = key == "fixed"
+        km_low = dc.km_likelihood(parameter_min=-np.inf, parameter_max=threshold)
+        km_high = dc.km_likelihood(parameter_min=threshold, parameter_max=np.inf)
+        times_low = sorted(km_low.patient_death_times)
+        times_high = sorted(km_high.patient_death_times)
+        print(f"\n[{info['label']}] KM low={len(times_low)} death times, "
+              f"high={len(times_high)} death times")
+        best_low, toy_low, chi2_low = km_low.toy_calibrated_survival_bands(
+            CLs=[0.68, 0.95],
+            times_for_plot=times_low,
+            n_max=N_MAX,
+            rng=RNG,
+            binomial_only=binomial_only,
+            Threads=THREADS,
+            print_progress=True,
+        )
+        best_high, toy_high, chi2_high = km_high.toy_calibrated_survival_bands(
+            CLs=[0.68, 0.95],
+            times_for_plot=times_high,
+            n_max=N_MAX,
+            rng=RNG + 1,
+            binomial_only=binomial_only,
+            Threads=THREADS,
+            print_progress=True,
+        )
+        elapsed = time.perf_counter() - started
+        km_results[key] = {
+            "label": info["label"],
+            "low": {
+                "times": times_low,
+                "best": best_low,
+                "chi2": chi2_low,
+                "toy": toy_low,
+            },
+            "high": {
+                "times": times_high,
+                "best": best_high,
+                "chi2": chi2_high,
+                "toy": toy_high,
+            },
+            "wall": elapsed,
+        }
+        print(f"{info['label']}: KM toy bands wall {elapsed:.1f}s")
 ```
-
 ```python
 _, axes_dict = plt.subplot_mosaic(
     MOSAIC_LAYOUT, figsize=(14, 13),
@@ -251,6 +314,100 @@ for panel_key, row_label in zip(
 
 plt.suptitle(
     "n=20: chi2 HR scan vs toy 68%/95% intervals (Fixed / discrete / Poisson)",
+    fontsize=14, fontweight="bold",
+)
+plt.tight_layout()
+plt.show()
+```
+
+```python
+def _km_step_arrays(times, best, lo, hi):
+    if len(times) == 0:
+        return [0.0], [1.0], [1.0], [1.0]
+    times_plot = [times[0]]
+    best_plot = [1.0]
+    lo_plot = [1.0]
+    hi_plot = [1.0]
+    for i, t in enumerate(times):
+        times_plot.append(t)
+        best_plot.append(best[i])
+        lo_plot.append(lo[i])
+        hi_plot.append(hi[i])
+    return times_plot, best_plot, lo_plot, hi_plot
+
+
+_, axes_dict = plt.subplot_mosaic(
+    MOSAIC_LAYOUT, figsize=(14, 13),
+    gridspec_kw={'hspace': 0.52, 'wspace': 0.35},
+)
+for panel_key, scenario_key in MOSAIC_TO_SCENARIO.items():
+    ax = axes_dict[panel_key]
+    info = SCENARIOS[scenario_key]
+    ax.set_title(info["label"], fontsize=11, fontweight="bold")
+    ax.set_xlabel("Time", fontsize=10)
+    ax.set_ylabel("Survival Probability", fontsize=10)
+    ax.set_ylim(0, 1.05)
+    ax.grid(True, alpha=0.3)
+    result = km_results.get(scenario_key)
+    if result is None:
+        ax.text(0.5, 0.5, "KOMBINE_SKIP_TOY_CALIBRATION=1",
+                ha="center", va="center", transform=ax.transAxes)
+        continue
+    for arm, color in (
+        ("low", COLORS_PALETTE[(scenario_key, "low")]),
+        ("high", COLORS_PALETTE[(scenario_key, "high")]),
+    ):
+        arm_result = result[arm]
+        times = arm_result["times"]
+        best = arm_result["best"]
+        # CL index 1 is 95%
+        chi2_lo = arm_result["chi2"][:, 1, 0]
+        chi2_hi = arm_result["chi2"][:, 1, 1]
+        toy_lo = arm_result["toy"][:, 1, 0]
+        toy_hi = arm_result["toy"][:, 1, 1]
+        t_plot, best_plot, chi2_lo_plot, chi2_hi_plot = _km_step_arrays(
+            times, best, chi2_lo, chi2_hi,
+        )
+        _, _, toy_lo_plot, toy_hi_plot = _km_step_arrays(
+            times, best, toy_lo, toy_hi,
+        )
+        ax.fill_between(
+            t_plot, chi2_lo_plot, chi2_hi_plot, step="post",
+            alpha=0.12, color=color, label=f"{arm} chi2 95%",
+        )
+        ax.fill_between(
+            t_plot, toy_lo_plot, toy_hi_plot, step="post",
+            alpha=0.28, color=color, label=f"{arm} toy 95%",
+        )
+        ax.step(
+            t_plot, best_plot, where="post", linewidth=2.5, color=color,
+            label=f"{arm} MLE", zorder=3,
+        )
+    ax.legend(fontsize=7, loc="lower left")
+
+for panel_key, header in zip(
+    ['dc_small', 'dc_moderate', 'dc_large'],
+    ['Small Uncertainty', 'Medium Uncertainty', 'Large Uncertainty'],
+):
+    axes_dict[panel_key].annotate(
+        header, xy=(0.5, 1.0), xytext=(0, 30),
+        xycoords='axes fraction', textcoords='offset points',
+        ha='center', va='bottom', fontsize=12, fontweight='bold',
+        color='#333333', annotation_clip=False,
+    )
+for panel_key, row_label in zip(
+    ['dc_small', 'pois_large'],
+    ['Discrete\nClasses', 'Poisson\nCounts'],
+):
+    axes_dict[panel_key].annotate(
+        row_label, xy=(0, 0.5), xytext=(-52, 0),
+        xycoords='axes fraction', textcoords='offset points',
+        ha='center', va='center', fontsize=11, fontweight='bold',
+        color='#333333', rotation=90, annotation_clip=False,
+    )
+
+plt.suptitle(
+    "n=20: chi2 vs toy 95% KM bands (Fixed / discrete / Poisson)",
     fontsize=14, fontweight="bold",
 )
 plt.tight_layout()

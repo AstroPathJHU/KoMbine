@@ -8,6 +8,7 @@ import dataclasses
 import datetime
 import functools
 import os
+import time
 import typing
 import pathlib
 
@@ -38,6 +39,9 @@ from .toy_calibration import (
   as_generator,
   binomial_km_outcomes,
   bisection_endpoint,
+  first_interior,
+  linspaced_s_probes,
+  unique_unit_interval,
 )
 from .utilities import InspectableCache, LOG_ZERO_EPSILON_DEFAULT
 
@@ -935,10 +939,15 @@ class KaplanMeierLikelihood(KaplanMeierBase):  # pylint: disable=too-many-instan
     xtol: float = 0.02,
     verbose: bool = False,
     print_progress: bool = False,
-  ) -> tuple[np.ndarray, np.ndarray]:
+  ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Toy-calibrated KM bands. Returns (best_probabilities, bands) like
-    ``survival_probabilities_likelihood``, with endpoint search from χ² edges.
+    Toy-calibrated KM bands via endpoint search from an interior point.
+
+    If the MLE is not toy-accepted, probe S=0.5 then a linspace grid until
+    some S is inside. Bisect outward from that interior point to the χ²
+    edges, then to the open unit interval if the χ² edge is still inside.
+
+    Returns ``(best_probabilities, toy_bands, chi2_bands)``.
     """
     cls_tuple = tuple(float(cl) for cl in CLs)
     generator = as_generator(rng)
@@ -960,6 +969,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):  # pylint: disable=too-many-instan
       ) -> ToyTestResult:
         key = round(float(prob), 10)
         if key not in _cache:
+          started = time.perf_counter()
           _cache[key] = self.hypothesized_s_toy_test(
             _t,
             float(np.clip(prob, self.__endpoint_epsilon, 1.0 - self.__endpoint_epsilon)),
@@ -969,10 +979,24 @@ class KaplanMeierLikelihood(KaplanMeierBase):  # pylint: disable=too-many-instan
             binomial_only=binomial_only,
             Threads=Threads,
             verbose=verbose,
-            print_progress=print_progress,
+            print_progress=False,
           )
+          elapsed = time.perf_counter() - started
+          result = _cache[key]
+          if print_progress:
+            print(
+              f"[{datetime.datetime.now()}] toy S(t={_t:g})={prob:g}: "
+              f"n_ext={result.n_extreme}/{result.n_run} "
+              f"p={result.p_value:.3g} decisions={result.decisions} "
+              f"wall={elapsed:.1f}s",
+              flush=True,
+            )
         return _cache[key]
 
+      probes = unique_unit_interval(
+        [best_clip, 0.5],
+        linspaced_s_probes(self.__endpoint_epsilon, 1.0 - self.__endpoint_epsilon),
+      )
       row = []
       for i_cl, cl in enumerate(cls_tuple):
         chi2_lo, chi2_hi = chi2_bands[i_time][i_cl]
@@ -980,26 +1004,27 @@ class KaplanMeierLikelihood(KaplanMeierBase):  # pylint: disable=too-many-instan
         def inside(prob: float, _cl=cl) -> bool:
           return test_at(prob).decisions[_cl] == "accept"
 
-        if not inside(best_clip):
+        interior = first_interior(inside, probes)
+        if interior is None:
           row.append((float(best_clip), float(best_clip)))
           continue
 
         lower = bisection_endpoint(
-          inside, best_clip, max(float(chi2_lo), self.__endpoint_epsilon),
+          inside, interior, max(float(chi2_lo), self.__endpoint_epsilon),
           xtol=xtol, log_scale=False,
         )
         if inside(lower) and lower > self.__endpoint_epsilon:
           lower = bisection_endpoint(
-            inside, best_clip, self.__endpoint_epsilon,
+            inside, interior, self.__endpoint_epsilon,
             xtol=xtol, log_scale=False,
           )
         upper = bisection_endpoint(
-          inside, best_clip, min(float(chi2_hi), 1.0 - self.__endpoint_epsilon),
+          inside, interior, min(float(chi2_hi), 1.0 - self.__endpoint_epsilon),
           xtol=xtol, log_scale=False,
         )
         if inside(upper) and upper < 1.0 - self.__endpoint_epsilon:
           upper = bisection_endpoint(
-            inside, best_clip, 1.0 - self.__endpoint_epsilon,
+            inside, interior, 1.0 - self.__endpoint_epsilon,
             xtol=xtol, log_scale=False,
           )
         if chi2_lo <= 0:
@@ -1008,7 +1033,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):  # pylint: disable=too-many-instan
           upper = 1.0
         row.append((float(lower), float(upper)))
       toy_bands.append(row)
-    return np.array(best_probabilities), np.array(toy_bands)
+    return np.array(best_probabilities), np.array(toy_bands), np.asarray(chi2_bands)
 
   def plot(self, config: KaplanMeierPlotConfig | None = None, **kwargs) -> dict:
     """

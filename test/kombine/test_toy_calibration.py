@@ -14,10 +14,12 @@ from kombine.toy_calibration import (
   binomial_km_outcomes,
   bisection_endpoint,
   first_interior,
+  linspaced_s_probes,
   logspaced_hr_probes,
   mc_p_value,
   sequential_status,
   unique_positive_hrs,
+  unique_unit_interval,
   weighted_cox_permutation,
 )
 
@@ -156,6 +158,21 @@ def test_first_interior_uses_h1_when_mle_rejected():
   assert first_interior(inside, [20.0, 0.05, 100.0]) is None
 
 
+def test_first_interior_uses_half_when_km_mle_rejected():
+  """When the KM MLE sits outside, S=0.5 is tried before the linspace grid."""
+  def inside(value: float) -> bool:
+    return 0.4 <= value <= 0.6
+
+  probes = unique_unit_interval(
+    [0.95, 0.5],
+    linspaced_s_probes(1e-6, 1.0 - 1e-6),
+  )
+  assert probes[0] == 0.95
+  assert probes[1] == 0.5
+  assert first_interior(inside, probes) == 0.5
+  assert first_interior(inside, [0.95, 0.05, 0.99]) is None
+
+
 def test_hr_toy_test_golden():
   """Seeded tiny-cohort HR Neyman test; numbers are regression goldens."""
   datacard = _parse_tiny()
@@ -254,6 +271,7 @@ if __name__ == "__main__":
   test_binomial_km_outcomes_respects_risk_and_p()
   test_bisection_endpoint_from_chi2_edges()
   test_first_interior_uses_h1_when_mle_rejected()
+  test_first_interior_uses_half_when_km_mle_rejected()
   print("[PASS] generator / sequential tests")
   test_hr_toy_test_golden()
   print("[PASS] HR toy golden")
