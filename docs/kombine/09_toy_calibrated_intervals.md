@@ -22,14 +22,14 @@ jupyter:
 
 Permutation p-values in KoMbine shuffle `(time, censored)` under **no association** ($H=1$). Likelihood scans still cut $\Delta 2\mathrm{NLL}$ at $\chi^2_1$ (1 and 3.84). Those cuts ignore assignment search, so at large measurement error a $\chi^2$ 95% HR interval can exclude $H=1$ while the permutation test does not reject it.
 
-This notebook inverts the same profile LRT with **toys** on the n=20 discrete-class cards from the methods-comparison notebook ($e=0.20$, $0.25$, $0.40$):
+This notebook inverts the same profile LRT with **toys** on the n=20 cards from the methods-comparison notebook (Fixed, discrete $e=0.20/0.25/0.40$, and Poisson large/moderate/small counts):
 
 1. Pretend a candidate $\theta$ (an $H$, or $S(t)$) is true.
 2. Simulate cohorts with biomarkers held fixed (weighted Cox permutation of the observed times for HR; binomial redraws on the observed death-time grid for KM).
 3. Ask only whether each toy's $\Delta 2\mathrm{NLL}$ is larger than the observed value (`excess_at_most`), and stop when remaining toys cannot change the 68%/95% decision.
 4. Search only interval **endpoints**, starting from a known-inside $H$ (the MLE if toys accept it, otherwise $H=1$, then a log-spaced grid). Interior points are not toy-tested.
 
-The HR figure matches notebook 07's discrete row: KoMbine $\chi^2$ $\Delta 2\mathrm{NLL}$ vs $H$ (0.01–100, 25 scan points) with toy 68%/95% intervals overlaid as shaded ranges. Yi / MC-SIMEX are omitted here; toys calibrate KoMbine, not those approximations.
+The HR figure matches notebook 07's mosaic layout: KoMbine $\chi^2$ $\Delta 2\mathrm{NLL}$ vs $H$ (0.01–100, 25 scan points) with toy 68%/95% intervals overlaid as shaded ranges. Yi / MC-SIMEX are omitted here; toys calibrate KoMbine, not those approximations.
 
 CI sets `KOMBINE_SKIP_TOY_CALIBRATION=1` and skips the MINLP cells (same pattern as notebook 07 skipping n=50).
 
@@ -75,35 +75,74 @@ HAZARD_RATIO_MIN = 0.01
 HAZARD_RATIO_MAX = 100.0
 HAZARD_RATIOS_SCAN = np.logspace(-2, 2, N_HR_SCAN)
 DATACARDS = _repo_root / "test" / "kombine" / "datacards" / "simple_examples"
-CARDS = {
-    "e=0.20": {
-        "file": DATACARDS / "discrete_classes_hr_example_moderate.txt",
-        "label": "Disc. Classes (e=0.20)",
+
+# Same n=20 family and mosaic layout as notebook 07.
+MOSAIC_LAYOUT = [
+    ['.', 'fixed', '.'],
+    ['dc_small', 'dc_moderate', 'dc_large'],
+    ['pois_large', 'pois_moderate', 'pois_small'],
+]
+MOSAIC_TO_SCENARIO = {
+    'fixed': 'fixed',
+    'dc_small': 'misclass_small',
+    'dc_moderate': 'misclass_moderate',
+    'dc_large': 'misclass_large',
+    'pois_large': 'large',
+    'pois_moderate': 'moderate',
+    'pois_small': 'small',
+}
+SCENARIOS = {
+    'fixed': {
+        'file': DATACARDS / 'fixed_hr_example.txt',
+        'label': 'Fixed Observable',
+        'threshold': 0.5001,
     },
-    "e=0.25": {
-        "file": DATACARDS / "discrete_classes_hr_example_large.txt",
-        "label": "Disc. Classes (e=0.25)",
+    'misclass_small': {
+        'file': DATACARDS / 'discrete_classes_hr_example_moderate.txt',
+        'label': 'Disc. Classes (e=0.20)',
+        'threshold': 1.0,
     },
-    "e=0.40": {
-        "file": DATACARDS / "discrete_classes_hr_example_very_large.txt",
-        "label": "Disc. Classes (e=0.40)",
+    'misclass_moderate': {
+        'file': DATACARDS / 'discrete_classes_hr_example_large.txt',
+        'label': 'Disc. Classes (e=0.25)',
+        'threshold': 1.0,
+    },
+    'misclass_large': {
+        'file': DATACARDS / 'discrete_classes_hr_example_very_large.txt',
+        'label': 'Disc. Classes (e=0.40)',
+        'threshold': 1.0,
+    },
+    'large': {
+        'file': DATACARDS / 'poisson_density_hr_example_large.txt',
+        'label': 'Poisson (large counts)',
+        'threshold': 0.5001,
+    },
+    'moderate': {
+        'file': DATACARDS / 'poisson_density_hr_example_moderate.txt',
+        'label': 'Poisson (moderate counts)',
+        'threshold': 0.5001,
+    },
+    'small': {
+        'file': DATACARDS / 'poisson_density_hr_example_small.txt',
+        'label': 'Poisson (small counts)',
+        'threshold': 0.5001,
     },
 }
 hr_results = {}
 
 print("skip toy calibration MINLPs:", SKIP)
-print("n=20 discrete-class HR mosaic; N_MAX=", N_MAX, "Threads=", THREADS)
+print("n=20 Fixed / discrete / Poisson HR mosaic; N_MAX=", N_MAX, "Threads=", THREADS)
 ```
 
 ```python
 if SKIP:
     print("Skipping n=20 toy HR mosaic (KOMBINE_SKIP_TOY_CALIBRATION=1).")
 else:
-    for key, info in CARDS.items():
+    for key, info in SCENARIOS.items():
         started = time.perf_counter()
         dc = Datacard.parse_datacard(info["file"])
         hr_calc = dc.km_hazard_ratio(
-            parameter_threshold=1.0,
+            parameter_threshold=info["threshold"],
             parameter_min=-np.inf,
             parameter_max=np.inf,
         )
@@ -153,20 +192,25 @@ else:
 ```
 
 ```python
-fig, axes = plt.subplots(1, 3, figsize=(14, 4.2), sharey=True)
-for ax, key in zip(axes, CARDS):
-    info = CARDS[key]
+_, axes_dict = plt.subplot_mosaic(
+    MOSAIC_LAYOUT, figsize=(14, 13),
+    gridspec_kw={'hspace': 0.52, 'wspace': 0.35},
+)
+for panel_key, scenario_key in MOSAIC_TO_SCENARIO.items():
+    ax = axes_dict[panel_key]
+    info = SCENARIOS[scenario_key]
     ax.set_title(info["label"], fontsize=11, fontweight="bold")
     ax.set_xscale("log")
     ax.set_xlim(HAZARD_RATIO_MIN, HAZARD_RATIO_MAX)
     ax.set_ylim(0, 10)
     ax.set_xlabel("Hazard Ratio", fontsize=10)
+    ax.set_ylabel(r"$-2 \Delta \ln L$", fontsize=10)
     ax.axhline(3.84, color="gray", linestyle=":", alpha=0.6, linewidth=2.0,
                label="95% CL (chi2=3.84)", zorder=1)
     ax.axvline(1.0, color="gray", linestyle="--", alpha=0.5, linewidth=1.0,
                label="H = 1", zorder=1)
     ax.grid(True, alpha=0.3, which="both")
-    result = hr_results.get(key)
+    result = hr_results.get(scenario_key)
     if result is None:
         ax.text(0.5, 0.5, "KOMBINE_SKIP_TOY_CALIBRATION=1",
                 ha="center", va="center", transform=ax.transAxes)
@@ -184,9 +228,31 @@ for ax, key in zip(axes, CARDS):
                label="toy 68%", zorder=0)
     ax.legend(fontsize=7, loc="upper left")
 
-axes[0].set_ylabel(r"$-2 \Delta \ln L$", fontsize=10)
-fig.suptitle("n=20 discrete classes: chi2 HR scan vs toy 68%/95% intervals",
-             fontsize=13, fontweight="bold")
-fig.tight_layout()
+for panel_key, header in zip(
+    ['dc_small', 'dc_moderate', 'dc_large'],
+    ['Small Uncertainty', 'Medium Uncertainty', 'Large Uncertainty'],
+):
+    axes_dict[panel_key].annotate(
+        header, xy=(0.5, 1.0), xytext=(0, 30),
+        xycoords='axes fraction', textcoords='offset points',
+        ha='center', va='bottom', fontsize=12, fontweight='bold',
+        color='#333333', annotation_clip=False,
+    )
+for panel_key, row_label in zip(
+    ['dc_small', 'pois_large'],
+    ['Discrete\nClasses', 'Poisson\nCounts'],
+):
+    axes_dict[panel_key].annotate(
+        row_label, xy=(0, 0.5), xytext=(-52, 0),
+        xycoords='axes fraction', textcoords='offset points',
+        ha='center', va='center', fontsize=11, fontweight='bold',
+        color='#333333', rotation=90, annotation_clip=False,
+    )
+
+plt.suptitle(
+    "n=20: chi2 HR scan vs toy 68%/95% intervals (Fixed / discrete / Poisson)",
+    fontsize=14, fontweight="bold",
+)
+plt.tight_layout()
 plt.show()
 ```
