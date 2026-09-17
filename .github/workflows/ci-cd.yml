@@ -191,6 +191,10 @@ jobs:
         run: |
           python -m test.kombine.test_mc_simex
 
+      - name: Toy calibration tests
+        run: |
+          python -m test.kombine.test_toy_calibration
+
       - name: convert KoMbine notebooks
         run: |
           jupytext --sync docs/kombine/*.md
@@ -200,6 +204,7 @@ jobs:
       - name: test KoMbine notebooks
         env:
           KOMBINE_QUICK_COMPARISON: "1"
+          KOMBINE_SKIP_TOY_CALIBRATION: "1"
         run: |
           jupyter nbconvert --execute --to html --ExecutePreprocessor.timeout=3600 -- docs/kombine/*.ipynb
 

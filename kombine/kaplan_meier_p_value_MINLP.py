@@ -9,6 +9,7 @@ The p-value is computed via the likelihood ratio test.
 import functools
 import os
 import datetime
+from typing import Self
 
 import gurobipy as gp
 from gurobipy import GRB
@@ -1046,6 +1047,34 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
     ]
     self._invalidate_outcome_dependent_state(keep_model=keep_model)
 
+  def _copy_for_outcome_shuffle(self) -> Self:
+    """Fresh calculator with the same patients and bounds, for outcome swaps."""
+    return type(self)(
+      list(self.all_patients),
+      parameter_min=self.parameter_min,
+      parameter_threshold=self.parameter_threshold,
+      parameter_max=self.parameter_max,
+      log_zero_epsilon=self.log_zero_epsilon,
+      tie_handling=self.tie_handling,
+      log_hazard_ratio_bounds=self.log_hazard_ratio_bounds,
+    )
+
+  def set_patient_outcomes(
+    self,
+    times: list[float],
+    censored: list[bool],
+    *,
+    keep_model: bool = False,
+  ) -> None:
+    """
+    Replace each patient's (time, censored), keeping measurement NLLs fixed.
+
+    When ``keep_model`` is True the Gurobi model is retained so death-incidence
+    constraints can be refreshed in place. The unique death-time grid must
+    stay the same size (as under a permutation of the observed outcomes).
+    """
+    self._set_patient_outcomes(times, censored, keep_model=keep_model)
+
   def _extract_optimize_result(
     self,
     model: gp.Model,
@@ -1262,15 +1291,7 @@ class MINLPforKMPValue(GurobiOptimizerMixin):  #pylint: disable=too-many-public-
 
     base_times = [patient.time for patient in self.all_patients]
     base_censored = [patient.censored for patient in self.all_patients]
-    perm_calc = type(self)(
-      list(self.all_patients),
-      parameter_min=self.parameter_min,
-      parameter_threshold=self.parameter_threshold,
-      parameter_max=self.parameter_max,
-      log_zero_epsilon=self.log_zero_epsilon,
-      tie_handling=self.tie_handling,
-      log_hazard_ratio_bounds=self.log_hazard_ratio_bounds,
-    )
+    perm_calc = self._copy_for_outcome_shuffle()
 
     generator = np.random.default_rng(rng)
     n_extreme = 0

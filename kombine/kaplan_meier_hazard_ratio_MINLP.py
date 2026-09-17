@@ -8,8 +8,10 @@ of the hazard ratio H, enabling profile likelihood analyses and confidence inter
 import warnings
 import os
 import datetime
+import typing
 from typing import Optional
 
+import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
 import numpy.typing as npt
@@ -17,6 +19,15 @@ import scipy.optimize
 import scipy.stats
 
 from .kaplan_meier_p_value_MINLP import MINLPforKMPValue
+from .toy_calibration import (
+  DEFAULT_CLS,
+  SequentialToyCounter,
+  ToyTestResult,
+  as_generator,
+  bisection_endpoint,
+  hard_group_high,
+  weighted_cox_permutation,
+)
 from .utilities import LOG_ZERO_EPSILON_DEFAULT, brentq_hazard_ratio_ci
 
 
@@ -75,6 +86,8 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
     self.__mip_start_log_hr: float | None = None
     # Only reuse starts when |Δ log H| is below this (avoids trapping on distant jumps).
     self.__mip_start_max_log_hr_delta = 1.0
+    self.__feasibility_cut_constraints: list = []
+    self.last_oracle_work: float | None = None
 
   def _clear_hazard_ratio_mip_starts(self, a, beta_var=None) -> None:
     """Drop cached starts and reset Gurobi Start attributes."""
@@ -210,6 +223,7 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
       beta,
       use_cox_penalty_indicator,
     ) = self.gurobi_model
+    self._clear_feasibility_cuts(model)
 
     # Set the hazard ratio constraint
     log_hazard_ratio = np.log(hazard_ratio)
@@ -496,3 +510,334 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
         RuntimeWarning,
         stacklevel=3
       )
+
+  def _clear_feasibility_cuts(self, model) -> None:
+    """Remove temporary CL-feasibility cuts from a prior excess_at_most call."""
+    for constr in self.__feasibility_cut_constraints:
+      try:
+        model.remove(constr)
+      except gp.GurobiError:
+        pass
+    self.__feasibility_cut_constraints = []
+    model.update()
+
+  def _clear_fixed_hazard_ratio_constraint(self, model) -> None:
+    """Drop a leftover locked-H constraint so H can float again."""
+    existing = model.getConstrByName("fixed_hazard_ratio_constraint")
+    if existing is not None:
+      model.remove(existing)
+      model.update()
+
+  def _lock_hazard_ratio_for_solve(
+    self,
+    hazard_ratio: float,
+    *,
+    cox_only: bool,
+  ):
+    """Lock H, disable the H=1 indicator, and apply cox_only assignment bounds."""
+    (
+      model,
+      null_hypothesis_indicator,
+      a,
+      beta,
+      use_cox_penalty_indicator,
+    ) = self.gurobi_model
+    self._clear_feasibility_cuts(model)
+    log_hazard_ratio = np.log(hazard_ratio)
+    beta_var = model.getVarByName("log_hazard_ratio")
+    if beta_var is None:
+      raise ValueError("Could not find log_hazard_ratio variable in model")
+    hazard_ratio_constraint_name = "fixed_hazard_ratio_constraint"
+    existing_constr = model.getConstrByName(hazard_ratio_constraint_name)
+    if existing_constr is not None:
+      model.remove(existing_constr)
+    model.addConstr(
+      beta_var == log_hazard_ratio,
+      name=hazard_ratio_constraint_name,
+    )
+    self.update_model_for_null_hypothesis_or_not(
+      model, null_hypothesis_indicator, False,
+    )
+    self.update_model_with_cox_only_constraints(model, a, cox_only)
+    self.update_model_with_patient_wise_only_constraint(
+      model,
+      beta=beta,
+      null_hypothesis_indicator=null_hypothesis_indicator,
+      patient_wise_only=False,
+      use_cox_penalty_indicator=use_cox_penalty_indicator,
+    )
+    return model, a, beta_var, log_hazard_ratio
+
+  def _install_toy_outcomes(
+    self,
+    times: list[float],
+    censored: list[bool],
+    *,
+    first: bool,
+  ) -> None:
+    """Swap (time, censored) on this calculator, refreshing incidence if needed."""
+    if first:
+      self.set_patient_outcomes(times, censored, keep_model=False)
+      return
+    self.set_patient_outcomes(times, censored, keep_model=True)
+    model, _null, a, _beta, _use_cox = self.gurobi_model
+    r_vars, d_vars = self._get_risk_set_vars()
+    assert r_vars is not None and d_vars is not None
+    self._refresh_death_incidence_constraints(model, a, r_vars, d_vars)
+
+  def excess_at_most(  # pylint: disable=too-many-arguments, too-many-locals, too-many-branches
+    self,
+    hazard_ratio: float,
+    *,
+    twoNLL_min: float,
+    level: float,
+    cox_only: bool = False,
+    verbose: bool = False,
+    print_progress: bool = False,
+    TimeLimit: float | None = None,
+    Threads: int | None = None,
+    LogFile: Optional[os.PathLike] = None,
+  ) -> typing.Literal["inside", "outside", "unknown"]:
+    """
+    Ask whether profile excess 2NLL(H) - twoNLL_min can be <= ``level``.
+
+    Adds an objective cut ``2NLL <= twoNLL_min + level`` at locked H and
+    runs a feasibility-focused solve (first incumbent is enough).
+    """
+    if hazard_ratio <= 0:
+      raise ValueError(f"hazard_ratio must be > 0, got {hazard_ratio}")
+    if level < 0:
+      raise ValueError(f"level must be >= 0, got {level}")
+    if not np.isfinite(twoNLL_min):
+      raise ValueError(f"twoNLL_min must be finite, got {twoNLL_min}")
+    threshold = float(twoNLL_min + level)
+    if print_progress or verbose:
+      print(
+        f"[{datetime.datetime.now()}] Feasibility excess_at_most "
+        f"H={hazard_ratio} level={level} T={threshold}",
+        flush=True,
+      )
+    model, a, beta_var, log_hazard_ratio = self._lock_hazard_ratio_for_solve(
+      hazard_ratio, cox_only=cox_only,
+    )
+    self._apply_hazard_ratio_mip_starts(a, beta_var, log_hazard_ratio, cox_only)
+    self.__feasibility_cut_constraints.append(
+      model.addConstr(model.getObjective() <= threshold, name="feas_total_2nll_cut")
+    )
+    model.setParam("OutputFlag", 1 if verbose else 0)
+    model.setParam("DisplayInterval", 1)
+    model.setParam("NonConvex", 2)
+    model.setParam("Seed", 123456)
+    model.setParam("MIPFocus", 1)
+    model.setParam("FuncPieces", 1000)
+    model.setParam("FuncPieceRatio", 0.5)
+    model.setParam("SolutionLimit", 1)
+    if TimeLimit is not None:
+      model.setParam("TimeLimit", TimeLimit)
+    if Threads is not None:
+      model.setParam("Threads", Threads)
+    if LogFile is not None:
+      model.setParam("LogFile", os.fspath(LogFile))
+    try:
+      model.optimize()
+      status = model.status
+      sol_count = int(model.SolCount)
+      if sol_count > 0:
+        self._store_hazard_ratio_mip_starts(a, cox_only, log_hazard_ratio)
+        result: typing.Literal["inside", "outside", "unknown"] = "inside"
+      elif status == GRB.INFEASIBLE:
+        result = "outside"
+      else:
+        result = "unknown"
+      try:
+        self.last_oracle_work = float(model.Work)
+      except (AttributeError, gp.GurobiError):
+        self.last_oracle_work = None
+      if print_progress or verbose:
+        print(
+          f"[{datetime.datetime.now()}] excess_at_most -> {result} "
+          f"(status={status}, SolCount={sol_count})",
+          flush=True,
+        )
+    finally:
+      model.setParam("SolutionLimit", 2000000000)
+      model.setParam("MIPFocus", 0)
+      self._clear_feasibility_cuts(model)
+    return result
+
+  def hypothesized_hr_toy_test(  # pylint: disable=too-many-arguments, too-many-locals
+    self,
+    hazard_ratio: float,
+    *,
+    n_max: int = 19,
+    rng: int | np.random.Generator | None = None,
+    cox_only: bool = False,
+    confidence_levels: tuple[float, ...] = DEFAULT_CLS,
+    Threads: int | None = 1,
+    verbose: bool = False,
+    print_progress: bool = False,
+  ) -> ToyTestResult:
+    """
+    Neyman test of H = ``hazard_ratio`` using weighted Cox outcome toys.
+
+    Each toy is classified as more extreme than the data if
+    ``excess_at_most`` returns ``outside`` (Δ2NLL* > Δ2NLL_obs).
+    """
+    generator = as_generator(rng)
+    result_locked = self.compute_2nll_at_hazard_ratio(
+      hazard_ratio, cox_only=cox_only, Threads=Threads,
+      verbose=verbose, print_progress=print_progress,
+    )
+    self._clear_fixed_hazard_ratio_constraint(self.gurobi_model[0])
+    _, result_alt = self._fit_null_and_alternative(
+      cox_only=cox_only,
+      patient_wise_only=False,
+      verbose=verbose,
+      print_progress=print_progress,
+      solve_null=False,
+      MIPGap=1e-6,
+      MIPGapAbs=1e-8,
+      TimeLimit=None,
+      Threads=Threads,
+      MIPFocus=None,
+      LogFile=None,
+    )
+    t_obs = float(result_locked.x - result_alt.x)
+    if t_obs < 0:
+      t_obs = 0.0
+    times0 = [patient.time for patient in self.all_patients]
+    censored0 = [bool(patient.censored) for patient in self.all_patients]
+    group_high = hard_group_high(
+      self.observed_parameters,
+      self.parameter_threshold,
+      self.parameter_max,
+    )
+    counter = SequentialToyCounter(n_max=n_max, confidence_levels=confidence_levels)
+    toy_calc = self._copy_for_outcome_shuffle()
+    fit_kwargs = {
+      "cox_only": cox_only,
+      "patient_wise_only": False,
+      "verbose": verbose,
+      "print_progress": print_progress,
+      "solve_null": False,
+      "MIPGap": 1e-6,
+      "MIPGapAbs": 1e-8,
+      "TimeLimit": None,
+      "Threads": Threads,
+      "MIPFocus": None,
+      "LogFile": None,
+    }
+    try:
+      for i_toy in range(n_max):
+        toy_times, toy_censored = weighted_cox_permutation(
+          times0, censored0, group_high, hazard_ratio, rng=generator,
+        )
+        toy_calc._install_toy_outcomes(  # pylint: disable=protected-access
+          toy_times, toy_censored, first=i_toy == 0,
+        )
+        toy_calc._clear_fixed_hazard_ratio_constraint(  # pylint: disable=protected-access
+          toy_calc.gurobi_model[0],
+        )
+        _, toy_alt = toy_calc._fit_null_and_alternative(  # pylint: disable=protected-access
+          **fit_kwargs,
+        )
+        status = toy_calc.excess_at_most(
+          hazard_ratio,
+          twoNLL_min=float(toy_alt.x),
+          level=t_obs,
+          cox_only=cox_only,
+          verbose=verbose,
+          print_progress=print_progress,
+          Threads=Threads,
+        )
+        if status == "unknown":
+          locked = toy_calc.compute_2nll_at_hazard_ratio(
+            hazard_ratio, cox_only=cox_only, Threads=Threads,
+            verbose=verbose, print_progress=print_progress,
+          )
+          extreme = float(locked.x - toy_alt.x) > t_obs
+        else:
+          extreme = status == "outside"
+        counter.observe(extreme)
+        if counter.all_decided():
+          break
+    finally:
+      toy_calc._dispose_gurobi_model()  # pylint: disable=protected-access
+    return counter.as_result(t_obs)
+
+  def toy_calibrated_hazard_ratio_interval(  # pylint: disable=too-many-arguments, too-many-locals
+    self,
+    *,
+    n_max: int = 19,
+    rng: int | np.random.Generator | None = None,
+    cox_only: bool = False,
+    confidence_levels: tuple[float, ...] = DEFAULT_CLS,
+    hazard_ratio_min: float = 0.1,
+    hazard_ratio_max: float = 10.0,
+    xtol: float = 0.05,
+    Threads: int | None = 1,
+    verbose: bool = False,
+    print_progress: bool = False,
+  ) -> dict[float, tuple[float, float, float]]:
+    """
+    Toy-calibrated HR interval via endpoint search from the χ² edges.
+
+    Returns a dict mapping each CL to (best_fit, lower, upper).
+    """
+    generator = as_generator(rng)
+    best_fit, chi2_lower, chi2_upper, _best = self.hazard_ratio_confidence_interval(
+      cox_only=cox_only,
+      confidence_level=max(confidence_levels),
+      hazard_ratio_min=hazard_ratio_min,
+      hazard_ratio_max=hazard_ratio_max,
+    )
+    cache: dict[float, ToyTestResult] = {}
+
+    def test_at(hr: float) -> ToyTestResult:
+      key = round(float(hr), 10)
+      if key not in cache:
+        cache[key] = self.hypothesized_hr_toy_test(
+          hr,
+          n_max=n_max,
+          rng=int(generator.integers(0, 2**31 - 1)),
+          cox_only=cox_only,
+          confidence_levels=confidence_levels,
+          Threads=Threads,
+          verbose=verbose,
+          print_progress=print_progress,
+        )
+      return cache[key]
+
+    intervals: dict[float, tuple[float, float, float]] = {}
+    for cl in confidence_levels:
+      def inside(hr: float, _cl=cl) -> bool:
+        return test_at(hr).decisions[_cl] == "accept"
+
+      if not inside(best_fit):
+        intervals[cl] = (float(best_fit), float(best_fit), float(best_fit))
+        continue
+
+      lower_probe = min(chi2_lower, best_fit)
+      if lower_probe <= 0:
+        lower_probe = max(hazard_ratio_min, best_fit * 0.5)
+      lower = bisection_endpoint(
+        inside, best_fit, lower_probe,
+        xtol=xtol, log_scale=True,
+      )
+      if inside(lower) and lower > hazard_ratio_min:
+        lower = bisection_endpoint(
+          inside, best_fit, hazard_ratio_min,
+          xtol=xtol, log_scale=True,
+        )
+      upper_probe = max(chi2_upper, best_fit)
+      upper = bisection_endpoint(
+        inside, best_fit, upper_probe,
+        xtol=xtol, log_scale=True,
+      )
+      if inside(upper) and upper < hazard_ratio_max:
+        upper = bisection_endpoint(
+          inside, best_fit, hazard_ratio_max,
+          xtol=xtol, log_scale=True,
+        )
+      intervals[cl] = (float(best_fit), float(lower), float(upper))
+    return intervals

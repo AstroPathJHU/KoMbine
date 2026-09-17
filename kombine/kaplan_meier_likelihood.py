@@ -31,6 +31,14 @@ from .kaplan_meier import (
   KaplanMeierInstance,
 )
 from .kaplan_meier_MINLP import GurobiWorkStats, MINLPForKM, KaplanMeierPatientNLL
+from .toy_calibration import (
+  DEFAULT_CLS,
+  SequentialToyCounter,
+  ToyTestResult,
+  as_generator,
+  binomial_km_outcomes,
+  bisection_endpoint,
+)
 from .utilities import InspectableCache, LOG_ZERO_EPSILON_DEFAULT
 
 @dataclasses.dataclass
@@ -799,6 +807,208 @@ class KaplanMeierLikelihood(KaplanMeierBase):  # pylint: disable=too-many-instan
           survival_probabilities_time_point.append((lower_bound, upper_bound))
       self._last_gurobi_work_stats = minlp.work_stats
     return np.array(best_probabilities), np.array(survival_probabilities)
+
+  def hypothesized_s_toy_test(  # pylint: disable=too-many-arguments, too-many-locals
+    self,
+    time_point: float,
+    expected_probability: float,
+    *,
+    n_max: int = 19,
+    rng: int | np.random.Generator | None = None,
+    confidence_levels: tuple[float, ...] = DEFAULT_CLS,
+    binomial_only: bool = False,
+    Threads: int | None = 1,
+    verbose: bool = False,
+    print_progress: bool = False,
+  ) -> ToyTestResult:
+    """
+    Neyman test of S(t) = ``expected_probability`` using binomial grid toys.
+
+    Toys are drawn from the constrained MLE at this S(t) (assignments and
+    interval p_i^s). Each toy is more extreme if ``excess_at_most`` is
+    ``outside``.
+    """
+    generator = as_generator(rng)
+    minlp = self.minlp_for_km(
+      time_point=time_point,
+      binomial_only=binomial_only,
+      patient_wise_only=False,
+    )
+    unconstrained = minlp.run_MINLP(
+      None,
+      binomial_only=binomial_only,
+      patient_wise_only=False,
+      verbose=verbose,
+      print_progress=print_progress,
+      Threads=Threads,
+    )
+    locked = minlp.run_MINLP(
+      expected_probability,
+      binomial_only=binomial_only,
+      patient_wise_only=False,
+      verbose=verbose,
+      print_progress=print_progress,
+      Threads=Threads,
+    )
+    t_obs = float(locked.x - unconstrained.x)
+    if t_obs < 0:
+      t_obs = 0.0
+    selected_mask = np.zeros(len(self.all_patients), dtype=bool)
+    for index in locked.selected:
+      selected_mask[int(index)] = True
+    times0 = [patient.time for patient in self.all_patients]
+    censored0 = [bool(patient.censored) for patient in self.all_patients]
+    death_times = np.asarray(minlp.times_to_consider, dtype=float)
+    p_survived = np.asarray(locked.p_survived, dtype=float)
+    counter = SequentialToyCounter(n_max=n_max, confidence_levels=confidence_levels)
+    for _i_toy in range(n_max):
+      toy_times, toy_censored = binomial_km_outcomes(
+        times0,
+        censored0,
+        selected_mask,
+        death_times,
+        p_survived,
+        rng=generator,
+      )
+      toy_patients = [
+        KaplanMeierPatientNLL(
+          time=float(toy_times[i]),
+          censored=bool(toy_censored[i]),
+          parameter_nll=patient.parameter,
+          observed_parameter=patient.observed_parameter,
+        )
+        for i, patient in enumerate(self.all_patients)
+      ]
+      toy_minlp = MINLPForKM(
+        toy_patients,
+        parameter_min=self.parameter_min,
+        parameter_max=self.parameter_max,
+        time_point=time_point,
+        endpoint_epsilon=self.__endpoint_epsilon,
+        log_zero_epsilon=self.__log_zero_epsilon,
+        collapse_consecutive_deaths=self.__collapse_consecutive_deaths,
+        binomial_only=binomial_only,
+        patient_wise_only=False,
+      )
+      toy_free = toy_minlp.run_MINLP(
+        None,
+        binomial_only=binomial_only,
+        patient_wise_only=False,
+        verbose=verbose,
+        print_progress=print_progress,
+        Threads=Threads,
+      )
+      status = toy_minlp.excess_at_most(
+        expected_probability,
+        twoNLL_min=float(toy_free.x),
+        level=t_obs,
+        verbose=verbose,
+        print_progress=print_progress,
+        Threads=Threads,
+      )
+      if status == "unknown":
+        toy_locked = toy_minlp.run_MINLP(
+          expected_probability,
+          binomial_only=binomial_only,
+          patient_wise_only=False,
+          verbose=verbose,
+          print_progress=print_progress,
+          Threads=Threads,
+        )
+        extreme = float(toy_locked.x - toy_free.x) > t_obs
+      else:
+        extreme = status == "outside"
+      counter.observe(extreme)
+      if counter.all_decided():
+        break
+    return counter.as_result(t_obs)
+
+  def toy_calibrated_survival_bands(  # pylint: disable=too-many-arguments, too-many-locals, cell-var-from-loop
+    self,
+    CLs: list[float],
+    times_for_plot: typing.Sequence[float],
+    *,
+    n_max: int = 19,
+    rng: int | np.random.Generator | None = None,
+    binomial_only: bool = False,
+    Threads: int | None = 1,
+    xtol: float = 0.02,
+    verbose: bool = False,
+    print_progress: bool = False,
+  ) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Toy-calibrated KM bands. Returns (best_probabilities, bands) like
+    ``survival_probabilities_likelihood``, with endpoint search from χ² edges.
+    """
+    cls_tuple = tuple(float(cl) for cl in CLs)
+    generator = as_generator(rng)
+    best_probabilities, chi2_bands = self.survival_probabilities_likelihood(
+      CLs=list(cls_tuple),
+      times_for_plot=times_for_plot,
+      binomial_only=binomial_only,
+      crossing_mode="feasibility",
+      print_progress=print_progress,
+    )
+    toy_bands = []
+    for i_time, time_point in enumerate(times_for_plot):
+      best = float(best_probabilities[i_time])
+      best_clip = float(np.clip(best, self.__endpoint_epsilon, 1.0 - self.__endpoint_epsilon))
+      cache: dict[float, ToyTestResult] = {}
+
+      def test_at(  # pylint: disable=dangerous-default-value
+        prob: float, _t=time_point, _cache=cache,
+      ) -> ToyTestResult:
+        key = round(float(prob), 10)
+        if key not in _cache:
+          _cache[key] = self.hypothesized_s_toy_test(
+            _t,
+            float(np.clip(prob, self.__endpoint_epsilon, 1.0 - self.__endpoint_epsilon)),
+            n_max=n_max,
+            rng=int(generator.integers(0, 2**31 - 1)),
+            confidence_levels=cls_tuple,
+            binomial_only=binomial_only,
+            Threads=Threads,
+            verbose=verbose,
+            print_progress=print_progress,
+          )
+        return _cache[key]
+
+      row = []
+      for i_cl, cl in enumerate(cls_tuple):
+        chi2_lo, chi2_hi = chi2_bands[i_time][i_cl]
+
+        def inside(prob: float, _cl=cl) -> bool:
+          return test_at(prob).decisions[_cl] == "accept"
+
+        if not inside(best_clip):
+          row.append((float(best_clip), float(best_clip)))
+          continue
+
+        lower = bisection_endpoint(
+          inside, best_clip, max(float(chi2_lo), self.__endpoint_epsilon),
+          xtol=xtol, log_scale=False,
+        )
+        if inside(lower) and lower > self.__endpoint_epsilon:
+          lower = bisection_endpoint(
+            inside, best_clip, self.__endpoint_epsilon,
+            xtol=xtol, log_scale=False,
+          )
+        upper = bisection_endpoint(
+          inside, best_clip, min(float(chi2_hi), 1.0 - self.__endpoint_epsilon),
+          xtol=xtol, log_scale=False,
+        )
+        if inside(upper) and upper < 1.0 - self.__endpoint_epsilon:
+          upper = bisection_endpoint(
+            inside, best_clip, 1.0 - self.__endpoint_epsilon,
+            xtol=xtol, log_scale=False,
+          )
+        if chi2_lo <= 0:
+          lower = 0.0
+        if chi2_hi >= 1:
+          upper = 1.0
+        row.append((float(lower), float(upper)))
+      toy_bands.append(row)
+    return np.array(best_probabilities), np.array(toy_bands)
 
   def plot(self, config: KaplanMeierPlotConfig | None = None, **kwargs) -> dict:
     """

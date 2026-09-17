@@ -15,6 +15,12 @@ from .comparisons import (
   YiCorrectionForLogrank,
 )
 from .datacard import Datacard
+from .toy_calibration import (
+  SequentialToyCounter,
+  ToyTestResult,
+  binomial_km_outcomes,
+  weighted_cox_permutation,
+)
 
 __all__ = [
   "KaplanMeierPatient",
@@ -29,4 +35,8 @@ __all__ = [
   "McSimexForCoxPH",
   "McSimexForKaplanMeier",
   "Datacard",
+  "SequentialToyCounter",
+  "ToyTestResult",
+  "binomial_km_outcomes",
+  "weighted_cox_permutation",
 ]
