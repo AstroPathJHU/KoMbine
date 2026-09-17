@@ -8,6 +8,7 @@ of the hazard ratio H, enabling profile likelihood analyses and confidence inter
 import warnings
 import os
 import datetime
+import time
 import typing
 from typing import Optional
 
@@ -25,7 +26,10 @@ from .toy_calibration import (
   ToyTestResult,
   as_generator,
   bisection_endpoint,
+  first_interior,
   hard_group_high,
+  logspaced_hr_probes,
+  unique_positive_hrs,
   weighted_cox_permutation,
 )
 from .utilities import LOG_ZERO_EPSILON_DEFAULT, brentq_hazard_ratio_ci
@@ -772,17 +776,23 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
     rng: int | np.random.Generator | None = None,
     cox_only: bool = False,
     confidence_levels: tuple[float, ...] = DEFAULT_CLS,
-    hazard_ratio_min: float = 0.1,
-    hazard_ratio_max: float = 10.0,
+    hazard_ratio_min: float = 0.01,
+    hazard_ratio_max: float = 100.0,
     xtol: float = 0.05,
     Threads: int | None = 1,
     verbose: bool = False,
     print_progress: bool = False,
   ) -> dict[float, tuple[float, float, float]]:
     """
-    Toy-calibrated HR interval via endpoint search from the χ² edges.
+    Toy-calibrated HR interval via endpoint search from an interior point.
 
-    Returns a dict mapping each CL to (best_fit, lower, upper).
+    If the MLE is not toy-accepted, probe H=1 then a log-spaced grid until
+    some H is inside. Bisect outward from that interior point to the χ²
+    edges, then to ``hazard_ratio_min`` / ``hazard_ratio_max`` if the χ²
+    edge is still inside.
+
+    Returns a dict mapping each CL to (best_fit, lower, upper). ``best_fit``
+    is the unconstrained MLE even when it lies outside the toy region.
     """
     generator = as_generator(rng)
     best_fit, chi2_lower, chi2_upper, _best = self.hazard_ratio_confidence_interval(
@@ -796,6 +806,7 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
     def test_at(hr: float) -> ToyTestResult:
       key = round(float(hr), 10)
       if key not in cache:
+        started = time.perf_counter()
         cache[key] = self.hypothesized_hr_toy_test(
           hr,
           n_max=n_max,
@@ -804,39 +815,54 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
           confidence_levels=confidence_levels,
           Threads=Threads,
           verbose=verbose,
-          print_progress=print_progress,
+          print_progress=False,
         )
+        elapsed = time.perf_counter() - started
+        result = cache[key]
+        if print_progress:
+          print(
+            f"[{datetime.datetime.now()}] toy HR={hr:g}: "
+            f"n_ext={result.n_extreme}/{result.n_run} "
+            f"p={result.p_value:.3g} decisions={result.decisions} "
+            f"wall={elapsed:.1f}s",
+            flush=True,
+          )
       return cache[key]
 
+    probes = unique_positive_hrs(
+      [best_fit, 1.0],
+      logspaced_hr_probes(hazard_ratio_min, hazard_ratio_max),
+    )
     intervals: dict[float, tuple[float, float, float]] = {}
     for cl in confidence_levels:
       def inside(hr: float, _cl=cl) -> bool:
         return test_at(hr).decisions[_cl] == "accept"
 
-      if not inside(best_fit):
+      interior = first_interior(inside, probes)
+      if interior is None:
         intervals[cl] = (float(best_fit), float(best_fit), float(best_fit))
         continue
 
-      lower_probe = min(chi2_lower, best_fit)
+      lower_probe = min(float(chi2_lower), interior)
       if lower_probe <= 0:
-        lower_probe = max(hazard_ratio_min, best_fit * 0.5)
+        lower_probe = max(hazard_ratio_min, interior * 0.5)
       lower = bisection_endpoint(
-        inside, best_fit, lower_probe,
+        inside, interior, lower_probe,
         xtol=xtol, log_scale=True,
       )
       if inside(lower) and lower > hazard_ratio_min:
         lower = bisection_endpoint(
-          inside, best_fit, hazard_ratio_min,
+          inside, interior, hazard_ratio_min,
           xtol=xtol, log_scale=True,
         )
-      upper_probe = max(chi2_upper, best_fit)
+      upper_probe = max(float(chi2_upper), interior)
       upper = bisection_endpoint(
-        inside, best_fit, upper_probe,
+        inside, interior, upper_probe,
         xtol=xtol, log_scale=True,
       )
       if inside(upper) and upper < hazard_ratio_max:
         upper = bisection_endpoint(
-          inside, best_fit, hazard_ratio_max,
+          inside, interior, hazard_ratio_max,
           xtol=xtol, log_scale=True,
         )
       intervals[cl] = (float(best_fit), float(lower), float(upper))

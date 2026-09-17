@@ -276,6 +276,45 @@ def binomial_km_outcomes(  # pylint: disable=too-many-arguments, too-many-locals
   return new_times, new_censored
 
 
+def unique_positive_hrs(*groups: typing.Iterable[float]) -> list[float]:
+  """Deduplicate positive finite H values, preserving first-seen order."""
+  seen: set[float] = set()
+  ordered: list[float] = []
+  for group in groups:
+    for value in group:
+      hazard_ratio = float(value)
+      if not math.isfinite(hazard_ratio) or hazard_ratio <= 0:
+        continue
+      key = round(hazard_ratio, 10)
+      if key in seen:
+        continue
+      seen.add(key)
+      ordered.append(hazard_ratio)
+  return ordered
+
+
+def logspaced_hr_probes(x_min: float, x_max: float, n_grid: int = 9) -> list[float]:
+  """Log-spaced H probes on ``[x_min, x_max]``."""
+  if x_min <= 0 or x_max <= 0 or x_max < x_min:
+    raise ValueError(
+      f"Need 0 < x_min <= x_max, got x_min={x_min}, x_max={x_max}"
+    )
+  if n_grid < 2:
+    raise ValueError(f"n_grid must be >= 2, got {n_grid}")
+  return np.geomspace(x_min, x_max, num=n_grid).tolist()
+
+
+def first_interior(
+  is_inside: typing.Callable[[float], bool],
+  candidates: typing.Sequence[float],
+) -> float | None:
+  """Return the first candidate that ``is_inside`` accepts, else None."""
+  for value in candidates:
+    if is_inside(float(value)):
+      return float(value)
+  return None
+
+
 def bisection_endpoint(  # pylint: disable=too-many-arguments
   is_inside: typing.Callable[[float], bool],
   x_inner: float,

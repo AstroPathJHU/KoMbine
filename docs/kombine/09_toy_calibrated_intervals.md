@@ -22,12 +22,14 @@ jupyter:
 
 Permutation p-values in KoMbine shuffle `(time, censored)` under **no association** ($H=1$). Likelihood scans still cut $\Delta 2\mathrm{NLL}$ at $\chi^2_1$ (1 and 3.84). Those cuts ignore assignment search, so at large measurement error a $\chi^2$ 95% HR interval can exclude $H=1$ while the permutation test does not reject it.
 
-This notebook inverts the same profile LRT with **toys** on the n=20 discrete-class cards from the methods-comparison notebook ($e=0.20$ vs $e=0.40$):
+This notebook inverts the same profile LRT with **toys** on the n=20 discrete-class cards from the methods-comparison notebook ($e=0.20$, $0.25$, $0.40$):
 
 1. Pretend a candidate $\theta$ (an $H$, or $S(t)$) is true.
 2. Simulate cohorts with biomarkers held fixed (weighted Cox permutation of the observed times for HR; binomial redraws on the observed death-time grid for KM).
 3. Ask only whether each toy's $\Delta 2\mathrm{NLL}$ is larger than the observed value (`excess_at_most`), and stop when remaining toys cannot change the 68%/95% decision.
-4. Search only interval **endpoints**, starting from the $\chi^2$ edges. Interior points are not toy-tested.
+4. Search only interval **endpoints**, starting from a known-inside $H$ (the MLE if toys accept it, otherwise $H=1$, then a log-spaced grid). Interior points are not toy-tested.
+
+The HR figure matches notebook 07's discrete row: KoMbine $\chi^2$ $\Delta 2\mathrm{NLL}$ vs $H$ (0.01–100, 25 scan points) with toy 68%/95% intervals overlaid as shaded ranges. Yi / MC-SIMEX are omitted here; toys calibrate KoMbine, not those approximations.
 
 CI sets `KOMBINE_SKIP_TOY_CALIBRATION=1` and skips the MINLP cells (same pattern as notebook 07 skipping n=50).
 
@@ -52,6 +54,7 @@ At large $e$ the plug-in labeling / constrained MLE can be a poor stand-in for t
 ```python
 import os
 import sys
+import time
 import pathlib
 import numpy as np
 import matplotlib.pyplot as plt
@@ -65,25 +68,40 @@ from kombine.datacard import Datacard
 SKIP = bool(os.environ.get("KOMBINE_SKIP_TOY_CALIBRATION"))
 N_MAX = 19
 RNG = 0
-THREADS = 1
+# Local runs use Gurobi's default thread count. CI goldens keep Threads=1.
+THREADS = None
+N_HR_SCAN = 25
+HAZARD_RATIO_MIN = 0.01
+HAZARD_RATIO_MAX = 100.0
+HAZARD_RATIOS_SCAN = np.logspace(-2, 2, N_HR_SCAN)
 DATACARDS = _repo_root / "test" / "kombine" / "datacards" / "simple_examples"
 CARDS = {
-    "e=0.20": DATACARDS / "discrete_classes_hr_example_moderate.txt",
-    "e=0.40": DATACARDS / "discrete_classes_hr_example_very_large.txt",
+    "e=0.20": {
+        "file": DATACARDS / "discrete_classes_hr_example_moderate.txt",
+        "label": "Disc. Classes (e=0.20)",
+    },
+    "e=0.25": {
+        "file": DATACARDS / "discrete_classes_hr_example_large.txt",
+        "label": "Disc. Classes (e=0.25)",
+    },
+    "e=0.40": {
+        "file": DATACARDS / "discrete_classes_hr_example_very_large.txt",
+        "label": "Disc. Classes (e=0.40)",
+    },
 }
-hr_rows = []
-km_info = None
+hr_results = {}
 
 print("skip toy calibration MINLPs:", SKIP)
-print("n=20 discrete-class prototype; N_MAX=", N_MAX)
+print("n=20 discrete-class HR mosaic; N_MAX=", N_MAX, "Threads=", THREADS)
 ```
 
 ```python
 if SKIP:
-    print("Skipping n=20 toy calibration (KOMBINE_SKIP_TOY_CALIBRATION=1).")
+    print("Skipping n=20 toy HR mosaic (KOMBINE_SKIP_TOY_CALIBRATION=1).")
 else:
-    for label, path in CARDS.items():
-        dc = Datacard.parse_datacard(path)
+    for key, info in CARDS.items():
+        started = time.perf_counter()
+        dc = Datacard.parse_datacard(info["file"])
         hr_calc = dc.km_hazard_ratio(
             parameter_threshold=1.0,
             parameter_min=-np.inf,
@@ -91,135 +109,84 @@ else:
         )
         chi2 = hr_calc.hazard_ratio_confidence_interval(
             cox_only=False, confidence_level=0.95,
-            hazard_ratio_min=0.05, hazard_ratio_max=20.0,
+            hazard_ratio_min=HAZARD_RATIO_MIN,
+            hazard_ratio_max=HAZARD_RATIO_MAX,
         )
-        toy_h1 = hr_calc.hypothesized_hr_toy_test(
-            1.0, n_max=N_MAX, rng=RNG, Threads=THREADS,
+        scan_2nll = []
+        for hr in HAZARD_RATIOS_SCAN:
+            locked = hr_calc.compute_2nll_at_hazard_ratio(
+                float(hr), cox_only=False, Threads=THREADS,
+            )
+            scan_2nll.append(float(locked.x))
+        toy_intervals = hr_calc.toy_calibrated_hazard_ratio_interval(
+            n_max=N_MAX,
+            rng=RNG,
+            confidence_levels=(0.68, 0.95),
+            hazard_ratio_min=HAZARD_RATIO_MIN,
+            hazard_ratio_max=HAZARD_RATIO_MAX,
+            Threads=THREADS,
+            print_progress=True,
         )
-        toy_lo = hr_calc.hypothesized_hr_toy_test(
-            float(chi2[1]), n_max=N_MAX, rng=RNG + 1, Threads=THREADS,
-        )
-        toy_hi = hr_calc.hypothesized_hr_toy_test(
-            float(chi2[2]), n_max=N_MAX, rng=RNG + 2, Threads=THREADS,
-        )
-        row = {
-            "label": label,
+        elapsed = time.perf_counter() - started
+        hr_results[key] = {
+            "label": info["label"],
             "chi2_best": float(chi2[0]),
             "chi2_lo": float(chi2[1]),
             "chi2_hi": float(chi2[2]),
-            "p_h1": float(toy_h1.p_value),
-            "dec_h1": dict(toy_h1.decisions),
-            "t_obs_h1": float(toy_h1.t_obs),
-            "n_ext_h1": (toy_h1.n_extreme, toy_h1.n_run),
-            "dec_lo": dict(toy_lo.decisions),
-            "dec_hi": dict(toy_hi.decisions),
+            "scan_2nll": scan_2nll,
+            "toy": toy_intervals,
+            "wall": elapsed,
         }
-        hr_rows.append(row)
-        print(f"\n{label}: chi2 95% HR = {chi2[0]:.3g} [{chi2[1]:.3g}, {chi2[2]:.3g}]")
-        print(f"  toy test H=1: p={toy_h1.p_value:.3g} "
-              f"n_ext={toy_h1.n_extreme}/{toy_h1.n_run} "
-              f"decisions={toy_h1.decisions} d2NLL_obs={toy_h1.t_obs:.3g}")
-        print(f"  toy at chi2 lower {chi2[1]:.3g}: {toy_lo.decisions}")
-        print(f"  toy at chi2 upper {chi2[2]:.3g}: {toy_hi.decisions}")
+        toy_68 = toy_intervals[0.68]
+        toy_95 = toy_intervals[0.95]
+        print(f"\n{info['label']}: chi2 95% HR = {chi2[0]:.3g} [{chi2[1]:.3g}, {chi2[2]:.3g}]")
+        print(f"  toy 68% [{toy_68[1]:.3g}, {toy_68[2]:.3g}]  (MLE {toy_68[0]:.3g})")
+        print(f"  toy 95% [{toy_95[1]:.3g}, {toy_95[2]:.3g}]  (MLE {toy_95[0]:.3g})")
+        print(f"  wall {elapsed:.1f}s")
 ```
 
 ```python
 if SKIP:
-    print("Skipping KM toy band probe at e=0.40.")
-    km_info = None
+    print("Skipping KM toy band probe (HR-only pass).")
 else:
-    dc = Datacard.parse_datacard(CARDS["e=0.40"])
-    km = dc.km_likelihood(parameter_min=-np.inf, parameter_max=1.0)
-    times = sorted(p.time for p in km.all_patients if not p.censored)
-    t0 = times[min(2, len(times) - 1)]
-    best, chi2_bands = km.survival_probabilities_likelihood(
-        CLs=[0.68, 0.95], times_for_plot=[t0], crossing_mode="feasibility",
-    )
-    s_mle = float(np.clip(best[0], 1e-3, 1 - 1e-3))
-    chi2_95 = chi2_bands[0][1]
-    toy_mle = km.hypothesized_s_toy_test(
-        t0, s_mle, n_max=N_MAX, rng=RNG, Threads=THREADS,
-    )
-    s_lo = float(np.clip(chi2_95[0], 1e-3, 1 - 1e-3))
-    s_hi = float(np.clip(chi2_95[1], 1e-3, 1 - 1e-3))
-    toy_lo = km.hypothesized_s_toy_test(
-        t0, s_lo, n_max=N_MAX, rng=RNG + 1, Threads=THREADS,
-    )
-    toy_hi = km.hypothesized_s_toy_test(
-        t0, s_hi, n_max=N_MAX, rng=RNG + 2, Threads=THREADS,
-    )
-    km_info = {
-        "t0": t0,
-        "best": float(best[0]),
-        "chi2_bands": chi2_bands[0],
-        "toy_mle": toy_mle,
-        "toy_lo": toy_lo,
-        "toy_hi": toy_hi,
-        "s_lo": s_lo,
-        "s_hi": s_hi,
-    }
-    print(f"KM low group e=0.40 at t={t0:g}: best S={best[0]:.3g}")
-    print(f"  chi2 68/95 bands={chi2_bands[0]}")
-    print(f"  toy at MLE S: p={toy_mle.p_value:.3g} "
-          f"n_ext={toy_mle.n_extreme}/{toy_mle.n_run} "
-          f"decisions={toy_mle.decisions}")
-    print(f"  toy at chi2 95 lower {s_lo:.3g}: {toy_lo.decisions}")
-    print(f"  toy at chi2 95 upper {s_hi:.3g}: {toy_hi.decisions}")
+    print("KM toy bands are out of scope for this pass; skipping.")
 ```
 
 ```python
-fig, axes = plt.subplots(1, 2, figsize=(9.5, 4.0))
-ax_hr, ax_km = axes
+fig, axes = plt.subplots(1, 3, figsize=(14, 4.2), sharey=True)
+for ax, key in zip(axes, CARDS):
+    info = CARDS[key]
+    ax.set_title(info["label"], fontsize=11, fontweight="bold")
+    ax.set_xscale("log")
+    ax.set_xlim(HAZARD_RATIO_MIN, HAZARD_RATIO_MAX)
+    ax.set_ylim(0, 10)
+    ax.set_xlabel("Hazard Ratio", fontsize=10)
+    ax.axhline(3.84, color="gray", linestyle=":", alpha=0.6, linewidth=2.0,
+               label="95% CL (chi2=3.84)", zorder=1)
+    ax.axvline(1.0, color="gray", linestyle="--", alpha=0.5, linewidth=1.0,
+               label="H = 1", zorder=1)
+    ax.grid(True, alpha=0.3, which="both")
+    result = hr_results.get(key)
+    if result is None:
+        ax.text(0.5, 0.5, "KOMBINE_SKIP_TOY_CALIBRATION=1",
+                ha="center", va="center", transform=ax.transAxes)
+        continue
+    delta = np.array(result["scan_2nll"]) - min(result["scan_2nll"])
+    ax.plot(HAZARD_RATIOS_SCAN, delta, color="#d32f2f", linewidth=2.5,
+            marker="s", markersize=3, label="KoMbine chi2", zorder=3)
+    ax.axvline(result["chi2_best"], color="#d32f2f", linestyle="--",
+               alpha=0.6, linewidth=1.5, zorder=2)
+    toy_68 = result["toy"][0.68]
+    toy_95 = result["toy"][0.95]
+    ax.axvspan(toy_95[1], toy_95[2], color="#d32f2f", alpha=0.12,
+               label="toy 95%", zorder=0)
+    ax.axvspan(toy_68[1], toy_68[2], color="#d32f2f", alpha=0.22,
+               label="toy 68%", zorder=0)
+    ax.legend(fontsize=7, loc="upper left")
 
-if not hr_rows:
-    ax_hr.set_title("HR (skipped)")
-    ax_hr.text(0.5, 0.5, "KOMBINE_SKIP_TOY_CALIBRATION=1", ha="center", va="center")
-    ax_hr.set_xticks([])
-    ax_hr.set_yticks([])
-else:
-    ys = np.arange(len(hr_rows))
-    bests = [row["chi2_best"] for row in hr_rows]
-    xerr = np.array([
-        [row["chi2_best"] - row["chi2_lo"] for row in hr_rows],
-        [row["chi2_hi"] - row["chi2_best"] for row in hr_rows],
-    ])
-    ax_hr.errorbar(bests, ys, xerr=xerr, fmt="o", capsize=4, label="chi2 95% HR")
-    ax_hr.axvline(1.0, color="gray", ls=":", label="H = 1")
-    for y, row in zip(ys, hr_rows):
-        mark = "accept" if row["dec_h1"].get(0.95) == "accept" else "reject"
-        ax_hr.text(max(row["chi2_hi"] * 1.05, 1.2), y, f"toy H=1 95%: {mark}", va="center")
-    ax_hr.set_yticks(ys)
-    ax_hr.set_yticklabels([row["label"] for row in hr_rows])
-    ax_hr.set_xscale("log")
-    ax_hr.set_xlabel("hazard ratio")
-    ax_hr.set_title("n=20 chi2 95% HR vs toy test at H=1")
-    ax_hr.legend(loc="lower right", fontsize=8)
-
-if km_info is None:
-    ax_km.set_title("KM e=0.40 (skipped)")
-    ax_km.text(0.5, 0.5, "KOMBINE_SKIP_TOY_CALIBRATION=1", ha="center", va="center")
-    ax_km.set_xticks([])
-    ax_km.set_yticks([])
-else:
-    chi2_68, chi2_95 = km_info["chi2_bands"]
-    ax_km.plot(km_info["best"], 0.0, "ko", label="MLE S")
-    ax_km.hlines(0.15, chi2_68[0], chi2_68[1], colors="C0", lw=6, label="chi2 68%")
-    ax_km.hlines(-0.15, chi2_95[0], chi2_95[1], colors="C1", lw=6, label="chi2 95%")
-    for s_val, toy, name in (
-        (km_info["best"], km_info["toy_mle"], "MLE"),
-        (km_info["s_lo"], km_info["toy_lo"], "chi2 lo"),
-        (km_info["s_hi"], km_info["toy_hi"], "chi2 hi"),
-    ):
-        color = "green" if toy.decisions.get(0.95) == "accept" else "red"
-        ax_km.plot(s_val, -0.45, "v", color=color)
-        ax_km.text(s_val, -0.7, name, ha="center", fontsize=8, color=color)
-    ax_km.set_xlim(-0.05, 1.05)
-    ax_km.set_ylim(-1.0, 0.6)
-    ax_km.set_yticks([])
-    ax_km.set_xlabel(f"S(t={km_info['t0']:g}) low group")
-    ax_km.set_title("e=0.40 KM: chi2 bands vs toy 95% at edges")
-    ax_km.legend(loc="upper right", fontsize=8)
-
+axes[0].set_ylabel(r"$-2 \Delta \ln L$", fontsize=10)
+fig.suptitle("n=20 discrete classes: chi2 HR scan vs toy 68%/95% intervals",
+             fontsize=13, fontweight="bold")
 fig.tight_layout()
 plt.show()
 ```
