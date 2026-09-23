@@ -15,7 +15,7 @@ jupyter:
 ---
 
 ```python
-# pylint: disable=bad-indentation,line-too-long,missing-module-docstring,redefined-outer-name,wrong-import-order,wrong-import-position,duplicate-code,too-many-locals,too-many-statements,too-many-branches
+# pylint: disable=bad-indentation,line-too-long,missing-module-docstring,redefined-outer-name,wrong-import-order,wrong-import-position,duplicate-code,too-many-locals,too-many-statements,too-many-branches,missing-function-docstring
 ```
 
 # Toy-calibrated HR intervals and KM bands
@@ -51,23 +51,39 @@ Three layers:
 
 At large $e$ the plug-in labeling / constrained MLE can be a poor stand-in for the true DGP, so toy coverage can still be off even though $\chi^2$ is also wrong. Do not treat these bands as assumption-free.
 
-**Monotone KM edges.** Pointwise toy endpoint search is omitted as the primary band. We run an S-grid of toys (all $B$ toys, no early stop) and fit decreasing $lo(t)$, $hi(t)$ by a binomial MLE: $n_{\mathrm{extreme}}\sim\mathrm{Binomial}(B,\pi_{\mathrm{in}})$ inside the band and $\pi_{\mathrm{out}}>\pi_{\mathrm{in}}$ outside. The same call also returns the usual $\chi^2$ profile bands. A later notebook cell compares that monotone fit to **naive** per-time intervals from the same grid (min/max accepted $S$ at each $t$, not forced decreasing)—no extra toys.
+**Monotone KM edges.** Pointwise toy endpoint search is omitted as the primary band. We run an S-grid of toys (all $B$ toys, no early stop) and fit decreasing $lo(t)$, $hi(t)$ by a binomial MLE: $n_{\mathrm{extreme}}\sim\mathrm{Binomial}(B,\pi_{\mathrm{in}})$ inside the band and $\pi_{\mathrm{out}}<\pi_{\mathrm{in}}$ outside (high extreme counts mean accept, so $\pi$ is higher inside). The same call also returns the usual $\chi^2$ profile bands. A later notebook cell compares that monotone fit to **naive** per-time intervals from the same grid (min/max accepted $S$ at each $t$, not forced decreasing)—no extra toys.
+
+**Cache.** Fit dicts are written to gitignored `_toy_calibration_cache/n20_toy_calibration.json` after each scenario (JSON with ndarray payloads). If that file exists, the setup cell loads it by default so plots can be redone without new toys. Delete the file (or set `LOAD_TOY_CACHE = False`) to recompute. The file is text so it can later be committed for CI docs if desired.
 
 ```python
+import json
 import os
+import pathlib
 import sys
 import time
-import pathlib
-import numpy as np
+
 import matplotlib.pyplot as plt
+import numpy as np
 
 _repo_root = pathlib.Path(".").resolve().parent.parent
 if str(_repo_root) not in sys.path:
     sys.path.insert(0, str(_repo_root))
 
 from kombine.datacard import Datacard
-from kombine.toy_calibration import naive_pointwise_band_edges_from_grid
+from kombine.toy_calibration import (
+    fit_monotone_band_edges_binomial,
+    naive_pointwise_band_edges_from_grid,
+)
+```
 
+```python
+# Own cell so a full re-run of setup/config does not necessarily clear fits.
+# Re-running *this* cell does clear them; load from cache afterward if needed.
+hr_results = {}
+km_results = {}
+```
+
+```python
 SKIP = bool(os.environ.get("KOMBINE_SKIP_TOY_CALIBRATION"))
 N_MAX = 19
 N_S_GRID = 11
@@ -79,8 +95,11 @@ HAZARD_RATIO_MIN = 0.01
 HAZARD_RATIO_MAX = 100.0
 HAZARD_RATIOS_SCAN = np.logspace(-2, 2, N_HR_SCAN)
 DATACARDS = _repo_root / "test" / "kombine" / "datacards" / "simple_examples"
+CACHE_DIR = _repo_root / "docs" / "kombine" / "_toy_calibration_cache"
+CACHE_PATH = CACHE_DIR / "n20_toy_calibration.json"
+# Load existing cache by default; set False to ignore a present cache file.
+LOAD_TOY_CACHE = True
 
-# Same n=20 family and mosaic layout as notebook 07.
 MOSAIC_LAYOUT = [
     ['.', 'fixed', '.'],
     ['dc_small', 'dc_moderate', 'dc_large'],
@@ -132,9 +151,6 @@ SCENARIOS = {
         'threshold': 0.5001,
     },
 }
-hr_results = {}
-km_results = {}
-
 COLORS_PALETTE = {
     ('fixed', 'low'): '#1565c0',
     ('fixed', 'high'): '#c62828',
@@ -152,9 +168,136 @@ COLORS_PALETTE = {
     ('small', 'high'): '#ffd54f',
 }
 
+
+def _json_encode(obj):
+    if isinstance(obj, dict):
+        return {str(key): _json_encode(value) for key, value in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_encode(value) for value in obj]
+    if isinstance(obj, np.ndarray):
+        return {
+            "__ndarray__": True,
+            "dtype": str(obj.dtype),
+            "shape": list(obj.shape),
+            "data": obj.tolist(),
+        }
+    if isinstance(obj, (np.floating, np.integer)):
+        return obj.item()
+    if isinstance(obj, pathlib.Path):
+        return str(obj)
+    return obj
+
+
+def _json_decode(obj):
+    if isinstance(obj, dict):
+        if obj.get("__ndarray__"):
+            return np.asarray(obj["data"], dtype=np.dtype(obj["dtype"]))
+        decoded = {key: _json_decode(value) for key, value in obj.items()}
+        # HR toy intervals use float CL keys.
+        if decoded and all(
+            isinstance(key, str) and key.replace(".", "", 1).isdigit()
+            for key in decoded
+        ):
+            try:
+                return {float(key): value for key, value in decoded.items()}
+            except ValueError:
+                return decoded
+        return decoded
+    if isinstance(obj, list):
+        return [_json_decode(value) for value in obj]
+    return obj
+
+
+def save_toy_calibration_cache(path, hr_results_dict, km_results_dict):
+    path = pathlib.Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "format": "kombine_toy_calibration_v1",
+        "N_MAX": int(N_MAX),
+        "N_S_GRID": int(N_S_GRID),
+        "RNG": int(RNG),
+        "HAZARD_RATIO_MIN": float(HAZARD_RATIO_MIN),
+        "HAZARD_RATIO_MAX": float(HAZARD_RATIO_MAX),
+        "hr_results": _json_encode(hr_results_dict),
+        "km_results": _json_encode(km_results_dict),
+    }
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path
+
+
+def load_toy_calibration_cache(path):
+    path = pathlib.Path(path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("format") != "kombine_toy_calibration_v1":
+        raise ValueError(f"Unsupported cache format: {payload.get('format')!r}")
+    return (
+        _json_decode(payload.get("hr_results", {})),
+        _json_decode(payload.get("km_results", {})),
+        payload,
+    )
+
+
+def _km_step_arrays(times, best, lo, hi):
+    if len(times) == 0:
+        return [0.0], [1.0], [1.0], [1.0]
+    times_plot = [times[0]]
+    best_plot = [1.0]
+    lo_plot = [1.0]
+    hi_plot = [1.0]
+    for i, t in enumerate(times):
+        times_plot.append(t)
+        best_plot.append(best[i])
+        lo_plot.append(lo[i])
+        hi_plot.append(hi[i])
+    return times_plot, best_plot, lo_plot, hi_plot
+
+
+if LOAD_TOY_CACHE and CACHE_PATH.is_file():
+    _hr_loaded, _km_loaded, _meta = load_toy_calibration_cache(CACHE_PATH)
+    hr_results.update(_hr_loaded)
+    km_results.update(_km_loaded)
+    print(
+        f"Loaded toy cache {CACHE_PATH}: "
+        f"{len(_hr_loaded)} HR / {len(_km_loaded)} KM scenarios "
+        f"(N_MAX={_meta.get('N_MAX')}, N_S_GRID={_meta.get('N_S_GRID')})"
+    )
+elif LOAD_TOY_CACHE:
+    print(f"No toy cache at {CACHE_PATH}; starting empty")
+
 print("skip toy calibration MINLPs:", SKIP)
 print("n=20 Fixed / discrete / Poisson HR+KM mosaics; N_MAX=", N_MAX,
       "N_S_GRID=", N_S_GRID, "Threads=", THREADS)
+print("toy cache path:", CACHE_PATH.resolve(), "LOAD_TOY_CACHE=", LOAD_TOY_CACHE)
+```
+
+```python
+# Re-fit monotone edges from stored S-grid toys (no new MINLPs). Safe after a
+# polarity fix to fit_monotone_band_edges_binomial; also refreshes pi/loglik.
+def _refit_km_monotone_from_grid(km_results_dict, n_max):
+    n_refit = 0
+    for _key, result in km_results_dict.items():
+        for arm in ("low", "high"):
+            arm_result = result[arm]
+            fit = fit_monotone_band_edges_binomial(
+                arm_result["s_grid"],
+                arm_result["n_extreme"],
+                n_max,
+                best=arm_result["best"],
+            )
+            arm_result["fitted"] = np.column_stack([fit.lo, fit.hi])
+            arm_result["pi_in"] = fit.pi_in
+            arm_result["pi_out"] = fit.pi_out
+            arm_result["loglik"] = fit.loglik
+            n_refit += 1
+    return n_refit
+
+
+if km_results:
+    _n_refit = _refit_km_monotone_from_grid(km_results, N_MAX)
+    save_toy_calibration_cache(CACHE_PATH, hr_results, km_results)
+    print(f"Re-fit {_n_refit} KM arms from cached n_extreme; cache updated")
+else:
+    print("No KM results to re-fit yet")
 ```
 
 ```python
@@ -202,12 +345,13 @@ else:
             "toy": toy_intervals,
             "wall": elapsed,
         }
+        save_toy_calibration_cache(CACHE_PATH, hr_results, km_results)
         toy_68 = toy_intervals[0.68]
         toy_95 = toy_intervals[0.95]
         print(f"\n{info['label']}: chi2 95% HR = {chi2[0]:.3g} [{chi2[1]:.3g}, {chi2[2]:.3g}]")
         print(f"  toy 68% [{toy_68[1]:.3g}, {toy_68[2]:.3g}]  (MLE {toy_68[0]:.3g})")
         print(f"  toy 95% [{toy_95[1]:.3g}, {toy_95[2]:.3g}]  (MLE {toy_95[0]:.3g})")
-        print(f"  wall {elapsed:.1f}s")
+        print(f"  wall {elapsed:.1f}s; cache -> {CACHE_PATH.name}")
 ```
 
 ```python
@@ -278,12 +422,15 @@ else:
             },
             "wall": elapsed,
         }
+        save_toy_calibration_cache(CACHE_PATH, hr_results, km_results)
         print(
             f"{info['label']}: KM monotone fit wall {elapsed:.1f}s "
             f"(low pi_in={fit_low.pi_in:.2f}/pi_out={fit_low.pi_out:.2f}, "
-            f"high pi_in={fit_high.pi_in:.2f}/pi_out={fit_high.pi_out:.2f})"
+            f"high pi_in={fit_high.pi_in:.2f}/pi_out={fit_high.pi_out:.2f}); "
+            f"cache -> {CACHE_PATH.name}"
         )
 ```
+
 ```python
 _, axes_dict = plt.subplot_mosaic(
     MOSAIC_LAYOUT, figsize=(14, 13),
@@ -351,21 +498,6 @@ plt.show()
 ```
 
 ```python
-def _km_step_arrays(times, best, lo, hi):
-    if len(times) == 0:
-        return [0.0], [1.0], [1.0], [1.0]
-    times_plot = [times[0]]
-    best_plot = [1.0]
-    lo_plot = [1.0]
-    hi_plot = [1.0]
-    for i, t in enumerate(times):
-        times_plot.append(t)
-        best_plot.append(best[i])
-        lo_plot.append(lo[i])
-        hi_plot.append(hi[i])
-    return times_plot, best_plot, lo_plot, hi_plot
-
-
 _, axes_dict = plt.subplot_mosaic(
     MOSAIC_LAYOUT, figsize=(14, 13),
     gridspec_kw={'hspace': 0.52, 'wspace': 0.35},
@@ -390,7 +522,6 @@ for panel_key, scenario_key in MOSAIC_TO_SCENARIO.items():
         arm_result = result[arm]
         times = arm_result["times"]
         best = arm_result["best"]
-        # Single CL=0.95 from toy_monotone_fit_survival_bands
         chi2_lo = arm_result["chi2"][:, 0, 0]
         chi2_hi = arm_result["chi2"][:, 0, 1]
         fitted = arm_result["fitted"]

@@ -29,3 +29,6 @@ test/kombine/datacards/lung/poisson_and_uncorrected_flatfielding/*.txt
 
 # On-demand rebinned methods_comparison cards (from rebin_methods_comparison_times.py)
 test/kombine/datacards/simple_examples/rebinned/
+
+# Optional local HR/KM toy-fit JSON cache (notebook 09)
+docs/kombine/_toy_calibration_cache/
