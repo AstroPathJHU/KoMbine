@@ -34,12 +34,14 @@ from .kaplan_meier import (
 from .kaplan_meier_MINLP import GurobiWorkStats, MINLPForKM, KaplanMeierPatientNLL
 from .toy_calibration import (
   DEFAULT_CLS,
+  MonotoneBandFit,
   SequentialToyCounter,
   ToyTestResult,
   as_generator,
   binomial_km_outcomes,
   bisection_endpoint,
   first_interior,
+  fit_monotone_band_edges_binomial,
   linspaced_s_probes,
   unique_unit_interval,
 )
@@ -824,6 +826,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):  # pylint: disable=too-many-instan
     Threads: int | None = 1,
     verbose: bool = False,
     print_progress: bool = False,
+    early_stop: bool = True,
   ) -> ToyTestResult:
     """
     Neyman test of S(t) = ``expected_probability`` using binomial grid toys.
@@ -831,6 +834,9 @@ class KaplanMeierLikelihood(KaplanMeierBase):  # pylint: disable=too-many-instan
     Toys are drawn from the constrained MLE at this S(t) (assignments and
     interval p_i^s). Each toy is more extreme if ``excess_at_most`` is
     ``outside``.
+
+    When ``early_stop`` is False, all ``n_max`` toys are always run so
+    ``n_extreme ~ Binomial(n_max, π)`` for binomial edge fitting.
     """
     generator = as_generator(rng)
     minlp = self.minlp_for_km(
@@ -923,7 +929,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):  # pylint: disable=too-many-instan
       else:
         extreme = status == "outside"
       counter.observe(extreme)
-      if counter.all_decided():
+      if early_stop and counter.all_decided():
         break
     return counter.as_result(t_obs)
 
@@ -1034,6 +1040,112 @@ class KaplanMeierLikelihood(KaplanMeierBase):  # pylint: disable=too-many-instan
         row.append((float(lower), float(upper)))
       toy_bands.append(row)
     return np.array(best_probabilities), np.array(toy_bands), np.asarray(chi2_bands)
+
+  def toy_extreme_counts_on_s_grid(  # pylint: disable=too-many-arguments, too-many-locals
+    self,
+    times_for_plot: typing.Sequence[float],
+    s_grid: typing.Sequence[float],
+    *,
+    n_max: int = 19,
+    rng: int | np.random.Generator | None = None,
+    binomial_only: bool = False,
+    Threads: int | None = 1,
+    verbose: bool = False,
+    print_progress: bool = False,
+  ) -> npt.NDArray[np.int64]:
+    """
+    Run all ``n_max`` toys (no early stop) on an S-grid at each time.
+
+    Returns an ``(n_times, n_s)`` array of ``n_extreme`` counts for binomial
+    monotone-edge fitting.
+    """
+    generator = as_generator(rng)
+    s_values = [float(s) for s in s_grid]
+    if not s_values:
+      raise ValueError("s_grid must be non-empty")
+    n_extreme = np.zeros((len(times_for_plot), len(s_values)), dtype=np.int64)
+    for i_time, time_point in enumerate(times_for_plot):
+      for i_s, survival in enumerate(s_values):
+        started = time.perf_counter()
+        result = self.hypothesized_s_toy_test(
+          float(time_point),
+          float(np.clip(survival, self.__endpoint_epsilon, 1.0 - self.__endpoint_epsilon)),
+          n_max=n_max,
+          rng=int(generator.integers(0, 2**31 - 1)),
+          confidence_levels=DEFAULT_CLS,
+          binomial_only=binomial_only,
+          Threads=Threads,
+          verbose=verbose,
+          print_progress=False,
+          early_stop=False,
+        )
+        if result.n_run != n_max:
+          raise RuntimeError(
+            f"Expected n_run={n_max} with early_stop=False, got {result.n_run}"
+          )
+        n_extreme[i_time, i_s] = int(result.n_extreme)
+        if print_progress:
+          print(
+            f"[{datetime.datetime.now()}] grid S(t={time_point:g})={survival:g}: "
+            f"n_ext={result.n_extreme}/{result.n_max} "
+            f"wall={time.perf_counter() - started:.1f}s",
+            flush=True,
+          )
+    return n_extreme
+
+  def toy_monotone_fit_survival_bands(  # pylint: disable=too-many-arguments, too-many-locals
+    self,
+    times_for_plot: typing.Sequence[float],
+    *,
+    n_max: int = 19,
+    n_s_grid: int = 11,
+    rng: int | np.random.Generator | None = None,
+    binomial_only: bool = False,
+    Threads: int | None = 1,
+    print_progress: bool = False,
+  ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, MonotoneBandFit]:
+    """
+    Pointwise S-grid toys (no early stop) + binomial MLE monotone edges.
+
+    Returns
+    ``(best_probabilities, chi2_bands, fitted_lo_hi, n_extreme, fit)`` where
+    ``chi2_bands`` is from the usual profile cut at CL=0.95 (shape
+    ``(n_times, 1, 2)``), ``fitted_lo_hi`` has shape ``(n_times, 2)``, and
+    ``fit`` is the ``MonotoneBandFit`` (includes ``pi_in`` / ``pi_out``).
+    """
+    s_grid = linspaced_s_probes(
+      self.__endpoint_epsilon, 1.0 - self.__endpoint_epsilon, n_grid=n_s_grid,
+    )
+    best_probabilities, chi2_bands = self.survival_probabilities_likelihood(
+      CLs=[0.95],
+      times_for_plot=times_for_plot,
+      binomial_only=binomial_only,
+      crossing_mode="feasibility",
+      print_progress=print_progress,
+    )
+    n_extreme = self.toy_extreme_counts_on_s_grid(
+      times_for_plot,
+      s_grid,
+      n_max=n_max,
+      rng=rng,
+      binomial_only=binomial_only,
+      Threads=Threads,
+      print_progress=print_progress,
+    )
+    fit = fit_monotone_band_edges_binomial(
+      s_grid,
+      n_extreme,
+      n_max,
+      best=best_probabilities,
+    )
+    fitted = np.column_stack([fit.lo, fit.hi])
+    return (
+      np.asarray(best_probabilities, dtype=float),
+      np.asarray(chi2_bands, dtype=float),
+      fitted,
+      n_extreme,
+      fit,
+    )
 
   def plot(self, config: KaplanMeierPlotConfig | None = None, **kwargs) -> dict:
     """

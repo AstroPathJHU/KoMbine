@@ -383,3 +383,261 @@ def bisection_endpoint(  # pylint: disable=too-many-arguments
     else:
       outer = mid
   return to_x(outer)
+
+
+@dataclasses.dataclass(frozen=True)
+class MonotoneBandFit:
+  """Binomial-MLE decreasing survival band edges."""
+
+  lo: npt.NDArray[np.float64]
+  hi: npt.NDArray[np.float64]
+  pi_in: float
+  pi_out: float
+  loglik: float
+  s_grid: npt.NDArray[np.float64]
+
+
+def _binomial_loglik(n_extreme: int, n_max: int, pi: float) -> float:
+  """Binomial log-likelihood for one cell (up to an additive constant)."""
+  if n_max < 0:
+    raise ValueError(f"n_max must be >= 0, got {n_max}")
+  if not 0 <= n_extreme <= n_max:
+    raise ValueError(
+      f"n_extreme must be in [0, n_max], got {n_extreme} / {n_max}"
+    )
+  pi_clip = min(max(float(pi), 1e-12), 1.0 - 1e-12)
+  return (
+    float(n_extreme) * math.log(pi_clip)
+    + float(n_max - n_extreme) * math.log(1.0 - pi_clip)
+  )
+
+
+def _pair_scores_one_time(
+  cell_ll: npt.NDArray[np.float64],
+  best_i: int | None,
+) -> npt.NDArray[np.float64]:
+  """Scores for every (lo_idx, hi_idx) pair at one time."""
+  n_s = cell_ll.shape[0]
+  pair_score = np.full((n_s, n_s), -np.inf)
+  for lo_i in range(n_s):
+    for hi_i in range(lo_i, n_s):
+      if best_i is not None and not lo_i <= best_i <= hi_i:
+        continue
+      inside = (np.arange(n_s) >= lo_i) & (np.arange(n_s) <= hi_i)
+      pair_score[lo_i, hi_i] = float(
+        cell_ll[inside, 1].sum() + cell_ll[~inside, 0].sum()
+      )
+  return pair_score
+
+
+def _best_previous_pair(
+  dp_prev: npt.NDArray[np.float64],
+  lo_i: int,
+  hi_i: int,
+) -> tuple[float, int, int]:
+  """Best feasible previous (lo, hi) for nonincreasing edges."""
+  n_s = dp_prev.shape[0]
+  best_prev = -np.inf
+  arg_lo = -1
+  arg_hi = -1
+  for lo_prev in range(lo_i, n_s):
+    for hi_prev in range(max(lo_prev, hi_i), n_s):
+      candidate = float(dp_prev[lo_prev, hi_prev])
+      if candidate > best_prev:
+        best_prev = candidate
+        arg_lo = lo_prev
+        arg_hi = hi_prev
+  return best_prev, arg_lo, arg_hi
+
+
+def _best_monotone_indices_for_pis(  # pylint: disable=too-many-locals
+  n_extreme: npt.NDArray[np.integer],
+  n_max: int,
+  pi_in: float,
+  pi_out: float,
+  *,
+  best_idx: npt.NDArray[np.integer] | None = None,
+) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.int64], float]:
+  """
+  DP: best decreasing lo/hi index paths for fixed ``pi_in`` / ``pi_out``.
+
+  Survival decreases with time, so index paths on an ascending S-grid are
+  componentwise nonincreasing. Optional ``best_idx[t]`` must lie in
+  ``[lo_idx[t], hi_idx[t]]``.
+  """
+  n_times, n_s = n_extreme.shape
+  cell_ll = np.empty((n_times, n_s, 2), dtype=float)
+  for i_time in range(n_times):
+    for i_s in range(n_s):
+      n_ext = int(n_extreme[i_time, i_s])
+      cell_ll[i_time, i_s, 0] = _binomial_loglik(n_ext, n_max, pi_out)
+      cell_ll[i_time, i_s, 1] = _binomial_loglik(n_ext, n_max, pi_in)
+
+  pair_score = np.empty((n_times, n_s, n_s), dtype=float)
+  for i_time in range(n_times):
+    best_i = int(best_idx[i_time]) if best_idx is not None else None
+    pair_score[i_time] = _pair_scores_one_time(cell_ll[i_time], best_i)
+
+  dp = np.full((n_times, n_s, n_s), -np.inf)
+  prev_lo = np.full((n_times, n_s, n_s), -1, dtype=np.int64)
+  prev_hi = np.full((n_times, n_s, n_s), -1, dtype=np.int64)
+  dp[0] = pair_score[0]
+
+  for i_time in range(1, n_times):
+    for lo_i in range(n_s):
+      for hi_i in range(lo_i, n_s):
+        base = float(pair_score[i_time, lo_i, hi_i])
+        if not math.isfinite(base):
+          continue
+        best_prev, arg_lo, arg_hi = _best_previous_pair(dp[i_time - 1], lo_i, hi_i)
+        if math.isfinite(best_prev):
+          dp[i_time, lo_i, hi_i] = base + best_prev
+          prev_lo[i_time, lo_i, hi_i] = arg_lo
+          prev_hi[i_time, lo_i, hi_i] = arg_hi
+
+  end = dp[n_times - 1]
+  if not np.isfinite(end).any():
+    raise RuntimeError("No feasible monotone band on the S-grid")
+  end_idx = np.unravel_index(int(np.argmax(end)), end.shape)
+  lo_end = int(end_idx[0])
+  hi_end = int(end_idx[1])
+
+  lo_path = np.empty(n_times, dtype=np.int64)
+  hi_path = np.empty(n_times, dtype=np.int64)
+  lo_path[-1] = lo_end
+  hi_path[-1] = hi_end
+  for i_time in range(n_times - 1, 0, -1):
+    lo_cur = int(lo_path[i_time])
+    hi_cur = int(hi_path[i_time])
+    lo_path[i_time - 1] = int(prev_lo[i_time, lo_cur, hi_cur])
+    hi_path[i_time - 1] = int(prev_hi[i_time, lo_cur, hi_cur])
+  return lo_path, hi_path, float(dp[n_times - 1, lo_end, hi_end])
+
+
+def fit_monotone_band_edges_binomial(  # pylint: disable=too-many-locals,too-many-branches,too-many-arguments
+  s_grid: npt.ArrayLike,
+  n_extreme: npt.ArrayLike,
+  n_max: int,
+  *,
+  best: npt.ArrayLike | None = None,
+  pi_in_values: typing.Sequence[float] | None = None,
+  pi_out_values: typing.Sequence[float] | None = None,
+) -> MonotoneBandFit:
+  """
+  Fit decreasing ``lo(t)``, ``hi(t)`` by binomial MLE on an S-grid.
+
+  Model: at time ``t`` and grid survival ``s``,
+  ``n_extreme ~ Binomial(n_max, π_in)`` if ``lo(t) <= s <= hi(t)``, else
+  ``Binomial(n_max, π_out)``, with ``π_in < π_out`` and both edges
+  nonincreasing in ``t``.
+  """
+  s_arr = np.asarray(s_grid, dtype=float)
+  counts = np.asarray(n_extreme, dtype=int)
+  if s_arr.ndim != 1 or s_arr.size < 2:
+    raise ValueError("s_grid must be a 1-d array with at least 2 points")
+  if counts.ndim != 2 or counts.shape[1] != s_arr.size:
+    raise ValueError(
+      f"n_extreme shape {counts.shape} incompatible with s_grid length {s_arr.size}"
+    )
+  if np.any(np.diff(s_arr) <= 0):
+    raise ValueError("s_grid must be strictly increasing")
+  if n_max < 1:
+    raise ValueError(f"n_max must be >= 1, got {n_max}")
+
+  best_idx = None
+  if best is not None:
+    best_arr = np.asarray(best, dtype=float)
+    if best_arr.shape != (counts.shape[0],):
+      raise ValueError(
+        f"best shape {best_arr.shape} != (n_times,)={(counts.shape[0],)}"
+      )
+    best_idx = np.array(
+      [int(np.argmin(np.abs(s_arr - float(value)))) for value in best_arr],
+      dtype=np.int64,
+    )
+
+  if pi_in_values is None:
+    pi_in_values = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30]
+  if pi_out_values is None:
+    pi_out_values = [0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
+
+  best_fit: MonotoneBandFit | None = None
+  for pi_in in pi_in_values:
+    for pi_out in pi_out_values:
+      if not 0.0 < pi_in < pi_out < 1.0:
+        continue
+      lo_idx, hi_idx, loglik = _best_monotone_indices_for_pis(
+        counts, n_max, float(pi_in), float(pi_out), best_idx=best_idx,
+      )
+      candidate = MonotoneBandFit(
+        lo=s_arr[lo_idx].copy(),
+        hi=s_arr[hi_idx].copy(),
+        pi_in=float(pi_in),
+        pi_out=float(pi_out),
+        loglik=float(loglik),
+        s_grid=s_arr.copy(),
+      )
+      if best_fit is None or candidate.loglik > best_fit.loglik:
+        best_fit = candidate
+  if best_fit is None:
+    raise RuntimeError("No valid (pi_in, pi_out) pair for monotone band fit")
+  return best_fit
+
+
+def naive_pointwise_band_edges_from_grid(  # pylint: disable=too-many-locals
+  s_grid: npt.ArrayLike,
+  n_extreme: npt.ArrayLike,
+  n_max: int,
+  *,
+  confidence_level: float = 0.95,
+  best: npt.ArrayLike | None = None,
+) -> npt.NDArray[np.float64]:
+  """
+  Per-time toy accept intervals on an S-grid (no monotone constraint).
+
+  At each time, accept grid values with Monte Carlo p-value
+  ``(1 + n_extreme) / (1 + n_max) > 1 - confidence_level``. The naive
+  interval is the min/max accepted ``S`` (so edges need not decrease in
+  ``t``). If nothing is accepted, falls back to the nearest grid point to
+  ``best`` (or the mid grid point).
+
+  Returns an ``(n_times, 2)`` array of ``[lo, hi]``.
+  """
+  s_arr = np.asarray(s_grid, dtype=float)
+  counts = np.asarray(n_extreme, dtype=int)
+  if s_arr.ndim != 1 or s_arr.size < 1:
+    raise ValueError("s_grid must be a non-empty 1-d array")
+  if counts.ndim != 2 or counts.shape[1] != s_arr.size:
+    raise ValueError(
+      f"n_extreme shape {counts.shape} incompatible with s_grid length {s_arr.size}"
+    )
+  if not 0.0 < confidence_level < 1.0:
+    raise ValueError(f"confidence_level must be in (0, 1), got {confidence_level}")
+  alpha = 1.0 - float(confidence_level)
+  n_times = counts.shape[0]
+  best_arr = None if best is None else np.asarray(best, dtype=float)
+  if best_arr is not None and best_arr.shape != (n_times,):
+    raise ValueError(
+      f"best shape {best_arr.shape} != (n_times,)={(n_times,)}"
+    )
+
+  edges = np.empty((n_times, 2), dtype=float)
+  for i_time in range(n_times):
+    accepted = [
+      float(s_arr[i_s])
+      for i_s in range(s_arr.size)
+      if mc_p_value(int(counts[i_time, i_s]), n_max) > alpha
+    ]
+    if accepted:
+      edges[i_time, 0] = min(accepted)
+      edges[i_time, 1] = max(accepted)
+      continue
+    if best_arr is None:
+      mid = float(s_arr[s_arr.size // 2])
+      edges[i_time, 0] = mid
+      edges[i_time, 1] = mid
+    else:
+      nearest = float(s_arr[int(np.argmin(np.abs(s_arr - best_arr[i_time])))])
+      edges[i_time, 0] = nearest
+      edges[i_time, 1] = nearest
+  return edges

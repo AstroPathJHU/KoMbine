@@ -14,6 +14,7 @@ from kombine.toy_calibration import (
   binomial_km_outcomes,
   bisection_endpoint,
   first_interior,
+  fit_monotone_band_edges_binomial,
   linspaced_s_probes,
   logspaced_hr_probes,
   mc_p_value,
@@ -173,6 +174,30 @@ def test_first_interior_uses_half_when_km_mle_rejected():
   assert first_interior(inside, [0.95, 0.05, 0.99]) is None
 
 
+def test_fit_monotone_band_edges_binomial_recovers_step_band():
+  """Synthetic binomial counts recover a known decreasing band on a grid."""
+  s_grid = np.linspace(0.1, 0.9, 9)
+  true_lo = np.array([0.4, 0.4, 0.3, 0.3, 0.2])
+  true_hi = np.array([0.8, 0.7, 0.7, 0.6, 0.5])
+  n_max = 40
+  rng = np.random.default_rng(0)
+  n_extreme = np.empty((len(true_lo), len(s_grid)), dtype=int)
+  for i_time, (lo, hi) in enumerate(zip(true_lo, true_hi)):
+    for i_s, survival in enumerate(s_grid):
+      pi = 0.1 if lo <= survival <= hi else 0.7
+      n_extreme[i_time, i_s] = rng.binomial(n_max, pi)
+  best = 0.5 * (true_lo + true_hi)
+  fit = fit_monotone_band_edges_binomial(
+    s_grid, n_extreme, n_max, best=best,
+  )
+  assert np.all(np.diff(fit.lo) <= 1e-12)
+  assert np.all(np.diff(fit.hi) <= 1e-12)
+  assert np.all(fit.lo <= fit.hi)
+  assert fit.pi_in < fit.pi_out
+  np.testing.assert_allclose(fit.lo, true_lo, atol=0.15)
+  np.testing.assert_allclose(fit.hi, true_hi, atol=0.15)
+
+
 def test_hr_toy_test_golden():
   """Seeded tiny-cohort HR Neyman test; numbers are regression goldens."""
   datacard = _parse_tiny()
@@ -272,6 +297,7 @@ if __name__ == "__main__":
   test_bisection_endpoint_from_chi2_edges()
   test_first_interior_uses_h1_when_mle_rejected()
   test_first_interior_uses_half_when_km_mle_rejected()
+  test_fit_monotone_band_edges_binomial_recovers_step_band()
   print("[PASS] generator / sequential tests")
   test_hr_toy_test_golden()
   print("[PASS] HR toy golden")
