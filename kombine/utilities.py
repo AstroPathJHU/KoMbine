@@ -2,6 +2,7 @@
 Miscellaneous utilities for ROC Picker
 """
 import os
+import time
 import typing
 
 import numpy as np
@@ -177,6 +178,32 @@ def validate_class_probs(class_probs: list) -> None:
 # Gurobi Optimization Helper Mixin
 # ============================================================================
 
+_TRANSIENT_WLS_MARKERS = (
+  "token.gurobi.com",
+  "could not resolve host",
+  "code 6",
+  "temporary failure",
+  "connection refused",
+  "connection reset",
+  "network is unreachable",
+  "name or service not known",
+  "failed to connect",
+)
+
+
+def is_transient_gurobi_wls_error(exc: BaseException) -> bool:
+  """True for transient Gurobi WLS / license-token network failures."""
+  try:
+    # pylint: disable-next=import-outside-toplevel
+    from gurobipy import GurobiError
+  except ImportError:
+    return False
+  if not isinstance(exc, GurobiError):
+    return False
+  message = str(exc).lower()
+  return any(marker in message for marker in _TRANSIENT_WLS_MARKERS)
+
+
 class GurobiOptimizerMixin:  # pylint: disable=too-few-public-methods
   """
   Mixin class providing common Gurobi optimization utilities.
@@ -189,6 +216,36 @@ class GurobiOptimizerMixin:  # pylint: disable=too-few-public-methods
     for param, value in params.items():
       if value is not None:
         model.setParam(param, value)
+
+  def _optimize_with_wls_retry(
+    self,
+    model,
+    *,
+    max_attempts: int = 5,
+    initial_delay_s: float = 5.0,
+  ) -> None:
+    """
+    Call ``model.optimize()``, retrying transient WLS/token network errors.
+    """
+    # pylint: disable-next=import-outside-toplevel
+    from gurobipy import GurobiError
+
+    delay = float(initial_delay_s)
+    for attempt in range(1, max_attempts + 1):
+      try:
+        model.optimize()
+        return
+      except GurobiError as exc:
+        if not is_transient_gurobi_wls_error(exc) or attempt >= max_attempts:
+          raise
+        print(
+          f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+          f"Gurobi WLS/network error; "
+          f"retry {attempt}/{max_attempts} after {delay:.0f}s: {exc}",
+          flush=True,
+        )
+        time.sleep(delay)
+        delay *= 2.0
 
   def _create_gurobi_params(  # pylint: disable=too-many-arguments
     self,
@@ -317,7 +374,7 @@ class GurobiOptimizerMixin:  # pylint: disable=too-few-public-methods
 
     if verbose:
       print("Attempting initial optimization...")
-    model.optimize()
+    self._optimize_with_wls_retry(model)
 
     needs_fallback = model.status in (GRB.SUBOPTIMAL, GRB.TIME_LIMIT)
     if needs_fallback:
@@ -329,7 +386,7 @@ class GurobiOptimizerMixin:  # pylint: disable=too-few-public-methods
           )
           print(f"  New parameters: {fallback_params}")
         self._set_gurobi_params(model, fallback_params)
-        model.optimize()
+        self._optimize_with_wls_retry(model)
         if model.status == GRB.OPTIMAL:
           if verbose:
             print(f"Fallback {i+1} successful. Model is now optimal.")

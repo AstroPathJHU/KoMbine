@@ -702,7 +702,7 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
 
     if verbose:
       print("Attempting initial optimization...")
-    model.optimize()
+    self._optimize_with_wls_retry(model)
     call_work += self._record_work(model, kind="minimize")
 
     needs_fallback = model.status in (GRB.SUBOPTIMAL, GRB.TIME_LIMIT)
@@ -715,7 +715,7 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
           )
           print(f"  New parameters: {fallback_params}")
         self._set_gurobi_params(model, fallback_params)
-        model.optimize()
+        self._optimize_with_wls_retry(model)
         fallback_work = self._record_work(model, kind="minimize")
         call_work += fallback_work
         if verbose:
@@ -2123,7 +2123,7 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       model.setParam("LogFile", os.fspath(LogFile))
 
     try:
-      model.optimize()
+      self._optimize_with_wls_retry(model)
       status = model.status
       sol_count = int(model.SolCount)
 
