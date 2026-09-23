@@ -51,6 +51,8 @@ Three layers:
 
 At large $e$ the plug-in labeling / constrained MLE can be a poor stand-in for the true DGP, so toy coverage can still be off even though $\chi^2$ is also wrong. Do not treat these bands as assumption-free.
 
+**Monotone KM edges.** Pointwise toy endpoint search is omitted as the primary band. We run an S-grid of toys (all $B$ toys, no early stop) and fit decreasing $lo(t)$, $hi(t)$ by a binomial MLE: $n_{\mathrm{extreme}}\sim\mathrm{Binomial}(B,\pi_{\mathrm{in}})$ inside the band and $\pi_{\mathrm{out}}>\pi_{\mathrm{in}}$ outside. The same call also returns the usual $\chi^2$ profile bands. A later notebook cell compares that monotone fit to **naive** per-time intervals from the same grid (min/max accepted $S$ at each $t$, not forced decreasing)—no extra toys.
+
 ```python
 import os
 import sys
@@ -64,9 +66,11 @@ if str(_repo_root) not in sys.path:
     sys.path.insert(0, str(_repo_root))
 
 from kombine.datacard import Datacard
+from kombine.toy_calibration import naive_pointwise_band_edges_from_grid
 
 SKIP = bool(os.environ.get("KOMBINE_SKIP_TOY_CALIBRATION"))
 N_MAX = 19
+N_S_GRID = 11
 RNG = 0
 # Local runs use Gurobi's default thread count. CI goldens keep Threads=1.
 THREADS = None
@@ -149,7 +153,8 @@ COLORS_PALETTE = {
 }
 
 print("skip toy calibration MINLPs:", SKIP)
-print("n=20 Fixed / discrete / Poisson HR+KM mosaics; N_MAX=", N_MAX, "Threads=", THREADS)
+print("n=20 Fixed / discrete / Poisson HR+KM mosaics; N_MAX=", N_MAX,
+      "N_S_GRID=", N_S_GRID, "Threads=", THREADS)
 ```
 
 ```python
@@ -157,6 +162,9 @@ if SKIP:
     print("Skipping n=20 toy HR mosaic (KOMBINE_SKIP_TOY_CALIBRATION=1).")
 else:
     for key, info in SCENARIOS.items():
+        if key in hr_results:
+            print(f"skipping {info['label']} HR (already in memory)")
+            continue
         started = time.perf_counter()
         dc = Datacard.parse_datacard(info["file"])
         hr_calc = dc.km_hazard_ratio(
@@ -204,9 +212,12 @@ else:
 
 ```python
 if SKIP:
-    print("Skipping n=20 toy KM mosaic (KOMBINE_SKIP_TOY_CALIBRATION=1).")
+    print("Skipping n=20 KM monotone mosaic (KOMBINE_SKIP_TOY_CALIBRATION=1).")
 else:
     for key, info in SCENARIOS.items():
+        if key in km_results:
+            print(f"skipping {info['label']} KM (already in memory)")
+            continue
         started = time.perf_counter()
         dc = Datacard.parse_datacard(info["file"])
         threshold = info["threshold"]
@@ -216,24 +227,29 @@ else:
         times_low = sorted(km_low.patient_death_times)
         times_high = sorted(km_high.patient_death_times)
         print(f"\n[{info['label']}] KM low={len(times_low)} death times, "
-              f"high={len(times_high)} death times")
-        best_low, toy_low, chi2_low = km_low.toy_calibrated_survival_bands(
-            CLs=[0.68, 0.95],
-            times_for_plot=times_low,
-            n_max=N_MAX,
-            rng=RNG,
-            binomial_only=binomial_only,
-            Threads=THREADS,
-            print_progress=True,
+              f"high={len(times_high)} death times; "
+              f"S-grid={N_S_GRID}, B={N_MAX}, early_stop=False")
+        best_low, chi2_low, fitted_low, n_ext_low, fit_low = (
+            km_low.toy_monotone_fit_survival_bands(
+                times_low,
+                n_max=N_MAX,
+                n_s_grid=N_S_GRID,
+                rng=RNG,
+                binomial_only=binomial_only,
+                Threads=THREADS,
+                print_progress=True,
+            )
         )
-        best_high, toy_high, chi2_high = km_high.toy_calibrated_survival_bands(
-            CLs=[0.68, 0.95],
-            times_for_plot=times_high,
-            n_max=N_MAX,
-            rng=RNG + 1,
-            binomial_only=binomial_only,
-            Threads=THREADS,
-            print_progress=True,
+        best_high, chi2_high, fitted_high, n_ext_high, fit_high = (
+            km_high.toy_monotone_fit_survival_bands(
+                times_high,
+                n_max=N_MAX,
+                n_s_grid=N_S_GRID,
+                rng=RNG + 1,
+                binomial_only=binomial_only,
+                Threads=THREADS,
+                print_progress=True,
+            )
         )
         elapsed = time.perf_counter() - started
         km_results[key] = {
@@ -242,17 +258,31 @@ else:
                 "times": times_low,
                 "best": best_low,
                 "chi2": chi2_low,
-                "toy": toy_low,
+                "fitted": fitted_low,
+                "n_extreme": n_ext_low,
+                "s_grid": fit_low.s_grid,
+                "pi_in": fit_low.pi_in,
+                "pi_out": fit_low.pi_out,
+                "loglik": fit_low.loglik,
             },
             "high": {
                 "times": times_high,
                 "best": best_high,
                 "chi2": chi2_high,
-                "toy": toy_high,
+                "fitted": fitted_high,
+                "n_extreme": n_ext_high,
+                "s_grid": fit_high.s_grid,
+                "pi_in": fit_high.pi_in,
+                "pi_out": fit_high.pi_out,
+                "loglik": fit_high.loglik,
             },
             "wall": elapsed,
         }
-        print(f"{info['label']}: KM toy bands wall {elapsed:.1f}s")
+        print(
+            f"{info['label']}: KM monotone fit wall {elapsed:.1f}s "
+            f"(low pi_in={fit_low.pi_in:.2f}/pi_out={fit_low.pi_out:.2f}, "
+            f"high pi_in={fit_high.pi_in:.2f}/pi_out={fit_high.pi_out:.2f})"
+        )
 ```
 ```python
 _, axes_dict = plt.subplot_mosaic(
@@ -360,24 +390,23 @@ for panel_key, scenario_key in MOSAIC_TO_SCENARIO.items():
         arm_result = result[arm]
         times = arm_result["times"]
         best = arm_result["best"]
-        # CL index 1 is 95%
-        chi2_lo = arm_result["chi2"][:, 1, 0]
-        chi2_hi = arm_result["chi2"][:, 1, 1]
-        toy_lo = arm_result["toy"][:, 1, 0]
-        toy_hi = arm_result["toy"][:, 1, 1]
+        # Single CL=0.95 from toy_monotone_fit_survival_bands
+        chi2_lo = arm_result["chi2"][:, 0, 0]
+        chi2_hi = arm_result["chi2"][:, 0, 1]
+        fitted = arm_result["fitted"]
         t_plot, best_plot, chi2_lo_plot, chi2_hi_plot = _km_step_arrays(
             times, best, chi2_lo, chi2_hi,
         )
-        _, _, toy_lo_plot, toy_hi_plot = _km_step_arrays(
-            times, best, toy_lo, toy_hi,
+        _, _, mono_lo_plot, mono_hi_plot = _km_step_arrays(
+            times, best, fitted[:, 0], fitted[:, 1],
         )
         ax.fill_between(
             t_plot, chi2_lo_plot, chi2_hi_plot, step="post",
             alpha=0.12, color=color, label=f"{arm} chi2 95%",
         )
         ax.fill_between(
-            t_plot, toy_lo_plot, toy_hi_plot, step="post",
-            alpha=0.28, color=color, label=f"{arm} toy 95%",
+            t_plot, mono_lo_plot, mono_hi_plot, step="post",
+            alpha=0.28, color=color, label=f"{arm} toy monotone fit",
         )
         ax.step(
             t_plot, best_plot, where="post", linewidth=2.5, color=color,
@@ -407,7 +436,96 @@ for panel_key, row_label in zip(
     )
 
 plt.suptitle(
-    "n=20: chi2 vs toy 95% KM bands (Fixed / discrete / Poisson)",
+    "n=20: chi2 vs binomial monotone toy KM bands (Fixed / discrete / Poisson)",
+    fontsize=14, fontweight="bold",
+)
+plt.tight_layout()
+plt.show()
+```
+
+```python
+# Compare monotone binomial fit vs naive per-time intervals from the same
+# S-grid (no extra toys). Naive edges are min/max accepted S at each t and
+# need not decrease.
+_, axes_dict = plt.subplot_mosaic(
+    MOSAIC_LAYOUT, figsize=(14, 13),
+    gridspec_kw={'hspace': 0.52, 'wspace': 0.35},
+)
+for panel_key, scenario_key in MOSAIC_TO_SCENARIO.items():
+    ax = axes_dict[panel_key]
+    info = SCENARIOS[scenario_key]
+    ax.set_title(info["label"], fontsize=11, fontweight="bold")
+    ax.set_xlabel("Time", fontsize=10)
+    ax.set_ylabel("Survival Probability", fontsize=10)
+    ax.set_ylim(0, 1.05)
+    ax.grid(True, alpha=0.3)
+    result = km_results.get(scenario_key)
+    if result is None:
+        ax.text(0.5, 0.5, "KOMBINE_SKIP_TOY_CALIBRATION=1",
+                ha="center", va="center", transform=ax.transAxes)
+        continue
+    for arm, color in (
+        ("low", COLORS_PALETTE[(scenario_key, "low")]),
+        ("high", COLORS_PALETTE[(scenario_key, "high")]),
+    ):
+        arm_result = result[arm]
+        times = arm_result["times"]
+        best = arm_result["best"]
+        fitted = arm_result["fitted"]
+        naive = naive_pointwise_band_edges_from_grid(
+            arm_result["s_grid"],
+            arm_result["n_extreme"],
+            N_MAX,
+            confidence_level=0.95,
+            best=best,
+        )
+        t_plot, best_plot, mono_lo_plot, mono_hi_plot = _km_step_arrays(
+            times, best, fitted[:, 0], fitted[:, 1],
+        )
+        _, _, naive_lo_plot, naive_hi_plot = _km_step_arrays(
+            times, best, naive[:, 0], naive[:, 1],
+        )
+        ax.fill_between(
+            t_plot, naive_lo_plot, naive_hi_plot, step="post",
+            alpha=0.18, color=color, label=f"{arm} naive pointwise",
+        )
+        ax.step(
+            t_plot, mono_lo_plot, where="post", linewidth=2.0,
+            color=color, linestyle="--", label=f"{arm} monotone fit", zorder=4,
+        )
+        ax.step(
+            t_plot, mono_hi_plot, where="post", linewidth=2.0,
+            color=color, linestyle="--", zorder=4,
+        )
+        ax.step(
+            t_plot, best_plot, where="post", linewidth=2.5, color=color,
+            label=f"{arm} MLE", zorder=3,
+        )
+    ax.legend(fontsize=6, loc="lower left")
+
+for panel_key, header in zip(
+    ['dc_small', 'dc_moderate', 'dc_large'],
+    ['Small Uncertainty', 'Medium Uncertainty', 'Large Uncertainty'],
+):
+    axes_dict[panel_key].annotate(
+        header, xy=(0.5, 1.0), xytext=(0, 30),
+        xycoords='axes fraction', textcoords='offset points',
+        ha='center', va='bottom', fontsize=12, fontweight='bold',
+        color='#333333', annotation_clip=False,
+    )
+for panel_key, row_label in zip(
+    ['dc_small', 'pois_large'],
+    ['Discrete\nClasses', 'Poisson\nCounts'],
+):
+    axes_dict[panel_key].annotate(
+        row_label, xy=(0, 0.5), xytext=(-52, 0),
+        xycoords='axes fraction', textcoords='offset points',
+        ha='center', va='center', fontsize=11, fontweight='bold',
+        color='#333333', rotation=90, annotation_clip=False,
+    )
+
+plt.suptitle(
+    "n=20: monotone binomial fit vs naive per-time toy intervals (same S-grid)",
     fontsize=14, fontweight="bold",
 )
 plt.tight_layout()

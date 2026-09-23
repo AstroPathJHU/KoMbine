@@ -18,6 +18,7 @@ from kombine.toy_calibration import (
   linspaced_s_probes,
   logspaced_hr_probes,
   mc_p_value,
+  naive_pointwise_band_edges_from_grid,
   sequential_status,
   unique_positive_hrs,
   unique_unit_interval,
@@ -198,6 +199,23 @@ def test_fit_monotone_band_edges_binomial_recovers_step_band():
   np.testing.assert_allclose(fit.hi, true_hi, atol=0.15)
 
 
+def test_naive_pointwise_band_edges_need_not_be_monotone():
+  """Per-time accept min/max can rise with t even when a monotone fit would not."""
+  s_grid = np.array([0.2, 0.4, 0.6, 0.8])
+  # Extreme = toy more extreme than data. High n_ext => accept H0.
+  # B=19: accept 95% when (1+n_ext)/20 > 0.05 i.e. n_ext >= 1.
+  n_extreme = np.array([
+    [0, 5, 5, 0],   # accept 0.4 and 0.6
+    [5, 0, 0, 5],   # accept 0.2 and 0.8 -> non-monotone vs previous
+  ], dtype=int)
+  edges = naive_pointwise_band_edges_from_grid(
+    s_grid, n_extreme, 19, confidence_level=0.95,
+  )
+  np.testing.assert_allclose(edges[0], [0.4, 0.6])
+  np.testing.assert_allclose(edges[1], [0.2, 0.8])
+  assert edges[1, 0] < edges[0, 0] or edges[1, 1] > edges[0, 1]
+
+
 def test_hr_toy_test_golden():
   """Seeded tiny-cohort HR Neyman test; numbers are regression goldens."""
   datacard = _parse_tiny()
@@ -298,6 +316,7 @@ if __name__ == "__main__":
   test_first_interior_uses_h1_when_mle_rejected()
   test_first_interior_uses_half_when_km_mle_rejected()
   test_fit_monotone_band_edges_binomial_recovers_step_band()
+  test_naive_pointwise_band_edges_need_not_be_monotone()
   print("[PASS] generator / sequential tests")
   test_hr_toy_test_golden()
   print("[PASS] HR toy golden")
