@@ -20,40 +20,17 @@ jupyter:
 
 # Toy-calibrated HR intervals and KM bands
 
-Permutation p-values in KoMbine shuffle `(time, censored)` under **no association** ($H=1$). Likelihood scans still cut $\Delta 2\mathrm{NLL}$ at $\chi^2_1$ (1 and 3.84). Those cuts ignore assignment search, so at large measurement error a $\chi^2$ 95% HR interval can exclude $H=1$ while the permutation test does not reject it.
+KoMbine's permutation test for $H=1$ shuffles `(time, censored)`. Profile scans still cut $\Delta 2\mathrm{NLL}$ at $\chi^2_1$, which ignores assignment search—so at large measurement error a $\chi^2$ 95% HR interval can exclude $H=1$ while the permutation test does not.
 
-This notebook inverts the same profile LRT with **toys** on the n=20 cards from the methods-comparison notebook (Fixed, discrete $e=0.20/0.25/0.40$, and Poisson large/moderate/small counts):
+This notebook builds **toy-calibrated** intervals on the same n=20 cards as notebook 07 (Fixed, discrete $e=0.20/0.25/0.40$, Poisson large/moderate/small). For a candidate $\theta$ ($H$ or $S(t)$), toys redraw cohorts with biomarkers fixed (weighted Cox time permutation for HR; binomial deaths on the observed grid for KM), count how often the toy $\Delta 2\mathrm{NLL}$ exceeds the observed one, and invert only the interval endpoints. Yi / MC-SIMEX are omitted; the mosaics match notebook 07's layout.
 
-1. Pretend a candidate $\theta$ (an $H$, or $S(t)$) is true.
-2. Simulate cohorts with biomarkers held fixed (weighted Cox permutation of the observed times for HR; binomial redraws on the observed death-time grid for KM).
-3. Ask only whether each toy's $\Delta 2\mathrm{NLL}$ is larger than the observed value (`excess_at_most`), and stop when remaining toys cannot change the 68%/95% decision.
-4. Search only interval **endpoints**, starting from a known-inside point (the MLE if toys accept it; otherwise $H=1$ / $S=0.5$, then a probe grid). Interior points are not toy-tested.
+**Runtime.** Without a cache, expect roughly **~25 min** for the HR mosaic and **~1.5–2 h** for the KM S-grid fits (local Gurobi, $B{=}19$, 11 $S$-grid points, seven scenarios; ~2 h total). CI sets `KOMBINE_SKIP_TOY_CALIBRATION=1` and skips those cells.
 
-The HR and KM figures match notebook 07's mosaic layout. Yi / MC-SIMEX are omitted here; toys calibrate KoMbine, not those approximations.
+**Model dependence.** Coverage is exact only if the toys match the true experiment. These toys use KoMbine's fitted model as the DGP: PH / binomial KM likelihood, hard labels (HR) or constrained MLE plug-ins (KM), and the **observed** event-time grid with censoring held fixed. No parametric baseline and no biomarker redraw. At large $e$ the plug-in can be a poor stand-in, so treat the bands as calibrated under that DGP—not assumption-free. ($H{=}1$ time permutation is essentially nonparametric given exchangeability.)
 
-CI sets `KOMBINE_SKIP_TOY_CALIBRATION=1` and skips the MINLP cells (same pattern as notebook 07 skipping n=50).
+**Monotone KM edges.** Primary KM bands come from an S-grid of toys (all $B$, no early stop) with decreasing $lo(t)$, $hi(t)$ fit by binomial MLE: $n_{\mathrm{extreme}}\sim\mathrm{Binomial}(B,\pi_{\mathrm{in}})$ inside the band and $\pi_{\mathrm{out}}<\pi_{\mathrm{in}}$ outside (high extremes mean accept). The same call returns $\chi^2$ profile bands. A later cell compares the monotone fit to **naive** per-time min/max accepted $S$ on the same grid (no extra toys).
 
-## What model dependence the toys add
-
-Coverage is exact only if the toys are draws from the true experiment. $\chi^2$ does not avoid model dependence; it assumes regularity and 1 df instead. These toys swap that for **the DGP we simulate is the one KoMbine fitted.**
-
-Three layers:
-
-1. **The likelihood model itself (already in KoMbine).** Proportional hazards for HR; binomial deaths given risk sets for KM; known measurement-error penalties; one discrete group per patient. Using that model as a simulator is the usual parametric-bootstrap assumption, not a new structural story.
-
-2. **Plug-in of things the likelihood treats as unknown.** The HR generator uses the **observed hard label** vs threshold. That ignores measurement error in the *generation* of times (the fit still pays the measurement penalty). KM binomial draws use the **constrained MLE** at $S(t)=s_0$ (assignments and interval $p_i^s$). Specifying only $S(t^*)=s_0$ does not determine the rest of the curve; the rest is filled in from that profiled fit.
-
-3. **Frozen event-time grid.** We re-pair or redraw deaths on the **observed times**, we do not draw new calendars. Censoring is kept as observed.
-
-**Special case $H=1$.** Uniform permutation of `(time, censored)` is essentially nonparametric given exchangeability. Extra dependence appears only for $H\neq 1$ and for KM.
-
-**What this does not add.** No exponential/Weibull baseline. No redraw of biomarkers.
-
-At large $e$ the plug-in labeling / constrained MLE can be a poor stand-in for the true DGP, so toy coverage can still be off even though $\chi^2$ is also wrong. Do not treat these bands as assumption-free.
-
-**Monotone KM edges.** Pointwise toy endpoint search is omitted as the primary band. We run an S-grid of toys (all $B$ toys, no early stop) and fit decreasing $lo(t)$, $hi(t)$ by a binomial MLE: $n_{\mathrm{extreme}}\sim\mathrm{Binomial}(B,\pi_{\mathrm{in}})$ inside the band and $\pi_{\mathrm{out}}<\pi_{\mathrm{in}}$ outside (high extreme counts mean accept, so $\pi$ is higher inside). The same call also returns the usual $\chi^2$ profile bands. A later notebook cell compares that monotone fit to **naive** per-time intervals from the same grid (min/max accepted $S$ at each $t$, not forced decreasing)—no extra toys.
-
-**Cache.** Fit dicts are written to gitignored `_toy_calibration_cache/n20_toy_calibration.json` after each scenario (JSON with ndarray payloads). If that file exists, the setup cell loads it by default so plots can be redone without new toys. Delete the file (or set `LOAD_TOY_CACHE = False`) to recompute. The file is text so it can later be committed for CI docs if desired.
+**Cache.** Results are written to gitignored `_toy_calibration_cache/n20_toy_calibration.json` after each scenario. If that file exists, setup loads it by default so plots can be redone without new toys. Delete it (or set `LOAD_TOY_CACHE = False`) to recompute.
 
 ```python
 import json
@@ -151,22 +128,9 @@ SCENARIOS = {
         'threshold': 0.5001,
     },
 }
-COLORS_PALETTE = {
-    ('fixed', 'low'): '#1565c0',
-    ('fixed', 'high'): '#c62828',
-    ('misclass_small', 'low'): '#2e7d32',
-    ('misclass_small', 'high'): '#c62828',
-    ('misclass_moderate', 'low'): '#43a047',
-    ('misclass_moderate', 'high'): '#b71c1c',
-    ('misclass_large', 'low'): '#66bb6a',
-    ('misclass_large', 'high'): '#e57373',
-    ('large', 'low'): '#1976d2',
-    ('large', 'high'): '#e53935',
-    ('moderate', 'low'): '#26a69a',
-    ('moderate', 'high'): '#fb8c00',
-    ('small', 'low'): '#80cbc4',
-    ('small', 'high'): '#ffd54f',
-}
+# Same low/high colors in every mosaic panel (panels are separate plots).
+COLOR_LOW = "#1565c0"
+COLOR_HIGH = "#c62828"
 
 
 def _json_encode(obj):
@@ -271,8 +235,7 @@ print("toy cache path:", CACHE_PATH.resolve(), "LOAD_TOY_CACHE=", LOAD_TOY_CACHE
 ```
 
 ```python
-# Re-fit monotone edges from stored S-grid toys (no new MINLPs). Safe after a
-# polarity fix to fit_monotone_band_edges_binomial; also refreshes pi/loglik.
+# Re-fit monotone edges from stored S-grid toys (no new MINLPs).
 def _refit_km_monotone_from_grid(km_results_dict, n_max):
     n_refit = 0
     for _key, result in km_results_dict.items():
@@ -456,15 +419,15 @@ for panel_key, scenario_key in MOSAIC_TO_SCENARIO.items():
                 ha="center", va="center", transform=ax.transAxes)
         continue
     delta = np.array(result["scan_2nll"]) - min(result["scan_2nll"])
-    ax.plot(HAZARD_RATIOS_SCAN, delta, color="#d32f2f", linewidth=2.5,
+    ax.plot(HAZARD_RATIOS_SCAN, delta, color=COLOR_HIGH, linewidth=2.5,
             marker="s", markersize=3, label="KoMbine chi2", zorder=3)
-    ax.axvline(result["chi2_best"], color="#d32f2f", linestyle="--",
+    ax.axvline(result["chi2_best"], color=COLOR_HIGH, linestyle="--",
                alpha=0.6, linewidth=1.5, zorder=2)
     toy_68 = result["toy"][0.68]
     toy_95 = result["toy"][0.95]
-    ax.axvspan(toy_95[1], toy_95[2], color="#d32f2f", alpha=0.12,
+    ax.axvspan(toy_95[1], toy_95[2], color=COLOR_HIGH, alpha=0.12,
                label="toy 95%", zorder=0)
-    ax.axvspan(toy_68[1], toy_68[2], color="#d32f2f", alpha=0.22,
+    ax.axvspan(toy_68[1], toy_68[2], color=COLOR_HIGH, alpha=0.22,
                label="toy 68%", zorder=0)
     ax.legend(fontsize=7, loc="upper left")
 
@@ -515,10 +478,7 @@ for panel_key, scenario_key in MOSAIC_TO_SCENARIO.items():
         ax.text(0.5, 0.5, "KOMBINE_SKIP_TOY_CALIBRATION=1",
                 ha="center", va="center", transform=ax.transAxes)
         continue
-    for arm, color in (
-        ("low", COLORS_PALETTE[(scenario_key, "low")]),
-        ("high", COLORS_PALETTE[(scenario_key, "high")]),
-    ):
+    for arm, color in (("low", COLOR_LOW), ("high", COLOR_HIGH)):
         arm_result = result[arm]
         times = arm_result["times"]
         best = arm_result["best"]
@@ -595,10 +555,7 @@ for panel_key, scenario_key in MOSAIC_TO_SCENARIO.items():
         ax.text(0.5, 0.5, "KOMBINE_SKIP_TOY_CALIBRATION=1",
                 ha="center", va="center", transform=ax.transAxes)
         continue
-    for arm, color in (
-        ("low", COLORS_PALETTE[(scenario_key, "low")]),
-        ("high", COLORS_PALETTE[(scenario_key, "high")]),
-    ):
+    for arm, color in (("low", COLOR_LOW), ("high", COLOR_HIGH)):
         arm_result = result[arm]
         times = arm_result["times"]
         best = arm_result["best"]

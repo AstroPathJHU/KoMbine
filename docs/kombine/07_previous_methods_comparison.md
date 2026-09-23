@@ -241,22 +241,9 @@ SCENARIOS_FULL = {
     },
 }
 
-COLORS_PALETTE = {
-    ('fixed', 'low'): '#0d47a1',
-    ('fixed', 'high'): '#6d1c1e',
-    ('misclass_small', 'low'): '#1b5e20',
-    ('misclass_small', 'high'): '#8e0000',
-    ('misclass_moderate', 'low'): '#2e7d32',
-    ('misclass_moderate', 'high'): '#b71c1c',
-    ('misclass_large', 'low'): '#66bb6a',
-    ('misclass_large', 'high'): '#e57373',
-    ('large', 'low'): '#1976d2',
-    ('large', 'high'): '#e53935',
-    ('moderate', 'low'): '#26a69a',
-    ('moderate', 'high'): '#fb8c00',
-    ('small', 'low'): '#80cbc4',
-    ('small', 'high'): '#ffd54f',
-}
+# Same low/high colors in every mosaic panel (panels are separate plots).
+COLOR_LOW = "#1565c0"
+COLOR_HIGH = "#c62828"
 
 
 def progress(msg: str) -> None:
@@ -415,10 +402,10 @@ def run_km_analysis(scenarios, datacards):
     return km_results
 
 
-def _plot_km_in_ax(ax, scenario_key, scenario_info, result):
+def _plot_km_in_ax(ax, scenario_info, result):
     """Plot KM curves (Yi dashed, SIMEX dotted, KoMbine solid + CI shading)."""
-    color_low = COLORS_PALETTE[(scenario_key, 'low')]
-    color_high = COLORS_PALETTE[(scenario_key, 'high')]
+    color_low = COLOR_LOW
+    color_high = COLOR_HIGH
 
     times_low_yi = result['yi']['low']['times_for_plot']
     surv_low_yi = result['yi']['low']['survival_probabilities']
@@ -514,8 +501,11 @@ def plot_km_mosaic(scenarios, km_results, title):
         gridspec_kw={'hspace': 0.52, 'wspace': 0.35},
     )
     for panel_key, scenario_key in MOSAIC_TO_SCENARIO.items():
-        _plot_km_in_ax(axes_dict[panel_key], scenario_key,
-                       scenarios[scenario_key], km_results[scenario_key])
+        _plot_km_in_ax(
+            axes_dict[panel_key],
+            scenarios[scenario_key],
+            km_results[scenario_key],
+        )
     _annotate_comparison_mosaic(axes_dict)
     plt.suptitle(title, fontsize=14, fontweight='bold')
     plt.tight_layout()
