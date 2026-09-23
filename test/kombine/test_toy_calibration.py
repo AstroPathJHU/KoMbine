@@ -185,7 +185,8 @@ def test_fit_monotone_band_edges_binomial_recovers_step_band():
   n_extreme = np.empty((len(true_lo), len(s_grid)), dtype=int)
   for i_time, (lo, hi) in enumerate(zip(true_lo, true_hi)):
     for i_s, survival in enumerate(s_grid):
-      pi = 0.1 if lo <= survival <= hi else 0.7
+      # High n_extreme inside = accept (matches real MC toys).
+      pi = 0.7 if lo <= survival <= hi else 0.1
       n_extreme[i_time, i_s] = rng.binomial(n_max, pi)
   best = 0.5 * (true_lo + true_hi)
   fit = fit_monotone_band_edges_binomial(
@@ -194,7 +195,7 @@ def test_fit_monotone_band_edges_binomial_recovers_step_band():
   assert np.all(np.diff(fit.lo) <= 1e-12)
   assert np.all(np.diff(fit.hi) <= 1e-12)
   assert np.all(fit.lo <= fit.hi)
-  assert fit.pi_in < fit.pi_out
+  assert fit.pi_in > fit.pi_out
   np.testing.assert_allclose(fit.lo, true_lo, atol=0.15)
   np.testing.assert_allclose(fit.hi, true_hi, atol=0.15)
 

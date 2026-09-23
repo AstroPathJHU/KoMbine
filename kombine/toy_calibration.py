@@ -528,8 +528,12 @@ def fit_monotone_band_edges_binomial(  # pylint: disable=too-many-locals,too-man
 
   Model: at time ``t`` and grid survival ``s``,
   ``n_extreme ~ Binomial(n_max, π_in)`` if ``lo(t) <= s <= hi(t)``, else
-  ``Binomial(n_max, π_out)``, with ``π_in < π_out`` and both edges
+  ``Binomial(n_max, π_out)``, with ``π_in > π_out`` and both edges
   nonincreasing in ``t``.
+
+  High ``n_extreme`` means toys were often more extreme than the data, so the
+  hypothesized ``S`` is compatible (standard MC p-value). Inside the band we
+  therefore expect a *higher* extreme rate than outside.
   """
   s_arr = np.asarray(s_grid, dtype=float)
   counts = np.asarray(n_extreme, dtype=int)
@@ -556,15 +560,16 @@ def fit_monotone_band_edges_binomial(  # pylint: disable=too-many-locals,too-man
       dtype=np.int64,
     )
 
+  # Inside: high extreme rate (accept); outside: low (reject).
   if pi_in_values is None:
-    pi_in_values = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30]
+    pi_in_values = [0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
   if pi_out_values is None:
-    pi_out_values = [0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
+    pi_out_values = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30]
 
   best_fit: MonotoneBandFit | None = None
   for pi_in in pi_in_values:
     for pi_out in pi_out_values:
-      if not 0.0 < pi_in < pi_out < 1.0:
+      if not 0.0 < pi_out < pi_in < 1.0:
         continue
       lo_idx, hi_idx, loglik = _best_monotone_indices_for_pis(
         counts, n_max, float(pi_in), float(pi_out), best_idx=best_idx,
