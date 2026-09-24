@@ -39,12 +39,10 @@ jupyter:
      Thomas and Grunkemeier as implemented in R package `km.ci`
  - `07_previous_methods_comparison.html`
    - comparison of Yi's weights, Küchenhoff MC-SIMEX, and KoMbine
-     on Kaplan-Meier curves, p-values, and hazard ratios
+     on Kaplan-Meier curves, p-values, and hazard ratios.
+     KoMbine intervals are toy-calibrated when group assignments are free
  - `08_command_line_interface.html`
    - documentation for the command line interface (`kombine` and `kombine_twogroups` commands)
- - `09_toy_calibrated_intervals.html`
-   - Neyman / toy inversion of the profile LRT for hazard-ratio intervals
-     and Kaplan-Meier bands (weighted Cox permutations and binomial grid toys)
 
 # Compilation instructions
 

@@ -114,9 +114,11 @@ hr_calc = datacard.km_hazard_ratio(
     parameter_max=np.inf,
 )
 
-# Calculate best-fit HR and 95% confidence interval
+# Wilks profile interval (method="chi2"). The library default when
+# assignments are free is a toy-calibrated interval; this cell shows the scan.
 best_fit_hr, lower_ci_95, upper_ci_95, result_95 = hr_calc.hazard_ratio_confidence_interval(
     cox_only=False,
+    method="chi2",
     confidence_level=0.95,
     hazard_ratio_min=0.01,
     hazard_ratio_max=100.0,

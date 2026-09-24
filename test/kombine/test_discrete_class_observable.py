@@ -153,6 +153,7 @@ def test_discrete_class_hazard_ratio_stays_near_hard_labels():
   )
   kombine_hr, lower, upper, _ = hr_calc.hazard_ratio_confidence_interval(
     cox_only=False,
+    method="chi2",
     confidence_level=0.95,
     hazard_ratio_min=0.01,
     hazard_ratio_max=100.0,

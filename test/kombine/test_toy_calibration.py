@@ -19,11 +19,28 @@ from kombine.toy_calibration import (
   logspaced_hr_probes,
   mc_p_value,
   naive_pointwise_band_edges_from_grid,
+  resolve_hazard_ratio_interval_method,
   sequential_status,
   unique_positive_hrs,
   unique_unit_interval,
   weighted_cox_permutation,
 )
+
+
+def test_resolve_hazard_ratio_interval_method():
+  """Toys are the default only when assignments are free."""
+  assert resolve_hazard_ratio_interval_method(None, cox_only=False) == "toy"
+  assert resolve_hazard_ratio_interval_method(None, cox_only=True) == "chi2"
+  assert resolve_hazard_ratio_interval_method("chi2", cox_only=False) == "chi2"
+  assert resolve_hazard_ratio_interval_method("chi2", cox_only=True) == "chi2"
+  assert resolve_hazard_ratio_interval_method("toy", cox_only=False) == "toy"
+  assert resolve_hazard_ratio_interval_method("toy", cox_only=True) == "toy"
+  try:
+    resolve_hazard_ratio_interval_method("wilks", cox_only=False)
+  except ValueError:
+    pass
+  else:
+    raise AssertionError("expected ValueError for an unknown method")
 
 
 TINY_DATACARD = """
@@ -308,6 +325,7 @@ def test_hr_mle_at_bound_toy_region_golden():
 
 
 if __name__ == "__main__":
+  test_resolve_hazard_ratio_interval_method()
   test_sequential_status_accept_reject_continue()
   test_sequential_counter_stops_when_all_cls_decided()
   test_weighted_cox_h1_preserves_outcome_multiset()

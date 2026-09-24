@@ -29,6 +29,7 @@ from .toy_calibration import (
   first_interior,
   hard_group_high,
   logspaced_hr_probes,
+  resolve_hazard_ratio_interval_method,
   unique_positive_hrs,
   weighted_cox_permutation,
 )
@@ -397,12 +398,21 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
     hazard_ratio_min: float = 0.01,
     hazard_ratio_max: float = 100.0,
     tolerance: float = 1e-3,
+    method: typing.Literal["toy", "chi2"] | None = None,
+    n_max: int = 19,
+    rng: int | np.random.Generator | None = None,
+    xtol: float = 0.05,
+    Threads: int | None = 1,
+    verbose: bool = False,
+    print_progress: bool = False,
   ) -> tuple[float, float, float, scipy.optimize.OptimizeResult]:
     """
-    Compute the confidence interval for the hazard ratio using profile likelihood.
+    Confidence interval for the hazard ratio.
 
-    This method finds the best-fit hazard ratio and its confidence interval by
-    identifying where the 2NLL crosses the threshold for the desired confidence level.
+    When assignments are free (``cox_only=False``) the default is a
+    toy-calibrated Neyman interval at ``confidence_level``. Pass
+    ``method="chi2"`` for a Wilks profile cut. Fixed assignments
+    (``cox_only=True``) use that Wilks cut unless ``method="toy"``.
 
     Parameters
     ----------
@@ -415,7 +425,22 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
     hazard_ratio_max : float, optional
         Maximum hazard ratio to consider in the search. Default is 100.0.
     tolerance : float, optional
-        Tolerance for the confidence interval boundaries. Default is 1e-3.
+        Tolerance for the χ² profile boundaries. Default is 1e-3.
+    method : {"toy", "chi2"} or None, optional
+        ``None`` selects toys when assignments are free and a χ² cut when
+        they are fixed. ``"chi2"`` always uses the Wilks profile.
+    n_max : int, optional
+        Planned number of toys when ``method`` resolves to ``"toy"``.
+    rng : int or numpy.random.Generator, optional
+        Toy seed.
+    xtol : float, optional
+        Log-HR tolerance for the toy endpoint bisection.
+    Threads : int or None, optional
+        Gurobi thread count for toy solves.
+    verbose : bool, optional
+        Passed through to toy solves.
+    print_progress : bool, optional
+        Print each toy HR probe.
 
     Returns
     -------
@@ -428,6 +453,44 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
     best_fit_result : scipy.optimize.OptimizeResult
         The optimization result at the best-fit hazard ratio.
     """
+    resolved = resolve_hazard_ratio_interval_method(method, cox_only=cox_only)
+    if resolved == "toy":
+      intervals = self.toy_calibrated_hazard_ratio_interval(
+        n_max=n_max,
+        rng=rng,
+        cox_only=cox_only,
+        confidence_levels=(float(confidence_level),),
+        hazard_ratio_min=hazard_ratio_min,
+        hazard_ratio_max=hazard_ratio_max,
+        xtol=xtol,
+        Threads=Threads,
+        verbose=verbose,
+        print_progress=print_progress,
+      )
+      best_fit_hr, lower_ci, upper_ci = intervals[float(confidence_level)]
+      best_fit_result = self.compute_2nll_at_hazard_ratio(
+        best_fit_hr, cox_only=cox_only, Threads=Threads,
+        verbose=verbose, print_progress=print_progress,
+      )
+      return best_fit_hr, lower_ci, upper_ci, best_fit_result
+    return self._chi2_hazard_ratio_confidence_interval(
+      cox_only=cox_only,
+      confidence_level=confidence_level,
+      hazard_ratio_min=hazard_ratio_min,
+      hazard_ratio_max=hazard_ratio_max,
+      tolerance=tolerance,
+    )
+
+  def _chi2_hazard_ratio_confidence_interval(  # pylint: disable=too-many-arguments,too-many-locals
+    self,
+    *,
+    cox_only: bool,
+    confidence_level: float,
+    hazard_ratio_min: float,
+    hazard_ratio_max: float,
+    tolerance: float,
+  ) -> tuple[float, float, float, scipy.optimize.OptimizeResult]:
+    """Wilks profile interval: 2NLL crosses min + χ²_1(CL)."""
     # First, find the best-fit hazard ratio by minimizing the 2NLL
     def objective(log_hr):
       hr = np.exp(log_hr)
@@ -795,11 +858,13 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
     is the unconstrained MLE even when it lies outside the toy region.
     """
     generator = as_generator(rng)
+    # χ² edges bracket the toy search. method="chi2" avoids recursing into toys.
     best_fit, chi2_lower, chi2_upper, _best = self.hazard_ratio_confidence_interval(
       cox_only=cox_only,
       confidence_level=max(confidence_levels),
       hazard_ratio_min=hazard_ratio_min,
       hazard_ratio_max=hazard_ratio_max,
+      method="chi2",
     )
     cache: dict[float, ToyTestResult] = {}
 

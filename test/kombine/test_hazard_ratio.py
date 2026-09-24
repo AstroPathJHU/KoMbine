@@ -221,6 +221,7 @@ def test_confidence_interval():
   # Calculate 68% confidence interval
   best_fit_hr, lower_ci, upper_ci, best_fit_result = hr_calc.hazard_ratio_confidence_interval(
     cox_only=False,
+    method="chi2",
     confidence_level=0.68,
     hazard_ratio_min=0.01,
     hazard_ratio_max=20.0,
@@ -387,6 +388,7 @@ def test_known_hazard_ratios(): #pylint: disable=too-many-locals
     # Calculate best-fit hazard ratio with confidence interval
     best_fit_hr, lower_ci, upper_ci, _ = hr_calc.hazard_ratio_confidence_interval(
       cox_only=False,
+      method="chi2",
       confidence_level=0.68,
       hazard_ratio_min=0.1,
       hazard_ratio_max=10.0,
@@ -439,6 +441,7 @@ def test_bounds_warning():
   # Get best-fit HR
   best_fit_wide, _, _, _ = hr_calc_wide.hazard_ratio_confidence_interval(
     cox_only=False,
+    method="chi2",
     confidence_level=0.68,
     hazard_ratio_min=0.00001,
     hazard_ratio_max=10.0,
@@ -463,6 +466,7 @@ def test_bounds_warning():
     # Request confidence interval - best-fit should hit lower bound
     best_fit_tight, _, _, _ = hr_calc_tight.hazard_ratio_confidence_interval(
       cox_only=False,
+      method="chi2",
       confidence_level=0.68,
       hazard_ratio_min=np.exp(log_lower_bound),
       hazard_ratio_max=1.0,

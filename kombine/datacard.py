@@ -1435,7 +1435,11 @@ class Datacard:  # pylint: disable=too-many-public-methods
     >>> from kombine.datacard import Datacard
     >>> datacard = Datacard.parse_datacard("datacard.txt")
     >>> hr_calc = datacard.km_hazard_ratio(parameter_threshold=0.5)
-    >>> best_fit, lower_ci, upper_ci, result = hr_calc.hazard_ratio_confidence_interval()
+    >>> # Default is a toy interval when assignments are free.
+    >>> # method="chi2" is the fast Wilks profile cut.
+    >>> best_fit, lower_ci, upper_ci, result = hr_calc.hazard_ratio_confidence_interval(
+    ...     method="chi2",
+    ... )
     >>> print(f"Hazard ratio: {best_fit:.2f} [{lower_ci:.2f}, {upper_ci:.2f}]")
     """
     # Import here to avoid circular import

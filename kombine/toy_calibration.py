@@ -17,6 +17,29 @@ import numpy.typing as npt
 
 DEFAULT_CLS: tuple[float, ...] = (0.68, 0.95)
 
+HazardRatioIntervalMethod = typing.Literal["toy", "chi2"]
+
+
+def resolve_hazard_ratio_interval_method(
+  method: str | None,
+  *,
+  cox_only: bool,
+) -> HazardRatioIntervalMethod:
+  """
+  Choose the reported HR interval.
+
+  Toys are the default when assignments are free. A Wilks χ² cut is used
+  when assignments are fixed (``cox_only=True``) or when ``method="chi2"``.
+  An explicit ``method="toy"`` is honored even if ``cox_only`` is set.
+  """
+  if method not in (None, "toy", "chi2"):
+    raise ValueError(
+      f"method must be 'toy', 'chi2', or None, got {method!r}"
+    )
+  if method == "chi2" or (method is None and cox_only):
+    return "chi2"
+  return "toy"
+
 
 def mc_p_value(n_extreme: int, n_max: int) -> float:
   """Monte Carlo p-value with the +1 continuity correction."""

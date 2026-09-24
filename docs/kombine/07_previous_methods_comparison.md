@@ -18,16 +18,21 @@ jupyter:
 # pylint: disable=bad-indentation,line-too-long,missing-module-docstring,redefined-outer-name,trailing-whitespace,too-many-locals,too-many-statements,too-many-arguments,too-many-branches,too-many-positional-arguments,wrong-import-order,wrong-import-position
 ```
 
-# Previous Methods vs KoMbine: Yi, MC-SIMEX, and Profile Likelihood
+# Previous Methods vs KoMbine
 
-This notebook compares two published recipes for discrete covariate misclassification — Yi's probability weights and Küchenhoff MC-SIMEX — to KoMbine's profile likelihood over group assignments.
+This notebook compares two published recipes for discrete covariate misclassification — Yi's probability weights and Küchenhoff MC-SIMEX — to KoMbine.
+
+KoMbine's reported uncertainty depends on whether group assignments can move:
+
+- **Fixed card:** assignments are determined by the data. Kaplan–Meier bands are the binomial profile, and the hazard-ratio interval is a Wilks $\chi^2_1$ cut (`method="chi2"`).
+- **Discrete and Poisson cards:** assignments are free. Hazard-ratio intervals are toy-calibrated Neyman inversions of the profile LRT ($B=19$, 68% and 95%). Kaplan–Meier bands are a decreasing binomial fit to an $S$-grid of toys (11 grid points, no early stop). The $\chi^2$ profile is only the bracket that starts that search, not the reported interval.
 
 **Two families** (n=20 always; n=50 unless CI skips it):
 
-- **n=20** (`*_hr_example*`, ~7 distinct death times, discrete $e = 0.20$, $0.25$, $0.40$): minutes-scale. This is the discrete ladder where KoMbine KM bands widen / collapse at large $e$. Always run.
-- **n=50** (`methods_comparison_*`, regenerated into a gitignored `rebinned/` dir, **4** quantile-bin death-time medians, discrete $e = 0.05$, $0.10$, $0.25$): hours-scale. KoMbine KM bands use `crossing_mode="feasibility"` (oracle bracketing + brentq polish). A 2026-09 local n=50 pass was **~85 min** (Analysis 1 ~63 min, Analysis 2 ~21 min with $B=99$, Analysis 3 negligible); Poisson (small counts) dominates Analysis 1 (~50 min). Default (unset env) runs this family **after** n=20.
+- **n=20** (`*_hr_example*`, discrete $e = 0.20$, $0.25$, $0.40$). Yi, MC-SIMEX, and permutation p-values are minutes-scale. Toy HR intervals and KM bands are a long local run.
+- **n=50** (`methods_comparison_*`, regenerated into a gitignored `rebinned/` dir, **4** quantile-bin death-time medians, discrete $e = 0.05$, $0.10$, $0.25$). The same toy calls run after n=20. That pass takes many hours. Default (unset env) runs this family **after** n=20.
 
-**CI / skip n=50** (`KOMBINE_QUICK_COMPARISON=1`): n=20 only. The n=50 cells still run, but they print a skip message instead of loading cards or solving MINLPs.
+**CI.** `KOMBINE_QUICK_COMPARISON=1` skips the n=50 family. `KOMBINE_SKIP_TOY_CALIBRATION=1` skips toy solves and does not draw a $\chi^2$ band in their place. A cache file, if present, is still plotted. Yi, MC-SIMEX, and p-values on n=20 still run.
 
 Fixed and Poisson cards are split at `0.5001` (a density/value cut). Discrete-class cards are split at `1` (the boundary between class indices 0 and 1):
 - Fixed Hazard Ratio (deterministic, no measurement error)
@@ -47,7 +52,7 @@ All three methods use the same measurement model (`observable.probability_in_ran
 | **Optimization** | 1-D scalar min of the weighted Breslow 2NLL | Monte Carlo average at each $\lambda$, quadratic fit | Mixed Integer Nonlinear Programming (Gurobi) |
 | **Computational cost** | Low | Low–medium | Medium-high (~1 h for the n=50 family) |
 | **Accuracy (within model)** | Approximate to the full likelihood | Approximate (simulation + extrapolation) | Exact maximizer within solver tolerance |
-| **Uncertainty** | Likelihood-ratio interval of the weighted Breslow 2NLL (no KM bands here) | Sampling CI of the extrapolated number (Wald for HR) | Profile likelihood |
+| **Uncertainty** | Likelihood-ratio interval of the weighted Breslow 2NLL (no KM bands here) | Sampling CI of the extrapolated number (Wald for HR) | Toy-calibrated interval when assignments are free; Wilks $\chi^2$ when they are fixed |
 | **Core assumptions** | Known measurement error distribution; independent errors; fractional group membership is an adequate proxy for uncertain assignment | Known measurement error distribution; independent errors; quadratic extrapolation of the naive hard-label estimator is adequate | Known measurement error distribution; independent errors; patients belong to one group; event times treated as observed and discrete; likelihood model is correctly specified |
 
 ### How the three recipes use the same $e_i$
@@ -74,7 +79,7 @@ All three methods use the same measurement model (`observable.probability_in_ran
 - Introduce a binary assignment variable for each patient (low vs high group).
 - Combine the survival likelihood with a measurement error penalty that scores how plausible each assignment is.
 - Solve a constrained optimization problem that finds the most likely set of assignments and survival parameters together.
-- Compute confidence intervals via profile likelihood, which naturally widens as uncertainty increases.
+- Report a toy-calibrated confidence set when assignments are free. A Wilks $\chi^2$ cut is used only when assignments are fixed, and as the bracket that starts the toy search.
 - This is exact for the specified likelihood model but requires heavier computation than Yi or MC-SIMEX.
 
 ### Key Comparisons
@@ -93,10 +98,10 @@ $$
 $$
 where $e$ is the misclassification rate shared by all patients.
 
-Each family uses three error levels chosen so the mid panel keeps KoMbine near the observed-label HR while the large-$e$ panel shows assignment search:
+Each family uses three error levels:
 
-- n=20 (`*_hr_example*`, always): $e = 0.20$, $0.25$, $0.40$ — KM bands stay similar at $0.20$ vs $0.25$ and widen / collapse at $e=0.40$
-- n=50 (`methods_comparison_*`, default only): $e = 0.05$, $0.10$, $0.25$ — KM bands stay similar (observed-label basin); the high panel is the joint HR assignment-search cliff
+- n=20 (`*_hr_example*`, always): $e = 0.20$, $0.25$, $0.40$
+- n=50 (`methods_comparison_*`, default only): $e = 0.05$, $0.10$, $0.25$
 
 `KOMBINE_QUICK_COMPARISON=1` skips the n=50 family.
 
@@ -107,9 +112,11 @@ $(1-e, e)$, and patients in the high group get $(e, 1-e)$.
 MC-SIMEX uses the same $e$ as the per-patient flip rate.
 
 ```python
+import json
 import os
 import sys
 import datetime
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 import pathlib
@@ -121,6 +128,10 @@ if str(_repo_root) not in sys.path:
 
 from kombine.datacard import Datacard
 from kombine.comparisons import YiCorrectionForCoxPH
+from kombine.toy_calibration import (
+    fit_monotone_band_edges_binomial,
+    naive_pointwise_band_edges_from_grid,
+)
 
 # Single notebook budget. Edit these if you want denser scans.
 N_PERMUTATIONS = 99
@@ -128,10 +139,22 @@ N_HR_SCAN = 25
 SIMEX_B = 20
 LABEL_WIDTH = 9
 HAZARD_RATIOS_SCAN = np.logspace(-2, 2, N_HR_SCAN)  # 0.01 to 100
+HAZARD_RATIO_MIN = 0.01
+HAZARD_RATIO_MAX = 100.0
 
 # Default: n=20 then n=50. Set KOMBINE_QUICK_COMPARISON=1 to skip n=50 (CI).
 QUICK_COMPARISON = bool(os.environ.get("KOMBINE_QUICK_COMPARISON"))
+# Skip toy MINLPs. A cache, if loaded, is still plotted. Fixed-card χ² still runs.
+SKIP_TOY = bool(os.environ.get("KOMBINE_SKIP_TOY_CALIBRATION"))
 SIMEX_RNG = 0
+N_MAX = 19
+N_S_GRID = 11
+TOY_RNG = 0
+# Local runs use Gurobi's default thread count.
+THREADS = None
+LOAD_TOY_CACHE = True
+CACHE_DIR = _repo_root / "docs" / "kombine" / "_toy_calibration_cache"
+CACHE_PATH = CACHE_DIR / "methods_comparison_toys.json"
 
 TITLE_QUICK = "n=20, discrete e=0.20/0.25/0.40"
 TITLE_FULL = "n=50, discrete e=0.05/0.10/0.25"
@@ -268,6 +291,131 @@ def skip_n50(what: str) -> None:
     )
 
 
+def skip_toys(what: str) -> None:
+    """Print why a toy solve was omitted."""
+    progress(
+        f"Skipping {what} because KOMBINE_SKIP_TOY_CALIBRATION is set. "
+        "χ² is not plotted in its place."
+    )
+
+
+def _json_encode(obj):
+    if isinstance(obj, dict):
+        return {str(key): _json_encode(value) for key, value in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_encode(value) for value in obj]
+    if isinstance(obj, np.ndarray):
+        return {
+            "__ndarray__": True,
+            "dtype": str(obj.dtype),
+            "shape": list(obj.shape),
+            "data": obj.tolist(),
+        }
+    if isinstance(obj, (np.floating, np.integer)):
+        return obj.item()
+    if isinstance(obj, pathlib.Path):
+        return str(obj)
+    return obj
+
+
+def _json_decode(obj):
+    if isinstance(obj, dict):
+        if obj.get("__ndarray__"):
+            return np.asarray(obj["data"], dtype=np.dtype(obj["dtype"]))
+        return {key: _json_decode(value) for key, value in obj.items()}
+    if isinstance(obj, list):
+        return [_json_decode(value) for value in obj]
+    return obj
+
+
+TOY_CACHE = {"n20": {"hr": {}, "km": {}}, "n50": {"hr": {}, "km": {}}}
+
+
+def save_toy_cache(path=CACHE_PATH):
+    """Write toy HR/KM results for both families. Skip placeholders are not stored."""
+    path = pathlib.Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "format": "kombine_methods_comparison_toys_v1",
+        "N_MAX": int(N_MAX),
+        "N_S_GRID": int(N_S_GRID),
+        "RNG": int(TOY_RNG),
+        "families": _json_encode(TOY_CACHE),
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def load_toy_cache(path=CACHE_PATH):
+    """Load a matching cache. Returns False when the file is missing or stale."""
+    path = pathlib.Path(path)
+    if not path.is_file():
+        return False
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("format") != "kombine_methods_comparison_toys_v1":
+        progress(f"Ignoring toy cache with format {payload.get('format')!r}")
+        return False
+    if int(payload.get("N_MAX", -1)) != N_MAX or int(payload.get("N_S_GRID", -1)) != N_S_GRID:
+        progress(
+            f"Ignoring toy cache at {path.name}: "
+            f"N_MAX/N_S_GRID {payload.get('N_MAX')}/{payload.get('N_S_GRID')} "
+            f"!= {N_MAX}/{N_S_GRID}"
+        )
+        return False
+    loaded = _json_decode(payload.get("families", {}))
+    for family in ("n20", "n50"):
+        family_payload = loaded.get(family, {})
+        TOY_CACHE[family]["hr"] = family_payload.get("hr", {})
+        TOY_CACHE[family]["km"] = family_payload.get("km", {})
+    return True
+
+
+def _refit_cached_km(km_dict):
+    """Re-fit monotone edges from stored S-grid counts. No new MINLPs."""
+    n_refit = 0
+    for result in km_dict.values():
+        kombine = result.get("kombine", {})
+        for arm in ("low", "high"):
+            arm_result = kombine.get(arm, {})
+            if "n_extreme" not in arm_result:
+                continue
+            fit = fit_monotone_band_edges_binomial(
+                arm_result["s_grid"],
+                arm_result["n_extreme"],
+                N_MAX,
+                best=arm_result["best"],
+            )
+            fitted = np.column_stack([fit.lo, fit.hi])
+            arm_result["fitted"] = fitted
+            arm_result["ci"] = fitted[:, None, :]
+            arm_result["pi_in"] = fit.pi_in
+            arm_result["pi_out"] = fit.pi_out
+            arm_result["loglik"] = fit.loglik
+            n_refit += 1
+    return n_refit
+
+
+def _band_from_profile(best, ci):
+    """Profile CI is already (n_times, n_cl, 2)."""
+    return np.asarray(best, dtype=float), np.asarray(ci, dtype=float)
+
+
+def _band_from_monotone(best, fitted, n_extreme, s_grid, fit):
+    """Store the monotone toy band in the same CI layout as a one-CL profile."""
+    fitted = np.asarray(fitted, dtype=float)
+    return {
+        "best": np.asarray(best, dtype=float),
+        "ci": fitted[:, None, :],
+        "fitted": fitted,
+        "n_extreme": np.asarray(n_extreme),
+        "s_grid": np.asarray(s_grid, dtype=float),
+        "pi_in": fit.pi_in,
+        "pi_out": fit.pi_out,
+        "loglik": fit.loglik,
+        "skipped": False,
+    }
+
+
 def load_datacards(directory, scenarios):
     """Parse each scenario datacard and print n / deaths / distinct times."""
     loaded = {}
@@ -287,10 +435,20 @@ def load_datacards(directory, scenarios):
     return loaded
 
 
-def run_km_analysis(scenarios, datacards):
-    """Yi, MC-SIMEX, and KoMbine KM (with KoMbine 95% bands) for every scenario."""
+def run_km_analysis(scenarios, datacards, family):
+    """Yi, MC-SIMEX, and KoMbine KM for every scenario.
+
+    The fixed card uses a binomial χ² band. Other cards use monotone toy
+    bands unless toys are skipped and this family has no cache entry.
+    """
     km_results = {}
     for scenario_key, scenario_info in scenarios.items():
+        cached = TOY_CACHE[family]["km"].get(scenario_key)
+        if cached is not None:
+            progress(f"[{scenario_info['label']}] Analysis 1 from toy cache")
+            km_results[scenario_key] = cached
+            continue
+
         progress(f"[{scenario_info['label']}] Analysis 1 starting…")
         dc = datacards[scenario_key]
         threshold = scenario_info['threshold']
@@ -340,22 +498,78 @@ def run_km_analysis(scenarios, datacards):
             B=SIMEX_B,
         )
 
-        progress("  KoMbine low arm (full NLL, CLs=[0.95], crossing_mode=feasibility)…")
-        best_low, ci_low = km_low.survival_probabilities_likelihood(
-            CLs=[0.95],
-            times_for_plot=times_low,
-            binomial_only=(scenario_key == 'fixed'),
-            print_progress=True,
-            crossing_mode="feasibility",
-        )
-        progress("  KoMbine high arm (full NLL, CLs=[0.95], crossing_mode=feasibility)…")
-        best_high, ci_high = km_high.survival_probabilities_likelihood(
-            CLs=[0.95],
-            times_for_plot=times_high,
-            binomial_only=(scenario_key == 'fixed'),
-            print_progress=True,
-            crossing_mode="feasibility",
-        )
+        use_toys = scenario_key != "fixed"
+        if use_toys and SKIP_TOY:
+            skip_toys(f"{scenario_info['label']} KoMbine KM bands")
+            kombine_low = {
+                "times": times_low, "best": None, "ci": None, "skipped": True,
+            }
+            kombine_high = {
+                "times": times_high, "best": None, "ci": None, "skipped": True,
+            }
+            store_cache = False
+        elif use_toys:
+            progress(
+                f"  KoMbine toy monotone KM (B={N_MAX}, S-grid={N_S_GRID})…"
+            )
+            started = time.perf_counter()
+            best_low, _chi2_low, fitted_low, n_ext_low, fit_low = (
+                km_low.toy_monotone_fit_survival_bands(
+                    times_low,
+                    n_max=N_MAX,
+                    n_s_grid=N_S_GRID,
+                    rng=TOY_RNG,
+                    binomial_only=False,
+                    Threads=THREADS,
+                    print_progress=True,
+                )
+            )
+            best_high, _chi2_high, fitted_high, n_ext_high, fit_high = (
+                km_high.toy_monotone_fit_survival_bands(
+                    times_high,
+                    n_max=N_MAX,
+                    n_s_grid=N_S_GRID,
+                    rng=TOY_RNG + 1,
+                    binomial_only=False,
+                    Threads=THREADS,
+                    print_progress=True,
+                )
+            )
+            kombine_low = _band_from_monotone(
+                best_low, fitted_low, n_ext_low, fit_low.s_grid, fit_low,
+            )
+            kombine_high = _band_from_monotone(
+                best_high, fitted_high, n_ext_high, fit_high.s_grid, fit_high,
+            )
+            kombine_low["times"] = times_low
+            kombine_high["times"] = times_high
+            progress(f"  toy KM wall {time.perf_counter() - started:.1f}s")
+            store_cache = True
+        else:
+            progress("  KoMbine fixed card: binomial χ² bands…")
+            best_low, ci_low = km_low.survival_probabilities_likelihood(
+                CLs=[0.95],
+                times_for_plot=times_low,
+                binomial_only=True,
+                print_progress=True,
+                crossing_mode="feasibility",
+            )
+            best_high, ci_high = km_high.survival_probabilities_likelihood(
+                CLs=[0.95],
+                times_for_plot=times_high,
+                binomial_only=True,
+                print_progress=True,
+                crossing_mode="feasibility",
+            )
+            best_low, ci_low = _band_from_profile(best_low, ci_low)
+            best_high, ci_high = _band_from_profile(best_high, ci_high)
+            kombine_low = {
+                "times": times_low, "best": best_low, "ci": ci_low, "skipped": False,
+            }
+            kombine_high = {
+                "times": times_high, "best": best_high, "ci": ci_high, "skipped": False,
+            }
+            store_cache = True
 
         km_results[scenario_key] = {
             'yi': {
@@ -367,18 +581,13 @@ def run_km_analysis(scenarios, datacards):
                 'high': result_high_simex,
             },
             'kombine': {
-                'low': {
-                    'times': times_low,
-                    'best': best_low,
-                    'ci': ci_low,
-                },
-                'high': {
-                    'times': times_high,
-                    'best': best_high,
-                    'ci': ci_high,
-                }
-            }
+                'low': kombine_low,
+                'high': kombine_high,
+            },
         }
+        if store_cache:
+            TOY_CACHE[family]["km"][scenario_key] = km_results[scenario_key]
+            save_toy_cache()
 
         print(f"\n{scenario_info['label']}:")
         print(f"  {'Yi':<{LABEL_WIDTH}} - Low group final survival:  {result_low_yi['survival_probabilities'][-1]:.4f}")
@@ -386,19 +595,21 @@ def run_km_analysis(scenarios, datacards):
         print(f"  {'MC-SIMEX':<{LABEL_WIDTH}} - Low group final survival:  {result_low_simex['survival_probabilities'][-1]:.4f}")
         print(f"  {'MC-SIMEX':<{LABEL_WIDTH}} - High group final survival: {result_high_simex['survival_probabilities'][-1]:.4f}")
 
-        if len(ci_low) > 0:
-            ci_low_lower = ci_low[-1, 0, 0]
-            ci_low_upper = ci_low[-1, 0, 1]
-            print(f"  {'KoMbine':<{LABEL_WIDTH}} - Low group final survival:  {best_low[-1]:.4f} [{ci_low_lower:.4f}, {ci_low_upper:.4f}]")
-        else:
-            print(f"  {'KoMbine':<{LABEL_WIDTH}} - Low group final survival:  {best_low[-1]:.4f}")
-
-        if len(ci_high) > 0:
-            ci_high_lower = ci_high[-1, 0, 0]
-            ci_high_upper = ci_high[-1, 0, 1]
-            print(f"  {'KoMbine':<{LABEL_WIDTH}} - High group final survival: {best_high[-1]:.4f} [{ci_high_lower:.4f}, {ci_high_upper:.4f}]")
-        else:
-            print(f"  {'KoMbine':<{LABEL_WIDTH}} - High group final survival: {best_high[-1]:.4f}")
+        for arm_name, arm in (("Low", kombine_low), ("High", kombine_high)):
+            if arm.get("skipped") or arm.get("best") is None or len(arm["best"]) == 0:
+                print(f"  {'KoMbine':<{LABEL_WIDTH}} - {arm_name} group: toys skipped")
+                continue
+            ci = arm["ci"]
+            if getattr(ci, "size", 0):
+                print(
+                    f"  {'KoMbine':<{LABEL_WIDTH}} - {arm_name} group final survival:  "
+                    f"{arm['best'][-1]:.4f} [{ci[-1, 0, 0]:.4f}, {ci[-1, 0, 1]:.4f}]"
+                )
+            else:
+                print(
+                    f"  {'KoMbine':<{LABEL_WIDTH}} - {arm_name} group final survival:  "
+                    f"{arm['best'][-1]:.4f}"
+                )
     return km_results
 
 
@@ -430,42 +641,49 @@ def _plot_km_in_ax(ax, scenario_info, result):
     times_low_kombine = result['kombine']['low']['times']
     best_low_kombine = result['kombine']['low']['best']
     ci_low_kombine = result['kombine']['low']['ci']
-    times_plot_low = [times_low_kombine[0]]
-    best_plot_low = [1.0]
-    for i, t in enumerate(times_low_kombine):
-        times_plot_low.append(t)
-        best_plot_low.append(best_low_kombine[i])
-    ax.step(times_plot_low, best_plot_low, where='post', linewidth=2.5,
-            color=color_low, alpha=0.9, label='KoMbine: Low group', zorder=3)
-    if getattr(ci_low_kombine, 'size', 0):
-        ci_lower_plot_low = [1.0]
-        ci_upper_plot_low = [1.0]
-        for i, _t in enumerate(times_low_kombine):
-            ci_lower_plot_low.append(ci_low_kombine[i, 0, 0])
-            ci_upper_plot_low.append(ci_low_kombine[i, 0, 1])
-        ax.fill_between(times_plot_low, ci_lower_plot_low, ci_upper_plot_low,
-                        step='post', alpha=0.15, color=color_low,
-                        label='KoMbine: Low 95% CI', zorder=2)
+    if result['kombine']['low'].get('skipped') or best_low_kombine is None:
+        ax.text(
+            0.98, 0.98, "KoMbine toys skipped",
+            ha="right", va="top", transform=ax.transAxes, fontsize=8,
+        )
+    else:
+        times_plot_low = [times_low_kombine[0]]
+        best_plot_low = [1.0]
+        for i, t in enumerate(times_low_kombine):
+            times_plot_low.append(t)
+            best_plot_low.append(best_low_kombine[i])
+        ax.step(times_plot_low, best_plot_low, where='post', linewidth=2.5,
+                color=color_low, alpha=0.9, label='KoMbine: Low group', zorder=3)
+        if getattr(ci_low_kombine, 'size', 0):
+            ci_lower_plot_low = [1.0]
+            ci_upper_plot_low = [1.0]
+            for i, _t in enumerate(times_low_kombine):
+                ci_lower_plot_low.append(ci_low_kombine[i, 0, 0])
+                ci_upper_plot_low.append(ci_low_kombine[i, 0, 1])
+            ax.fill_between(times_plot_low, ci_lower_plot_low, ci_upper_plot_low,
+                            step='post', alpha=0.15, color=color_low,
+                            label='KoMbine: Low 95% CI', zorder=2)
 
     times_high_kombine = result['kombine']['high']['times']
     best_high_kombine = result['kombine']['high']['best']
     ci_high_kombine = result['kombine']['high']['ci']
-    times_plot_high = [times_high_kombine[0]]
-    best_plot_high = [1.0]
-    for i, t in enumerate(times_high_kombine):
-        times_plot_high.append(t)
-        best_plot_high.append(best_high_kombine[i])
-    ax.step(times_plot_high, best_plot_high, where='post', linewidth=2.5,
-            color=color_high, alpha=0.9, label='KoMbine: High group', zorder=3)
-    if getattr(ci_high_kombine, 'size', 0):
-        ci_lower_plot_high = [1.0]
-        ci_upper_plot_high = [1.0]
-        for i, _t in enumerate(times_high_kombine):
-            ci_lower_plot_high.append(ci_high_kombine[i, 0, 0])
-            ci_upper_plot_high.append(ci_high_kombine[i, 0, 1])
-        ax.fill_between(times_plot_high, ci_lower_plot_high, ci_upper_plot_high,
-                        step='post', alpha=0.15, color=color_high,
-                        label='KoMbine: High 95% CI', zorder=2)
+    if not result['kombine']['high'].get('skipped') and best_high_kombine is not None:
+        times_plot_high = [times_high_kombine[0]]
+        best_plot_high = [1.0]
+        for i, t in enumerate(times_high_kombine):
+            times_plot_high.append(t)
+            best_plot_high.append(best_high_kombine[i])
+        ax.step(times_plot_high, best_plot_high, where='post', linewidth=2.5,
+                color=color_high, alpha=0.9, label='KoMbine: High group', zorder=3)
+        if getattr(ci_high_kombine, 'size', 0):
+            ci_lower_plot_high = [1.0]
+            ci_upper_plot_high = [1.0]
+            for i, _t in enumerate(times_high_kombine):
+                ci_lower_plot_high.append(ci_high_kombine[i, 0, 0])
+                ci_upper_plot_high.append(ci_high_kombine[i, 0, 1])
+            ax.fill_between(times_plot_high, ci_lower_plot_high, ci_upper_plot_high,
+                            step='post', alpha=0.15, color=color_high,
+                            label='KoMbine: High 95% CI', zorder=2)
 
     ax.set_xlabel('Time', fontsize=10)
     ax.set_ylabel('Survival Probability', fontsize=10)
@@ -506,6 +724,72 @@ def plot_km_mosaic(scenarios, km_results, title):
             scenarios[scenario_key],
             km_results[scenario_key],
         )
+    _annotate_comparison_mosaic(axes_dict)
+    plt.suptitle(title, fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_monotone_vs_naive(scenarios, km_results, title):
+    """Monotone toy edges vs naive per-time intervals on the stored S-grid."""
+    _, axes_dict = plt.subplot_mosaic(MOSAIC_LAYOUT, figsize=(14, 13),  # pyright: ignore[reportCallIssue, reportArgumentType]
+        gridspec_kw={'hspace': 0.52, 'wspace': 0.35},
+    )
+    for panel_key, scenario_key in MOSAIC_TO_SCENARIO.items():
+        ax = axes_dict[panel_key]
+        info = scenarios[scenario_key]
+        ax.set_title(info['label'], fontsize=11, fontweight='bold')
+        ax.set_xlabel('Time', fontsize=10)
+        ax.set_ylabel('Survival Probability', fontsize=10)
+        ax.set_ylim(0, 1.05)
+        ax.grid(True, alpha=0.3)
+        result = km_results[scenario_key]['kombine']
+        if 'n_extreme' not in result['low']:
+            note = "toys skipped" if result['low'].get('skipped') else "χ² band (fixed card)"
+            ax.text(0.5, 0.5, note, ha='center', va='center', transform=ax.transAxes)
+            continue
+        for arm, color in (('low', COLOR_LOW), ('high', COLOR_HIGH)):
+            arm_result = result[arm]
+            times = arm_result['times']
+            best = arm_result['best']
+            fitted = arm_result['fitted']
+            naive = naive_pointwise_band_edges_from_grid(
+                arm_result['s_grid'],
+                arm_result['n_extreme'],
+                N_MAX,
+                confidence_level=0.95,
+                best=best,
+            )
+            times_plot = [times[0]]
+            best_plot = [1.0]
+            mono_lo = [1.0]
+            mono_hi = [1.0]
+            naive_lo = [1.0]
+            naive_hi = [1.0]
+            for i, t in enumerate(times):
+                times_plot.append(t)
+                best_plot.append(best[i])
+                mono_lo.append(fitted[i, 0])
+                mono_hi.append(fitted[i, 1])
+                naive_lo.append(naive[i, 0])
+                naive_hi.append(naive[i, 1])
+            ax.fill_between(
+                times_plot, naive_lo, naive_hi, step='post',
+                alpha=0.18, color=color, label=f'{arm} naive pointwise',
+            )
+            ax.step(
+                times_plot, mono_lo, where='post', linewidth=2.0,
+                color=color, linestyle='--', label=f'{arm} monotone fit', zorder=4,
+            )
+            ax.step(
+                times_plot, mono_hi, where='post', linewidth=2.0,
+                color=color, linestyle='--', zorder=4,
+            )
+            ax.step(
+                times_plot, best_plot, where='post', linewidth=2.5, color=color,
+                label=f'{arm} MLE', zorder=3,
+            )
+        ax.legend(fontsize=6, loc='lower left')
     _annotate_comparison_mosaic(axes_dict)
     plt.suptitle(title, fontsize=14, fontweight='bold')
     plt.tight_layout()
@@ -594,10 +878,20 @@ def plot_pvalue_bars(scenarios, pvalue_results, title):
     plt.show()
 
 
-def run_hr_analysis(scenarios, datacards):
-    """Yi Breslow profile, MC-SIMEX Wald, and KoMbine full-model HR profile."""
+def run_hr_analysis(scenarios, datacards, family):
+    """Yi Breslow profile, MC-SIMEX Wald, and KoMbine HR.
+
+    The KoMbine curve is the profile Δ2NLL. The reported interval is a toy
+    95% interval when assignments are free, and a Wilks cut on the fixed card.
+    """
     hr_results = {}
     for scenario_key, scenario_info in scenarios.items():
+        cached = TOY_CACHE[family]["hr"].get(scenario_key)
+        if cached is not None:
+            progress(f"[{scenario_info['label']}] Analysis 3 from toy cache")
+            hr_results[scenario_key] = cached
+            continue
+
         dc = datacards[scenario_key]
         hr_threshold = scenario_info['threshold']
         progress(f"[{scenario_info['label']}] Analysis 3 starting…")
@@ -612,8 +906,8 @@ def run_hr_analysis(scenarios, datacards):
         best_hr_yi, yi_lower_ci, yi_upper_ci, yi_best_fit = (
             yi_calc.hazard_ratio_confidence_interval(
                 confidence_level=0.95,
-                hazard_ratio_min=0.01,
-                hazard_ratio_max=100.0,
+                hazard_ratio_min=HAZARD_RATIO_MIN,
+                hazard_ratio_max=HAZARD_RATIO_MAX,
             )
         )
         yi_2nlls = [
@@ -641,14 +935,6 @@ def run_hr_analysis(scenarios, datacards):
             parameter_max=np.inf,
         )
 
-        progress("  KoMbine HR profile CI…")
-        best_hr_kombine, lower_ci, upper_ci, _ = hr_calc.hazard_ratio_confidence_interval(
-            cox_only=False,
-            confidence_level=0.95,
-            hazard_ratio_min=0.01,
-            hazard_ratio_max=100.0,
-        )
-
         progress(f"  KoMbine HR 2NLL scan ({N_HR_SCAN} points)…")
         kombine_2nlls = []
         for hr in HAZARD_RATIOS_SCAN:
@@ -656,6 +942,41 @@ def run_hr_analysis(scenarios, datacards):
                 hr, cox_only=False, verbose=False, print_progress=True,
             )
             kombine_2nlls.append(result.x)
+
+        use_toys = scenario_key != "fixed"
+        toy_68 = None
+        if use_toys and SKIP_TOY:
+            skip_toys(f"{scenario_info['label']} KoMbine HR interval")
+            grid_idx = int(np.argmin(kombine_2nlls))
+            best_hr_kombine = float(HAZARD_RATIOS_SCAN[grid_idx])
+            lower_ci = np.nan
+            upper_ci = np.nan
+            store_cache = False
+        elif use_toys:
+            progress(f"  KoMbine toy HR interval (B={N_MAX})…")
+            toy_intervals = hr_calc.toy_calibrated_hazard_ratio_interval(
+                n_max=N_MAX,
+                rng=TOY_RNG,
+                cox_only=False,
+                confidence_levels=(0.68, 0.95),
+                hazard_ratio_min=HAZARD_RATIO_MIN,
+                hazard_ratio_max=HAZARD_RATIO_MAX,
+                Threads=THREADS,
+                print_progress=True,
+            )
+            best_hr_kombine, lower_ci, upper_ci = toy_intervals[0.95]
+            toy_68 = (toy_intervals[0.68][1], toy_intervals[0.68][2])
+            store_cache = True
+        else:
+            progress("  KoMbine fixed card: χ² HR interval…")
+            best_hr_kombine, lower_ci, upper_ci, _ = hr_calc.hazard_ratio_confidence_interval(
+                cox_only=False,
+                method="chi2",
+                confidence_level=0.95,
+                hazard_ratio_min=HAZARD_RATIO_MIN,
+                hazard_ratio_max=HAZARD_RATIO_MAX,
+            )
+            store_cache = True
 
         hr_results[scenario_key] = {
             'yi_best': best_hr_yi,
@@ -671,12 +992,20 @@ def run_hr_analysis(scenarios, datacards):
             'kombine_2nlls': kombine_2nlls,
             'kombine_lower': lower_ci,
             'kombine_upper': upper_ci,
+            'kombine_toy_68': toy_68,
+            'kombine_skipped': bool(use_toys and SKIP_TOY),
         }
+        if store_cache:
+            TOY_CACHE[family]["hr"][scenario_key] = hr_results[scenario_key]
+            save_toy_cache()
 
         print(f"\n{scenario_info['label']}:")
         print(f"  {'Yi':<{LABEL_WIDTH}} best-fit HR: {best_hr_yi:.3f} [{yi_lower_ci:.3f}, {yi_upper_ci:.3f}]")
         print(f"  {'MC-SIMEX':<{LABEL_WIDTH}} best-fit HR: {simex_estimate['hazard_ratio']:.3f} [{simex_estimate['ci_lower']:.3f}, {simex_estimate['ci_upper']:.3f}]")
-        print(f"  {'KoMbine':<{LABEL_WIDTH}} best-fit HR: {best_hr_kombine:.3f} [{lower_ci:.3f}, {upper_ci:.3f}]")
+        if np.isfinite(lower_ci) and np.isfinite(upper_ci):
+            print(f"  {'KoMbine':<{LABEL_WIDTH}} best-fit HR: {best_hr_kombine:.3f} [{lower_ci:.3f}, {upper_ci:.3f}]")
+        else:
+            print(f"  {'KoMbine':<{LABEL_WIDTH}} best-fit HR: {best_hr_kombine:.3f} [toys skipped]")
     return hr_results
 
 
@@ -701,12 +1030,20 @@ def plot_hr_mosaic(scenarios, hr_results, title):
         ax.plot(HAZARD_RATIOS_SCAN, delta_simex, color='#7b1fa2', linewidth=2.5, marker='^', markersize=3,
                 linestyle=':', label='MC-SIMEX (Wald)', zorder=3)
         ax.plot(HAZARD_RATIOS_SCAN, delta_kombine, color='#d32f2f', linewidth=2.5, marker='s', markersize=3,
-                label='KoMbine', zorder=3)
+                label='KoMbine profile', zorder=3)
         ax.axvline(result['yi_best'], color='#1976d2', linestyle='--', alpha=0.6, linewidth=1.5, zorder=2)
         ax.axvline(result['simex_best'], color='#7b1fa2', linestyle=':', alpha=0.6, linewidth=1.5, zorder=2)
         ax.axvline(result['kombine_best'], color='#d32f2f', linestyle='--', alpha=0.6, linewidth=1.5, zorder=2)
-        ax.axhline(3.84, color='gray', linestyle=':', alpha=0.6, linewidth=2.0,
-                   label='95% CL (χ²=3.84)', zorder=1)
+        lower = result['kombine_lower']
+        upper = result['kombine_upper']
+        if np.isfinite(lower) and np.isfinite(upper) and upper > lower:
+            ax.axvspan(lower, upper, color='#d32f2f', alpha=0.12, label='KoMbine 95%', zorder=0)
+        toy_68 = result.get('kombine_toy_68')
+        if toy_68 is not None:
+            ax.axvspan(toy_68[0], toy_68[1], color='#d32f2f', alpha=0.22, label='KoMbine 68%', zorder=0)
+        elif result.get('kombine_skipped'):
+            ax.text(0.98, 0.98, "KoMbine toys skipped",
+                    ha="right", va="top", transform=ax.transAxes, fontsize=8)
 
         ax.set_xlabel('Hazard Ratio', fontsize=10)
         ax.set_ylabel(r'$-2 \Delta \ln L$', fontsize=10)
@@ -735,7 +1072,8 @@ def print_summary_table(scenarios, pvalue_results, hr_results):
         yi_ci = (f"[{hr['yi_lower']:.3f}, {hr['yi_upper']:.3f}]"
                  if not np.isnan(hr['yi_lower']) else '[n/a]')
         simex_ci = f"[{hr['simex_lower']:.3f}, {hr['simex_upper']:.3f}]"
-        ko_ci = f"[{hr['kombine_lower']:.3f}, {hr['kombine_upper']:.3f}]"
+        ko_ci = (f"[{hr['kombine_lower']:.3f}, {hr['kombine_upper']:.3f}]"
+                 if np.isfinite(hr['kombine_lower']) else '[toys skipped]')
         yi_hr_str = f"{hr['yi_best']:.3f} {yi_ci}"
         simex_hr_str = f"{hr['simex_best']:.3f} {simex_ci}"
         ko_hr_str = f"{hr['kombine_best']:.3f} {ko_ci}"
@@ -754,24 +1092,46 @@ if QUICK_COMPARISON:
 else:
     mode_name = "n=20 then n=50 (default)"
 
+if LOAD_TOY_CACHE and load_toy_cache():
+    n_km = _refit_cached_km(TOY_CACHE["n20"]["km"]) + _refit_cached_km(TOY_CACHE["n50"]["km"])
+    if n_km:
+        save_toy_cache()
+    progress(
+        f"Loaded toy cache {CACHE_PATH.name}: "
+        f"n20 HR {len(TOY_CACHE['n20']['hr'])} / KM {len(TOY_CACHE['n20']['km'])}, "
+        f"n50 HR {len(TOY_CACHE['n50']['hr'])} / KM {len(TOY_CACHE['n50']['km'])}"
+        + (f"; re-fit {n_km} KM arms" if n_km else "")
+    )
+elif LOAD_TOY_CACHE:
+    progress(f"No toy cache at {CACHE_PATH}")
+
 progress(f"Notebook 07 mode: {mode_name}")
+progress(
+    "Toy calibration: "
+    + ("skipped (KOMBINE_SKIP_TOY_CALIBRATION=1)" if SKIP_TOY else f"B={N_MAX}, S-grid={N_S_GRID}")
+)
 progress(f"Loading n=20 hr_example cards ({TITLE_QUICK})")
 datacards_quick = load_datacards(datacards_dir_quick, SCENARIOS_QUICK)
 ```
 
 ## Analysis 1: Kaplan-Meier Curves
 
-Compare the Kaplan-Meier survival curves between Yi's method (dashed), MC-SIMEX (dotted), and KoMbine (solid lines with shaded 95% confidence intervals) across all scenarios. Yi and MC-SIMEX are point estimates only; they have no fill bands.
+Compare the Kaplan-Meier survival curves between Yi's method (dashed), MC-SIMEX (dotted), and KoMbine (solid lines with shaded 95% intervals) across all scenarios. Yi and MC-SIMEX are point estimates only. KoMbine shades a toy band when assignments are free, and a binomial $\chi^2$ band on the fixed card.
 
 ### n=20 (`*_hr_example*`)
 
 ```python
 progress(f"Analysis 1 — {TITLE_QUICK}")
-km_results_quick = run_km_analysis(SCENARIOS_QUICK, datacards_quick)
+km_results_quick = run_km_analysis(SCENARIOS_QUICK, datacards_quick, "n20")
 plot_km_mosaic(
     SCENARIOS_QUICK,
     km_results_quick,
     f"Kaplan-Meier Curves: Yi, MC-SIMEX, and KoMbine ({TITLE_QUICK})",
+)
+plot_monotone_vs_naive(
+    SCENARIOS_QUICK,
+    km_results_quick,
+    f"KoMbine KM: monotone toy fit vs naive per-time intervals ({TITLE_QUICK})",
 )
 ```
 
@@ -830,9 +1190,9 @@ plot_pvalue_bars(
 
 We compare hazard ratios estimated using:
 
-- **Yi**: the weighted Breslow partial likelihood. The table reports a **continuous** MLE in $\log H$ and a likelihood-ratio interval (same `minimize_scalar` / `brentq` recipe as KoMbine). The curve is that 2NLL on an `N_HR_SCAN`-point log grid, recentered at the continuous MLE.
+- **Yi**: the weighted Breslow partial likelihood. The table reports a **continuous** MLE in $\log H$ and a likelihood-ratio interval. The curve is that 2NLL on an `N_HR_SCAN`-point log grid, recentered at the continuous MLE.
 - **MC-SIMEX**: extrapolated $\widehat{\log H}$ with a Wald CI. The curve below is the Wald quadratic, **not** a profile likelihood. On the **fixed** panel membership is exact and the point HR matches Yi/KoMbine, but the purple scan is still Wald, so it will not overlay the Breslow profiles.
-- **KoMbine**: the full profile likelihood (**`cox_only=False`**), which jointly optimizes discrete assignments and survival parameters.
+- **KoMbine**: the full model (`cox_only=False`). The curve below is the profile $\Delta$2NLL. On the fixed card the reported interval is a Wilks cut. On the other cards it is the toy-calibrated 95% interval (with the 68% interval shaded inside it). The horizontal $\chi^2=3.84$ line is not KoMbine's cutoff.
 
 ### Why the confidence intervals behave differently
 
@@ -840,24 +1200,24 @@ As noted in the paper text, Yi’s approach can reduce bias in the *point estima
 
 MC-SIMEX is in the same family: the Wald interval is the sampling interval of the extrapolated number. It stays finite even when labels are nearly uninformative.
 
-KoMbine’s likelihood framework, by contrast, can naturally widen the profile-likelihood confidence interval as patient-wise uncertainty increases, because the model explicitly accounts for the possibility that the discrete group assignment itself is uncertain.
+KoMbine's toy interval inverts the same profile LRT used for the permutation test, so the reported set accounts for assignment search. The profile curve is the objective being calibrated, not itself the interval.
 
 ### n=20 (`*_hr_example*`)
 
 ```python
 progress(f"Analysis 3 — {TITLE_QUICK}")
-hr_results_quick = run_hr_analysis(SCENARIOS_QUICK, datacards_quick)
+hr_results_quick = run_hr_analysis(SCENARIOS_QUICK, datacards_quick, "n20")
 plot_hr_mosaic(
     SCENARIOS_QUICK,
     hr_results_quick,
-    f"Hazard Ratio: Yi and KoMbine Profiles vs MC-SIMEX Wald ({TITLE_QUICK})",
+    f"Hazard Ratio: Yi and KoMbine profiles vs MC-SIMEX Wald ({TITLE_QUICK})",
 )
 ```
 
 
 ## n=50 family (`methods_comparison_*`)
 
-Default (unset `KOMBINE_QUICK_COMPARISON`) repeats Analyses 1–3 on the stronger n=50 cards. CI sets the env var, so these cells print a skip message instead of solving.
+Default (unset `KOMBINE_QUICK_COMPARISON`) repeats Analyses 1–3 on the n=50 cards, including toy HR intervals and monotone KM bands. That is a many-hour run. CI sets the env var, so these cells print a skip message instead of solving.
 
 ```python
 datacards_full = None
@@ -881,11 +1241,16 @@ if QUICK_COMPARISON:
     skip_n50("KM analysis")
 else:
     progress(f"Analysis 1 — {TITLE_FULL}")
-    km_results_full = run_km_analysis(SCENARIOS_FULL, datacards_full)
+    km_results_full = run_km_analysis(SCENARIOS_FULL, datacards_full, "n50")
     plot_km_mosaic(
         SCENARIOS_FULL,
         km_results_full,
         f"Kaplan-Meier Curves: Yi, MC-SIMEX, and KoMbine ({TITLE_FULL})",
+    )
+    plot_monotone_vs_naive(
+        SCENARIOS_FULL,
+        km_results_full,
+        f"KoMbine KM: monotone toy fit vs naive per-time intervals ({TITLE_FULL})",
     )
 ```
 
@@ -911,7 +1276,7 @@ if QUICK_COMPARISON:
     skip_n50("HR analysis")
 else:
     progress(f"Analysis 3 — {TITLE_FULL}")
-    hr_results_full = run_hr_analysis(SCENARIOS_FULL, datacards_full)
+    hr_results_full = run_hr_analysis(SCENARIOS_FULL, datacards_full, "n50")
     plot_hr_mosaic(
         SCENARIOS_FULL,
         hr_results_full,
@@ -926,16 +1291,12 @@ The key modeling difference is **fractional weights vs extrapolated hard labels 
 Yi’s method assigns each patient to both groups with weights, MC-SIMEX extrapolates a naive hard-label estimator, and KoMbine enforces one group per
 patient and scores assignments using an explicit measurement-error model.
 
-The two card families are calibrated for different stories. The n=20 high-$e$ row is where KoMbine KM bands widen; the n=50 low-$e$ row is where the joint HR profile jumps into assignment search while the separate KM bands stay similar.
+The two card families use different measurement-error ladders. KoMbine's intervals on the discrete and Poisson cards are toy-calibrated; the fixed card uses a $\chi^2$ cut because assignments do not move. Numerical interval endpoints from a local toy run are not filled in here.
 
 ### Kaplan–Meier Curves (Qualitative)
-- **Fixed observable** (both families): Yi, MC-SIMEX, and KoMbine produce identical curves because group membership is exact.
-- **Discrete classes, n=20** ($e=0.20$, $0.25$, $0.40$): KoMbine KM bands stay similar at $e=0.20$ vs $0.25$ (observed-label basin; the HR interval may already hit the scan bound). At $e=0.40$ the separate KM fits widen / collapse. That is the KM-widening figure.
-- **Discrete classes, n=50** ($e=0.05$, $0.10$, $0.25$): At $e=0.05$–$0.10$ the KoMbine KM curves and point HR stay near the fixed baseline (HR $\approx 2.08$). At $e=0.25$ the KM bands remain similar (still not the $e=0.40$ collapse); Yi’s curves and HR drift toward 1 ($\widehat H \approx 1.40$), MC-SIMEX extrapolates the hard-label KM ($\widehat H \approx 2.86$), and the **joint** HR profile hits the scan bound ($\widehat H \approx 100$) with a wide interval.
-- **Poisson (large/moderate counts)**: Yi shrinks the group gap ($\widehat H$ from 2.03 to 1.79 on n=50); MC-SIMEX is an extrapolated hard-label
-  curve with growing Wald intervals; KoMbine confidence bands and HR intervals widen as assignment uncertainty increases.
-- **Poisson (small counts)**: Differences become qualitative (including apparent reversals in the
-  separate KM fits). On n=50, Yi is most conservative ($\widehat H \approx 1.58$, $p \approx 0.13$); MC-SIMEX can show the strongest separation ($\widehat H \approx 4.0$); KoMbine sits between them ($\widehat H \approx 3.0$) with a wide profile interval.
+- **Fixed observable** (both families): Yi, MC-SIMEX, and KoMbine produce the same curves because group membership is exact. KoMbine's band on this card is the binomial profile.
+- **Discrete classes and Poisson counts:** Yi weights patients into both groups, MC-SIMEX extrapolates a hard-label curve, and KoMbine reports a monotone toy band. Those three can disagree when membership is weakly identified, including apparent reversals in the separate KM fits at large error.
+- The monotone-vs-naive panels reuse the stored $S$-grid. They do not launch new toys. The fixed panel has no toy grid.
 
 ### P-Values and Hazard Ratios
 - Yi’s p-values generally increase as uncertainty grows; its best-fit HR drifts toward 1.
@@ -943,29 +1304,29 @@ The two card families are calibrated for different stories. The n=20 high-$e$ ro
 - MC-SIMEX p-values and HRs are those of an extrapolated hard-label statistic; the Wald HR interval stays finite.
   The plotted MC-SIMEX curve is that Wald quadratic even when $e_i=0$.
 - KoMbine’s plotted $p$ is a permutation LRT with $B=99$.
-  The profile interval can widen while the point HR remains moderate; on n=50 at $e=0.25$ the HR scan can pin at the upper bound.
+  On discrete and Poisson cards the shaded HR interval is the toy 95% set (68% inside it). The curve is the profile $\Delta$2NLL, not a $\chi^2$ cutoff.
 - Large disagreements among the three indicate that inference is driven by how group-membership
   uncertainty is modeled, not just by sampling noise.
 
 ### Runtime
-| Family | Analysis | Wall time | Notes |
-|---|---|---:|---|
-| n=20 | 1–3 | minutes | Always run; CI path |
-| n=50 | 1 — KM bands | ~63 min (2026-09) | Dominated by Poisson (small counts) ~50 min |
-| n=50 | 2 — P-values | ~21 min | Permutation LRT ($B=99$) |
-| n=50 | 3 — HR profiles | ~0.1 min | Grid scan ($N\_HR\_SCAN=25$) |
-| n=50 | **Total** | **~85 min** | Skipped when `KOMBINE_QUICK_COMPARISON=1` |
+| Family | What runs | When it is skipped |
+|---|---|---|
+| n=20 | Yi, MC-SIMEX, permutation p-values | Always run, including CI |
+| n=20 | Toy HR intervals and monotone KM bands | `KOMBINE_SKIP_TOY_CALIBRATION=1` (unless a cache is loaded) |
+| n=50 | Same three analyses, including toys | `KOMBINE_QUICK_COMPARISON=1` |
+
+Toy KM and HR on n=50 are a many-hour local run. Results are written to gitignored `_toy_calibration_cache/methods_comparison_toys.json` after each scenario.
 
 ### Practical Takeaways
 1. When measurement error is tiny, KM curves and the Cox **point** HR agree. The HR *scan*
-   is still Wald (MC-SIMEX) vs two Breslow profiles (Yi, KoMbine), and KoMbine’s $p$ is a
+   is still Wald (MC-SIMEX) vs two profiles (Yi, KoMbine), and KoMbine’s $p$ is a
    permutation LRT rather than logrank $\chi^2$.
 2. When measurement error is moderate/large, treat the conclusion as model-dependent and
    report sensitivity to the modeling choice.
 3. Yi’s method is fast and often conservative (it blurs separation as uncertainty grows).
 4. MC-SIMEX is also fast; its Wald interval is a sampling interval of the extrapolated number.
-5. KoMbine is likelihood-principled for the specified error model and can reveal when
-   parameters become weakly identified via widening profile-likelihood intervals.
+5. KoMbine reports a toy-calibrated interval when assignments are free, using the same
+   profile LRT as the permutation test.
 
 ```python
 progress(f"Summary table — {TITLE_QUICK}")

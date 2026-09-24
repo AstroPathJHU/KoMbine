@@ -1116,6 +1116,7 @@ class KaplanMeierLikelihood(KaplanMeierBase):  # pylint: disable=too-many-instan
     s_grid = linspaced_s_probes(
       self.__endpoint_epsilon, 1.0 - self.__endpoint_epsilon, n_grid=n_s_grid,
     )
+    # χ² profile bracket only. The reported band is the monotone toy fit below.
     best_probabilities, chi2_bands = self.survival_probabilities_likelihood(
       CLs=[0.95],
       times_for_plot=times_for_plot,
