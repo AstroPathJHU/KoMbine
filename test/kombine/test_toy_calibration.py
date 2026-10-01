@@ -285,7 +285,14 @@ def test_km_toy_test_golden():
 
 
 def test_hr_mle_at_bound_toy_region_golden():
-  """Tiny-card free-H MLE sits on the log-HR bound; toys reject both CLs (seeded)."""
+  """Tiny-card free-H fit sits against the lower log-HR bound.
+
+  The profile is flat there: locked 2NLL changes by about 0.01 between the
+  incumbents Gurobi reports on Windows (HR 4.63e-5) and Linux (HR 9.47e-5).
+  The reported MLE and the likelihood-ratio statistic move with that choice.
+  The Neyman decision does not. Every toy is less extreme, and both
+  confidence levels reject.
+  """
   datacard = _parse_tiny()
   calc = datacard.km_hazard_ratio(
     parameter_threshold=1.0,
@@ -315,10 +322,10 @@ def test_hr_mle_at_bound_toy_region_golden():
       Threads=1,
       confidence_levels=(0.68, 0.95),
     )
-  np.testing.assert_allclose(best, 4.6274862563194215e-05, rtol=1e-3)
+  lower = float(np.exp(calc.log_hazard_ratio_bounds[0]))
+  assert lower * 0.99 <= best < 10.0 * lower
   assert result.n_run == 19
   assert result.n_extreme == 0
-  np.testing.assert_allclose(result.t_obs, 0.03635340527999009, rtol=1e-3, atol=1e-4)
   np.testing.assert_allclose(result.p_value, 0.05)
   assert result.decisions[0.68] == "reject"
   assert result.decisions[0.95] == "reject"
