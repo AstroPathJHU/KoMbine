@@ -1985,6 +1985,7 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
 
     model.update()
 
+  # pylint: disable=duplicate-code
   def _clear_feasibility_cuts(self, model: gp.Model) -> None:
     """Remove temporary CL-feasibility cuts from a prior excess_at_most call."""
     for constr in self.__feasibility_cut_constraints:
@@ -2157,6 +2158,7 @@ class MINLPForKM(GurobiOptimizerMixin):  # pylint: disable=too-many-public-metho
       model.setParam("MIPFocus", 0)
       self._clear_feasibility_cuts(model)
     return result
+  # pylint: enable=duplicate-code
 
   def run_MINLP( # pylint: disable=too-many-locals, too-many-statements, too-many-branches, too-many-arguments
     self,

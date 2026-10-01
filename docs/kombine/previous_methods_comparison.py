@@ -255,6 +255,9 @@ def load_toy_cache(path=CACHE_PATH):
     )
     return False
   loaded = _json_decode(payload.get("families", {}))
+  if not isinstance(loaded, dict):
+    progress(f"Ignoring toy cache at {path.name}: families is not an object")
+    return False
   # Older files have no N_PERMUTATIONS. Keep their HR/KM entries and leave p-values empty.
   use_pvalues = int(payload.get("N_PERMUTATIONS", -1)) == N_PERMUTATIONS
   if "N_PERMUTATIONS" in payload and not use_pvalues:
@@ -264,9 +267,14 @@ def load_toy_cache(path=CACHE_PATH):
     )
   for family in ("n20", "n50"):
     family_payload = loaded.get(family, {})
-    TOY_CACHE[family]["hr"] = family_payload.get("hr", {})
-    TOY_CACHE[family]["km"] = family_payload.get("km", {})
-    TOY_CACHE[family]["pv"] = family_payload.get("pv", {}) if use_pvalues else {}
+    if not isinstance(family_payload, dict):
+      family_payload = {}
+    hr = family_payload.get("hr", {})
+    km = family_payload.get("km", {})
+    pv = family_payload.get("pv", {}) if use_pvalues else {}
+    TOY_CACHE[family]["hr"] = hr if isinstance(hr, dict) else {}
+    TOY_CACHE[family]["km"] = km if isinstance(km, dict) else {}
+    TOY_CACHE[family]["pv"] = pv if isinstance(pv, dict) else {}
   return True
 
 

@@ -578,6 +578,7 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
         stacklevel=3
       )
 
+  # pylint: disable=duplicate-code
   def _clear_feasibility_cuts(self, model) -> None:
     """Remove temporary CL-feasibility cuts from a prior excess_at_most call."""
     for constr in self.__feasibility_cut_constraints:
@@ -731,6 +732,7 @@ class MINLPforKMHazardRatio(MINLPforKMPValue):
       model.setParam("MIPFocus", 0)
       self._clear_feasibility_cuts(model)
     return result
+  # pylint: enable=duplicate-code
 
   def hypothesized_hr_toy_test(  # pylint: disable=too-many-arguments, too-many-locals
     self,

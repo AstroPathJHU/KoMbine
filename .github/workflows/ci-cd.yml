@@ -179,6 +179,10 @@ jobs:
         run: |
           python -m test.kombine.test_hazard_ratio
 
+      - name: Gurobi WLS retry tests
+        run: |
+          python -m test.kombine.test_gurobi_wls_retry
+
       - name: Documentation and CI tests
         run: |
           python -m test.kombine.test_ci_and_documentation
